@@ -23,10 +23,14 @@ import (
 // routed back by id, events are fanned out to subscribers by (method,
 // sessionId).
 type cdpClient struct {
+	// Keep the 64-bit atomic counter first. On 32-bit platforms, the first
+	// word of an allocated struct is 64-bit aligned; fields after pointers may
+	// only have pointer alignment and would make AddInt64 panic at runtime.
+	nextID int64
+
 	conn *websocket.Conn
 
 	writeMu sync.Mutex // gorilla requires serialized writes
-	nextID  int64
 
 	pendingMu sync.Mutex
 	pending   map[int64]chan rpcResponse

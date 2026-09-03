@@ -6,7 +6,7 @@
 
 - [x] 当前开发分支为 `dev-zxy`。
 - [x] 未合并 `main`，未在 `buding` 分支直接开发。
-- [ ] 推送 `origin/dev-zxy`。
+- [x] 推送 `origin/dev-zxy`。
 - [ ] 创建 PR：源分支 `dev-zxy`，目标分支 `buding`。
 
 ## 品牌资料与资源
@@ -50,7 +50,7 @@
 - [x] 审计报告区分“品牌展示完成”“技术身份迁移未完成”“Browser 环境阻断”。
 - [ ] `git diff --check` 通过。
 - [ ] 审计文档提交到 `dev-zxy`。
-- [ ] 推送后确认远程分支存在。
+- [x] 推送后确认远程分支存在。
 - [ ] PR 创建后确认 base 为 `buding`，不是 `main`。
 
 ## 后续可修改入口
@@ -66,3 +66,4 @@
 详细证据见：
 
 `E:\zxy\work-code\buding-box-client\dev-docs-buding\品牌修改\品牌最终审计报告.md`
+

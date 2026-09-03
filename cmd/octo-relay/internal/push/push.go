@@ -1,5 +1,5 @@
 // Package push sends content-free wakeup notifications. The relay consumes a
-// host's wakeup frame and fires a generic "Octo has new activity" push at the
+// host's wakeup frame and fires a generic branded activity push at the
 // phone's token — no session content, no token persistence, no token logging.
 // APNs and FCM credentials belong to the relay operator (the octo host never
 // holds them); tokens belong to the phones and pass through in memory only.
@@ -8,6 +8,7 @@ package push
 import (
 	"bytes"
 	"context"
+	_ "embed"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -19,10 +20,31 @@ import (
 
 // The notification body is deliberately generic: push payloads transit
 // Apple/Google, so the E2E design keeps them content-free.
-const (
-	notifTitle = "Octo"
-	notifBody  = "Octo has new activity"
+type relayBrand struct {
+	Product struct {
+		Names map[string]string `json:"names"`
+	} `json:"product"`
+}
+
+// brand.json is generated from branding/brand.json by scripts/sync-branding.mjs.
+// The relay is a nested module and intentionally remains self-contained.
+//go:embed brand.json
+var embeddedBrand []byte
+
+var (
+	notifTitle = loadNotificationBrand()
+	notifBody  = notifTitle + " has new activity"
 )
+
+func loadNotificationBrand() string {
+	var cfg relayBrand
+	if err := json.Unmarshal(embeddedBrand, &cfg); err == nil {
+		if name := cfg.Product.Names["en-US"]; name != "" {
+			return name
+		}
+	}
+	return "Pudding Box"
+}
 
 // Pusher fires one content-free wakeup at a platform token.
 type Pusher interface {

@@ -5,6 +5,7 @@
   import { ws, wsState } from './lib/ws'
   import { notificationsEnabled } from './lib/notifications'
   import { locale, t, tr, setLocale } from './lib/i18n'
+  import { brandName } from './lib/brand'
   import { checkAuth } from './lib/auth'
   import { get } from 'svelte/store'
   import * as api from './lib/api'
@@ -537,6 +538,11 @@
     return () => window.removeEventListener('resize', recompute)
   })
 </script>
+
+<svelte:head>
+  <title>{brandName($locale)}</title>
+  <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+</svelte:head>
 
 <svelte:window onkeydown={onGlobalKeydown} />
 

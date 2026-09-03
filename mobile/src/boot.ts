@@ -4,6 +4,7 @@ import { ManagedRelayTransport } from './transport'
 import { OctoTunnel, registerPlugin } from './plugin'
 import { parsePairingURL, type PairingInfo } from './pairing'
 import { scanPairingURL } from './qr'
+import { mobileBrandName, brand } from './brand'
 
 // The first-party App plugin, resolved through the same native bridge as
 // OctoTunnel (see plugin.ts) rather than @capacitor/app's JS, so a scanned QR
@@ -79,11 +80,11 @@ async function showOverlay(): Promise<void> {
     'gap:20px;font-family:system-ui,-apple-system,sans-serif;padding:32px;text-align:center;'
 
   const title = document.createElement('div')
-  title.textContent = 'octo'
+  title.textContent = mobileBrandName()
   title.style.cssText = 'font-size:32px;font-weight:700;letter-spacing:-0.5px;'
 
   const sub = document.createElement('div')
-  sub.textContent = '连接到你的 octo serve'
+  sub.textContent = `${brand.product.names["zh-CN"]} · 连接到本机服务`
   sub.style.cssText = 'font-size:15px;opacity:0.7;'
 
   const button = document.createElement('button')

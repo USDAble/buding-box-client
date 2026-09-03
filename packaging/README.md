@@ -1,9 +1,9 @@
-# Packaging
+# Pudding Box packaging
 
-Service templates and OS packaging assets for running `octo serve` as a
+Service templates and OS packaging assets for running the Pudding Box backend (`octo serve`) as a
 long-lived daemon.
 
-## Running octo serve as a service
+## Running the Pudding Box backend as a service
 
 `octo serve` writes structured logs (Go `slog`, text format) to **stderr**;
 the level is set by `OCTO_LOG_LEVEL` (`debug` | `info` | `warn` | `error`,
@@ -44,7 +44,7 @@ tail -f /tmp/octo-serve.log
 > address requires `-addr :8088` (or similar) **and** an access key — see
 > [SECURITY.md](../SECURITY.md).
 
-## macOS installer
+## macOS installer for Pudding Box
 
 The double-click `octo-setup.pkg` is built from [`macos/`](macos/) by the
 release workflow (`macos/build.sh` drives `pkgbuild` + `productbuild`). It
@@ -53,7 +53,7 @@ installs to `~/Library/Application Support/octo` and writes its own
 the manual launchd template above under the same label, the installer
 overwrites it. See the README's Install section.
 
-## Windows installer
+## Windows installer for Pudding Box
 
 The double-click `octo-setup.exe` is built from
 [`windows/octo.iss`](windows/octo.iss) by the release workflow. See the README's

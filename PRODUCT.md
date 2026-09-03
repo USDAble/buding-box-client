@@ -1,4 +1,4 @@
-# Product
+# Product — Pudding Box（布丁盒子）
 
 ## Register
 
@@ -6,17 +6,18 @@ product
 
 ## Users
 
-Developer (Roy), using locally for debugging and interacting with the octo-agent AI coding assistant via browser.
+Developer (Roy), using locally for debugging and interacting with the Pudding Box（兼容后端命令 `octo`）AI coding assistant via browser.
 
 ## Product Purpose
 
-A lightweight web UI for octo-agent server that provides a chat interface to create sessions, send messages, and view streaming responses. Design serves the product — the UI gets out of the way so the developer can focus on the conversation.
+A lightweight web UI for Pudding Box server (`octo serve`) that provides a chat interface to create sessions, send messages, and view streaming responses. Design serves the product — the UI gets out of the way so the developer can focus on the conversation.
 
 ## Brand Personality
 
 - Minimalist: every element earns its place
 - Precise: sharp edges, consistent spacing, intentional hierarchy
-- Capable: looks like a tool built by developers, for developers
+- Capable: looks like a calm, trustworthy workspace built for real work
+- Warm but not childish: the pudding-box metaphor is friendly without replacing technical clarity
 
 ## Anti-references
 

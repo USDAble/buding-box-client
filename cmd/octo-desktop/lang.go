@@ -2,9 +2,11 @@ package main
 
 import (
 	"os"
+	"reflect"
 	"strings"
 	"sync/atomic"
 
+	"github.com/open-octo/octo-agent/internal/brand"
 	"github.com/open-octo/octo-agent/internal/config"
 )
 
@@ -122,6 +124,20 @@ var zhStrings = uiStrings{
 	updInplaceFailed: "自动更新失败,已打开下载页。",
 }
 
+// withBrand resolves only the display token. Lowercase compatibility identifiers
+// such as `octo` remain unchanged in commands, paths and protocol text.
+func withBrand(s uiStrings, locale string) uiStrings {
+	display := brand.Load().Name(locale)
+	value := reflect.ValueOf(&s).Elem()
+	for i := 0; i < value.NumField(); i++ {
+		field := value.Field(i)
+		if field.Kind() == reflect.String && field.CanSet() {
+			field.SetString(strings.ReplaceAll(field.String(), "Octo", display))
+		}
+	}
+	return s
+}
+
 // active holds the current string set. It's an atomic pointer because the tray
 // refresh loop re-applies the language on its own goroutine while dialog
 // callbacks read it on the UI thread.
@@ -142,9 +158,11 @@ func L() *uiStrings {
 // not the OS.
 func applyLang() {
 	if resolveLang() == "zh" {
-		active.Store(&zhStrings)
+		localized := withBrand(zhStrings, "zh-CN")
+		active.Store(&localized)
 	} else {
-		active.Store(&enStrings)
+		localized := withBrand(enStrings, "en-US")
+		active.Store(&localized)
 	}
 }
 

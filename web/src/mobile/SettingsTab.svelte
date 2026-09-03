@@ -6,7 +6,8 @@
   import { notificationsEnabled, setNotificationsEnabled } from '../lib/notifications'
   import { getMode, setMode, type ThemeMode } from '../lib/theme'
   import { wsState } from '../lib/ws'
-  import { t } from '../lib/i18n'
+  import { t, locale } from '../lib/i18n'
+  import { brand, brandName } from '../lib/brand'
 
   let mode = $state<ThemeMode>(getMode())
   const themes: { m: ThemeMode; key: string }[] = [
@@ -63,8 +64,12 @@
   <p class="lbl">{$t('m.about')}</p>
   <div class="card group">
     <div class="row">
-      <span class="rlabel">{$t('m.about_octo')}</span>
+      <span class="rlabel">{brandName($locale)}</span>
       <span class="rval mono">{version ? `v${version}` : ''}</span>
+    </div>
+    <div class="about-copy">
+      <strong>{brand.about.teamName[$locale] ?? brand.about.teamName['en-US']}</strong>
+      <span>{brand.about.supportEmail}</span>
     </div>
   </div>
 </div>
@@ -80,6 +85,7 @@
   .device .dot.live { background: var(--m-success); }
   .lbl { margin: 2px 2px 8px; font: 600 12px/1 system-ui; letter-spacing: .5px; text-transform: uppercase; color: var(--m-text-3); }
   .group { overflow: hidden; margin-bottom: 20px; }
+  .about-copy { display: flex; flex-direction: column; gap: 3px; padding: 0 16px 14px; color: var(--m-text-3); font-size: 11px; line-height: 1.4; }
   .row { display: flex; align-items: center; gap: 12px; padding: 14px 16px; }
   .row + .row { border-top: 1px solid var(--m-divider); }
   .row.col { flex-direction: column; align-items: stretch; gap: 10px; }

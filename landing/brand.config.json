@@ -1,0 +1,160 @@
+{
+  "schemaVersion": 1,
+  "brandId": "puddingbox",
+  "product": {
+    "names": {
+      "zh-CN": "布丁盒子",
+      "en-US": "Pudding Box",
+      "zh-TW": "布丁盒子",
+      "ja-JP": "プディングボックス",
+      "ko-KR": "푸딩 박스",
+      "es-ES": "Pudding Box",
+      "fr-FR": "Pudding Box"
+    },
+    "shortName": {
+      "zh-CN": "布丁盒子",
+      "en-US": "Pudding Box"
+    },
+    "category": {
+      "zh-CN": "智能代理工作台",
+      "en-US": "Agent workspace"
+    },
+    "tagline": {
+      "zh-CN": "把复杂的智能代理工作，装进一个简单的盒子。",
+      "en-US": "A simple box for powerful agent workflows."
+    },
+    "description": {
+      "zh-CN": "布丁盒子是一套面向个人和团队的智能代理工作台，用于连接本地工具、管理任务，并在 Web、桌面和移动端之间保持连续的工作体验。",
+      "en-US": "Pudding Box is an agent workspace for individuals and teams to connect local tools, manage tasks, and keep work connected across web, desktop, and mobile."
+    }
+  },
+  "about": {
+    "teamName": {
+      "zh-CN": "布丁盒子工作室",
+      "en-US": "Pudding Box Studio"
+    },
+    "copyright": {
+      "zh-CN": "Copyright © 2026 布丁盒子工作室",
+      "en-US": "Copyright © 2026 Pudding Box Studio"
+    },
+    "contactEmail": "hello@puddingbox.example",
+    "supportEmail": "support@puddingbox.example",
+    "securityEmail": "security@puddingbox.example",
+    "license": "MIT",
+    "notice": {
+      "zh-CN": "布丁盒子是面向个人和团队的智能代理工作台。产品默认将工作数据保存在本地；联网、更新、配对和第三方服务行为以隐私说明和实际配置为准。",
+      "en-US": "Pudding Box is an agent workspace for individuals and teams. Data is stored locally by default. Networking, updates, pairing, and third-party service behavior are described in the privacy notice and configuration."
+    }
+  },
+  "links": {
+    "website": "https://puddingbox.example",
+    "docs": "https://docs.puddingbox.example",
+    "download": "https://download.puddingbox.example",
+    "privacy": "https://puddingbox.example/privacy",
+    "security": "https://puddingbox.example/security",
+    "feedback": "https://puddingbox.example/feedback",
+    "repository": "https://github.com/<your-org>/pudding-box-client",
+    "license": "https://github.com/<your-org>/pudding-box-client/blob/main/LICENSE.txt"
+  },
+  "visual": {
+    "logo": {
+      "mark": "assets/pudding-box-mark.svg",
+      "favicon": "assets/pudding-box-mark.svg",
+      "temporary": true
+    },
+    "colors": {
+      "primary": "#F4A261",
+      "secondary": "#6C4AB6",
+      "darkBackground": "#211A2E",
+      "lightBackground": "#FFF8F0",
+      "success": "#4F9D69",
+      "danger": "#D95D5D"
+    }
+  },
+  "compatibility": {
+    "cliCommand": "octo",
+    "configDir": "~/.octo",
+    "environmentPrefix": "OCTO_",
+    "uiProtocol": "octo-ui",
+    "pairingProtocol": "octo-pair",
+    "goModule": "github.com/open-octo/octo-agent"
+  },
+  "futureMigration": {
+    "cliCommand": "puddingbox",
+    "configDir": "~/.puddingbox",
+    "environmentPrefix": "PUDDINGBOX_",
+    "uiProtocol": "puddingbox-ui",
+    "pairingProtocol": "puddingbox-pair",
+    "urlScheme": "puddingbox://",
+    "macBundleId": "com.puddingbox.desktop",
+    "windowsAppUserModelId": "PuddingBox.Desktop",
+    "linuxDesktopEntry": "puddingbox.desktop",
+    "mobileApplicationId": "com.puddingbox.mobile"
+  },
+  "copy": {
+    "aboutTitle": {
+      "zh-CN": "关于布丁盒子",
+      "en-US": "About Pudding Box"
+    },
+    "settingsTitle": {
+      "zh-CN": "布丁盒子设置",
+      "en-US": "Pudding Box Settings"
+    },
+    "welcomeTitle": {
+      "zh-CN": "欢迎使用布丁盒子",
+      "en-US": "Welcome to Pudding Box"
+    },
+    "welcomeDescription": {
+      "zh-CN": "一个更简单的智能代理工作空间。",
+      "en-US": "A simpler workspace for agent workflows."
+    },
+    "getStarted": {
+      "zh-CN": "开始使用",
+      "en-US": "Get started"
+    },
+    "setUpLater": {
+      "zh-CN": "稍后设置",
+      "en-US": "Set up later"
+    },
+    "localDataNotice": {
+      "zh-CN": "你的工作数据默认保存在本地。",
+      "en-US": "Your work data is stored locally by default."
+    },
+    "helpLabel": {
+      "zh-CN": "帮助中心",
+      "en-US": "Help Center"
+    },
+    "feedbackLabel": {
+      "zh-CN": "提交反馈",
+      "en-US": "Send feedback"
+    },
+    "docsLabel": {
+      "zh-CN": "查看文档",
+      "en-US": "Documentation"
+    },
+    "privacyLabel": {
+      "zh-CN": "隐私说明",
+      "en-US": "Privacy"
+    },
+    "licenseLabel": {
+      "zh-CN": "许可证与归属",
+      "en-US": "Licenses & Attributions"
+    },
+    "updateTitle": {
+      "zh-CN": "布丁盒子更新",
+      "en-US": "Pudding Box Update"
+    },
+    "pairingTitle": {
+      "zh-CN": "连接布丁盒子",
+      "en-US": "Connect to Pudding Box"
+    },
+    "exportFooter": {
+      "zh-CN": "由布丁盒子导出",
+      "en-US": "Exported from Pudding Box"
+    },
+    "offlineNotice": {
+      "zh-CN": "当前处于离线状态",
+      "en-US": "You are currently offline"
+    }
+  }
+}

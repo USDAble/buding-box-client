@@ -1,4 +1,6 @@
-; octo-setup — per-user Windows installer for the Octo desktop app.
+; pudding-box setup — per-user Windows installer for the Pudding Box desktop app.
+; The installer filename, executable names, and install directory remain stable
+; for compatibility with existing Octo installations.
 ;
 ; Installs the desktop app (octo-desktop.exe) + the octo CLI to
 ; %LOCALAPPDATA%\Programs\octo, puts that dir on the user PATH (HKCU — no admin,
@@ -37,10 +39,10 @@
 ; A stable AppId so re-running a newer installer updates in place rather than
 ; stacking a second copy. Never change this value.
 AppId={{8F2A6B1C-3D4E-4F50-9A6B-7C8D9E0F1A2B}
-AppName=Octo
+AppName=Pudding Box
 AppVersion={#AppVersion}
-AppPublisher=open-octo
-AppPublisherURL=https://github.com/open-octo/octo-agent
+AppPublisher=Pudding Box Studio
+AppPublisherURL=https://puddingbox.example
 DefaultDirName={userpf}\octo
 DisableProgramGroupPage=yes
 DisableDirPage=yes
@@ -54,7 +56,7 @@ WizardStyle=modern
 ; Broadcast WM_SETTINGCHANGE after install so Explorer-launched shells pick up
 ; the new PATH without a logout.
 ChangesEnvironment=yes
-UninstallDisplayName=Octo {#AppVersion}
+UninstallDisplayName=Pudding Box {#AppVersion}
 
 [Files]
 Source: "{#SourceDir}\octo-desktop.exe"; DestDir: "{app}"; Flags: ignoreversion
@@ -69,9 +71,9 @@ Source: "{#SourceDir}\uv.exe"; DestDir: "{app}"; Flags: ignoreversion skipifsour
 
 [Icons]
 ; Launch the desktop app. IconFilename points at the embedded icon in the exe so
-; the Start-menu shortcut shows the Octo logo instead of the Windows generic icon.
-Name: "{userprograms}\Octo"; Filename: "{app}\octo-desktop.exe"; \
-  WorkingDir: "{app}"; IconFilename: "{app}\octo-desktop.exe"; Comment: "Octo"
+; the Start-menu shortcut shows the Pudding Box logo instead of the Windows generic icon.
+Name: "{userprograms}\Pudding Box"; Filename: "{app}\octo-desktop.exe"; \
+  WorkingDir: "{app}"; IconFilename: "{app}\octo-desktop.exe"; Comment: "Pudding Box"
 
 [Code]
 const

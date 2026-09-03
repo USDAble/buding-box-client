@@ -24,7 +24,7 @@ probe libwebkitgtk-6.0.so || missing="$missing WebKitGTK-6.0"
 probe libgtk-4.so         || missing="$missing GTK4"
 
 if [ -n "$missing" ]; then
-  msg="Octo needs these system libraries, which aren't installed:$missing
+  msg="Pudding Box needs these system libraries, which aren't installed:$missing
 
 Install them and relaunch:
   Debian/Ubuntu:  sudo apt install libgtk-4-1 libwebkitgtk-6.0-4
@@ -34,7 +34,7 @@ Install them and relaunch:
 (These ship with most current desktops; older distributions may not have
 WebKitGTK 6.0 packaged yet.)"
   if command -v zenity >/dev/null 2>&1; then
-    zenity --error --no-wrap --title="Octo — missing dependencies" --text="$msg"
+    zenity --error --no-wrap --title="Pudding Box — missing dependencies" --text="$msg"
   elif command -v kdialog >/dev/null 2>&1; then
     kdialog --error "$msg"
   else
@@ -45,7 +45,7 @@ fi
 
 # First-run desktop integration. An AppImage runs from a single file and does
 # NOT register itself in the application menu — unlike the macOS/Windows
-# installers. Offer to do it once so Octo launches from the app grid like a
+# installers. Offer to do it once so Pudding Box launches from the app grid like a
 # native install. Backgrounded so it never delays startup; the prompt (if the
 # user has one) appears alongside the window. Skipped when: not an AppImage
 # (extracted/dev run — no $APPIMAGE), already asked once, or no GUI dialog tool
@@ -63,10 +63,10 @@ integrate_desktop() {
   mkdir -p "$data/octo" && : > "$marker"
 
   if [ "$dlg" = zenity ]; then
-    zenity --question --no-wrap --title="Octo" \
-      --text="Add Octo to your applications menu?" || return 0
+    zenity --question --no-wrap --title="Pudding Box" \
+      --text="Add Pudding Box to your applications menu?" || return 0
   else
-    kdialog --yesno "Add Octo to your applications menu?" || return 0
+    kdialog --yesno "Add Pudding Box to your applications menu?" || return 0
   fi
 
   icons="$data/icons/hicolor/256x256/apps"

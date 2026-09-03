@@ -11,6 +11,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/open-octo/octo-agent/internal/brand"
 	"github.com/open-octo/octo-agent/internal/server"
 	"github.com/wailsapp/wails/v3/pkg/application"
 	"github.com/wailsapp/wails/v3/pkg/events"
@@ -532,7 +533,7 @@ func (b *nativeBridge) showWindowAt(hash string) {
 			startState = application.WindowStateMaximised
 		}
 		w := b.app.Window.NewWithOptions(application.WebviewWindowOptions{
-			Title:      "Octo",
+			Title:      brand.Load().Name(resolveLang()),
 			Width:      width,
 			Height:     height,
 			MinWidth:   minWindowWidth,

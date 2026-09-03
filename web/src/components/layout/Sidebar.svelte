@@ -4,7 +4,8 @@
   import { view, sidebar, sessions, sessionGroups, pinnedSessions, collapsedSessions, editGroupId, editGroupDraft, activeSessionId, selMode, sel, menuFor, editId, editDraft, showToast, mcpServers, createNewSession, createSessionInGroup, clearPendingSessionOpts, settingsModalOpen, cmdkOpen, nativeShell, dirLeaf } from '../../lib/stores'
   import * as api from '../../lib/api'
   import { titlebarDblClick } from '../../lib/nativeWindow'
-  import { t, tr } from '../../lib/i18n'
+  import { t, tr, locale } from '../../lib/i18n'
+  import { brandName } from '../../lib/brand'
   import { confirmDialog } from '../../lib/confirm'
   import { splitSections, swapWithinSection, parseSectionFold, type SectionFold } from '../../lib/sidebarSections'
   import { SIDEBAR_MIN, SIDEBAR_MAX, CENTER_MIN, readSidebarWidth, saveSidebarWidth } from '../../lib/sidebarWidth'
@@ -642,7 +643,7 @@
         <iconify-icon icon="lucide:panel-left" width="16"></iconify-icon>
       </button>
       <OctoLogo class="logo" size={20} />
-      <span class="brand-name">Octo</span>
+      <span class="brand-name">{brandName($locale)}</span>
       <span class="spacer"></span>
       <button class="icon-btn" title={$t('header.search_sessions')} onclick={() => cmdkOpen.set(true)}>
         <iconify-icon icon="ant-design:search-outlined" width="15"></iconify-icon>

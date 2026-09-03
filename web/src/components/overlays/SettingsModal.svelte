@@ -8,7 +8,7 @@
   import { get } from 'svelte/store'
   import { showToast, nativeShell, settingsModalOpen, settingsTarget, onboardPhase, sessions, sessionGroups, collapsedSessions, activeSessionId, view, clearPendingSessionOpts } from '../../lib/stores'
   import type { Session, SessionGroup } from '../../lib/types'
-  import { setLocale, t, tr } from '../../lib/i18n'
+  import { setLocale, t, tr, locale } from '../../lib/i18n'
   import { getMode, setMode, type ThemeMode } from '../../lib/theme'
   import { notificationsEnabled, setNotificationsEnabled } from '../../lib/notifications'
   import { openUrl } from '../../lib/externalLinks'
@@ -16,7 +16,9 @@
   import { ago, clockTick } from '../../lib/relTime'
   import * as api from '../../lib/api'
 
-  const LICENSE_URL = 'https://github.com/open-octo/octo-agent/blob/main/LICENSE.txt'
+  import { brand, brandUrl } from '../../lib/brand'
+
+  const LICENSE_URL = brandUrl('license')
 
   const fontZoomMap: Record<string, string> = { Small: '0.9', Medium: '1', Large: '1.1' }
   const modeToThemeLabel: Record<string, string> = { light: 'Light', dark: 'Dark', system: 'System' }
@@ -740,6 +742,11 @@
               <button class="link-btn" onclick={() => openUrl(LICENSE_URL)}>{$t('settings.about.license_view')}</button>
             </div>
           </div>
+          <div class="about-meta">
+            <strong>{brand.about.teamName[$locale] ?? brand.about.teamName['en-US']}</strong>
+            <span>{brand.about.copyright[$locale] ?? brand.about.copyright['en-US']}</span>
+            <span>{brand.about.supportEmail}</span>
+          </div>
           <div class="about-footer">
             {$t('settings.about.footer').replace('{tagline}', $t('nav.workbench')).replace('{year}', String(new Date().getFullYear()))}
           </div>
@@ -815,6 +822,15 @@
   font-weight: 500; cursor: pointer; font-family: inherit; padding: 0; flex: 0 0 auto;
 }
 .link-btn:hover { text-decoration: underline; }
+.about-meta {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin: 14px 0 4px;
+  color: var(--text-tertiary);
+  font-size: 11px;
+  line-height: 1.5;
+}
 .about-footer { padding: 28px 2px 4px; text-align: center; font-size: 12px; color: var(--text-tertiary); }
 .sinput {
   width: 220px; flex: 0 0 auto; height: 32px; padding: 0 10px;

@@ -4,9 +4,9 @@
 
 <div align="center">
 
-# octo-agent
+# 布丁盒子（Pudding Box）
 
-**开源、单二进制、自托管的 AI Agent。**
+**布丁盒子是开源、单二进制、自托管的 AI Agent 工作台。**
 
 coding agent 能力对标 Claude Code；作为个人助手，它比 OpenClaw 更轻量 —— 一个 MIT 开源的 Go 二进制，无需 Node / Python / Ruby，接入**任意模型**（DeepSeek、Kimi、Anthropic、OpenAI 或任何兼容端点），服务和数据都留在你自己的机器上。
 
@@ -17,13 +17,15 @@ coding agent 能力对标 Claude Code；作为个人助手，它比 OpenClaw 更
 [![Go](https://img.shields.io/badge/go-%3E%3D%201.25-00ADD8?style=flat-square)](https://go.dev)
 [![License](https://img.shields.io/badge/license-MIT-lightgrey?style=flat-square)](LICENSE.txt)
 
+> **品牌说明：**产品展示名称为**布丁盒子（Pudding Box）**。现有 `octo` 命令、路径、协议和源码链接暂作为兼容标识保留，迁移将按独立方案发布。
+
 [官网](https://octo-agent.dev) · [English](README.md) · [安装指南](https://octo-agent.dev/docs/zh/getting-started/install/) · [文档](https://octo-agent.dev/docs/zh/) · [社区](#社区与交流)
 
 觉得有用的话，给 octo 点个 ⭐ 吧！
 
 </div>
 
-## 为什么用 octo
+## 为什么用布丁盒子
 
 octo 不是又一个需要"养"的 agent 框架。OpenClaw、Hermes 这类项目往往需要你调环境、写规则、配技能才能让 agent 跑顺；octo 的定位更接近 Codex / WorkBuddy：**下载即用、用户友好**，同时把模型选择权、数据所有权和运行环境牢牢留在你手里。
 

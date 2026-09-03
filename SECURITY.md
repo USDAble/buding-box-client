@@ -1,6 +1,6 @@
-# Security
+# Pudding Box security
 
-octo is a **single-user, personal agent**. Its server (`octo serve`) executes
+Pudding Box is a **single-user, personal agent**. Its compatibility backend command remains `octo`. Its server (`octo serve`) executes
 arbitrary shell commands on behalf of its one trusted operator — that is the
 product, not a vulnerability. This document states where the security
 boundary sits, what protects it, and what is deliberately out of scope.

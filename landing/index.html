@@ -3,26 +3,26 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Octo — private, self-hosted AI agent · one brain, eight legs</title>
-  <meta name="description" content="A private, self-hosted AI agent: one brain — a single fast Go binary — with eight legs, like an octopus, reaching your TUI, CLI, VS Code, Obsidian, web, desktop, IM, and mobile. Any model, zero telemetry; your data never leaves your machine.">
-  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Crect width='100' height='100' rx='22' fill='%231677FF'/%3E%3Cpath fill='%23ffffff' d='M50 18 C34 18 26 30 26 44 C26 54 32 60 36 62 C34 70 28 78 20 82 C18 83 18 86 20 88 C22 89 25 89 27 87 C33 83 39 76 42 68 C44 69 47 70 50 70 L50 82 C50 85 53 87 56 86 C58 85 59 83 58 81 L56 70 C59 70 62 69 64 68 C67 76 73 83 79 87 C81 89 84 89 86 88 C88 86 88 83 86 82 C78 78 72 70 70 62 C74 60 80 54 80 44 C80 30 72 18 56 18 Z'/%3E%3Ccircle cx='40' cy='42' r='5' fill='%231677FF'/%3E%3Ccircle cx='60' cy='42' r='5' fill='%231677FF'/%3E%3C/svg%3E">
+  <title>Pudding Box — a simple box for powerful agent workflows</title>
+  <meta name="description" content="Pudding Box is a private, self-hosted agent workspace for connecting tools, managing tasks, and keeping work continuous across web, desktop, and mobile.">
+  <link rel="icon" href="pudding-box-mark.svg">
   <link rel="canonical" href="https://octo-agent.dev/">
-  <meta property="og:title" content="Octo — private, self-hosted AI agent · one brain, eight legs">
-  <meta property="og:description" content="A private, self-hosted AI agent: one brain — a single fast Go binary — with eight legs, like an octopus, reaching your TUI, CLI, VS Code, Obsidian, web, desktop, IM, and mobile. Any model, zero telemetry; your data never leaves your machine.">
+  <meta property="og:title" content="Pudding Box — a simple box for powerful agent workflows">
+  <meta property="og:description" content="Pudding Box is a private, self-hosted agent workspace for connecting tools, managing tasks, and keeping work continuous across web, desktop, and mobile.">
   <meta property="og:type" content="website">
   <meta property="og:url" content="https://octo-agent.dev/">
   <meta property="og:image" content="https://octo-agent.dev/og-image.png">
-  <meta property="og:site_name" content="Octo">
+  <meta property="og:site_name" content="Pudding Box">
   <meta name="twitter:card" content="summary_large_image">
-  <meta name="twitter:title" content="Octo — private, self-hosted AI agent · one brain, eight legs">
-  <meta name="twitter:description" content="A private, self-hosted AI agent: one brain — a single fast Go binary — with eight legs, like an octopus, reaching your TUI, CLI, VS Code, Obsidian, web, desktop, IM, and mobile. Any model, zero telemetry; your data never leaves your machine.">
+  <meta name="twitter:title" content="Pudding Box — a simple box for powerful agent workflows">
+  <meta name="twitter:description" content="Pudding Box is a private, self-hosted agent workspace for connecting tools, managing tasks, and keeping work continuous across web, desktop, and mobile.">
   <meta name="twitter:image" content="https://octo-agent.dev/og-image.png">
   <script type="application/ld+json">
   {
     "@context": "https://schema.org",
     "@type": "SoftwareApplication",
-    "name": "Octo",
-    "description": "A private, self-hosted AI agent: one brain — a single fast Go binary — with eight legs, like an octopus, reaching your TUI, CLI, VS Code, Obsidian, web, desktop, IM, and mobile. Any model; your data never leaves your machine.",
+    "name": "Pudding Box",
+    "description": "Pudding Box is a private, self-hosted agent workspace for connecting tools, managing tasks, and keeping work continuous across web, desktop, and mobile.",
     "applicationCategory": "DeveloperApplication",
     "operatingSystem": "macOS, Linux, Windows",
     "license": "https://github.com/open-octo/octo-agent/blob/main/LICENSE.txt",
@@ -55,6 +55,7 @@
 
     /* nav */
     .nav{position:fixed;top:0;left:0;right:0;z-index:100;display:flex;align-items:center;gap:24px;height:60px;padding:0 32px;background:rgba(255,255,255,.92);backdrop-filter:blur(8px);border-bottom:1px solid var(--line);}
+    .brand-mark{display:block;border-radius:8px;}
     .brand{display:flex;align-items:center;gap:10px;color:var(--t88);font-weight:600;font-size:17px;}
     .navlinks{flex:1;display:flex;gap:24px;margin-left:16px;font-size:14px;}
     .navlinks a{color:var(--t65);}
@@ -149,8 +150,8 @@
 
     /* arms */
     .arms{background:var(--canvas);border-top:1px solid var(--line);border-bottom:1px solid var(--line);}
-    .octo{max-width:660px;margin:0 auto 48px;}
-    .octo svg{width:100%;height:auto;display:block;}
+    .workspace-map{max-width:660px;margin:0 auto 48px;}
+    .workspace-map svg{width:100%;height:auto;display:block;}
     .grid4{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:16px;}
     .arm{background:#fff;border:1px solid var(--line2);border-radius:12px;padding:20px;}
     .arm:hover{background:rgba(22,119,255,.06);border-color:rgba(22,119,255,.5);}
@@ -165,7 +166,7 @@
     .arm-title{display:flex;align-items:center;gap:8px;margin-bottom:6px;}
     .arm-title h3{margin:0;}
 
-    /* why octo */
+    /* why pudding box */
     .why{background:#fff;border-top:1px solid var(--line);}
     .why-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:16px;}
     .why-card{background:var(--canvas);border:1px solid var(--line2);border-radius:12px;padding:20px;}
@@ -238,8 +239,8 @@
 
   <nav class="nav">
     <a class="brand" href="#top">
-      <svg width="28" height="28" viewBox="0 0 100 100"><rect width="100" height="100" rx="22" fill="#1677FF"/><path fill="#fff" d="M50 18 C34 18 26 30 26 44 C26 54 32 60 36 62 C34 70 28 78 20 82 C18 83 18 86 20 88 C22 89 25 89 27 87 C33 83 39 76 42 68 C44 69 47 70 50 70 L50 82 C50 85 53 87 56 86 C58 85 59 83 58 81 L56 70 C59 70 62 69 64 68 C67 76 73 83 79 87 C81 89 84 89 86 88 C88 86 88 83 86 82 C78 78 72 70 70 62 C74 60 80 54 80 44 C80 30 72 18 56 18 Z"/><circle cx="40" cy="42" r="5" fill="#1677FF"/><circle cx="60" cy="42" r="5" fill="#1677FF"/></svg>
-      Octo
+      <img class="brand-mark" src="pudding-box-mark.svg" alt="Pudding Box logo" width="28" height="28">
+      <span data-brand-name>Pudding Box</span>
     </a>
     <div class="navlinks">
       <a href="#arms" data-en="Interfaces" data-zh="界面"></a>
@@ -265,20 +266,15 @@
 
   <header id="top" class="hero">
     <div class="hero-inner">
-      <svg class="hero-logo" viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Octo logo">
-        <rect width="100" height="100" rx="22" fill="#1677FF"/>
-        <path fill="#ffffff" d="M50 18 C34 18 26 30 26 44 C26 54 32 60 36 62 C34 70 28 78 20 82 C18 83 18 86 20 88 C22 89 25 89 27 87 C33 83 39 76 42 68 C44 69 47 70 50 70 L50 82 C50 85 53 87 56 86 C58 85 59 83 58 81 L56 70 C59 70 62 69 64 68 C67 76 73 83 79 87 C81 89 84 89 86 88 C88 86 88 83 86 82 C78 78 72 70 70 62 C74 60 80 54 80 44 C80 30 72 18 56 18 Z"/>
-        <circle cx="40" cy="42" r="5" fill="#1677FF"/>
-        <circle cx="60" cy="42" r="5" fill="#1677FF"/>
-      </svg>
+      <img class="hero-logo" src="pudding-box-mark.svg" alt="Pudding Box logo">
       <div class="kicker">
         <iconify-icon icon="ant-design:safety-outlined" width="14"></iconify-icon>
         <span data-en="Open source · MIT · Self-hosted · Zero telemetry" data-zh="开源 · MIT · 自托管 · 零遥测"></span>
       </div>
-      <h1><span data-en="One brain, " data-zh="一个头，"></span><span class="accent" data-en="eight legs." data-zh="八条腿。"></span></h1>
+      <h1><span data-en="Your work, " data-zh="复杂工作，"></span><span class="accent" data-en="in one simple box." data-zh="装进一个简单的盒子。"></span></h1>
       <p class="tagline"
-         data-en="The self-hosted AI agent that just works. One Go binary, zero dependencies, any model — reaching your terminal, scripts, editor, notes, browser, desktop, chat apps, and phone. Your data never leaves your machine."
-         data-zh="开箱即用的自托管 AI Agent。一个零依赖的 Go 二进制，任意模型 —— 伸进终端、脚本、编辑器、笔记、浏览器、桌面、聊天应用和手机。你的数据从不离开你的机器。"></p>
+         data-en="A simple box for powerful agent workflows. Connect your tools, manage tasks, and keep your work local across terminal, web, desktop, and mobile."
+         data-zh="把复杂的智能代理工作，装进一个简单的盒子。连接工具、管理任务，让工作在终端、Web、桌面和移动端之间保持连续；数据默认留在本地。"></p>
       <div class="cta-row">
         <a id="get-started" class="btn-primary" href="https://github.com/open-octo/octo-agent/releases/latest">
           <iconify-icon id="dl-icon" icon="ant-design:download-outlined" width="18"></iconify-icon>
@@ -313,15 +309,15 @@
           <span class="dot" style="background:#FF5F57"></span>
           <span class="dot" style="background:#FEBC2E"></span>
           <span class="dot" style="background:#28C840"></span>
-          <span class="shot-title">Octo Desktop</span>
+          <span class="shot-title">Pudding Box Desktop</span>
         </div>
         <div class="shot-media">
           <div class="carousel" id="demo-carousel">
-            <div class="slide active"><video src="octo-demo-5.mp4" muted playsinline preload="auto" aria-label="Octo Desktop demo 1"></video></div>
-            <div class="slide"><video src="octo-demo.mp4" muted playsinline preload="auto" aria-label="Octo Desktop demo 2"></video></div>
-            <div class="slide"><video src="octo-demo-2.mp4" muted playsinline preload="auto" aria-label="Octo Desktop demo 3"></video></div>
-            <div class="slide"><video src="octo-demo-3.mp4" muted playsinline preload="auto" aria-label="Octo Desktop demo 4"></video></div>
-            <div class="slide"><video src="octo-demo-4.mp4" muted playsinline preload="auto" aria-label="Octo Desktop demo 5"></video></div>
+            <div class="slide active"><video src="octo-demo-5.mp4" muted playsinline preload="auto" aria-label="Pudding Box Desktop demo 1"></video></div>
+            <div class="slide"><video src="octo-demo.mp4" muted playsinline preload="auto" aria-label="Pudding Box Desktop demo 2"></video></div>
+            <div class="slide"><video src="octo-demo-2.mp4" muted playsinline preload="auto" aria-label="Pudding Box Desktop demo 3"></video></div>
+            <div class="slide"><video src="octo-demo-3.mp4" muted playsinline preload="auto" aria-label="Pudding Box Desktop demo 4"></video></div>
+            <div class="slide"><video src="octo-demo-4.mp4" muted playsinline preload="auto" aria-label="Pudding Box Desktop demo 5"></video></div>
             <div class="carousel-playpause" aria-hidden="true"></div>
             <button class="carousel-arrow prev" type="button" aria-label="Previous">‹</button>
             <button class="carousel-arrow next" type="button" aria-label="Next">›</button>
@@ -363,13 +359,13 @@
         </div>
         <div class="step reveal">
           <div class="step-head"><span class="num">2</span><h3 data-en="Connect a model" data-zh="连接模型"></h3></div>
-          <p data-en="Point Octo at any Anthropic- or OpenAI-compatible endpoint — cloud or fully local." data-zh="把 Octo 指向任意 Anthropic 或 OpenAI 兼容端点 —— 云端或完全本地。"></p>
+          <p data-en="Point Pudding Box at any Anthropic- or OpenAI-compatible endpoint — cloud or fully local." data-zh="把布丁盒子指向任意 Anthropic 或 OpenAI 兼容端点 —— 云端或完全本地。"></p>
           <div class="path"><span class="tag" data-en="Desktop" data-zh="桌面版"></span><span class="txt" data-en="First launch opens a setup wizard — pick a provider, paste an API key, test the connection." data-zh="首次启动自动进入设置向导 —— 选择供应商、填入 API Key、测试连接。"></span></div>
           <div class="path"><span class="tag">CLI</span><code data-en="octo config   # interactive setup" data-zh="octo config   # 交互式配置"></code></div>
         </div>
         <div class="step reveal">
           <div class="step-head"><span class="num">3</span><h3 data-en="Ship" data-zh="交付"></h3></div>
-          <p data-en="One prompt, full tool loop — in the TUI, headless in CI, or from any of the eight legs." data-zh="一句 prompt，完整工具循环 —— 在 TUI、CI 无界面运行，或从八条腿中任意一条发起。"></p>
+          <p data-en="One prompt, full tool loop — in the TUI, headless in CI, or from any interface." data-zh="一句 prompt，完整工具循环 —— 在 TUI、CI 无界面运行，或从任意界面发起。"></p>
           <div class="path"><span class="tag" data-en="Desktop" data-zh="桌面版"></span><span class="txt" data-en="Type your first prompt in the workbench — sessions, skills, and MCP all in one window." data-zh="在 Workbench 里发出第一句 prompt —— 会话、skills、MCP 都在同一个窗口。"></span></div>
           <div class="path"><span class="tag">CLI</span><code>octo "Add a --json flag to config show"</code></div>
         </div>
@@ -380,52 +376,41 @@
   <section id="arms" class="arms">
     <div class="wrap">
       <div class="sec-head reveal">
-        <h2 data-en="Reach it from wherever you work" data-zh="你在哪干活，就从哪够到它"></h2>
-        <p data-en="One brain — the Go harness plus the model you chose — and eight legs. Same memory, same ~/.octo, from every interface." data-zh="一个大脑 —— Go harness 加上你选的模型 —— 和八条腿。同一份记忆、同一个 ~/.octo，来自每一个界面。"></p>
+        <h2 data-en="A workspace that travels with your work" data-zh="工作到哪里，工作台就跟到哪里"></h2>
+        <p data-en="One local workspace across every interface. Same memory, same ~/.octo, from terminal to web, desktop, and mobile." data-zh="一个本地工作空间贯穿所有界面：同一份记忆、同一个 ~/.octo，从终端到 Web、桌面和移动端保持连续。"></p>
       </div>
-      <figure class="octo reveal">
-        <svg font-family="-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,sans-serif" xmlns="http://www.w3.org/2000/svg" viewBox="0 64 720 356" role="img" aria-label="One brain, eight legs — one local octopus agent whose eight legs reach eight interfaces: TUI, CLI, VS Code, Obsidian, web, desktop, IM, and mobile (coming soon)">
-          <g>
-          <path fill="#1677FF" d="M 330.11 206.96 L 324.02 202.37 L 317.87 197.81 L 311.65 193.27 L 305.37 188.75 L 299.02 184.26 L 292.61 179.80 L 286.13 175.35 L 279.58 170.93 L 272.97 166.54 L 266.29 162.17 L 259.54 157.82 L 252.73 153.49 L 245.85 149.19 L 238.91 144.90 L 231.90 140.64 L 224.83 136.41 L 217.69 132.19 L 210.48 127.99 L 203.21 123.82 L 195.88 119.66 L 188.47 115.52 L 181.01 111.40 L 173.48 107.29 L 165.88 103.20 L 158.23 99.12 L 150.52 95.03 L 149.48 96.97 L 157.08 101.21 L 164.60 105.51 L 172.04 109.84 L 179.40 114.21 L 186.67 118.61 L 193.88 123.04 L 201.00 127.50 L 208.05 131.98 L 215.02 136.50 L 221.92 141.04 L 228.74 145.60 L 235.48 150.20 L 242.15 154.81 L 248.74 159.46 L 255.25 164.12 L 261.69 168.82 L 268.05 173.53 L 274.34 178.27 L 280.55 183.04 L 286.68 187.83 L 292.74 192.64 L 298.72 197.47 L 304.63 202.33 L 310.46 207.21 L 316.21 212.11 L 321.89 217.04 Z"/>
-          <path fill="#1677FF" d="M 316.03 229.83 L 309.84 228.07 L 303.63 226.35 L 297.41 224.64 L 291.17 222.95 L 284.92 221.29 L 278.65 219.65 L 272.37 218.03 L 266.08 216.43 L 259.77 214.85 L 253.44 213.29 L 247.10 211.76 L 240.74 210.24 L 234.37 208.74 L 227.99 207.27 L 221.59 205.81 L 215.17 204.38 L 208.74 202.96 L 202.30 201.56 L 195.84 200.19 L 189.36 198.82 L 182.88 197.48 L 176.37 196.15 L 169.86 194.83 L 163.33 193.53 L 156.78 192.23 L 150.23 190.92 L 149.77 193.08 L 156.28 194.56 L 162.76 196.10 L 169.22 197.69 L 175.65 199.31 L 182.06 200.96 L 188.46 202.64 L 194.83 204.36 L 201.18 206.10 L 207.51 207.88 L 213.82 209.68 L 220.11 211.51 L 226.38 213.37 L 232.63 215.26 L 238.85 217.17 L 245.06 219.11 L 251.25 221.07 L 257.41 223.07 L 263.56 225.09 L 269.68 227.13 L 275.78 229.21 L 281.87 231.30 L 287.93 233.43 L 293.97 235.57 L 299.99 237.75 L 305.99 239.95 L 311.97 242.17 Z"/>
-          <path fill="#1677FF" d="M 316.12 255.78 L 309.65 257.97 L 303.18 260.08 L 296.72 262.12 L 290.27 264.08 L 283.82 265.96 L 277.38 267.76 L 270.95 269.48 L 264.52 271.13 L 258.10 272.69 L 251.69 274.18 L 245.28 275.59 L 238.88 276.92 L 232.48 278.17 L 226.10 279.34 L 219.72 280.43 L 213.34 281.44 L 206.98 282.37 L 200.62 283.21 L 194.26 283.98 L 187.92 284.66 L 181.58 285.25 L 175.25 285.77 L 168.92 286.19 L 162.61 286.53 L 156.30 286.77 L 150.00 286.90 L 150.00 289.10 L 156.33 289.15 L 162.67 289.16 L 169.03 289.12 L 175.40 289.00 L 181.79 288.82 L 188.20 288.57 L 194.62 288.26 L 201.06 287.87 L 207.52 287.40 L 213.99 286.87 L 220.48 286.26 L 226.99 285.58 L 233.52 284.83 L 240.06 284.00 L 246.62 283.10 L 253.19 282.13 L 259.78 281.08 L 266.39 279.95 L 273.02 278.75 L 279.66 277.47 L 286.32 276.12 L 293.00 274.69 L 299.70 273.19 L 306.41 271.61 L 313.14 269.95 L 319.88 268.22 Z"/>
-          <path fill="#1677FF" d="M 329.49 279.32 L 323.65 285.19 L 317.72 290.91 L 311.70 296.49 L 305.60 301.91 L 299.42 307.19 L 293.15 312.32 L 286.80 317.30 L 280.36 322.13 L 273.84 326.82 L 267.23 331.35 L 260.54 335.73 L 253.76 339.96 L 246.89 344.04 L 239.94 347.97 L 232.90 351.74 L 225.77 355.36 L 218.56 358.83 L 211.26 362.15 L 203.88 365.31 L 196.41 368.31 L 188.85 371.15 L 181.20 373.84 L 173.47 376.37 L 165.65 378.73 L 157.75 380.92 L 149.75 382.93 L 150.25 385.07 L 158.33 383.23 L 166.35 381.27 L 174.30 379.17 L 182.18 376.93 L 190.00 374.54 L 197.75 372.00 L 205.43 369.31 L 213.04 366.47 L 220.59 363.48 L 228.07 360.33 L 235.49 357.03 L 242.83 353.57 L 250.11 349.96 L 257.32 346.19 L 264.46 342.27 L 271.54 338.19 L 278.54 333.95 L 285.48 329.56 L 292.35 325.01 L 299.16 320.29 L 305.89 315.42 L 312.55 310.39 L 319.15 305.21 L 325.67 299.86 L 332.12 294.35 L 338.51 288.68 Z"/>
-          <path fill="#1677FF" d="M 398.11 217.04 L 403.79 212.11 L 409.54 207.21 L 415.37 202.33 L 421.28 197.47 L 427.26 192.64 L 433.32 187.83 L 439.45 183.04 L 445.66 178.27 L 451.95 173.53 L 458.31 168.82 L 464.75 164.12 L 471.26 159.46 L 477.85 154.81 L 484.52 150.20 L 491.26 145.60 L 498.08 141.04 L 504.98 136.50 L 511.95 131.98 L 519.00 127.50 L 526.12 123.04 L 533.33 118.61 L 540.60 114.21 L 547.96 109.84 L 555.40 105.51 L 562.92 101.21 L 570.52 96.97 L 569.48 95.03 L 561.77 99.12 L 554.12 103.20 L 546.52 107.29 L 538.99 111.40 L 531.53 115.52 L 524.12 119.66 L 516.79 123.82 L 509.52 127.99 L 502.31 132.19 L 495.17 136.41 L 488.10 140.64 L 481.09 144.90 L 474.15 149.19 L 467.27 153.49 L 460.46 157.82 L 453.71 162.17 L 447.03 166.54 L 440.42 170.93 L 433.87 175.35 L 427.39 179.80 L 420.98 184.26 L 414.63 188.75 L 408.35 193.27 L 402.13 197.81 L 395.98 202.37 L 389.89 206.96 Z"/>
-          <path fill="#1677FF" d="M 408.03 242.17 L 414.01 239.95 L 420.01 237.75 L 426.03 235.57 L 432.07 233.43 L 438.13 231.30 L 444.22 229.21 L 450.32 227.13 L 456.44 225.09 L 462.59 223.07 L 468.75 221.07 L 474.94 219.11 L 481.15 217.17 L 487.37 215.26 L 493.62 213.37 L 499.89 211.51 L 506.18 209.68 L 512.49 207.88 L 518.82 206.10 L 525.17 204.36 L 531.54 202.64 L 537.94 200.96 L 544.35 199.31 L 550.78 197.69 L 557.24 196.10 L 563.72 194.56 L 570.23 193.08 L 569.77 190.92 L 563.22 192.23 L 556.67 193.53 L 550.14 194.83 L 543.63 196.15 L 537.12 197.48 L 530.64 198.82 L 524.16 200.19 L 517.70 201.56 L 511.26 202.96 L 504.83 204.38 L 498.41 205.81 L 492.01 207.27 L 485.63 208.74 L 479.26 210.24 L 472.90 211.76 L 466.56 213.29 L 460.23 214.85 L 453.92 216.43 L 447.63 218.03 L 441.35 219.65 L 435.08 221.29 L 428.83 222.95 L 422.59 224.64 L 416.37 226.35 L 410.16 228.07 L 403.97 229.83 Z"/>
-          <path fill="#1677FF" d="M 400.12 268.22 L 406.86 269.95 L 413.59 271.61 L 420.30 273.19 L 427.00 274.69 L 433.68 276.12 L 440.34 277.47 L 446.98 278.75 L 453.61 279.95 L 460.22 281.08 L 466.81 282.13 L 473.38 283.10 L 479.94 284.00 L 486.48 284.83 L 493.01 285.58 L 499.52 286.26 L 506.01 286.87 L 512.48 287.40 L 518.94 287.87 L 525.38 288.26 L 531.80 288.57 L 538.21 288.82 L 544.60 289.00 L 550.97 289.12 L 557.33 289.16 L 563.67 289.15 L 570.00 289.10 L 570.00 286.90 L 563.70 286.77 L 557.39 286.53 L 551.08 286.19 L 544.75 285.77 L 538.42 285.25 L 532.08 284.66 L 525.74 283.98 L 519.38 283.21 L 513.02 282.37 L 506.66 281.44 L 500.28 280.43 L 493.90 279.34 L 487.52 278.17 L 481.12 276.92 L 474.72 275.59 L 468.31 274.18 L 461.90 272.69 L 455.48 271.13 L 449.05 269.48 L 442.62 267.76 L 436.18 265.96 L 429.73 264.08 L 423.28 262.12 L 416.82 260.08 L 410.35 257.97 L 403.88 255.78 Z"/>
-          <path fill="#6b7280" opacity="0.32" d="M 381.49 288.68 L 387.88 294.35 L 394.33 299.86 L 400.85 305.21 L 407.45 310.39 L 414.11 315.42 L 420.84 320.29 L 427.65 325.01 L 434.52 329.56 L 441.46 333.95 L 448.46 338.19 L 455.54 342.27 L 462.68 346.19 L 469.89 349.96 L 477.17 353.57 L 484.51 357.03 L 491.93 360.33 L 499.41 363.48 L 506.96 366.47 L 514.57 369.31 L 522.25 372.00 L 530.00 374.54 L 537.82 376.93 L 545.70 379.17 L 553.65 381.27 L 561.67 383.23 L 569.75 385.07 L 570.25 382.93 L 562.25 380.92 L 554.35 378.73 L 546.53 376.37 L 538.80 373.84 L 531.15 371.15 L 523.59 368.31 L 516.12 365.31 L 508.74 362.15 L 501.44 358.83 L 494.23 355.36 L 487.10 351.74 L 480.06 347.97 L 473.11 344.04 L 466.24 339.96 L 459.46 335.73 L 452.77 331.35 L 446.16 326.82 L 439.64 322.13 L 433.20 317.30 L 426.85 312.32 L 420.58 307.19 L 414.40 301.91 L 408.30 296.49 L 402.28 290.91 L 396.35 285.19 L 390.51 279.32 Z"/>
-            <ellipse fill="#E6F4FF" opacity="0.55" cx="360" cy="248" rx="64" ry="58"/>
-            <g transform="translate(360,250) scale(1.35) translate(-53,-53)">
-              <path fill="#1677FF" d="M50 18 C34 18 26 30 26 44 C26 54 32 60 36 62 C42 74 64 74 70 62 C74 60 80 54 80 44 C80 30 72 18 56 18 Z"/>
-              <circle fill="#ffffff" cx="40" cy="42" r="5"/>
-              <circle fill="#ffffff" cx="60" cy="42" r="5"/>
-            </g>
+      <figure class="workspace-map reveal">
+        <svg font-family="-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,sans-serif" xmlns="http://www.w3.org/2000/svg" viewBox="0 64 720 356" role="img" aria-label="One local workspace connecting TUI, CLI, VS Code, Obsidian, web, desktop, IM, and mobile">
+          <g fill="none" stroke="#D8CFF0" stroke-width="2" stroke-linecap="round">
+            <path d="M330 230 C260 190 210 130 136 96"/><path d="M330 246 C260 235 210 208 136 192"/>
+            <path d="M330 266 C260 290 210 286 136 288"/><path d="M330 282 C260 330 210 370 136 384"/>
+            <path d="M390 230 C460 190 510 130 584 96"/><path d="M390 246 C460 235 510 208 584 192"/>
+            <path d="M390 266 C460 290 510 286 584 288"/><path d="M390 282 C460 330 510 370 584 384"/>
           </g>
-          <rect fill="#ffffff" stroke="#e5e7eb" stroke-width="1.4" x="96" y="76" width="40" height="40" rx="11"/>
-          <g fill="none" stroke="#1677FF" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" transform="translate(104,84)"><polyline points="5 7 10 12 5 17"/><line x1="12" y1="17" x2="19" y2="17"/></g>
-          <text fill="#374151" font-size="14" font-weight="600" x="88" y="101" text-anchor="end">TUI</text>
-          <rect fill="#ffffff" stroke="#e5e7eb" stroke-width="1.4" x="96" y="172" width="40" height="40" rx="11"/>
-          <g fill="none" stroke="#1677FF" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" transform="translate(104,180)"><polyline points="9 8 5 12 9 16"/><polyline points="15 8 19 12 15 16"/></g>
-          <text fill="#374151" font-size="14" font-weight="600" x="88" y="197" text-anchor="end">VS Code</text>
-          <rect fill="#ffffff" stroke="#e5e7eb" stroke-width="1.4" x="96" y="268" width="40" height="40" rx="11"/>
-          <g fill="none" stroke="#1677FF" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" transform="translate(104,276)"><path d="M12 2 4 9l8 13 8-13-8-7z"/><path d="M4 9h16"/></g>
-          <text fill="#374151" font-size="14" font-weight="600" x="88" y="293" text-anchor="end">Obsidian</text>
-          <rect fill="#ffffff" stroke="#e5e7eb" stroke-width="1.4" x="96" y="364" width="40" height="40" rx="11"/>
-          <g fill="none" stroke="#1677FF" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" transform="translate(104,372)"><path d="M8 4c-2 0-2 2-2 4s0 4-2 4c2 0 2 2 2 4s0 4 2 4"/><path d="M16 4c2 0 2 2 2 4s0 4 2 4c-2 0-2 2-2 4s0 4-2 4"/></g>
-          <text fill="#374151" font-size="14" font-weight="600" x="88" y="389" text-anchor="end">CLI</text>
-          <rect fill="#ffffff" stroke="#e5e7eb" stroke-width="1.4" x="584" y="76" width="40" height="40" rx="11"/>
-          <g fill="none" stroke="#1677FF" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" transform="translate(592,84)"><circle cx="12" cy="12" r="9"/><line x1="3" y1="12" x2="21" y2="12"/><path d="M12 3c3.5 3 3.5 15 0 18M12 3c-3.5 3-3.5 15 0 18"/></g>
-          <text fill="#374151" font-size="14" font-weight="600" x="632" y="101" text-anchor="start">Web</text>
-          <rect fill="#ffffff" stroke="#e5e7eb" stroke-width="1.4" x="584" y="172" width="40" height="40" rx="11"/>
-          <g fill="none" stroke="#1677FF" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" transform="translate(592,180)"><rect x="3" y="4" width="18" height="12" rx="1.5"/><line x1="9" y1="20" x2="15" y2="20"/><line x1="12" y1="16" x2="12" y2="20"/></g>
-          <text fill="#374151" font-size="14" font-weight="600" x="632" y="197" text-anchor="start">Desktop</text>
-          <rect fill="#ffffff" stroke="#e5e7eb" stroke-width="1.4" x="584" y="268" width="40" height="40" rx="11"/>
-          <g fill="none" stroke="#1677FF" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" transform="translate(592,276)"><path d="M20 15a2 2 0 0 1-2 2H8l-4 4V6a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2z"/></g>
-          <text fill="#374151" font-size="14" font-weight="600" x="632" y="293" text-anchor="start">IM</text>
-          <rect fill="#ffffff" stroke="#e5e7eb" stroke-width="1.4" stroke-dasharray="4 3" opacity="0.65" x="584" y="364" width="40" height="40" rx="11"/>
-          <g fill="none" stroke="#6b7280" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" opacity="0.7" transform="translate(592,372)"><rect x="7" y="2" width="10" height="20" rx="2"/><line x1="11" y1="18" x2="13" y2="18"/></g>
-          <text fill="#6b7280" font-size="14" font-weight="600" x="632" y="381" text-anchor="start">Mobile</text>
-          <text fill="#6b7280" font-size="10" font-weight="600" letter-spacing="0.02em" x="632" y="396" text-anchor="start" data-en="dev preview" data-zh="开发者预览"></text>
+          <rect fill="#FFF8F0" stroke="#F4A261" stroke-width="2" x="302" y="194" width="116" height="116" rx="28"/>
+          <image href="pudding-box-mark.svg" x="326" y="214" width="68" height="68" preserveAspectRatio="xMidYMid meet"/>
+          <text fill="#6C4AB6" font-size="13" font-weight="700" x="360" y="298" text-anchor="middle">Pudding Box</text>
+          <g fill="#fff" stroke="#e5e7eb" stroke-width="1.4">
+            <rect x="96" y="76" width="40" height="40" rx="11"/><rect x="96" y="172" width="40" height="40" rx="11"/>
+            <rect x="96" y="268" width="40" height="40" rx="11"/><rect x="96" y="364" width="40" height="40" rx="11"/>
+            <rect x="584" y="76" width="40" height="40" rx="11"/><rect x="584" y="172" width="40" height="40" rx="11"/>
+            <rect x="584" y="268" width="40" height="40" rx="11"/><rect fill="#fafafa" stroke-dasharray="4 3" opacity=".7" x="584" y="364" width="40" height="40" rx="11"/>
+          </g>
+          <g fill="none" stroke="#6C4AB6" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M105 91h18M105 101l6-6 6 6"/><path d="M105 187l6-6 6 6M105 197l6-6 6 6"/>
+            <path d="M105 283h22M105 293h22"/><path d="M105 379l8-8 8 8"/>
+            <circle cx="604" cy="96" r="9"/><path d="M595 96h18M604 87c3 3 3 15 0 18"/>
+            <rect x="595" y="184" width="18" height="12" rx="1.5"/><path d="M601 201h6"/>
+            <path d="M612 283a2 2 0 0 1-2 2h-10l-4 4v-15a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2z"/>
+            <rect x="599" y="371" width="10" height="20" rx="2" stroke="#9b91b5"/>
+          </g>
+          <g fill="#374151" font-size="14" font-weight="600">
+            <text x="88" y="101" text-anchor="end">TUI</text><text x="88" y="197" text-anchor="end">VS Code</text>
+            <text x="88" y="293" text-anchor="end">Obsidian</text><text x="88" y="389" text-anchor="end">CLI</text>
+            <text x="632" y="101">Web</text><text x="632" y="197">Desktop</text><text x="632" y="293">IM</text>
+            <text fill="#6b7280" x="632" y="381">Mobile</text>
+          </g>
+          <text fill="#6b7280" font-size="10" font-weight="600" letter-spacing="0.02em" x="632" y="396">dev preview</text>
         </svg>
       </figure>
       <div class="grid4">
@@ -470,7 +455,7 @@
             <h3 data-en="Mobile" data-zh="移动端"></h3>
             <span class="soon-tag" data-en="Developer preview" data-zh="开发者预览"></span>
           </div>
-          <p data-en="A thin native client (iOS + Android) over an end-to-end encrypted link to your machine. The eighth leg — buildable today from source with a self-hosted relay; hosted relay and app-store builds are next." data-zh="通过端到端加密链路连回你机器的轻量原生客户端（iOS + Android）。第八条腿 —— 现在即可从源码自建并配合自托管 relay 使用；托管 relay 与应用商店版本在路上。"></p>
+          <p data-en="A thin native client (iOS + Android) over an end-to-end encrypted link to your machine. A native client — buildable today from source with a self-hosted relay; hosted relay and app-store builds are next." data-zh="通过端到端加密链路连回你机器的轻量原生客户端（iOS + Android）。原生移动客户端 —— 现在即可从源码自建并配合自托管 relay 使用；托管 relay 与应用商店版本在路上。"></p>
         </div>
       </div>
     </div>
@@ -537,7 +522,7 @@
     <div class="wrap">
       <div class="sec-head reveal">
         <h2 data-en="See it in action" data-zh="看它怎么干活"></h2>
-        <p data-en="A few commands to get a feel for what Octo can do." data-zh="几条命令，感受一下 Octo 能做什么。"></p>
+        <p data-en="A few commands to get a feel for what Pudding Box can do." data-zh="几条命令，感受一下布丁盒子能做什么。"></p>
       </div>
       <div class="grid2">
         <div class="term reveal">
@@ -554,7 +539,7 @@
         </div>
         <div class="term reveal">
           <div class="term-bar"><span class="d" style="background:#FF5F57"></span><span class="d" style="background:#FEBC2E"></span><span class="d" style="background:#28C840"></span><span data-en="Configuration layers" data-zh="配置分层"></span></div>
-          <pre><div class="cmt" data-en="# Octo learns who you are and how you work" data-zh="# Octo 学习你是谁、你怎么工作"></div><div>~/.octo/soul.md      <span class="cmt" data-en="# agent persona" data-zh="# agent 人格"></span></div><div>~/.octo/user.md      <span class="cmt" data-en="# your profile" data-zh="# 你的个人画像"></span></div><div>~/.octo/octorules.md <span class="cmt" data-en="# global rules" data-zh="# 全局规则"></span></div><div>.octorules           <span class="cmt" data-en="# project conventions" data-zh="# 项目约定"></span></div></pre>
+          <pre><div class="cmt" data-en="# Pudding Box learns who you are and how you work" data-zh="# 布丁盒子学习你是谁、你怎么工作"></div><div>~/.octo/soul.md      <span class="cmt" data-en="# agent persona" data-zh="# agent 人格"></span></div><div>~/.octo/user.md      <span class="cmt" data-en="# your profile" data-zh="# 你的个人画像"></span></div><div>~/.octo/octorules.md <span class="cmt" data-en="# global rules" data-zh="# 全局规则"></span></div><div>.octorules           <span class="cmt" data-en="# project conventions" data-zh="# 项目约定"></span></div></pre>
         </div>
       </div>
     </div>
@@ -563,7 +548,7 @@
   <section id="why" class="why">
     <div class="wrap">
       <div class="sec-head reveal">
-        <h2 data-en="Why Octo" data-zh="为什么用 Octo"></h2>
+        <h2 data-en="Why Pudding Box" data-zh="为什么用布丁盒子"></h2>
         <p data-en="Everything that matters, without the gates." data-zh="重要的事一件不落，门槛一点不加。"></p>
       </div>
       <div class="why-grid">
@@ -576,7 +561,7 @@
           <p data-en="Use DeepSeek, Kimi, Qwen, Anthropic, OpenAI, or any compatible endpoint. Tuned caching keeps hit rates high and bills low." data-zh="DeepSeek、Kimi、Qwen、Anthropic、OpenAI 或任意兼容端点。逐家优化的缓存保证高命中率、低账单。"></p>
         </div>
         <div class="why-card reveal">
-          <h3 data-en="One binary, eight legs" data-zh="一个二进制，八条腿"></h3>
+          <h3 data-en="One binary, many interfaces" data-zh="一个二进制，多种界面"></h3>
           <p data-en="A single ~40 MB Go executable with zero telemetry. The desktop installer is ~100 MB, not 1 GB." data-zh="单个约 40 MB 的 Go 可执行文件，零遥测。桌面安装包约 100 MB，而非 1 GB。"></p>
         </div>
         <div class="why-card reveal">
@@ -595,7 +580,7 @@
       <div class="faq-list">
         <details class="reveal">
           <summary data-en="Is it really private?" data-zh="真的私密吗？"></summary>
-          <p data-en="Yes. Octo ships with no analytics SDKs, no crash reporters, and no usage pings. The only network traffic is the requests you explicitly send to the model provider you configured — which can be a model running entirely on your own machine. The source is open; audit it." data-zh="是的。Octo 不含任何埋点 SDK、崩溃上报或用量回传。唯一的网络流量就是你主动发给所配置模型供应商的请求 —— 而它可以是完全跑在你自己机器上的本地模型。源码开放，可自行审计。"></p>
+          <p data-en="Yes. Pudding Box ships with no analytics SDKs, no crash reporters, and no usage pings. The only network traffic is the requests you explicitly send to the model provider you configured — which can be a model running entirely on your own machine. The source is open; audit it." data-zh="是的。布丁盒子不含任何埋点 SDK、崩溃上报或用量回传。唯一的网络流量就是你主动发给所配置模型供应商的请求 —— 而它可以是完全跑在你自己机器上的本地模型。源码开放，可自行审计。"></p>
         </details>
         <details class="reveal">
           <summary data-en="Which models can I use?" data-zh="能用哪些模型？"></summary>
@@ -607,11 +592,11 @@
         </details>
         <details class="reveal">
           <summary data-en="Is it free?" data-zh="免费吗？"></summary>
-          <p data-en="Octo is MIT-licensed and free forever. You only pay your model provider — or nothing at all if you run a local model." data-zh="Octo 采用 MIT 许可，永久免费。你只需为模型供应商付费 —— 若使用本地模型则完全免费。"></p>
+          <p data-en="Pudding Box is MIT-licensed and free forever. You only pay your model provider — or nothing at all if you run a local model." data-zh="布丁盒子采用 MIT 许可，永久免费。你只需为模型供应商付费 —— 若使用本地模型则完全免费。"></p>
         </details>
         <details class="reveal">
           <summary data-en="How is it different from other coding agents?" data-zh="和其他编程 agent 有何不同？"></summary>
-          <p data-en="Three things: it's one Go binary with zero runtime dependencies; it's radically private (self-hosted, zero telemetry, any model including local); and one brain serves eight interfaces — so your terminal, editor, notes, chat apps, and phone all share the same agent, memory, and permissions." data-zh="三点：它是零运行时依赖的单一 Go 二进制；它彻底私密（自托管、零遥测、任意模型含本地）；一个大脑服务八个界面 —— 你的终端、编辑器、笔记、聊天应用和手机共享同一个 agent、记忆与权限。"></p>
+          <p data-en="Three things: it's one Go binary with zero runtime dependencies; it's radically private (self-hosted, zero telemetry, any model including local); and one workspace serves many interfaces — so your terminal, editor, notes, chat apps, and phone all share the same agent, memory, and permissions." data-zh="三点：它是零运行时依赖的单一 Go 二进制；它彻底私密（自托管、零遥测、任意模型含本地）；一个工作空间服务多个界面 —— 你的终端、编辑器、笔记、聊天应用和手机共享同一个 agent、记忆与权限。"></p>
         </details>
       </div>
     </div>
@@ -637,10 +622,10 @@
     <div class="foot-grid">
       <div class="foot-about">
         <div class="brand" style="margin-bottom:10px">
-          <svg width="24" height="24" viewBox="0 0 100 100"><rect width="100" height="100" rx="22" fill="#1677FF"/><path fill="#fff" d="M50 18 C34 18 26 30 26 44 C26 54 32 60 36 62 C34 70 28 78 20 82 C18 83 18 86 20 88 C22 89 25 89 27 87 C33 83 39 76 42 68 C44 69 47 70 50 70 L50 82 C50 85 53 87 56 86 C58 85 59 83 58 81 L56 70 C59 70 62 69 64 68 C67 76 73 83 79 87 C81 89 84 89 86 88 C88 86 88 83 86 82 C78 78 72 70 70 62 C74 60 80 54 80 44 C80 30 72 18 56 18 Z"/><circle cx="40" cy="42" r="5" fill="#1677FF"/><circle cx="60" cy="42" r="5" fill="#1677FF"/></svg>
-          Octo
+          <img class="brand-mark" src="pudding-box-mark.svg" alt="Pudding Box logo" width="24" height="24">
+          Pudding Box
         </div>
-        <p data-en="A private, self-hosted AI agent. One brain, eight legs. MIT licensed." data-zh="私密、自托管的 AI Agent。一个脑，八条腿。MIT 许可。"></p>
+        <p data-en="A private, self-hosted agent workspace. Simple, local, and MIT licensed." data-zh="私密、自托管的 AI Agent 工作台。简单、本地、MIT 许可。"></p>
       </div>
       <div class="foot-col">
         <span class="h" data-en="Product" data-zh="产品"></span>
@@ -661,13 +646,40 @@
         <a href="https://github.com/open-octo/octo-agent/discussions" data-en="Discussions" data-zh="讨论"></a>
       </div>
     </div>
-    <p class="foot-legal" data-en="MIT licensed · Built with curiosity · octo-agent.dev" data-zh="MIT 许可 · 用好奇心打造 · octo-agent.dev"></p>
+    <p class="foot-legal" data-en="MIT licensed · Built with curiosity · Pudding Box" data-zh="MIT 许可 · 用好奇心打造 · 布丁盒子"></p>
   </footer>
 
   <script>
+    // ----- Brand config -----
+    let landingBrand = null;
+    function landingLocalized(values, lang){
+      if(!values) return '';
+      const locale = lang === 'zh' ? 'zh-CN' : 'en-US';
+      return values[locale] || values[Object.keys(values).find(k=>k.startsWith(lang+'-'))] || values['en-US'] || '';
+    }
+    function applyBrandConfig(lang){
+      if(!landingBrand) return;
+      const name = landingLocalized(landingBrand.product?.names, lang);
+      document.querySelectorAll('[data-brand-name]').forEach(el=>{ if(name) el.textContent=name; });
+      const tagline = landingLocalized(landingBrand.product?.tagline, lang);
+      if(tagline) document.querySelectorAll('[data-brand-tagline]').forEach(el=>{ el.textContent=tagline; });
+      const description = landingLocalized(landingBrand.product?.description, lang);
+      if(description){
+        document.title = `${name} — ${tagline}`;
+        document.querySelector('meta[name="description"]')?.setAttribute('content', description);
+        document.querySelector('meta[property="og:title"]')?.setAttribute('content', `${name} — ${tagline}`);
+        document.querySelector('meta[property="og:description"]')?.setAttribute('content', description);
+      }
+    }
+    fetch('brand.config.json').then(r=>r.ok?r.json():null).then(cfg=>{
+      landingBrand=cfg;
+      applyBrandConfig(document.documentElement.lang==='zh-CN'?'zh':'en');
+    }).catch(()=>{});
+
     // ----- Bilingual -----
     function applyLang(lang){
       document.documentElement.lang = lang === 'zh' ? 'zh-CN' : 'en';
+      applyBrandConfig(lang);
       document.querySelectorAll('[data-en]').forEach(el=>{
         const v = el.dataset[lang]; if(v!=null) el.textContent = v;
       });

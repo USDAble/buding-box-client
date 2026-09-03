@@ -1,6 +1,6 @@
 <script lang="ts">
-  // Reusable octo brand mark — the same octopus head that appears in favicon.svg,
-  // exposed as a Svelte component so the header and sidebar stay in sync.
+  import { brandName } from '../../lib/brand'
+
   interface Props {
     size?: number | string
     class?: string
@@ -12,13 +12,26 @@
   class={className}
   width={size}
   height={size}
-  viewBox="0 0 100 100"
+  viewBox="0 0 128 128"
   fill="none"
   xmlns="http://www.w3.org/2000/svg"
-  aria-label="octo"
+  aria-label={brandName('en-US')}
+  role="img"
 >
-  <rect width="100" height="100" rx="22" fill="currentColor"/>
-  <path fill="#ffffff" d="M50 18 C34 18 26 30 26 44 C26 54 32 60 36 62 C34 70 28 78 20 82 C18 83 18 86 20 88 C22 89 25 89 27 87 C33 83 39 76 42 68 C44 69 47 70 50 70 L50 82 C50 85 53 87 56 86 C58 85 59 83 58 81 L56 70 C59 70 62 69 64 68 C67 76 73 83 79 87 C81 89 84 89 86 88 C88 86 88 83 86 82 C78 78 72 70 70 62 C74 60 80 54 80 44 C80 30 72 18 56 18 Z"/>
-  <circle cx="40" cy="42" r="5" fill="currentColor"/>
-  <circle cx="60" cy="42" r="5" fill="currentColor"/>
+  <defs>
+    <linearGradient id="pb-box" x1="16" y1="20" x2="112" y2="112" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#F4A261"/><stop offset="1" stop-color="#D97745"/>
+    </linearGradient>
+    <linearGradient id="pb-pudding" x1="38" y1="24" x2="91" y2="61" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#FFE0A8"/><stop offset="1" stop-color="#F4A261"/>
+    </linearGradient>
+  </defs>
+  <rect x="8" y="8" width="112" height="112" rx="30" fill="#211A2E"/>
+  <path d="M25 53h78v43c0 8-6 14-14 14H39c-8 0-14-6-14-14V53Z" fill="url(#pb-box)"/>
+  <path d="M30 51c0-13 10-24 23-24h22c13 0 23 11 23 24 0 8-7 14-15 14H45c-8 0-15-6-15-14Z" fill="url(#pb-pudding)"/>
+  <path d="M57 28c-2-8 7-12 12-5 5-7 14-3 12 5" stroke="#D97745" stroke-width="5" stroke-linecap="round"/>
+  <path d="M25 59h78" stroke="#FFF8F0" stroke-opacity=".5" stroke-width="4"/>
+  <circle cx="50" cy="80" r="5" fill="#FFF8F0" fill-opacity=".9"/>
+  <circle cx="78" cy="80" r="5" fill="#FFF8F0" fill-opacity=".9"/>
+  <path d="M48 94c8 7 24 7 32 0" stroke="#FFF8F0" stroke-width="4" stroke-linecap="round"/>
 </svg>

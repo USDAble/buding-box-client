@@ -10,7 +10,12 @@
     "noFallthroughCasesInSwitch": true,
     "skipLibCheck": true,
     "allowJs": true,
-    "checkJs": false
+    "checkJs": false,
+    "resolveJsonModule": true,
+    "allowSyntheticDefaultImports": true
   },
-  "include": ["src/**/*.ts", "src/**/*.svelte"]
+  "include": [
+    "src/**/*.ts",
+    "src/**/*.svelte"
+  ]
 }

@@ -1,3 +1,4 @@
+import { brandName } from './brand';
 import { writable, derived, get } from "svelte/store";
 
 export const en: Record<string, string> = {
@@ -1908,7 +1909,13 @@ function dictFor(l: string): Record<string, string> {
 // re-renders; the previous plain t() read the locale once and never updated.
 export const t = derived(locale, ($l) => {
   const dict = dictFor($l);
-  return (key: string): string => dict[key] ?? en[key] ?? key;
+  return (key: string): string => {
+    const value = dict[key] ?? en[key] ?? key
+    // Keep translation files focused on copy while resolving the display name
+    // from branding/brand.json. Lowercase `octo` is intentionally untouched:
+    // it remains a compatibility command/path/protocol identifier.
+    return value.replaceAll('Octo', brandName($l))
+  }
 });
 
 // Non-reactive lookup for <script> / .ts one-shots (toasts, etc.).

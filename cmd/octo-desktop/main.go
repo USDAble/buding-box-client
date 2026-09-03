@@ -29,6 +29,7 @@ import (
 	"time"
 
 	"github.com/mattn/go-isatty"
+	"github.com/open-octo/octo-agent/internal/brand"
 	"github.com/open-octo/octo-agent/internal/crashlog"
 	"github.com/open-octo/octo-agent/internal/logfile"
 	"github.com/open-octo/octo-agent/internal/serveenv"
@@ -207,8 +208,8 @@ func main() {
 	}
 
 	app := application.New(application.Options{
-		Name:        "Octo",
-		Description: "Octo Agent",
+		Name:        brand.Load().Name(resolveLang()),
+		Description: brand.Load().Description(resolveLang()),
 		Services:    services,
 		SingleInstance: &application.SingleInstanceOptions{
 			UniqueID: "dev.octo-agent.desktop",

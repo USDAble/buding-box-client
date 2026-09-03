@@ -4,9 +4,9 @@
 
 <div align="center">
 
-# octo-agent
+# Pudding Box (布丁盒子)
 
-**An open-source, single-binary, self-hosted AI agent.**
+**Pudding Box is an open-source, single-binary, self-hosted AI agent workspace.**
 
 A coding agent on par with Claude Code; as a personal assistant, lighter than OpenClaw — one MIT-licensed Go binary, no Node / Python / Ruby, running on **any model** (DeepSeek, Kimi, Anthropic, OpenAI, or anything compatible), with the server and your data staying on your own machine.
 
@@ -17,13 +17,15 @@ A coding agent on par with Claude Code; as a personal assistant, lighter than Op
 [![Go](https://img.shields.io/badge/go-%3E%3D%201.25-00ADD8?style=flat-square)](https://go.dev)
 [![License](https://img.shields.io/badge/license-MIT-lightgrey?style=flat-square)](LICENSE.txt)
 
+> **Brand note:** The product is presented as **Pudding Box**. Existing `octo` commands, paths, protocols, and source links remain compatibility identifiers until a documented migration is released.
+
 [Website](https://octo-agent.dev) · [简体中文](README_CN.md) · [Install Guide](https://octo-agent.dev/docs/getting-started/install/) · [Documentation](https://octo-agent.dev/docs/) · [Community](#community)
 
 If you find octo useful, give it a ⭐ on GitHub!
 
 </div>
 
-## Why octo
+## Why Pudding Box
 
 octo isn't another agent framework you have to "raise." Projects like OpenClaw or Hermes often need environment tuning, rule writing, and skill configuration before the agent runs smoothly. octo sits closer to Codex or WorkBuddy: **download and use, user-friendly**, while keeping model choice, data ownership, and the runtime firmly in your hands.
 

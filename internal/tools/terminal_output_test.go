@@ -2,6 +2,7 @@ package tools
 
 import (
 	"context"
+	"runtime"
 	"strings"
 	"testing"
 )
@@ -15,8 +16,12 @@ func TestTerminalOutputTool_LinesSnapshot(t *testing.T) {
 	ctx := context.Background()
 
 	// Print 5 lines then exit; wait for completion.
+	command := "printf 'l1\nl2\nl3\nl4\nl5\n'"
+	if runtime.GOOS == "windows" {
+		command = "Write-Output l1,l2,l3,l4,l5"
+	}
 	if _, err := (TerminalTool{mgr: m}).Execute(ctx, "terminal", map[string]any{
-		"command":           "printf 'l1\\nl2\\nl3\\nl4\\nl5\\n'",
+		"command":           command,
 		"run_in_background": "interactive",
 	}); err != nil {
 		t.Fatalf("launch: %v", err)

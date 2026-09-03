@@ -54,8 +54,10 @@ foreach ($dir in @($portableHome, $browserProfile, $browserCache, $gatewayData, 
 
 $octoBin = Join-Path $AppRoot "runtime\windows\$arch\octo.exe"
 $guardBin = Join-Path $AppRoot "gateway\windows\$arch\ai-guard.exe"
+$desktopBin = Join-Path $AppRoot "desktop\windows\$arch\buding-box-desktop.exe"
 if (-not (Test-Path $octoBin)) { throw "缺少 $octoBin" }
 if (-not (Test-Path $guardBin)) { throw "缺少 $guardBin" }
+if (-not (Test-Path $desktopBin)) { throw "缺少本平台原生桌面壳：$desktopBin；请在 Windows 本机重新执行 current 打包" }
 
 $configDir = Join-Path $AppRoot 'config'
 $configFile = Join-Path $portableHome '.octo\config.yml'
@@ -67,8 +69,19 @@ if (-not (Test-Path $configFile)) {
     [IO.File]::WriteAllText($configFile, $content, [Text.UTF8Encoding]::new($false))
 }
 
+# 便携版不显示上游首次运行向导。标记位放在 U 盘的 application-home，
+# 只影响便携实例，不接触上游源码，也不污染宿主机的用户配置目录。
+$onboardMarker = Join-Path (Split-Path $configFile) '.onboard_attempted'
+if (-not (Test-Path $onboardMarker)) {
+    [IO.File]::WriteAllText($onboardMarker, "portable`n", [Text.UTF8Encoding]::new($false))
+}
+
+# 临时测试口令与便携前端保持一致；不读取宿主机凭据，也不修改上游鉴权源码。
+# 正式发布前必须恢复为随机密钥或接入独立身份服务。
+$appAccessKey = '123456'
+
 $upstreamUrl = $env:AI_GUARD_UPSTREAM_URL
-$upstreamModel = $env:AI_GUARD_UPSTREAM_MODEL
+$upstreamModel = if ($env:AI_GUARD_UPSTREAM_MODEL) { $env:AI_GUARD_UPSTREAM_MODEL } else { 'portable-approved-model' }
 $gatewayEnv = Join-Path $configDir 'gateway.env'
 if (Test-Path $gatewayEnv) {
     foreach ($line in [IO.File]::ReadAllLines($gatewayEnv)) {
@@ -80,16 +93,10 @@ if (Test-Path $gatewayEnv) {
     }
 }
 if (-not $upstreamUrl) { $upstreamUrl = 'https://api.openai.com' }
-if (-not $upstreamModel) { $upstreamModel = Read-Host '上游模型名称' }
-
 $upstreamKey = $env:AI_GUARD_UPSTREAM_API_KEY
-if (-not $upstreamKey) {
-    $secure = Read-Host '上游 API Key（不会写入磁盘）' -AsSecureString
-    $ptr = [Runtime.InteropServices.Marshal]::SecureStringToBSTR($secure)
-    try { $upstreamKey = [Runtime.InteropServices.Marshal]::PtrToStringBSTR($ptr) }
-    finally { [Runtime.InteropServices.Marshal]::ZeroFreeBSTR($ptr) }
-}
-if (-not $upstreamModel -or -not $upstreamKey) { throw '模型和 API Key 不能为空' }
+# 启动阶段不读取、不询问上游 API Key；空值会被网关安全地保留为“不可调用上游”。
+# 这样桌面可以无交互打开，后续配置凭据时再通过受控环境注入。
+if (-not $upstreamKey) { $upstreamKey = '' }
 
 $env:USERPROFILE = $portableHome
 $env:HOME = $portableHome
@@ -98,8 +105,10 @@ $env:LOCALAPPDATA = Join-Path $portableHome 'AppData\Local'
 $env:TEMP = $tempDir
 $env:TMP = $tempDir
 $env:WEBVIEW2_USER_DATA_FOLDER = $browserProfile
+$env:BUDING_BOX_WEBVIEW_DATA = $browserProfile
 $env:OCTO_PORTABLE_ROOT = $AppRoot
 $env:OCTO_PORTABLE = '1'
+$env:OCTO_ACCESS_KEY = $appAccessKey
 $env:AI_GUARD_LISTEN = '127.0.0.1:18080'
 $env:AI_GUARD_LOCAL_TOKEN = 'local-gateway-only'
 $env:AI_GUARD_UPSTREAM_URL = $upstreamUrl
@@ -116,7 +125,7 @@ function Test-Health([string]$Url) {
     catch { return $false }
 }
 if (Test-Health 'http://127.0.0.1:18080/healthz') { throw '端口 18080 已有网关进程' }
-if (Test-Health 'http://127.0.0.1:8088/api/version') { throw '端口 8088 已有 Octo 进程' }
+if (Test-Health 'http://127.0.0.1:18082/api/version') { throw '端口 18082 已有 Octo 进程' }
 
 $guard = $null
 $octo = $null
@@ -130,37 +139,15 @@ try {
     }
     if (-not (Test-Health 'http://127.0.0.1:18080/healthz')) { throw 'AI 网关健康检查超时' }
 
-    $octo = Start-Process -FilePath $octoBin -ArgumentList @('serve', '--no-supervisor', '-addr', '127.0.0.1:8088') -PassThru -RedirectStandardOutput (Join-Path $logsDir 'octo.log') -RedirectStandardError (Join-Path $logsDir 'octo-error.log')
-    for ($i = 0; $i -lt 100 -and -not (Test-Health 'http://127.0.0.1:8088/api/version'); $i++) {
+    $octo = Start-Process -FilePath $octoBin -ArgumentList @('serve', '--no-supervisor', '-addr', '127.0.0.1:18082') -PassThru -RedirectStandardOutput (Join-Path $logsDir 'octo.log') -RedirectStandardError (Join-Path $logsDir 'octo-error.log')
+    for ($i = 0; $i -lt 100 -and -not (Test-Health 'http://127.0.0.1:18082/api/version'); $i++) {
         if ($octo.HasExited) { throw "Octo 启动失败，请查看 $logsDir" }
         Start-Sleep -Milliseconds 100
     }
-    if (-not (Test-Health 'http://127.0.0.1:8088/api/version')) { throw 'Octo 健康检查超时' }
+    if (-not (Test-Health 'http://127.0.0.1:18082/api/version')) { throw 'Octo 健康检查超时' }
 
-    $candidatePaths = [Collections.Generic.List[string]]::new()
-    $candidatePaths.Add((Join-Path $AppRoot "browser\windows\$arch\chrome.exe"))
-    if ($originalProgramFiles) {
-        $candidatePaths.Add((Join-Path $originalProgramFiles 'Google\Chrome\Application\chrome.exe'))
-        $candidatePaths.Add((Join-Path $originalProgramFiles 'Microsoft\Edge\Application\msedge.exe'))
-    }
-    if ($originalProgramFilesX86) {
-        $candidatePaths.Add((Join-Path $originalProgramFilesX86 'Microsoft\Edge\Application\msedge.exe'))
-    }
-    if ($originalLocalAppData) {
-        $candidatePaths.Add((Join-Path $originalLocalAppData 'Google\Chrome\Application\chrome.exe'))
-    }
-    $browserCandidates = @($candidatePaths | Where-Object { Test-Path $_ })
-    if (-not $browserCandidates) { throw "未找到 Chrome/Edge；请安装浏览器或放入 $AppRoot\browser\windows\$arch" }
-    $browser = $browserCandidates[0]
-    $browserArgs = @(
-        '--app=http://127.0.0.1:8088',
-        "--user-data-dir=$browserProfile",
-        "--disk-cache-dir=$browserCache",
-        '--no-first-run', '--disable-sync', '--disable-background-networking',
-        '--disable-component-update', '--disable-crash-reporter'
-    )
     Write-Host 'Buding Box 已启动；关闭应用窗口后请等待安全退出提示。'
-    Start-Process -FilePath $browser -ArgumentList $browserArgs -Wait
+    Start-Process -FilePath $desktopBin -Wait
     Write-Host '应用已退出，可以安全弹出 U 盘。'
 }
 finally {

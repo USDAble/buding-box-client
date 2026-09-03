@@ -12,3 +12,6 @@ default: portable-guard::portable-approved-model
 permission_mode: strict
 workspace_dir: "__WORKSPACE__"
 language: zh
+# 便携版启动时不进入上游首次运行的模型/身份配置向导。
+# 该字段只属于 U 盘内生成的配置，不会修改上游默认配置或源码。
+onboard_attempted: true

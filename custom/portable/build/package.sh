@@ -39,19 +39,25 @@ if [[ "$skip_web" == false ]]; then
   if [[ ! -d "$repo_root/web/node_modules" ]]; then
     (cd "$repo_root/web" && npm ci)
   fi
-  (cd "$repo_root/web" && npm run build)
+  (cd "$repo_root/web" && PORTABLE_FORCE_LOGIN=0 ./node_modules/.bin/vite build --config ../custom/portable/web/vite.config.mts)
 fi
 [[ -f "$repo_root/internal/server/webdist/index.html" ]] || {
   printf 'missing webdist; run without --skip-web\n' >&2
   exit 1
 }
+for marker in 'Buding Box，我帮你' '当前测试口令为 123456' 'buding_box_portable_logged_in'; do
+  rg -a -q "$marker" "$repo_root/internal/server/webdist/assets" || {
+    printf 'webdist is missing portable login marker: %s; run without --skip-web\n' "$marker" >&2
+    exit 1
+  }
+done
 
 go test ./custom/portable/gateway
 
 # dist/ is generated output. Replacing only this versioned directory never
 # touches source or user data.
 rm -rf "$dist_root"
-mkdir -p "$app_root/runtime" "$app_root/gateway" "$app_root/browser" \
+mkdir -p "$app_root/runtime" "$app_root/gateway" "$app_root/desktop" "$app_root/browser" \
   "$app_root/config" "$app_root/launcher/windows" "$app_root/workspace"
 
 cp "$portable_src/config/octo-config.yml.template" "$app_root/config/"
@@ -90,6 +96,7 @@ if [[ "$mode" == all ]]; then
 else
   targets=("$(current_target)")
 fi
+host_target="$(current_target)"
 
 rg_version=15.1.0
 cleanup() {
@@ -107,8 +114,9 @@ for target in "${targets[@]}"; do
   esac
   runtime_dir="$app_root/runtime/$platform/$goarch"
   gateway_dir="$app_root/gateway/$platform/$goarch"
+  desktop_dir="$app_root/desktop/$platform/$goarch"
   browser_dir="$app_root/browser/$platform/$goarch"
-  mkdir -p "$runtime_dir" "$gateway_dir" "$browser_dir" "$app_root/data/$platform"
+  mkdir -p "$runtime_dir" "$gateway_dir" "$desktop_dir" "$browser_dir" "$app_root/data/$platform"
 
   printf 'building octo for %s/%s\n' "$goos" "$goarch"
   make -s -C "$repo_root" rg-embed-clean
@@ -130,8 +138,34 @@ for target in "${targets[@]}"; do
     -trimpath -ldflags='-s -w' \
     -o "$gateway_dir/ai-guard$extension" ./custom/portable/gateway
 
+  # Wails 使用各操作系统的原生 WebView 和 CGO，只能在目标系统或配置完整
+  # 交叉工具链的构建机上可靠生成。current 包始终包含当前平台原生壳；all
+  # 模式只额外生成当前构建机对应的壳，其他平台应在各自系统执行 current。
+  if [[ "$goos/$goarch" == "$host_target" ]]; then
+    printf 'building native desktop for %s/%s\n' "$goos" "$goarch"
+    desktop_output="$desktop_dir/buding-box-desktop$extension"
+    desktop_ldflags="-s -w"
+    case "$goos" in
+      darwin)
+        (cd "$portable_src/desktop" && env CGO_ENABLED=1 \
+          CGO_CFLAGS='-mmacosx-version-min=11.0' \
+          CGO_LDFLAGS='-Wl,-macos_version_min,11.0 -Wl,-no_warn_duplicate_libraries' \
+          go build -ldflags="$desktop_ldflags" -o "$desktop_output" .)
+        ;;
+      windows)
+        (cd "$portable_src/desktop" && env CGO_ENABLED=1 \
+          go build -ldflags="$desktop_ldflags -H windowsgui" -o "$desktop_output" .)
+        ;;
+      linux)
+        (cd "$portable_src/desktop" && env CGO_ENABLED=1 \
+          go build -ldflags="$desktop_ldflags" -o "$desktop_output" .)
+        ;;
+    esac
+  fi
+
   if [[ "$goos" != windows ]]; then
     chmod +x "$runtime_dir/octo" "$gateway_dir/ai-guard"
+    [[ ! -f "$desktop_dir/buding-box-desktop" ]] || chmod +x "$desktop_dir/buding-box-desktop"
   fi
 done
 

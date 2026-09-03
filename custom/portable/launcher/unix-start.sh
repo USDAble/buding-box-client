@@ -55,8 +55,10 @@ done
 
 octo_bin="$app_root/runtime/$platform/$arch/octo"
 guard_bin="$app_root/gateway/$platform/$arch/ai-guard"
+desktop_bin="$app_root/desktop/$platform/$arch/buding-box-desktop"
 [[ -f "$octo_bin" ]] || fail "缺少 $octo_bin"
 [[ -f "$guard_bin" ]] || fail "缺少 $guard_bin"
+[[ -f "$desktop_bin" ]] || fail "缺少本平台原生桌面壳：$desktop_bin；请在本平台重新执行 current 打包"
 
 config_dir="$app_root/config"
 template="$config_dir/octo-config.yml.template"
@@ -69,8 +71,20 @@ if [[ ! -f "$config_file" ]]; then
   chmod 600 "$config_file"
 fi
 
+# 便携版不显示上游首次运行向导。标记位放在 U 盘的 application-home，
+# 只影响便携实例，不接触上游源码，也不污染宿主机的 ~/.octo 数据。
+onboard_marker="$portable_home/.octo/.onboard_attempted"
+if [[ ! -f "$onboard_marker" ]]; then
+  printf 'portable\n' > "$onboard_marker"
+  chmod 600 "$onboard_marker"
+fi
+
+# 临时测试口令与便携前端保持一致；不读取宿主机凭据，也不修改上游鉴权源码。
+# 正式发布前必须恢复为随机密钥或接入独立身份服务。
+app_access_key=123456
+
 upstream_url="${AI_GUARD_UPSTREAM_URL:-}"
-upstream_model="${AI_GUARD_UPSTREAM_MODEL:-}"
+upstream_model="${AI_GUARD_UPSTREAM_MODEL:-portable-approved-model}"
 env_file="$config_dir/gateway.env"
 if [[ -f "$env_file" ]]; then
   while IFS='=' read -r key value; do
@@ -82,23 +96,15 @@ if [[ -f "$env_file" ]]; then
   done < <(sed -e '/^[[:space:]]*#/d' -e '/^[[:space:]]*$/d' "$env_file")
 fi
 upstream_url="${upstream_url:-https://api.openai.com}"
-if [[ -z "$upstream_model" ]]; then
-  [[ -t 0 ]] || fail "请设置 AI_GUARD_UPSTREAM_MODEL"
-  read -r -p "上游模型名称：" upstream_model
-fi
+# 启动阶段不读取、不询问上游 API Key；空值会被网关安全地保留为“不可调用上游”。
+# 这样桌面可以无交互打开，后续配置凭据时再通过受控环境注入。
 upstream_key="${AI_GUARD_UPSTREAM_API_KEY:-}"
-if [[ -z "$upstream_key" ]]; then
-  [[ -t 0 ]] || fail "请设置 AI_GUARD_UPSTREAM_API_KEY"
-  read -r -s -p "上游 API Key（不会写入磁盘）：" upstream_key
-  printf '\n'
-fi
-[[ -n "$upstream_model" && -n "$upstream_key" ]] || fail "模型和 API Key 不能为空"
 
 if curl -fsS --max-time 1 http://127.0.0.1:18080/healthz >/dev/null 2>&1; then
   fail "端口 18080 已有网关进程"
 fi
-if curl -fsS --max-time 1 http://127.0.0.1:8088/api/version >/dev/null 2>&1; then
-  fail "端口 8088 已有 Octo 进程"
+if curl -fsS --max-time 1 http://127.0.0.1:18082/api/version >/dev/null 2>&1; then
+  fail "端口 18082 已有 Octo 进程"
 fi
 
 export HOME="$portable_home"
@@ -106,8 +112,12 @@ export XDG_CONFIG_HOME="$portable_home/.config"
 export XDG_DATA_HOME="$portable_home/.local/share"
 export XDG_CACHE_HOME="$portable_home/.cache"
 export TMPDIR="$temp_dir"
+# CoreFoundation 和 Wails/WebKit 的本地数据根目录均固定到 U 盘。
+export CFFIXED_USER_HOME="$portable_home"
+export BUDING_BOX_WEBVIEW_DATA="$browser_profile"
 export OCTO_PORTABLE_ROOT="$app_root"
 export OCTO_PORTABLE=1
+export OCTO_ACCESS_KEY="$app_access_key"
 export AI_GUARD_LISTEN=127.0.0.1:18080
 export AI_GUARD_LOCAL_TOKEN=local-gateway-only
 export AI_GUARD_UPSTREAM_URL="$upstream_url"
@@ -139,11 +149,13 @@ if [[ "$platform" == linux ]]; then
   staging_dir="$(mktemp -d "$host_tmp/buding-box-runtime.XXXXXX")"
   cp "$octo_bin" "$staging_dir/octo"
   cp "$guard_bin" "$staging_dir/ai-guard"
-  chmod 700 "$staging_dir/octo" "$staging_dir/ai-guard"
+  cp "$desktop_bin" "$staging_dir/buding-box-desktop"
+  chmod 700 "$staging_dir/octo" "$staging_dir/ai-guard" "$staging_dir/buding-box-desktop"
   octo_bin="$staging_dir/octo"
   guard_bin="$staging_dir/ai-guard"
+  desktop_bin="$staging_dir/buding-box-desktop"
 else
-  chmod u+x "$octo_bin" "$guard_bin" 2>/dev/null || true
+  chmod u+x "$octo_bin" "$guard_bin" "$desktop_bin" 2>/dev/null || true
 fi
 
 "$guard_bin" >>"$logs_dir/ai-guard.log" 2>&1 &
@@ -155,46 +167,16 @@ for _ in {1..50}; do
 done
 curl -fsS --max-time 1 http://127.0.0.1:18080/healthz >/dev/null || fail "AI 网关健康检查超时"
 
-"$octo_bin" serve --no-supervisor -addr 127.0.0.1:8088 >>"$logs_dir/octo.log" 2>&1 &
+"$octo_bin" serve --no-supervisor -addr 127.0.0.1:18082 >>"$logs_dir/octo.log" 2>&1 &
 octo_pid=$!
 for _ in {1..100}; do
-  curl -fsS --max-time 1 http://127.0.0.1:8088/api/version >/dev/null 2>&1 && break
+  curl -fsS --max-time 1 http://127.0.0.1:18082/api/version >/dev/null 2>&1 && break
   kill -0 "$octo_pid" 2>/dev/null || fail "Octo 启动失败，请查看 $logs_dir/octo.log"
   sleep 0.1
 done
-curl -fsS --max-time 1 http://127.0.0.1:8088/api/version >/dev/null || fail "Octo 健康检查超时"
-
-browser=''
-if [[ "$platform" == macos ]]; then
-  candidates=(
-    "$app_root/browser/macos/$arch/Chromium.app/Contents/MacOS/Chromium"
-    "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"
-    "/Applications/Microsoft Edge.app/Contents/MacOS/Microsoft Edge"
-    "/Applications/Chromium.app/Contents/MacOS/Chromium"
-  )
-  for candidate in "${candidates[@]}"; do
-    [[ -x "$candidate" ]] && browser="$candidate" && break
-  done
-else
-  candidate="$app_root/browser/linux/$arch/chrome"
-  [[ -x "$candidate" ]] && browser="$candidate"
-  if [[ -z "$browser" ]]; then
-    for name in google-chrome-stable google-chrome chromium chromium-browser microsoft-edge; do
-      command -v "$name" >/dev/null 2>&1 && browser="$(command -v "$name")" && break
-    done
-  fi
-fi
-[[ -n "$browser" ]] || fail "未找到 Chromium/Chrome/Edge；请安装浏览器或放入 $app_root/browser/$platform/$arch"
+curl -fsS --max-time 1 http://127.0.0.1:18082/api/version >/dev/null || fail "Octo 健康检查超时"
 
 printf 'Buding Box 已启动；关闭应用窗口后请等待安全退出提示。\n'
-"$browser" \
-  --app=http://127.0.0.1:8088 \
-  --user-data-dir="$browser_profile" \
-  --disk-cache-dir="$browser_cache" \
-  --no-first-run \
-  --disable-sync \
-  --disable-background-networking \
-  --disable-component-update \
-  --disable-crash-reporter
+"$desktop_bin" >>"$logs_dir/desktop.log" 2>&1
 
 printf '应用已退出，可以安全弹出 U 盘。\n'

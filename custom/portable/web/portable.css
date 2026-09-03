@@ -1,0 +1,41 @@
+@import '../../../web/src/app.css';
+
+/* 复用上游启动占位，仅在检测超过 180ms 时显示加载信息，避免快速启动闪烁。 */
+#app .splash:not(.splash-msg) {
+  flex-direction: column;
+  gap: 14px;
+}
+
+#app .splash:not(.splash-msg)::after {
+  content: '正在加载 U 盘配置并验证登录状态…';
+  color: var(--text-secondary);
+  font-size: 13px;
+  opacity: 0;
+  animation: portable-loading-reveal 180ms ease 180ms forwards;
+}
+
+#app .splash:not(.splash-msg) .spinner {
+  width: 24px;
+  height: 24px;
+  border-width: 2px;
+  border-color: var(--border);
+  border-top-color: var(--text-heading);
+  opacity: 0;
+  animation:
+    portable-spin 760ms linear infinite,
+    portable-loading-reveal 180ms ease 180ms forwards;
+}
+
+@keyframes portable-spin {
+  to { transform: rotate(360deg); }
+}
+
+@keyframes portable-loading-reveal {
+  to { opacity: 1; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  #app .splash:not(.splash-msg) .spinner {
+    animation: portable-loading-reveal 0s linear 180ms forwards;
+  }
+}

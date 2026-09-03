@@ -21,6 +21,7 @@ import (
 	"log"
 	"net"
 	"net/http"
+	"net/http/httputil"
 	"net/url"
 	"os"
 	"regexp"
@@ -33,6 +34,7 @@ const (
 	// 网关强制固定在环回地址，便携版不得向局域网暴露模型代理或本地凭据。
 	defaultListen = "127.0.0.1:18080"
 	defaultToken  = "local-gateway-only"
+	octoURL       = "http://127.0.0.1:18082"
 	// 在转发或返回不可信载荷前执行硬限制，保护内存和 Token 预算。
 	maxRequestBytes  = 8 << 20
 	maxResponseBytes = 32 << 20
@@ -74,7 +76,9 @@ type gateway struct {
 }
 
 func main() {
-	// 配置采用失败关闭：缺少策略、模型、HTTPS 端点或凭据时，在监听端口前终止进程。
+	// 配置采用失败关闭：缺少策略、模型或 HTTPS 端点时，在监听端口前终止进程。
+	// 上游 API Key 可以为空，以便 U 盘启动阶段完全无交互；真正发送 AI 请求时
+	// 仍会在下方拒绝无凭据请求，绝不把空凭据转发给外部服务。
 	cfg, err := loadSettings()
 	if err != nil {
 		log.Fatal(err)
@@ -90,10 +94,13 @@ func main() {
 		}},
 	}
 
-	// 只开放健康检查和上游配置所需的单个 OpenAI 兼容路由。
+	// AI 路由由本进程直接处理，其余 UI/API/WS 请求转发给原版 Octo。
+	// 反向代理会添加上游认可的转发标记，使环回访问也必须通过原版 access-key
+	// 鉴权，从而在不修改上游认证代码的前提下保护便携版 UI 正常入口。
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /healthz", g.health)
 	mux.HandleFunc("POST /v1/chat/completions", g.chatCompletions)
+	mux.Handle("/", newOctoProxy())
 
 	srv := &http.Server{
 		Addr:              cfg.listen,
@@ -102,9 +109,38 @@ func main() {
 		IdleTimeout:       90 * time.Second,
 		MaxHeaderBytes:    32 << 10,
 	}
-	log.Printf("ai-guard listening on %s; upstream host=%s; model=%s; allowed_tools=%d",
-		cfg.listen, safeHost(cfg.upstreamURL), cfg.upstreamModel, len(cfg.allowedTools))
+	log.Printf("ai-guard listening on %s; upstream host=%s; model=%s; upstream_key_configured=%t; allowed_tools=%d",
+		cfg.listen, safeHost(cfg.upstreamURL), cfg.upstreamModel, cfg.upstreamAPIKey != "", len(cfg.allowedTools))
 	log.Fatal(srv.ListenAndServe())
+}
+
+func newOctoProxy() *httputil.ReverseProxy {
+	proxy, err := newReverseProxy(octoURL)
+	if err != nil {
+		// octoURL 是编译期常量，解析失败属于不可恢复的程序错误。
+		panic(err)
+	}
+	return proxy
+}
+
+func newReverseProxy(rawURL string) (*httputil.ReverseProxy, error) {
+	target, err := url.Parse(rawURL)
+	if err != nil {
+		return nil, err
+	}
+	proxy := httputil.NewSingleHostReverseProxy(target)
+	direct := proxy.Director
+	proxy.Director = func(r *http.Request) {
+		direct(r)
+		r.Host = target.Host
+		// 上游只使用该标记收紧环回权限；它不会赋予请求额外权限。
+		r.Header.Set("X-Octo-Forwarded", "portable-sidecar")
+	}
+	proxy.ErrorHandler = func(w http.ResponseWriter, _ *http.Request, err error) {
+		log.Printf("octo proxy failed: %v", err)
+		writeError(w, http.StatusBadGateway, "octo unavailable")
+	}
+	return proxy, nil
 }
 
 func loadSettings() (settings, error) {
@@ -115,8 +151,8 @@ func loadSettings() (settings, error) {
 		upstreamModel:  strings.TrimSpace(os.Getenv("AI_GUARD_UPSTREAM_MODEL")),
 		localToken:     envOr("AI_GUARD_LOCAL_TOKEN", defaultToken),
 	}
-	if cfg.upstreamURL == "" || cfg.upstreamAPIKey == "" || cfg.upstreamModel == "" {
-		return settings{}, errors.New("AI_GUARD_UPSTREAM_URL, AI_GUARD_UPSTREAM_API_KEY and AI_GUARD_UPSTREAM_MODEL are required")
+	if cfg.upstreamURL == "" || cfg.upstreamModel == "" {
+		return settings{}, errors.New("AI_GUARD_UPSTREAM_URL and AI_GUARD_UPSTREAM_MODEL are required")
 	}
 	// 真实模型流量必须使用 HTTPS；HTTP 仅用于 Octo 与本地 Sidecar 之间的环回通信。
 	if u, err := url.Parse(cfg.upstreamURL); err != nil || u.Scheme != "https" || u.Host == "" {
@@ -206,6 +242,12 @@ func (g *gateway) chatCompletions(w http.ResponseWriter, r *http.Request) {
 	// 本地令牌用于防止无关本机客户端误用；常量时间比较避免泄露部分令牌匹配信息。
 	if !constantTokenEqual(bearerToken(r.Header.Get("Authorization")), g.cfg.localToken) {
 		writeError(w, http.StatusUnauthorized, "unauthorized")
+		return
+	}
+	// 启动阶段允许没有上游 Key，但 AI 请求必须失败关闭；这样桌面可以先打开，
+	// 同时不会向外部模型服务发送空 Authorization，也不会把无凭据请求伪装成成功。
+	if g.cfg.upstreamAPIKey == "" {
+		writeError(w, http.StatusServiceUnavailable, "upstream credentials not configured")
 		return
 	}
 	body, err := readLimited(r.Body, maxRequestBytes)

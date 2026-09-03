@@ -2,6 +2,9 @@ package main
 
 import (
 	"encoding/json"
+	"io"
+	"net/http"
+	"net/http/httptest"
 	"strings"
 	"testing"
 )
@@ -103,6 +106,23 @@ func TestUpstreamEndpoint(t *testing.T) {
 	}
 }
 
+func TestChatCompletionsWithoutUpstreamKeyFailsClosed(t *testing.T) {
+	g := testGateway()
+	g.cfg.localToken = "local-token"
+	g.cfg.upstreamURL = "https://api.example.com"
+	request := httptest.NewRequest(http.MethodPost, "/v1/chat/completions", strings.NewReader(`{"messages":[]}`))
+	request.Header.Set("Authorization", "Bearer local-token")
+	response := httptest.NewRecorder()
+
+	g.chatCompletions(response, request)
+	if response.Code != http.StatusServiceUnavailable {
+		t.Fatalf("status = %d, want %d", response.Code, http.StatusServiceUnavailable)
+	}
+	if !strings.Contains(response.Body.String(), "upstream credentials not configured") {
+		t.Fatalf("body = %q, want missing-credentials error", response.Body.String())
+	}
+}
+
 func TestValidateSSEToolCallFragmentsByIndex(t *testing.T) {
 	body := []byte("data: {\"choices\":[{\"delta\":{\"tool_calls\":[{\"index\":0,\"id\":\"call-1\",\"function\":{\"name\":\"read_file\",\"arguments\":\"{\\\"path\\\":\"}}]}}]}\n\n" +
 		"data: {\"choices\":[{\"delta\":{\"tool_calls\":[{\"index\":0,\"function\":{\"arguments\":\"\\\"README.md\\\"}\"}}]}}]}\n\n" +
@@ -110,4 +130,32 @@ func TestValidateSSEToolCallFragmentsByIndex(t *testing.T) {
 	if err := validateSSEToolCalls(body, map[string]struct{}{"read_file": {}}); err != nil {
 		t.Fatalf("valid fragmented tool call was rejected: %v", err)
 	}
+}
+
+func TestOctoProxyMarksRequestsAsForwarded(t *testing.T) {
+	target, err := newReverseProxy("http://127.0.0.1:18082")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var marker string
+	target.Transport = roundTripFunc(func(r *http.Request) (*http.Response, error) {
+		marker = r.Header.Get("X-Octo-Forwarded")
+		return &http.Response{
+			StatusCode: http.StatusOK,
+			Header:     make(http.Header),
+			Body:       io.NopCloser(strings.NewReader("ok")),
+		}, nil
+	})
+	request := httptest.NewRequest(http.MethodGet, "/api/sessions", nil)
+	response := httptest.NewRecorder()
+	target.ServeHTTP(response, request)
+	if marker != "portable-sidecar" {
+		t.Fatalf("forward marker = %q, want portable-sidecar", marker)
+	}
+}
+
+type roundTripFunc func(*http.Request) (*http.Response, error)
+
+func (f roundTripFunc) RoundTrip(r *http.Request) (*http.Response, error) {
+	return f(r)
 }

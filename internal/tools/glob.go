@@ -80,12 +80,15 @@ func (GlobTool) Execute(ctx context.Context, _ string, input map[string]any) (ag
 	var absRoot string
 	matchPattern := pattern
 	if filepath.IsAbs(pattern) {
-		// When the pattern is an absolute path, use its literal directory
-		// prefix as the search root instead of the current working directory.
-		if prefix := literalPathPrefix(matchPattern); prefix != "" {
+		// Normalize before deriving the relative match pattern. On Windows,
+		// filepath.Join returns backslashes while literalPathPrefix uses slash
+		// notation; trimming those two forms as raw strings loses the wildcard.
+		normalizedPattern := filepath.Clean(filepath.FromSlash(pattern))
+		matchPattern = normalizedPattern
+		if prefix := literalPathPrefix(normalizedPattern); prefix != "" {
 			absRoot = prefix
 		} else {
-			absRoot = "/"
+			absRoot = string(filepath.Separator)
 		}
 		// If the literal prefix doesn't exist on disk, no file can match.
 		if _, statErr := os.Stat(absRoot); os.IsNotExist(statErr) {
@@ -97,8 +100,11 @@ func (GlobTool) Execute(ctx context.Context, _ string, input map[string]any) (ag
 				"total":   0,
 			}}, nil
 		}
-		matchPattern = strings.TrimPrefix(pattern, absRoot)
-		matchPattern = strings.TrimPrefix(matchPattern, "/")
+		relativePattern, relErr := filepath.Rel(absRoot, normalizedPattern)
+		if relErr != nil {
+			return agent.ToolResult{Text: ""}, fmt.Errorf("glob: resolve absolute pattern %q: %w", pattern, relErr)
+		}
+		matchPattern = relativePattern
 		if matchPattern == "" {
 			matchPattern = "."
 		}

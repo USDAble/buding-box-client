@@ -1,0 +1,9 @@
+# One OpenAI function name per line. This initial profile is intentionally read-only.
+ask_user_question
+glob
+grep
+memory_recall
+read_file
+show_artifact
+web_fetch
+web_search

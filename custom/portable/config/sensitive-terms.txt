@@ -1,0 +1,1 @@
+# Add one exact business-sensitive term per line. Empty/comment-only is valid.

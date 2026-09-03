@@ -1,0 +1,14 @@
+endpoints:
+  - id: portable-guard
+    name: Portable Guard Gateway
+    provider: custom
+    protocol: openai
+    base_url: http://127.0.0.1:18080/v1
+    api_key: local-gateway-only
+    models:
+      - model: portable-approved-model
+        vision: false
+default: portable-guard::portable-approved-model
+permission_mode: strict
+workspace_dir: "__WORKSPACE__"
+language: zh

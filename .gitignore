@@ -44,3 +44,4 @@ __pycache__/
 /internal/server/webdist/*
 !/internal/server/webdist/.gitkeep
 .octo/implement-state.json
+doc/

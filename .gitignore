@@ -45,5 +45,6 @@ __pycache__/
 !/internal/server/webdist/.gitkeep
 .octo/implement-state.json
 /staging/
+/staging-verify/
 /staging-arm64/
 /dl/

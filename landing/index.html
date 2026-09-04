@@ -239,7 +239,7 @@
 
   <nav class="nav">
     <a class="brand" href="#top">
-      <img class="brand-mark" src="pudding-box-mark.svg" alt="Pudding Box logo" width="28" height="28">
+      <img class="brand-mark" data-brand-logo src="pudding-box-mark.svg" alt="Pudding Box" width="28" height="28">
       <span data-brand-name>Pudding Box</span>
     </a>
     <div class="navlinks">
@@ -266,13 +266,13 @@
 
   <header id="top" class="hero">
     <div class="hero-inner">
-      <img class="hero-logo" src="pudding-box-mark.svg" alt="Pudding Box logo">
+      <img class="hero-logo" data-brand-logo src="pudding-box-mark.svg" alt="Pudding Box">
       <div class="kicker">
         <iconify-icon icon="ant-design:safety-outlined" width="14"></iconify-icon>
         <span data-en="Open source · MIT · Self-hosted · Zero telemetry" data-zh="开源 · MIT · 自托管 · 零遥测"></span>
       </div>
       <h1><span data-en="Your work, " data-zh="复杂工作，"></span><span class="accent" data-en="in one simple box." data-zh="装进一个简单的盒子。"></span></h1>
-      <p class="tagline"
+      <p class="tagline" data-brand-tagline
          data-en="A simple box for powerful agent workflows. Connect your tools, manage tasks, and keep your work local across terminal, web, desktop, and mobile."
          data-zh="把复杂的智能代理工作，装进一个简单的盒子。连接工具、管理任务，让工作在终端、Web、桌面和移动端之间保持连续；数据默认留在本地。"></p>
       <div class="cta-row">
@@ -622,8 +622,8 @@
     <div class="foot-grid">
       <div class="foot-about">
         <div class="brand" style="margin-bottom:10px">
-          <img class="brand-mark" src="pudding-box-mark.svg" alt="Pudding Box logo" width="24" height="24">
-          Pudding Box
+          <img class="brand-mark" data-brand-logo src="pudding-box-mark.svg" alt="Pudding Box" width="24" height="24">
+          <span data-brand-name>Pudding Box</span>
         </div>
         <p data-en="A private, self-hosted agent workspace. Simple, local, and MIT licensed." data-zh="私密、自托管的 AI Agent 工作台。简单、本地、MIT 许可。"></p>
       </div>
@@ -661,8 +661,13 @@
       if(!landingBrand) return;
       const name = landingLocalized(landingBrand.product?.names, lang);
       document.querySelectorAll('[data-brand-name]').forEach(el=>{ if(name) el.textContent=name; });
+      document.querySelectorAll('[data-brand-logo]').forEach(el=>{ if(name) el.alt=name; });
       const tagline = landingLocalized(landingBrand.product?.tagline, lang);
-      if(tagline) document.querySelectorAll('[data-brand-tagline]').forEach(el=>{ el.textContent=tagline; });
+      if(tagline) document.querySelectorAll('[data-brand-tagline]').forEach(el=>{
+        el.dataset.en = landingLocalized(landingBrand.product?.tagline, 'en');
+        el.dataset.zh = landingLocalized(landingBrand.product?.tagline, 'zh');
+        el.textContent=tagline;
+      });
       const description = landingLocalized(landingBrand.product?.description, lang);
       if(description){
         document.title = `${name} — ${tagline}`;

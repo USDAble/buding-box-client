@@ -651,6 +651,14 @@ func messageRecord(m Message) sessionRecord {
 // messages and a trusted prefix, Save is a no-op, so per-event callers (the
 // server persists mid-turn progress on every agent event) don't touch the
 // file at all between rounds.
+func (s *Session) markContentUpdated() {
+	now := time.Now()
+	if !now.After(s.ContentUpdatedAt) {
+		now = s.ContentUpdatedAt.Add(time.Nanosecond)
+	}
+	s.ContentUpdatedAt = now
+}
+
 func (s *Session) Save() error {
 	// Whether the message list itself is changing — as opposed to a rewrite
 	// forced by binding/lease/meta bookkeeping (Bind/Unbind, MarkHookStarted,
@@ -661,14 +669,14 @@ func (s *Session) Save() error {
 	contentChanged := len(s.Messages) != s.persisted || s.rewriteIsContent
 	if s.forceRewrite || s.persisted == 0 || len(s.Messages) < s.persisted {
 		if contentChanged {
-			s.ContentUpdatedAt = time.Now()
+			s.markContentUpdated()
 		}
 		return s.rewriteAll()
 	}
 	if len(s.Messages) == s.persisted {
 		return nil
 	}
-	s.ContentUpdatedAt = time.Now()
+	s.markContentUpdated()
 	return s.appendDelta()
 }
 

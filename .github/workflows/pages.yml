@@ -7,6 +7,8 @@ on:
       - 'landing/**'
       - 'docs/**'
       - 'blog/**'
+      - 'branding/**'
+      - 'scripts/sync-branding.mjs'
       - '.github/workflows/pages.yml'
   workflow_dispatch:
 

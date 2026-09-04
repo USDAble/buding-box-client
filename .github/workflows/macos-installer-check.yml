@@ -20,6 +20,8 @@ on:
       - 'packaging/macos/**'
       - 'cmd/octo-desktop/**'
       - 'scripts/package-desktop-macos.sh'
+      - 'branding/**'
+      - 'scripts/sync-branding.mjs'
       - '.github/workflows/macos-installer-check.yml'
   workflow_dispatch:
 

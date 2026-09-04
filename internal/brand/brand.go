@@ -20,6 +20,7 @@ type Config struct {
 	Compatibility   CompatibilityConfig          `json:"compatibility"`
 	FutureMigration map[string]string            `json:"futureMigration"`
 	Copy            map[string]map[string]string `json:"copy"`
+	Platform        PlatformConfig               `json:"platform"`
 }
 
 type ProductConfig struct {
@@ -28,6 +29,16 @@ type ProductConfig struct {
 	Category    map[string]string `json:"category"`
 	Tagline     map[string]string `json:"tagline"`
 	Description map[string]string `json:"description"`
+}
+
+type PlatformConfig struct {
+	Windows WindowsBrandConfig `json:"windows"`
+}
+
+type WindowsBrandConfig struct {
+	FileDescription  map[string]string `json:"fileDescription"`
+	InternalName     string            `json:"internalName"`
+	OriginalFilename string            `json:"originalFilename"`
 }
 
 type AboutConfig struct {
@@ -82,6 +93,21 @@ func (c Config) Name(locale string) string {
 // Description resolves the localized product description.
 func (c Config) Description(locale string) string {
 	return localized(c.Product.Description, locale)
+}
+
+// WindowsFileDescription resolves the localized Windows file description.
+func (c Config) WindowsFileDescription(locale string) string {
+	return localized(c.Platform.Windows.FileDescription, locale)
+}
+
+// TeamName resolves the configured publisher/team name for a locale.
+func (c Config) TeamName(locale string) string {
+	return localized(c.About.TeamName, locale)
+}
+
+// Copyright resolves the configured copyright notice for a locale.
+func (c Config) Copyright(locale string) string {
+	return localized(c.About.Copyright, locale)
 }
 
 // Text resolves one localized copy entry using the same fallback rules.

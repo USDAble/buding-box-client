@@ -9,6 +9,9 @@ on:
     paths:
       - 'packaging/windows/**'
       - 'cmd/octo-desktop/**'
+      - 'branding/**'
+      - 'scripts/sync-branding.mjs'
+      - 'scripts/package-desktop-windows.ps1'
       - '.github/workflows/windows-installer-check.yml'
   workflow_dispatch:
 

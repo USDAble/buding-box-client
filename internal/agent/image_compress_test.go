@@ -131,13 +131,13 @@ func TestNewImageBlock_Normalizes(t *testing.T) {
 	}
 }
 
-// A source whose JPEG re-encode would be BIGGER (a tiny, solid-colour PNG
-// past the edge cap — PNG crushes flat colour, JPEG can't) is kept as-is:
-// the keep-whichever-is-smaller rule. This one actually reaches the branch —
-// the edge cap is what pushes it past the early pass-through.
+// A source whose JPEG re-encode is bigger (a one-pixel-high, solid-colour
+// PNG just past the edge cap) is kept as-is. The narrow fixture guarantees
+// PNG remains far smaller than JPEG across supported Go image encoders while
+// still reaching the re-encode branch through its 2000-pixel long edge.
 func TestCompressImageData_KeepsSmaller(t *testing.T) {
-	img := image.NewRGBA(image.Rect(0, 0, 2000, 1000))
-	// zero value is opaque black, uniformly — PNG paradise, JPEG nightmare.
+	img := image.NewRGBA(image.Rect(0, 0, 2000, 1))
+	// Zero value is uniform transparent black; PNG compresses it extremely well.
 	var buf bytes.Buffer
 	if err := png.Encode(&buf, img); err != nil {
 		t.Fatalf("png.Encode: %v", err)

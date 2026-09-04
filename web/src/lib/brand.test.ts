@@ -19,7 +19,7 @@ describe('brand configuration', () => {
 
   it('exposes localized text and stable compatibility identifiers', () => {
     expect(brandText('tagline', 'zh-CN')).toContain('智能代理')
-    expect(brandText('tagline', 'en-US')).toContain('agent workflows')
+    expect(brandText('tagline', 'en-US')).toBe('One workspace for local tools, tasks, and agents.')
     expect(brand.compatibility.cliCommand).toBe('octo')
     expect(brand.compatibility.configDir).toBe('~/.octo')
   })

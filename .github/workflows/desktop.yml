@@ -26,6 +26,9 @@ on:
       - 'scripts/package-desktop-macos.sh'
       - 'scripts/package-desktop-linux.sh'
       - 'scripts/embed-rg-windows.ps1'
+      - 'scripts/package-desktop-windows.ps1'
+      - 'branding/**'
+      - 'scripts/sync-branding.mjs'
       - '.github/workflows/desktop.yml'
   pull_request:
     paths:
@@ -37,6 +40,9 @@ on:
       - 'scripts/package-desktop-macos.sh'
       - 'scripts/package-desktop-linux.sh'
       - 'scripts/embed-rg-windows.ps1'
+      - 'scripts/package-desktop-windows.ps1'
+      - 'branding/**'
+      - 'scripts/sync-branding.mjs'
       - '.github/workflows/desktop.yml'
   workflow_dispatch:
 

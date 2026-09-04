@@ -13,10 +13,14 @@ on:
     branches: [main]
     paths:
       - 'cmd/octo-relay/**'
+      - 'branding/**'
+      - 'scripts/sync-branding.mjs'
       - '.github/workflows/relay.yml'
   pull_request:
     paths:
       - 'cmd/octo-relay/**'
+      - 'branding/**'
+      - 'scripts/sync-branding.mjs'
       - '.github/workflows/relay.yml'
 
 # Only reads the checkout; no token write scope needed.

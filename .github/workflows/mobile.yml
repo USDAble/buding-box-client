@@ -16,10 +16,14 @@ on:
     branches: [main]
     paths:
       - 'mobile/**'
+      - 'branding/**'
+      - 'scripts/sync-branding.mjs'
       - '.github/workflows/mobile.yml'
   pull_request:
     paths:
       - 'mobile/**'
+      - 'branding/**'
+      - 'scripts/sync-branding.mjs'
       - '.github/workflows/mobile.yml'
 
 # Only reads the checkout; no token write scope needed.

@@ -1,4 +1,4 @@
-; pudding-box setup — per-user Windows installer for the Pudding Box desktop app.
+; Windows setup — per-user installer for the configured desktop product.
 ; The installer filename, executable names, and install directory remain stable
 ; for compatibility with existing Octo installations.
 ;
@@ -35,14 +35,16 @@
   #define OutputName "octo-setup"
 #endif
 
+#include "brand.iss"
+
 [Setup]
 ; A stable AppId so re-running a newer installer updates in place rather than
 ; stacking a second copy. Never change this value.
 AppId={{8F2A6B1C-3D4E-4F50-9A6B-7C8D9E0F1A2B}
-AppName=Pudding Box
+AppName={#BrandAppName}
 AppVersion={#AppVersion}
-AppPublisher=Pudding Box Studio
-AppPublisherURL=https://puddingbox.example
+AppPublisher={#BrandAppPublisher}
+AppPublisherURL={#BrandAppPublisherURL}
 DefaultDirName={userpf}\octo
 DisableProgramGroupPage=yes
 DisableDirPage=yes
@@ -56,7 +58,7 @@ WizardStyle=modern
 ; Broadcast WM_SETTINGCHANGE after install so Explorer-launched shells pick up
 ; the new PATH without a logout.
 ChangesEnvironment=yes
-UninstallDisplayName=Pudding Box {#AppVersion}
+UninstallDisplayName={#BrandAppName} {#AppVersion}
 
 [Files]
 Source: "{#SourceDir}\octo-desktop.exe"; DestDir: "{app}"; Flags: ignoreversion
@@ -71,9 +73,9 @@ Source: "{#SourceDir}\uv.exe"; DestDir: "{app}"; Flags: ignoreversion skipifsour
 
 [Icons]
 ; Launch the desktop app. IconFilename points at the embedded icon in the exe so
-; the Start-menu shortcut shows the Pudding Box logo instead of the Windows generic icon.
-Name: "{userprograms}\Pudding Box"; Filename: "{app}\octo-desktop.exe"; \
-  WorkingDir: "{app}"; IconFilename: "{app}\octo-desktop.exe"; Comment: "Pudding Box"
+; the Start-menu shortcut shows the embedded configured product icon instead of the Windows generic icon.
+Name: "{userprograms}\{#BrandAppName}"; Filename: "{app}\octo-desktop.exe"; \
+  WorkingDir: "{app}"; IconFilename: "{app}\octo-desktop.exe"; Comment: "{#BrandAppName}"
 
 [Code]
 const
@@ -133,7 +135,7 @@ begin
     exit;
   binDir := ExpandConstant('{%USERPROFILE}') + '\.octo\bin';
   ForceDirectories(binDir);
-  FileCopy(ExpandConstant('{app}\uv.exe'), binDir + '\uv.exe', False);
+  CopyFile(ExpandConstant('{app}\uv.exe'), binDir + '\uv.exe', False);
 end;
 
 // LaunchApp opens the desktop app after install (detached; installer returns).

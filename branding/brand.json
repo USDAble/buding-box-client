@@ -20,8 +20,8 @@
       "en-US": "Agent workspace"
     },
     "tagline": {
-      "zh-CN": "把复杂的智能代理工作，装进一个简单的盒子。",
-      "en-US": "A simple box for powerful agent workflows."
+      "zh-CN": "让本地工具、任务与智能代理，在一个工作台里协作。",
+      "en-US": "One workspace for local tools, tasks, and agents."
     },
     "description": {
       "zh-CN": "布丁盒子是一套面向个人和团队的智能代理工作台，用于连接本地工具、管理任务，并在 Web、桌面和移动端之间保持连续的工作体验。",
@@ -105,8 +105,8 @@
       "en-US": "Welcome to Pudding Box"
     },
     "welcomeDescription": {
-      "zh-CN": "一个更简单的智能代理工作空间。",
-      "en-US": "A simpler workspace for agent workflows."
+      "zh-CN": "从这里连接工具、组织任务，并持续推进工作。",
+      "en-US": "Connect tools, organize tasks, and keep work moving."
     },
     "getStarted": {
       "zh-CN": "开始使用",
@@ -155,6 +155,16 @@
     "offlineNotice": {
       "zh-CN": "当前处于离线状态",
       "en-US": "You are currently offline"
+    }
+  },
+  "platform": {
+    "windows": {
+      "fileDescription": {
+        "zh-CN": "布丁盒子桌面端",
+        "en-US": "Pudding Box Desktop"
+      },
+      "internalName": "pudding-box-desktop",
+      "originalFilename": "octo-desktop.exe"
     }
   }
 }

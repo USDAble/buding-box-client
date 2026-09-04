@@ -39,13 +39,13 @@ if [[ "$skip_web" == false ]]; then
   if [[ ! -d "$repo_root/web/node_modules" ]]; then
     (cd "$repo_root/web" && npm ci)
   fi
-  (cd "$repo_root/web" && PORTABLE_FORCE_LOGIN=0 ./node_modules/.bin/vite build --config ../custom/portable/web/vite.config.mts)
+  (cd "$repo_root/web" && PORTABLE_FORCE_LOGIN=0 ./node_modules/.bin/vite build --config ../custom/portable/web/portable.vite.config.mts)
 fi
 [[ -f "$repo_root/internal/server/webdist/index.html" ]] || {
   printf 'missing webdist; run without --skip-web\n' >&2
   exit 1
 }
-for marker in 'Buding Box，我帮你' '当前测试口令为 123456' 'buding_box_portable_logged_in'; do
+for marker in 'Buding Box，我帮你' 'Buding Box, here to help' '默认静态激活码：BUDING-123456' '默认静态验证码：123456' 'buding_box_portable_logged_in'; do
   rg -a -q "$marker" "$repo_root/internal/server/webdist/assets" || {
     printf 'webdist is missing portable login marker: %s; run without --skip-web\n' "$marker" >&2
     exit 1

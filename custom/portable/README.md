@@ -115,10 +115,12 @@ bash custom/portable/build/desktop-test.sh
 
 Do not use `make desktop` for this check: its upstream `web-build` target
 replaces the portable UI with the ordinary upstream Vite build.
-The test build sets `PORTABLE_FORCE_LOGIN=1`, so it always shows the login page
-even if the host WebView has a previous test login state.
-To test persistence instead, run `PORTABLE_FORCE_LOGIN=0 bash
-custom/portable/build/desktop-test.sh` after the first successful login.
+The test build sets `PORTABLE_FORCE_LOGIN=1`, so a newly opened browser/WebView
+session shows the login page even if it has an earlier persistent login. After
+successful login, refreshes in the same session reuse the state from local
+storage. Close and reopen the browser/WebView to force the page again. Use
+`PORTABLE_FORCE_LOGIN=0 bash custom/portable/build/desktop-test.sh` when the
+test should always honor an existing persistent login from startup.
 
 The completed folder is written under `dist/portable/`. Copy the whole
 versioned directory to the USB drive; do not copy only the executable.

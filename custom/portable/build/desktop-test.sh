@@ -23,8 +23,8 @@ if [[ ! -d "$web_dir/node_modules" ]]; then
   (cd "$web_dir" && npm ci)
 fi
 
-(cd "$web_dir" && PORTABLE_FORCE_LOGIN="$force_login" ./node_modules/.bin/vite build --config ../custom/portable/web/vite.config.mts)
-for marker in 'Buding Box，我帮你' '当前测试口令为 123456'; do
+(cd "$web_dir" && PORTABLE_FORCE_LOGIN="$force_login" ./node_modules/.bin/vite build --config ../custom/portable/web/portable.vite.config.mts)
+for marker in 'Buding Box，我帮你' 'Buding Box, here to help' '默认静态激活码：BUDING-123456' '默认静态验证码：123456'; do
   rg -a -q "$marker" "$repo_root/internal/server/webdist/assets" || {
     printf '便携登录页构建校验失败：缺少 %s\n' "$marker" >&2
     exit 1

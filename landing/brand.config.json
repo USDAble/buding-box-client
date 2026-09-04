@@ -156,5 +156,15 @@
       "zh-CN": "当前处于离线状态",
       "en-US": "You are currently offline"
     }
+  },
+  "platform": {
+    "windows": {
+      "fileDescription": {
+        "zh-CN": "布丁盒子桌面端",
+        "en-US": "Pudding Box Desktop"
+      },
+      "internalName": "pudding-box-desktop",
+      "originalFilename": "octo-desktop.exe"
+    }
   }
 }

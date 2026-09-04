@@ -419,6 +419,7 @@ func (b *nativeBridge) NotifyUpdateAvailable(title, body string) {
 // it's safe to call from the check goroutine.
 func (b *nativeBridge) refreshTray() {
 	if t := b.tray.Load(); t != nil {
+		setTrayBranding(t)
 		t.SetMenu(buildTrayMenu(b.app, b))
 	}
 }

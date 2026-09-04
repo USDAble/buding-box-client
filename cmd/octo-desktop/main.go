@@ -313,7 +313,7 @@ func main() {
 	} else {
 		tray.SetIcon(trayColorIcon)
 	}
-	tray.SetTooltip(L().takeoverTitle)
+	setTrayBranding(tray)
 	tray.SetMenu(buildTrayMenu(app, bridge))
 	// Keep the tray's status lines (backend, channels, connected clients) fresh
 	// while the app runs — macOS doesn't refresh a status menu on open.
@@ -620,6 +620,16 @@ func buildTrayMenu(app *application.App, bridge *nativeBridge) *application.Menu
 	return m
 }
 
+// setTrayBranding keeps the native shell tooltip synchronized with the same
+// localized display name used by dialogs, menus, and the window title. Wails
+// caches SetTooltip calls made before the tray implementation is created, but
+// explicitly reapplying it also covers language changes and Explorer refreshes.
+func setTrayBranding(tray *application.SystemTray) {
+	if tray != nil {
+		tray.SetTooltip(L().takeoverTitle)
+	}
+}
+
 // refreshTrayLoop re-publishes the tray menu whenever its status text changes,
 // so the counts stay live without rebuilding on every tick.
 func refreshTrayLoop(app *application.App, tray *application.SystemTray, bridge *nativeBridge) {
@@ -644,6 +654,7 @@ func refreshTrayLoop(app *application.App, tray *application.SystemTray, bridge 
 			continue
 		}
 		last = sig
+		setTrayBranding(tray)
 		tray.SetMenu(buildTrayMenu(app, bridge))
 	}
 }

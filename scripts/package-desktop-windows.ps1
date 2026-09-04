@@ -267,7 +267,7 @@ try {
     $cliExecutable = Join-Path $stageDirectory 'octo.exe'
 
     Invoke-CheckedCommand -Description "generating Windows icon and manifest resource for $Arch" -Command {
-        Invoke-TargetGo -GoArguments @('-C', $desktopDirectory, 'run', './build/windows/generate-syso', $Arch, 'build/windows/icon.ico', 'build/windows/wails.exe.manifest')
+        Invoke-TargetGo -GoArguments @('-C', $desktopDirectory, 'run', './build/windows/generate-syso', $Arch, 'build/windows/icon.ico', 'build/windows/wails.exe.manifest', $Version)
     }
 
     $commit = (& git -C $repositoryRoot rev-parse --short HEAD).Trim()

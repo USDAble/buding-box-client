@@ -118,7 +118,7 @@ jobs:
       - name: Generate Windows icon resource
         shell: pwsh
         working-directory: cmd/octo-desktop
-        run: go run ./build/windows/generate-syso ${{ matrix.arch }} build/windows/icon.ico build/windows/wails.exe.manifest
+        run: go run ./build/windows/generate-syso ${{ matrix.arch }} build/windows/icon.ico build/windows/wails.exe.manifest $env:version
 
       - name: Build desktop app
         shell: pwsh

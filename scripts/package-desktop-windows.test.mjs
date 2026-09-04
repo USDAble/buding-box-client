@@ -58,3 +58,9 @@ test('Windows package script refuses SkipWebBuild unless a built web entrypoint 
 
   assert.match(script, /internal\\server\\webdist\\index\.html/)
 })
+
+test('Windows package script passes the requested release version into the generated EXE VERSIONINFO', async () => {
+  const script = await readPackageScript()
+
+  assert.match(script, /'build\/windows\/wails\.exe\.manifest',\s*\$Version\)/)
+})

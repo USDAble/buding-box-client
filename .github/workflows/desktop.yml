@@ -161,7 +161,7 @@ jobs:
       - name: Generate Windows icon resource
         if: runner.os == 'Windows'
         working-directory: cmd/octo-desktop
-        run: go run ./build/windows/generate-syso ${{ matrix.goarch }} build/windows/icon.ico build/windows/wails.exe.manifest
+        run: go run ./build/windows/generate-syso ${{ matrix.goarch }} build/windows/icon.ico build/windows/wails.exe.manifest 0.0.0-ci
 
       - name: Build Windows binary
         if: runner.os == 'Windows'

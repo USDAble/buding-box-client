@@ -7,7 +7,7 @@ set -euo pipefail
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd -P)"
 web_dir="$repo_root/web"
 desktop_dir="$repo_root/cmd/octo-desktop"
-desktop_bin="$repo_root/octo-desktop-portable-test"
+desktop_bin="$repo_root/dist/portable/.build-cache/octo-desktop-portable-test"
 version="$(sed -n 's/^var Version = "\(.*\)"/\1/p' "$repo_root/internal/version/version.go")"
 commit="$(git -C "$repo_root" rev-parse --short HEAD 2>/dev/null || printf unknown)"
 build_cache="$repo_root/dist/portable/.build-cache/go"

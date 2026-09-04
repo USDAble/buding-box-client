@@ -7,7 +7,7 @@ window. It does not modify any upstream source file.
 ## What v1 includes
 
 - Windows, macOS and Linux launchers.
-- Per-platform `HOME`/`USERPROFILE`, cache, temp, log and browser-profile paths.
+- Per-platform `HOME`/`USERPROFILE`, WebView data, cache, temp and log paths.
 - Native Wails window using WKWebView, WebView2, or WebKitGTK according to the OS.
 - A full-page portable login with the temporary test password `123456`.
 - A startup loading transition that appears only when auth/config checks exceed
@@ -56,7 +56,7 @@ configuration files excluded from the integrity manifest. Changing other
 packaged files requires rebuilding the package.
 
 The current development build uses the fixed password `123456`. A successful
-login persists a small login-state flag in the USB-resident browser profile,
+login persists a small login-state flag in the USB-resident application data,
 so later cold starts reuse the session. Wrong entries
 are checked only in the portable page, remain on that page, and have no retry
 limit. A successful entry seeds only the same-origin Octo session cookie. UI/API/WebSocket traffic

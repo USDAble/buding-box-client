@@ -33,15 +33,12 @@ fi
 
 data_root="$app_root/data/$platform"
 portable_home="$data_root/application-home"
-browser_profile="$data_root/browser-profile"
-browser_cache="$data_root/browser-cache"
-gateway_data="$data_root/gateway"
 logs_dir="$data_root/logs"
 temp_dir="$data_root/temp"
 locks_dir="$data_root/locks"
 workspace="$app_root/workspace"
 
-for dir in "$portable_home" "$browser_profile" "$browser_cache" "$gateway_data" "$logs_dir" "$temp_dir" "$locks_dir" "$workspace"; do
+for dir in "$portable_home" "$logs_dir" "$temp_dir" "$locks_dir" "$workspace"; do
   mkdir -p "$dir" || fail "无法创建 $dir"
   resolved="$(cd "$dir" && pwd -P)"
   case "$resolved/" in
@@ -114,9 +111,6 @@ export XDG_CACHE_HOME="$portable_home/.cache"
 export TMPDIR="$temp_dir"
 # CoreFoundation 和 Wails/WebKit 的本地数据根目录均固定到 U 盘。
 export CFFIXED_USER_HOME="$portable_home"
-export BUDING_BOX_WEBVIEW_DATA="$browser_profile"
-export OCTO_PORTABLE_ROOT="$app_root"
-export OCTO_PORTABLE=1
 export OCTO_ACCESS_KEY="$app_access_key"
 export AI_GUARD_LISTEN=127.0.0.1:18080
 export AI_GUARD_LOCAL_TOKEN=local-gateway-only

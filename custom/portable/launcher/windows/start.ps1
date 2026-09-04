@@ -28,20 +28,15 @@ foreach ($line in [IO.File]::ReadAllLines($manifest)) {
     }
 }
 
-$originalLocalAppData = $env:LOCALAPPDATA
-$originalProgramFiles = $env:ProgramFiles
-$originalProgramFilesX86 = ${env:ProgramFiles(x86)}
 $dataRoot = Join-Path $AppRoot 'data\windows'
 $portableHome = Join-Path $dataRoot 'application-home'
 $browserProfile = Join-Path $dataRoot 'browser-profile'
-$browserCache = Join-Path $dataRoot 'browser-cache'
-$gatewayData = Join-Path $dataRoot 'gateway'
 $logsDir = Join-Path $dataRoot 'logs'
 $tempDir = Join-Path $dataRoot 'temp'
 $locksDir = Join-Path $dataRoot 'locks'
 $workspace = Join-Path $AppRoot 'workspace'
 
-foreach ($dir in @($portableHome, $browserProfile, $browserCache, $gatewayData, $logsDir, $tempDir, $locksDir, $workspace)) {
+foreach ($dir in @($portableHome, $browserProfile, $logsDir, $tempDir, $locksDir, $workspace)) {
     New-Item -ItemType Directory -Force -Path $dir | Out-Null
     $resolved = (Resolve-Path $dir).Path
     if (-not $resolved.StartsWith($AppRoot + '\', [StringComparison]::OrdinalIgnoreCase)) {
@@ -104,10 +99,7 @@ $env:APPDATA = Join-Path $portableHome 'AppData\Roaming'
 $env:LOCALAPPDATA = Join-Path $portableHome 'AppData\Local'
 $env:TEMP = $tempDir
 $env:TMP = $tempDir
-$env:WEBVIEW2_USER_DATA_FOLDER = $browserProfile
 $env:BUDING_BOX_WEBVIEW_DATA = $browserProfile
-$env:OCTO_PORTABLE_ROOT = $AppRoot
-$env:OCTO_PORTABLE = '1'
 $env:OCTO_ACCESS_KEY = $appAccessKey
 $env:AI_GUARD_LISTEN = '127.0.0.1:18080'
 $env:AI_GUARD_LOCAL_TOKEN = 'local-gateway-only'

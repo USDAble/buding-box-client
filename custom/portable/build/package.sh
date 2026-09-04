@@ -57,7 +57,7 @@ go test ./custom/portable/gateway
 # dist/ is generated output. Replacing only this versioned directory never
 # touches source or user data.
 rm -rf "$dist_root"
-mkdir -p "$app_root/runtime" "$app_root/gateway" "$app_root/desktop" "$app_root/browser" \
+mkdir -p "$app_root/runtime" "$app_root/gateway" "$app_root/desktop" \
   "$app_root/config" "$app_root/launcher/windows" "$app_root/workspace"
 
 cp "$portable_src/config/octo-config.yml.template" "$app_root/config/"
@@ -115,8 +115,7 @@ for target in "${targets[@]}"; do
   runtime_dir="$app_root/runtime/$platform/$goarch"
   gateway_dir="$app_root/gateway/$platform/$goarch"
   desktop_dir="$app_root/desktop/$platform/$goarch"
-  browser_dir="$app_root/browser/$platform/$goarch"
-  mkdir -p "$runtime_dir" "$gateway_dir" "$desktop_dir" "$browser_dir" "$app_root/data/$platform"
+  mkdir -p "$runtime_dir" "$gateway_dir" "$desktop_dir" "$app_root/data/$platform"
 
   printf 'building octo for %s/%s\n' "$goos" "$goarch"
   make -s -C "$repo_root" rg-embed-clean

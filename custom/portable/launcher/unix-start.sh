@@ -52,10 +52,18 @@ done
 
 octo_bin="$app_root/runtime/$platform/$arch/octo"
 guard_bin="$app_root/gateway/$platform/$arch/ai-guard"
-desktop_bin="$app_root/desktop/$platform/$arch/buding-box-desktop"
+desktop_root="$app_root/desktop/$platform/$arch"
+if [[ "$platform" == macos ]]; then
+  desktop_bin="$desktop_root/Buding Box.app/Contents/MacOS/buding-box-desktop"
+  desktop_icon="$desktop_root/Buding Box.app/Contents/Resources/icon.png"
+else
+  desktop_bin="$desktop_root/buding-box-desktop"
+  desktop_icon="$desktop_root/icon.png"
+fi
 [[ -f "$octo_bin" ]] || fail "缺少 $octo_bin"
 [[ -f "$guard_bin" ]] || fail "缺少 $guard_bin"
 [[ -f "$desktop_bin" ]] || fail "缺少本平台原生桌面壳：$desktop_bin；请在本平台重新执行 current 打包"
+[[ -f "$desktop_icon" ]] || fail "缺少本平台桌面图标：$desktop_icon"
 
 config_dir="$app_root/config"
 template="$config_dir/octo-config.yml.template"
@@ -111,6 +119,7 @@ export XDG_CACHE_HOME="$portable_home/.cache"
 export TMPDIR="$temp_dir"
 # CoreFoundation 和 Wails/WebKit 的本地数据根目录均固定到 U 盘。
 export CFFIXED_USER_HOME="$portable_home"
+export BUDING_BOX_APP_ICON="$desktop_icon"
 export OCTO_ACCESS_KEY="$app_access_key"
 export AI_GUARD_LISTEN=127.0.0.1:18080
 export AI_GUARD_LOCAL_TOKEN=local-gateway-only

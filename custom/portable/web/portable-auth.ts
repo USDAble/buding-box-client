@@ -2,6 +2,19 @@ import { writable } from 'svelte/store'
 
 declare const __PORTABLE_FORCE_LOGIN__: boolean
 
+// 桌面壳通过 URL 标记启用上游已有的拖拽实现。macOS 的原生交通灯会覆盖
+// 全尺寸 WebView，因此只在便携桌面环境添加样式标记，由扩展样式负责避让；
+// 普通浏览器和热更新页面不受影响。
+const isPortableDesktopShell =
+  typeof location !== 'undefined' && new URLSearchParams(location.search).get('shell') === 'octo-desktop'
+const isMacDesktop =
+  typeof navigator !== 'undefined' && /Mac|iPod|iPhone|iPad/.test(navigator.platform)
+
+if (isPortableDesktopShell) {
+  document.documentElement.classList.add('portable-desktop-shell')
+  if (isMacDesktop) document.documentElement.classList.add('portable-desktop-macos')
+}
+
 const COOKIE_NAME = 'octo_access_key'
 const LOGIN_STATE_KEY = 'buding_box_portable_logged_in'
 const LEGACY_STORAGE_KEY = 'octo_access_key'

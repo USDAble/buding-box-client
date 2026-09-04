@@ -1,4 +1,5 @@
 <script>
+  import { onDestroy } from 'svelte'
   import { onboardPhase } from '../../../web/src/lib/stores'
   import OctoLogo from '../../../web/src/components/layout/OctoLogo.svelte'
   import Segment from '../../../web/src/components/ui/Segment.svelte'
@@ -35,6 +36,8 @@
   let loginDialCode = '+86'
   let loginPhone = ''
   let verificationCode = ''
+  let codeCountdown = 0
+  let codeTimer = null
   let submitting = false
   let errorKey = null
   let firstInputEl = null
@@ -114,6 +117,30 @@
     errorKey = null
     await completeAuth()
   }
+
+  function sendVerificationCode() {
+    if (codeCountdown > 0 || submitting) return
+    const phoneDigits = loginPhone.replace(/\D/g, '')
+    if (phoneDigits.length < 6 || phoneDigits.length > 15) {
+      errorKey = 'auth.login.invalidPhone'
+      return
+    }
+
+    // 当前为静态原型：只模拟发送状态，不调用外部短信 API。
+    errorKey = null
+    codeCountdown = 60
+    codeTimer = window.setInterval(() => {
+      codeCountdown -= 1
+      if (codeCountdown <= 0) {
+        window.clearInterval(codeTimer)
+        codeTimer = null
+      }
+    }, 1000)
+  }
+
+  onDestroy(() => {
+    if (codeTimer !== null) window.clearInterval(codeTimer)
+  })
 </script>
 
 {#if $authPrompt || submitting}
@@ -229,20 +256,30 @@
               </div>
             </fieldset>
 
-            <label class="field" for="portable-verification-code">
-              <span>{$portableT('auth.login.code')}</span>
-              <input
-                id="portable-verification-code"
-                bind:value={verificationCode}
-                type="text"
-                inputmode="numeric"
-                maxlength="6"
-                autocomplete="one-time-code"
-                placeholder={$portableT('auth.login.codePlaceholder')}
-                disabled={submitting}
-                aria-invalid={errorKey === 'auth.login.invalidCode'}
-              />
-            </label>
+            <div class="field">
+              <label for="portable-verification-code">{$portableT('auth.login.code')}</label>
+              <div class="code-control">
+                <input
+                  id="portable-verification-code"
+                  bind:value={verificationCode}
+                  type="text"
+                  inputmode="numeric"
+                  maxlength="6"
+                  autocomplete="one-time-code"
+                  placeholder={$portableT('auth.login.codePlaceholder')}
+                  disabled={submitting}
+                  aria-invalid={errorKey === 'auth.login.invalidCode'}
+                />
+                <button
+                  class="send-code"
+                  type="button"
+                  disabled={submitting || codeCountdown > 0}
+                  on:click={sendVerificationCode}
+                >
+                  {codeCountdown > 0 ? `${codeCountdown}s` : $portableT('auth.login.sendCode')}
+                </button>
+              </div>
+            </div>
             {#if errorKey}
               <p class="error" role="alert">{$portableT(errorKey)}</p>
             {/if}
@@ -394,7 +431,7 @@
     gap: 6px;
   }
 
-  .field > span, .field > legend {
+  .field > span, .field > legend, .field > label {
     padding: 0;
     color: var(--text-heading, #18181b);
     font-size: 13px;
@@ -436,6 +473,32 @@
     background-repeat: no-repeat;
     background-position: right 18px center;
     cursor: pointer;
+  }
+
+  .code-control {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 112px;
+    gap: 8px;
+  }
+
+  .send-code {
+    height: 46px;
+    padding: 0 12px;
+    border: 1px solid var(--border, rgba(0, 0, 0, 0.14));
+    border-radius: 10px;
+    background: var(--bg-container, #fff);
+    color: var(--text-heading, #18181b);
+    font: inherit;
+    font-size: 13px;
+    font-weight: 620;
+    cursor: pointer;
+  }
+
+  .send-code:hover:not(:disabled) { background: var(--bg-layout, #fafafa); }
+  .send-code:disabled { opacity: 0.5; cursor: not-allowed; }
+  .send-code:focus-visible {
+    outline: 3px solid var(--focus-ring, rgba(37, 99, 235, 0.3));
+    outline-offset: 2px;
   }
 
   .help, .error {
@@ -530,6 +593,7 @@
     .auth-content { padding-top: 24px; }
     .auth-content.welcome { padding-top: 36px; }
     .phone-control { grid-template-columns: 1fr; }
+    .code-control { grid-template-columns: minmax(0, 1fr) 104px; }
     footer { min-height: 126px; padding-bottom: 72px; }
     .language-switcher { right: 16px; bottom: 12px; }
   }

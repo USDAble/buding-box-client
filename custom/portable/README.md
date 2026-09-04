@@ -73,8 +73,8 @@ model; protecting it from malicious local processes requires OS-level network
 isolation or an upstream option to disable the loopback exemption.
 
 - Windows: double-click `Start-Windows.cmd`.
-- macOS: run `bash Start-macOS.command` the first time; a signed distribution
-  can be double-clicked normally.
+- macOS: run `bash Start-macOS.command`; the package contains a standard,
+  ad-hoc-signed `Buding Box.app` with the upstream desktop icon.
 - Linux: run `bash Start-Linux.sh`.
 
 The native shell loads only `http://127.0.0.1:18080`, so UI/API/WebSocket
@@ -107,20 +107,24 @@ Reuse an already-built Web UI:
 bash custom/portable/build/package.sh all --skip-web
 ```
 
-Run the native desktop shell with the portable login UI for development:
+Build and run exactly the same native shell and platform package used by the
+portable release:
 
 ```bash
 bash custom/portable/build/desktop-test.sh
 ```
 
 Do not use `make desktop` for this check: its upstream `web-build` target
-replaces the portable UI with the ordinary upstream Vite build.
-The test build sets `PORTABLE_FORCE_LOGIN=1`, so a newly opened browser/WebView
-session shows the login page even if it has an earlier persistent login. After
-successful login, refreshes in the same session reuse the state from local
-storage. Close and reopen the browser/WebView to force the page again. Use
-`PORTABLE_FORCE_LOGIN=0 bash custom/portable/build/desktop-test.sh` when the
-test should always honor an existing persistent login from startup.
+replaces the portable UI with the ordinary upstream Vite build. The test entry
+sets `PORTABLE_FORCE_LOGIN=1` by default and preserves the package data folder
+between test rebuilds. Use `PORTABLE_FORCE_LOGIN=0 bash
+custom/portable/build/desktop-test.sh` to honor the persisted login immediately.
+
+The platform wrappers reuse upstream packaging assets without changing them:
+macOS gets a real `.app`, `Info.plist`, icon and ad-hoc signature; Windows gets
+the ICO and per-monitor-DPI manifest embedded in the executable; Linux and the
+runtime windows use the existing 256px application icon. The launcher still
+owns the USB-local HOME, WebView profile and sidecar process chain.
 
 The completed folder is written under `dist/portable/`. Copy the whole
 versioned directory to the USB drive; do not copy only the executable.

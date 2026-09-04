@@ -50,9 +50,11 @@ foreach ($dir in @($portableHome, $browserProfile, $logsDir, $tempDir, $locksDir
 $octoBin = Join-Path $AppRoot "runtime\windows\$arch\octo.exe"
 $guardBin = Join-Path $AppRoot "gateway\windows\$arch\ai-guard.exe"
 $desktopBin = Join-Path $AppRoot "desktop\windows\$arch\buding-box-desktop.exe"
+$desktopIcon = Join-Path $AppRoot "desktop\windows\$arch\icon.png"
 if (-not (Test-Path $octoBin)) { throw "缺少 $octoBin" }
 if (-not (Test-Path $guardBin)) { throw "缺少 $guardBin" }
 if (-not (Test-Path $desktopBin)) { throw "缺少本平台原生桌面壳：$desktopBin；请在 Windows 本机重新执行 current 打包" }
+if (-not (Test-Path $desktopIcon)) { throw "缺少本平台桌面图标：$desktopIcon" }
 
 $configDir = Join-Path $AppRoot 'config'
 $configFile = Join-Path $portableHome '.octo\config.yml'
@@ -100,6 +102,7 @@ $env:LOCALAPPDATA = Join-Path $portableHome 'AppData\Local'
 $env:TEMP = $tempDir
 $env:TMP = $tempDir
 $env:BUDING_BOX_WEBVIEW_DATA = $browserProfile
+$env:BUDING_BOX_APP_ICON = $desktopIcon
 $env:OCTO_ACCESS_KEY = $appAccessKey
 $env:AI_GUARD_LISTEN = '127.0.0.1:18080'
 $env:AI_GUARD_LOCAL_TOKEN = 'local-gateway-only'

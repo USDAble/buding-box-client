@@ -24,6 +24,10 @@ export default {
         replacement: resolve(portableDir, 'PortableFirstRunSetup.svelte'),
       },
       {
+        find: /^\.\/VersionBadge\.svelte$/,
+        replacement: resolve(portableDir, 'PortableSidebarFooter.svelte'),
+      },
+      {
         find: /^\.\/app\.css$/,
         replacement: resolve(portableDir, 'portable.css'),
       },

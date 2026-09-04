@@ -13,6 +13,8 @@ USAGE
 
 mode=current
 skip_web=false
+portable_force_login="${PORTABLE_FORCE_LOGIN:-0}"
+preserve_data="${PORTABLE_PRESERVE_DATA:-0}"
 for arg in "$@"; do
   case "$arg" in
     current|all) mode="$arg" ;;
@@ -39,13 +41,13 @@ if [[ "$skip_web" == false ]]; then
   if [[ ! -d "$repo_root/web/node_modules" ]]; then
     (cd "$repo_root/web" && npm ci)
   fi
-  (cd "$repo_root/web" && PORTABLE_FORCE_LOGIN=0 ./node_modules/.bin/vite build --config ../custom/portable/web/portable.vite.config.mts)
+  (cd "$repo_root/web" && PORTABLE_FORCE_LOGIN="$portable_force_login" ./node_modules/.bin/vite build --config ../custom/portable/web/portable.vite.config.mts)
 fi
 [[ -f "$repo_root/internal/server/webdist/index.html" ]] || {
   printf 'missing webdist; run without --skip-web\n' >&2
   exit 1
 }
-for marker in 'Buding Box，我帮你' 'Buding Box, here to help' '默认静态激活码：BUDING-123456' '默认静态验证码：123456' 'buding_box_portable_logged_in'; do
+for marker in 'Buding Box，我帮你' 'Buding Box, here to help' '默认静态激活码：BUDING-123456' '默认静态验证码：123456' 'buding_box_portable_logged_in' 'data-portable-sidebar-footer'; do
   rg -a -q "$marker" "$repo_root/internal/server/webdist/assets" || {
     printf 'webdist is missing portable login marker: %s; run without --skip-web\n' "$marker" >&2
     exit 1
@@ -56,9 +58,20 @@ go test ./custom/portable/gateway
 
 # dist/ is generated output. Replacing only this versioned directory never
 # touches source or user data.
+preserved_data="$build_cache/preserved-data-$release_name"
+if [[ "$preserve_data" == 1 && -d "$app_root/data" ]]; then
+  rm -rf "$preserved_data"
+  mkdir -p "$preserved_data"
+  cp -R "$app_root/data/." "$preserved_data/"
+fi
 rm -rf "$dist_root"
 mkdir -p "$app_root/runtime" "$app_root/gateway" "$app_root/desktop" \
   "$app_root/config" "$app_root/launcher/windows" "$app_root/workspace"
+if [[ "$preserve_data" == 1 && -d "$preserved_data" ]]; then
+  mkdir -p "$app_root/data"
+  cp -R "$preserved_data/." "$app_root/data/"
+  rm -rf "$preserved_data"
+fi
 
 cp "$portable_src/config/octo-config.yml.template" "$app_root/config/"
 cp "$portable_src/config/gateway.env.example" "$app_root/config/gateway.env"
@@ -101,6 +114,7 @@ host_target="$(current_target)"
 rg_version=15.1.0
 cleanup() {
   make -s -C "$repo_root" rg-embed-clean >/dev/null 2>&1 || true
+  rm -f "$portable_src/desktop"/rsrc_windows_*.syso
 }
 trap cleanup EXIT
 
@@ -146,18 +160,37 @@ for target in "${targets[@]}"; do
     desktop_ldflags="-s -w"
     case "$goos" in
       darwin)
+        app_bundle="$desktop_dir/Buding Box.app"
+        app_contents="$app_bundle/Contents"
+        mkdir -p "$app_contents/MacOS" "$app_contents/Resources"
+        desktop_output="$app_contents/MacOS/buding-box-desktop"
         (cd "$portable_src/desktop" && env CGO_ENABLED=1 \
           CGO_CFLAGS='-mmacosx-version-min=11.0' \
           CGO_LDFLAGS='-Wl,-macos_version_min,11.0 -Wl,-no_warn_duplicate_libraries' \
           go build -ldflags="$desktop_ldflags" -o "$desktop_output" .)
+        sed "s/__VERSION__/$version/g" \
+          "$portable_src/desktop/packaging/darwin/Info.plist" > "$app_contents/Info.plist"
+        cp "$repo_root/cmd/octo-desktop/build/darwin/icon.icns" "$app_contents/Resources/icon.icns"
+        cp "$repo_root/cmd/octo-desktop/build/linux/icon.png" "$app_contents/Resources/icon.png"
+        codesign --force --deep --sign - "$app_bundle" >/dev/null 2>&1 || \
+          printf 'warning: ad-hoc codesign failed; the app may still run locally\n' >&2
         ;;
       windows)
-        (cd "$portable_src/desktop" && env CGO_ENABLED=1 \
+        resource_tool="$build_cache/generate-windows-resources.exe"
+        (cd "$repo_root/cmd/octo-desktop" && go build \
+          -o "$resource_tool" ./build/windows/generate-syso)
+        (cd "$portable_src/desktop" && "$resource_tool" "$goarch" \
+          "$repo_root/cmd/octo-desktop/build/windows/icon.ico" \
+          "$repo_root/cmd/octo-desktop/build/windows/wails.exe.manifest")
+        (cd "$portable_src/desktop" && env CGO_ENABLED=0 GOOS=windows GOARCH="$goarch" \
           go build -ldflags="$desktop_ldflags -H windowsgui" -o "$desktop_output" .)
+        rm -f "$portable_src/desktop"/rsrc_windows_*.syso
+        cp "$repo_root/cmd/octo-desktop/build/linux/icon.png" "$desktop_dir/icon.png"
         ;;
       linux)
         (cd "$portable_src/desktop" && env CGO_ENABLED=1 \
           go build -ldflags="$desktop_ldflags" -o "$desktop_output" .)
+        cp "$repo_root/cmd/octo-desktop/build/linux/icon.png" "$desktop_dir/icon.png"
         ;;
     esac
   fi

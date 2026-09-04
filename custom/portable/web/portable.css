@@ -1,5 +1,39 @@
 @import '../../../web/src/app.css';
 
+/* macOS 便携壳使用全尺寸内容窗口：页面从窗口顶边开始，不再为原生标题栏
+   预留空白。这里只复刻上游 native-inset 的交通灯避让规则，不改上游组件。 */
+html.portable-desktop-macos #app .content > aside .side-header {
+  box-sizing: border-box;
+  max-height: 44px;
+  padding-left: 82px;
+  padding-bottom: 4px;
+}
+
+html.portable-desktop-macos #app .content > aside .rail-new {
+  padding-top: 44px;
+}
+
+html.portable-desktop-macos #app .content > .main > header {
+  box-sizing: border-box;
+  max-height: 44px;
+  padding-bottom: 4px;
+}
+
+/* 侧栏隐藏后交通灯位于主内容左上角，此时只横向让出按钮区域；
+   aside 的宽度由上游内联样式维护，扩展层据此判断，不引入状态耦合。 */
+html.portable-desktop-macos #app .content:has(> aside[style*='width:0px']) > .main > header {
+  padding-left: 82px;
+}
+
+/* 便携版侧栏由 VersionBadge alias 渲染用户信息和消息入口，隐藏上游设置文字并移除版本区域。 */
+#app aside .footer > .footer-settings {
+  display: none;
+}
+
+#app aside .footer {
+  padding: 8px 12px;
+}
+
 /* 复用上游启动占位，仅在检测超过 180ms 时显示加载信息，避免快速启动闪烁。 */
 #app .splash:not(.splash-msg) {
   flex-direction: column;

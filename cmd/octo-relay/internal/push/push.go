@@ -1,13 +1,15 @@
 // Package push sends content-free wakeup notifications. The relay consumes a
-// host's wakeup frame and fires a generic "Octo has new activity" push at the
-// phone's token — no session content, no token persistence, no token logging.
-// APNs and FCM credentials belong to the relay operator (the octo host never
-// holds them); tokens belong to the phones and pass through in memory only.
+// host's wakeup frame and fires a generic "Pudding Box has new activity" push
+// at the phone's token — no session content, no token persistence, no token
+// logging. APNs and FCM credentials belong to the relay operator (the octo
+// host never holds them); tokens belong to the phones and pass through in
+// memory only.
 package push
 
 import (
 	"bytes"
 	"context"
+	_ "embed"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -18,11 +20,43 @@ import (
 )
 
 // The notification body is deliberately generic: push payloads transit
-// Apple/Google, so the E2E design keeps them content-free.
-const (
-	notifTitle = "Octo"
-	notifBody  = "Octo has new activity"
+// Apple/Google, so the E2E design keeps them content-free. The only
+// user-facing text is the product name itself, read from the embedded
+// brand.json (synced from branding/brand.json by scripts/sync-branding.mjs —
+// this nested module cannot import the root internal/brand). It is fixed to
+// the English full name: a lock-screen notification has no UI language to
+// follow, so it is a class-B value, not localized.
+//
+//go:embed brand.json
+var embeddedBrand []byte
+
+var productName = loadProductName()
+
+var (
+	notifTitle = productName
+	notifBody  = productName + " has new activity"
 )
+
+// loadProductName extracts the fixed product name from the embedded brand.json.
+func loadProductName() string {
+	var cfg struct {
+		Product struct {
+			Names map[string]string `json:"names"`
+		} `json:"product"`
+	}
+	if err := json.Unmarshal(embeddedBrand, &cfg); err != nil {
+		panic("push: invalid embedded brand.json: " + err.Error())
+	}
+	if name := cfg.Product.Names["en-US"]; name != "" {
+		return name
+	}
+	for _, name := range cfg.Product.Names {
+		if name != "" {
+			return name
+		}
+	}
+	panic("push: brand.json has no product name")
+}
 
 // Pusher fires one content-free wakeup at a platform token.
 type Pusher interface {

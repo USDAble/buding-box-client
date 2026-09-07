@@ -117,7 +117,9 @@ func TestIdentifiersAreAsciiWithoutSpaces(t *testing.T) {
 		"identifiers.current": cfg.Identifiers.Current,
 		"identifiers.future":  cfg.Identifiers.Future,
 		"visual.logo":         cfg.Visual.Logo,
-		"visual.colors":       cfg.Visual.Colors,
+		// visual.colors is absent until the brand colour is agreed; a nil map
+		// here simply contributes nothing rather than failing.
+		"visual.colors": cfg.Visual.Colors,
 	}
 	for group, links := range cfg.Links {
 		groups["links."+group] = links

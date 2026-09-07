@@ -114,7 +114,9 @@ describe('class C identifiers and paths', () => {
       'identifiers.current': brand.identifiers.current,
       'identifiers.future': brand.identifiers.future,
       'visual.logo': brand.visual.logo,
-      'visual.colors': brand.visual.colors,
+      // Absent until the brand colour is agreed; an empty group contributes
+      // nothing rather than throwing.
+      'visual.colors': brand.visual.colors ?? {},
     }
     for (const [group, links] of Object.entries(brand.links)) groups[`links.${group}`] = links
 
@@ -143,7 +145,9 @@ describe('class C identifiers and paths', () => {
     expect(brandLink('inApp', 'terms')).toMatch(/^\//)
     expect(brandLink('nope', 'license')).toBe('')
     expect(brandAsset('mark')).not.toBe('')
-    expect(brandColor('primary')).toMatch(/^#[0-9A-Fa-f]{6}$/)
+    // The brand colour is not decided yet, so the accessor must degrade to an
+    // empty string rather than throw on the missing group.
+    expect(brandColor('primary')).toBe('')
   })
 })
 

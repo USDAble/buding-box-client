@@ -19,6 +19,11 @@ on:
       - 'internal/server/**'
       # The app embeds the web UI built from web/ (webdist is gitignored).
       - 'web/**'
+      # The tray menu and dialogs take the product name from internal/brand,
+      # which embeds branding/brand.json. Without these, renaming the product
+      # would skip the only job that runs cmd/octo-desktop's tests.
+      - 'branding/**'
+      - 'internal/brand/**'
       # Root-module dep bumps flow into the nested desktop module via its
       # replace directive, so they must build-verify the desktop app too.
       - 'go.mod'
@@ -32,6 +37,8 @@ on:
       - 'cmd/octo-desktop/**'
       - 'internal/server/**'
       - 'web/**'
+      - 'branding/**'
+      - 'internal/brand/**'
       - 'go.mod'
       - 'go.sum'
       - 'scripts/package-desktop-macos.sh'

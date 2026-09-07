@@ -1,4 +1,5 @@
 import { writable, derived, get } from "svelte/store";
+import { brandName, brandShortName } from "./brand";
 
 export const en: Record<string, string> = {
   "nav.sessions": "Sessions",
@@ -106,8 +107,8 @@ export const en: Record<string, string> = {
   "chat.send": "Send",
   "chat.send_or_queue_hint": "Enter steers this turn · Cmd/Ctrl+Enter queues it as the next turn",
   "chat.stop": "Stop",
-  "chat.placeholder": "Message Octo… (Enter to send · Shift+Enter for newline · / for skills)",
-  "chat.placeholder_running": "Message Octo… (Enter steers this turn · Cmd/Ctrl+Enter queues the next one)",
+  "chat.placeholder": "Message {brandShort}… (Enter to send · Shift+Enter for newline · / for skills)",
+  "chat.placeholder_running": "Message {brandShort}… (Enter steers this turn · Cmd/Ctrl+Enter queues the next one)",
   "chat.export": "Export",
   "chat.export_cancel": "Cancel",
   "chat.export_selected_count": "{n} selected",
@@ -481,14 +482,14 @@ export const en: Record<string, string> = {
   "settings.data.delete_selected_partial": "{n} could not be deleted",
   "settings.data.archived_no_match": "No archived tasks match this search or filter.",
   "settings.about": "About",
-  "settings.about.version_desc": "Currently installed Octo version",
+  "settings.about.version_desc": "Currently installed {brand} version",
   "settings.about.firstrun": "First-run Setup",
   "settings.about.firstrun_desc": "Re-run the welcome and configuration wizard",
   "settings.about.firstrun_btn": "Re-run",
   "settings.about.license": "Open Source Licenses",
   "settings.about.license_desc": "View third-party dependencies and license information",
   "settings.about.license_view": "View",
-  "settings.about.footer": "Octo · {tagline} · © {year}",
+  "settings.about.footer": "{brand} · {tagline} · © {year}",
   "profile.title": "Assistant Memory",
   "profile.soul": "Soul",
   "profile.user": "User",
@@ -611,9 +612,9 @@ export const en: Record<string, string> = {
   "header.notif_blocked": "Notifications are blocked — enable them in your browser settings",
   "header.notif_not_enabled": "Notifications were not enabled",
   "header.notif_disabled": "Desktop notifications are disabled",
-  "header.notif_question_body": "Octo is waiting for your input",
-  "header.notif_confirm_body": "Octo needs your approval",
-  "header.notif_turn_complete_body": "Octo is waiting for your input",
+  "header.notif_question_body": "{brand} is waiting for your input",
+  "header.notif_confirm_body": "{brand} needs your approval",
+  "header.notif_turn_complete_body": "{brand} is waiting for your input",
   "sidebar.chat": "Chat",
   "sidebar.select": "Select",
   "sidebar.batch_actions": "Batch actions",
@@ -681,9 +682,9 @@ export const en: Record<string, string> = {
   "settings.notifications": "Desktop Notifications",
   "settings.notifications_desc": "Notify you when a session needs an answer or finishes replying while you're away (requires browser permission)",
   "settings.autostart": "Launch at Login",
-  "settings.autostart_desc": "Start Octo automatically when you log in to this computer",
+  "settings.autostart_desc": "Start {brand} automatically when you log in to this computer",
   "settings.update": "Updates",
-  "settings.update_desc": "Check whether a newer version of Octo is available.",
+  "settings.update_desc": "Check whether a newer version of {brand} is available.",
   "settings.update_available": "A new version is available:",
   "settings.update.check": "Check for Updates",
   "settings.update.checking": "Checking…",
@@ -702,7 +703,7 @@ export const en: Record<string, string> = {
   "profile.captured_auto": "Captured automatically as you work",
   "profile.memories_loading": "Loading memories…",
   "profile.memories_empty": "No memory files yet.",
-  "profile.memories_hint": "Octo writes these as you work together. To add or correct a memory, just tell it in a conversation.",
+  "profile.memories_hint": "{brand} writes these as you work together. To add or correct a memory, just tell it in a conversation.",
   "files.subtitle": "Files the agent moved to trash across all projects. Recall them back to where they were, or clear the ones you don't need.",
   "files.refresh": "Refresh",
   "files.old": "Old",
@@ -748,7 +749,7 @@ export const en: Record<string, string> = {
   "mcp.ts_off": "Off",
   // First-run onboard / setup panel
   "onboard.session_title": "✨ Onboard",
-  "onboard.title": "Welcome to Octo",
+  "onboard.title": "Welcome to {brand}",
   "onboard.subtitle": "Let's get you set up in a minute.",
   "onboard.step.lang": "Language",
   "onboard.step.model": "Connect model",
@@ -758,7 +759,7 @@ export const en: Record<string, string> = {
   "onboard.key.title": "Connect your AI model",
   "onboard.key.btn.back": "← Back",
   "onboard.browser.prompt": "Browser automation (optional)",
-  "onboard.browser.sub": "Let Octo drive your real, logged-in browser — clicking, typing, and replaying workflows. You can always set this up later in Settings.",
+  "onboard.browser.sub": "Let {brand} drive your real, logged-in browser — clicking, typing, and replaying workflows. You can always set this up later in Settings.",
   "onboard.browser.skip": "Skip for now",
   // Shared model-config form (onboard + Settings)
   "models.provider": "Provider",
@@ -931,10 +932,10 @@ export const en: Record<string, string> = {
   "m.theme_dark": "Dark",
   "m.theme_system": "System",
   "m.about": "About",
-  "m.about_octo": "About Octo",
+  "m.about_octo": "About {brand}",
   "m.new_task": "New task",
   "m.task_desc": "Task description",
-  "m.task_ph": "What should Octo do? Leave empty for a blank session",
+  "m.task_ph": "What should {brand} do? Leave empty for a blank session",
   "m.model": "Model",
   "m.default": "Default",
   "m.perm_mode": "Permission mode",
@@ -964,7 +965,7 @@ export const zh: Record<string, string> = {
   "browser.view.connect_title": "连接",
   "browser.view.recordings_title": "录制",
   "browser.connected": "已连接",
-  "browser.rec.how": "录制方法：在聊天里让 Octo 录制你接下来的浏览器操作，在已连接的 Chrome 里演示一遍，然后说“录好了”。蒸馏后的工作流会出现在这里，可回放、可自愈。",
+  "browser.rec.how": "录制方法：在聊天里让{brand}录制你接下来的浏览器操作，在已连接的 Chrome 里演示一遍，然后说“录好了”。蒸馏后的工作流会出现在这里，可回放、可自愈。",
   "browser.rec.empty": "还没有录制。",
   "browser.rec.steps": "步",
   "browser.rec.run": "回放",
@@ -1429,14 +1430,14 @@ export const zh: Record<string, string> = {
   "settings.data.delete_selected_partial": "{n} 个删除失败",
   "settings.data.archived_no_match": "没有匹配搜索或筛选条件的已归档任务。",
   "settings.about": "关于",
-  "settings.about.version_desc": "当前安装的 Octo 版本",
+  "settings.about.version_desc": "当前安装的{brand}版本",
   "settings.about.firstrun": "首次引导",
   "settings.about.firstrun_desc": "重新运行欢迎与配置向导",
   "settings.about.firstrun_btn": "重新运行",
   "settings.about.license": "开源许可",
   "settings.about.license_desc": "查看第三方依赖与许可信息",
   "settings.about.license_view": "查看",
-  "settings.about.footer": "Octo · {tagline} · © {year}",
+  "settings.about.footer": "{brand} · {tagline} · © {year}",
   "profile.title": "助手记忆",
   "profile.soul": "灵魂",
   "profile.user": "用户",
@@ -1559,9 +1560,9 @@ export const zh: Record<string, string> = {
   "header.notif_blocked": "通知已被屏蔽 — 请在浏览器设置中开启",
   "header.notif_not_enabled": "未开启通知",
   "header.notif_disabled": "桌面通知已关闭",
-  "header.notif_question_body": "Octo 正在等待你的输入",
-  "header.notif_confirm_body": "Octo 需要你的审批",
-  "header.notif_turn_complete_body": "Octo 正在等待你的输入",
+  "header.notif_question_body": "{brand}正在等待你的输入",
+  "header.notif_confirm_body": "{brand}需要你的审批",
+  "header.notif_turn_complete_body": "{brand}正在等待你的输入",
   "sidebar.chat": "对话",
   "sidebar.select": "选择",
   "sidebar.batch_actions": "批量操作",
@@ -1629,9 +1630,9 @@ export const zh: Record<string, string> = {
   "settings.notifications": "桌面通知",
   "settings.notifications_desc": "当你离开时，会话需要回答或已完成回复时通知你（需要浏览器授权）",
   "settings.autostart": "开机自启",
-  "settings.autostart_desc": "登录这台电脑时自动启动 Octo",
+  "settings.autostart_desc": "登录这台电脑时自动启动{brand}",
   "settings.update": "更新",
-  "settings.update_desc": "检查是否有新版本的 Octo。",
+  "settings.update_desc": "检查是否有新版本的{brand}。",
   "settings.update_available": "有新版本可用:",
   "settings.update.check": "检查更新",
   "settings.update.checking": "检查中…",
@@ -1650,7 +1651,7 @@ export const zh: Record<string, string> = {
   "profile.captured_auto": "在你工作时自动记录",
   "profile.memories_loading": "正在加载记忆…",
   "profile.memories_empty": "暂无记忆文件。",
-  "profile.memories_hint": "Octo 会在共事过程中写下这些记忆。要新增或更正记忆，直接在对话中告诉它即可。",
+  "profile.memories_hint": "{brand}会在共事过程中写下这些记忆。要新增或更正记忆，直接在对话中告诉它即可。",
   "files.subtitle": "助手在所有项目中移入回收站的文件。把它们还原回原处，或清理掉不需要的。",
   "files.refresh": "刷新",
   "files.old": "陈旧",
@@ -1696,7 +1697,7 @@ export const zh: Record<string, string> = {
   "mcp.ts_off": "关",
   // First-run onboard / setup panel
   "onboard.session_title": "✨ 新手引导",
-  "onboard.title": "欢迎使用 Octo",
+  "onboard.title": "欢迎使用{brand}",
   "onboard.subtitle": "一分钟完成配置，马上开始。",
   "onboard.step.lang": "语言",
   "onboard.step.model": "连接模型",
@@ -1706,7 +1707,7 @@ export const zh: Record<string, string> = {
   "onboard.key.title": "连接 AI 模型",
   "onboard.key.btn.back": "← 返回",
   "onboard.browser.prompt": "浏览器自动化（可选）",
-  "onboard.browser.sub": "让 Octo 操作你已登录的真实浏览器 —— 点击、输入、回放工作流。也可以稍后在设置里再开启。",
+  "onboard.browser.sub": "让{brand}操作你已登录的真实浏览器 —— 点击、输入、回放工作流。也可以稍后在设置里再开启。",
   "onboard.browser.skip": "以后再说",
   // Shared model-config form (onboard + Settings)
   "models.provider": "服务商",
@@ -1879,10 +1880,10 @@ export const zh: Record<string, string> = {
   "m.theme_dark": "深色",
   "m.theme_system": "跟随系统",
   "m.about": "关于",
-  "m.about_octo": "关于 Octo",
+  "m.about_octo": "关于{brand}",
   "m.new_task": "新建任务",
   "m.task_desc": "任务描述",
-  "m.task_ph": "让 Octo 做什么?留空则只创建空会话",
+  "m.task_ph": "让{brand}做什么?留空则只创建空会话",
   "m.model": "模型",
   "m.default": "默认",
   "m.perm_mode": "权限模式",
@@ -1910,11 +1911,34 @@ function dictFor(l: string): Record<string, string> {
   return dictionaries[l] ?? (l && l.startsWith("zh") ? zh : en);
 }
 
+// The product name reaches the dictionaries as a {brand} / {brandShort}
+// placeholder rather than being spelled out, so renaming the product is an edit
+// to branding/brand.json instead of a sweep through 1900 lines of copy.
+//
+// Deliberately not a replaceAll of the old name over the resolved string. That
+// cannot tell a user-visible mention from a path — "~/Octo" in
+// settings.workspace_dir_desc is a real directory, and rewriting it produces
+// copy that names a folder which does not exist. It also forces every language
+// to inherit the same spacing, whereas a placeholder lets each dictionary
+// decide: English writes "About {brand}" with a space, Chinese writes
+// "关于{brand}" without one, because CJK takes no space around an inline name.
+const BRAND_PLACEHOLDER = /\{(brand|brandShort)\}/g;
+
+function interpolateBrand(text: string, locale: string): string {
+  // Cheap guard: t() is called on every re-render for keys that mostly have no
+  // placeholder, so skip building the regex match state for them.
+  if (!text.includes("{brand")) return text;
+  return text.replace(BRAND_PLACEHOLDER, (_, token: string) =>
+    token === "brandShort" ? brandShortName(locale) : brandName(locale),
+  );
+}
+
 // Reactive translator. Use as {$t('key')} in markup so a language switch
 // re-renders; the previous plain t() read the locale once and never updated.
 export const t = derived(locale, ($l) => {
   const dict = dictFor($l);
-  return (key: string): string => dict[key] ?? en[key] ?? key;
+  return (key: string): string =>
+    interpolateBrand(dict[key] ?? en[key] ?? key, $l);
 });
 
 // Non-reactive lookup for <script> / .ts one-shots (toasts, etc.).

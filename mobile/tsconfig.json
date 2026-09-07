@@ -6,6 +6,7 @@
     "lib": ["ESNext", "DOM"],
     "strict": true,
     "skipLibCheck": true,
+    "resolveJsonModule": true,
     "noEmit": true
   },
   "include": ["src/**/*.ts", "capacitor.config.ts"]

@@ -1,6 +1,6 @@
 ; octo-setup — per-user Windows installer for the Octo desktop app.
 ;
-; Installs the desktop app (octo-desktop.exe) + the octo CLI to
+; Installs the desktop app (PuddingBox.exe) + the octo CLI to
 ; %LOCALAPPDATA%\Programs\octo, puts that dir on the user PATH (HKCU — no admin,
 ; no UAC) so `octo` works in a terminal, creates a Start-menu shortcut that
 ; launches the app, seeds uv into ~/.octo/bin, and opens the app. Per-user is
@@ -13,7 +13,7 @@
 ;
 ; Compiled in CI by .github/workflows/release.yml. Defines passed in:
 ;   AppVersion — the release version, e.g. 0.20.0
-;   SourceDir  — the folder holding octo-desktop.exe, octo.exe, LICENSE.txt, and
+;   SourceDir  — the folder holding PuddingBox.exe, octo.exe, LICENSE.txt, and
 ;                (release builds) uv.exe.
 ; Compile locally:  ISCC.exe /DAppVersion=0.0.0 /DSourceDir=path\to\bits octo.iss
 
@@ -32,15 +32,19 @@
 #ifndef OutputName
   #define OutputName "octo-setup"
 #endif
+; Brand display values (app name, publisher, URL) come from brand.iss, generated
+; from branding/brand.json — renaming the product is a configuration edit, not a
+; sweep through this file.
+#include "brand.iss"
 
 [Setup]
 ; A stable AppId so re-running a newer installer updates in place rather than
 ; stacking a second copy. Never change this value.
 AppId={{8F2A6B1C-3D4E-4F50-9A6B-7C8D9E0F1A2B}
-AppName=Octo
+AppName={#BrandAppName}
 AppVersion={#AppVersion}
-AppPublisher=open-octo
-AppPublisherURL=https://github.com/open-octo/octo-agent
+AppPublisher={#BrandAppPublisher}
+AppPublisherURL={#BrandAppPublisherURL}
 DefaultDirName={userpf}\octo
 DisableProgramGroupPage=yes
 DisableDirPage=yes
@@ -54,14 +58,14 @@ WizardStyle=modern
 ; Broadcast WM_SETTINGCHANGE after install so Explorer-launched shells pick up
 ; the new PATH without a logout.
 ChangesEnvironment=yes
-UninstallDisplayName=Octo {#AppVersion}
+UninstallDisplayName={#BrandAppName} {#AppVersion}
 
 [Files]
-Source: "{#SourceDir}\octo-desktop.exe"; DestDir: "{app}"; Flags: ignoreversion
+Source: "{#SourceDir}\PuddingBox.exe"; DestDir: "{app}"; Flags: ignoreversion
 Source: "{#SourceDir}\octo.exe"; DestDir: "{app}"; Flags: ignoreversion
 Source: "{#SourceDir}\LICENSE.txt"; DestDir: "{app}"; Flags: ignoreversion
 ; uv, staged by `make bundle-tools-windows` into SourceDir before ISCC runs.
-; Lands in {app} beside octo-desktop.exe so the app self-provisions it into
+; Lands in {app} beside PuddingBox.exe so the app self-provisions it into
 ; ~/.octo/bin on first launch (bundledUvPath, matching macOS/Linux); the
 ; postinstall SeedUvToOctoBin also copies it there immediately for CLI-first
 ; use. skipifsourcedoesntexist lets a compile that only stages the exes succeed.
@@ -69,9 +73,9 @@ Source: "{#SourceDir}\uv.exe"; DestDir: "{app}"; Flags: ignoreversion skipifsour
 
 [Icons]
 ; Launch the desktop app. IconFilename points at the embedded icon in the exe so
-; the Start-menu shortcut shows the Octo logo instead of the Windows generic icon.
-Name: "{userprograms}\Octo"; Filename: "{app}\octo-desktop.exe"; \
-  WorkingDir: "{app}"; IconFilename: "{app}\octo-desktop.exe"; Comment: "Octo"
+; the Start-menu shortcut shows the app icon instead of the Windows generic icon.
+Name: "{userprograms}\{#BrandAppName}"; Filename: "{app}\PuddingBox.exe"; \
+  WorkingDir: "{app}"; IconFilename: "{app}\PuddingBox.exe"; Comment: "{#BrandAppName}"
 
 [Code]
 const
@@ -139,7 +143,7 @@ procedure LaunchApp;
 var
   ResultCode: Integer;
 begin
-  Exec(ExpandConstant('{app}\octo-desktop.exe'), '', ExpandConstant('{app}'),
+  Exec(ExpandConstant('{app}\PuddingBox.exe'), '', ExpandConstant('{app}'),
        SW_SHOWNORMAL, ewNoWait, ResultCode);
 end;
 
@@ -205,7 +209,7 @@ begin
     if FileExists(ExpandConstant('{app}\octo.exe')) then
       Exec(ExpandConstant('{app}\octo.exe'), 'serve --stop', '',
            SW_HIDE, ewWaitUntilTerminated, ResultCode);
-    Exec(ExpandConstant('{cmd}'), '/C taskkill /IM octo-desktop.exe /F >nul 2>&1',
+    Exec(ExpandConstant('{cmd}'), '/C taskkill /IM PuddingBox.exe /F >nul 2>&1',
          '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
     CleanupLegacyAutostart;
   end;
@@ -227,7 +231,7 @@ begin
   begin
     // Close a running app / stop any serve daemon so their images aren't locked
     // when the uninstaller removes them.
-    Exec(ExpandConstant('{cmd}'), '/C taskkill /IM octo-desktop.exe /F >nul 2>&1',
+    Exec(ExpandConstant('{cmd}'), '/C taskkill /IM PuddingBox.exe /F >nul 2>&1',
          '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
     if FileExists(ExpandConstant('{app}\octo.exe')) then
       Exec(ExpandConstant('{app}\octo.exe'), 'serve --stop', '',

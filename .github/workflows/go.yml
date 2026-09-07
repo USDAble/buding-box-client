@@ -17,6 +17,33 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  # Guards branding/brand.json — the single source of truth for product identity
+  # — and the generated copies that go:embed, Vite and Inno Setup read.
+  #
+  # The point is that the mistakes are caught here rather than in review: giving
+  # a path or an identifier a Chinese value or a language map fails rule C, a
+  # half-translated string fails rule A, and editing a generated copy instead of
+  # the source shows up as drift. The scripts have no npm dependencies, so this
+  # job needs no install step and finishes in seconds.
+  brand-guard:
+    name: Brand Guard
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '22'
+
+      - name: Validate branding/brand.json
+        run: node scripts/brand-schema.mjs
+
+      - name: Check generated brand files are in sync with the source
+        run: node scripts/sync-branding.mjs --check
+
+      - name: Run branding pipeline tests
+        run: node --test scripts/brand-schema.test.mjs scripts/sync-branding.test.mjs
+
   svelte-check:
     name: Svelte Check
     runs-on: ubuntu-latest

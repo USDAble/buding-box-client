@@ -50,7 +50,8 @@ export interface BrandConfig {
   links: Record<string, Record<string, string>>
   visual: {
     logo: Record<string, string>
-    colors: Record<string, string>
+    // Absent until the brand colour is agreed alongside the artwork.
+    colors?: Record<string, string>
   }
 }
 
@@ -160,7 +161,7 @@ export function brandAsset(key: string): string {
 
 /** A brand colour, e.g. brandColor('primary'). */
 export function brandColor(key: string): string {
-  return brand.visual.colors[key] ?? ''
+  return brand.visual.colors?.[key] ?? ''
 }
 
 /**

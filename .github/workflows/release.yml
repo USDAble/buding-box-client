@@ -118,7 +118,9 @@ jobs:
       - name: Generate Windows icon resource
         shell: pwsh
         working-directory: cmd/octo-desktop
-        run: go run ./build/windows/generate-syso ${{ matrix.arch }} build/windows/icon.ico build/windows/wails.exe.manifest
+        # Pass the release version so the VERSIONINFO file-properties version
+        # matches the ldflags-injected version (see generate-syso's [version]).
+        run: go run ./build/windows/generate-syso ${{ matrix.arch }} build/windows/icon.ico build/windows/wails.exe.manifest $env:version
 
       - name: Build desktop app
         shell: pwsh
@@ -133,7 +135,7 @@ jobs:
         run: |
           $commit = git rev-parse --short HEAD
           $pkg = "github.com/open-octo/octo-agent/internal/version"
-          go build -tags embedrg -ldflags "-H windowsgui -X $pkg.Version=$env:version -X $pkg.Commit=$commit" -o ..\..\staging\octo-desktop.exe .
+          go build -tags embedrg -ldflags "-H windowsgui -X $pkg.Version=$env:version -X $pkg.Commit=$commit" -o ..\..\staging\PuddingBox.exe .
 
       # Fetches uv.exe from its upstream GitHub release so the installer can
       # bundle it — see octo.iss's [Files] section. Native PowerShell rather
@@ -180,8 +182,8 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         shell: pwsh
         run: |
-          Copy-Item staging\octo-desktop.exe "staging\octo-desktop-windows-${{ matrix.arch }}.exe"
-          gh release upload "${{ github.ref_name }}" staging\${{ matrix.out }}.exe "staging\octo-desktop-windows-${{ matrix.arch }}.exe" --clobber
+          Copy-Item staging\PuddingBox.exe "staging\PuddingBox-windows-${{ matrix.arch }}.exe"
+          gh release upload "${{ github.ref_name }}" staging\${{ matrix.out }}.exe "staging\PuddingBox-windows-${{ matrix.arch }}.exe" --clobber
 
   # Build the double-click macOS installer (octo-setup.pkg) from the universal
   # (amd64+arm64) binary goreleaser just published, and attach it to the same
@@ -357,7 +359,7 @@ jobs:
           mkdir -p assets && cd assets
           gh release download "$GITHUB_REF_NAME" \
             --pattern 'Octo-darwin-universal.zip' \
-            --pattern 'octo-desktop-windows-*.exe'
+            --pattern 'PuddingBox-windows-*.exe'
           # AppImage sums are informational (no in-place update on Linux);
           # don't fail the sidecar when the linux leg produced no assets.
           gh release download "$GITHUB_REF_NAME" --pattern 'Octo-*.AppImage' \

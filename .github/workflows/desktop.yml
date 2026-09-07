@@ -170,7 +170,7 @@ jobs:
         env:
           GOARCH: ${{ matrix.goarch }}
           CGO_ENABLED: '0'
-        run: go build -v -tags embedrg -ldflags "-H windowsgui" -o octo-desktop.exe .
+        run: go build -v -tags embedrg -ldflags "-H windowsgui" -o PuddingBox.exe .
 
       # Raw .exe for now; wrapping it in an installer rides the existing Inno
       # Setup track (see windows-installer-check.yml), a separate change.
@@ -178,5 +178,5 @@ jobs:
         if: runner.os == 'Windows'
         uses: actions/upload-artifact@v7
         with:
-          name: octo-desktop-windows-${{ matrix.goarch }}
-          path: cmd/octo-desktop/octo-desktop.exe
+          name: PuddingBox-windows-${{ matrix.goarch }}
+          path: cmd/octo-desktop/PuddingBox.exe

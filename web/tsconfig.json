@@ -10,7 +10,8 @@
     "noFallthroughCasesInSwitch": true,
     "skipLibCheck": true,
     "allowJs": true,
-    "checkJs": false
+    "checkJs": false,
+    "resolveJsonModule": true
   },
   "include": ["src/**/*.ts", "src/**/*.svelte"]
 }

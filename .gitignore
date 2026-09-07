@@ -33,6 +33,7 @@ coverage.html
 .codegraph/
 /.worktrees/
 /.octo/
+/dev-docs-zxy/
 # Designer reference images (not deliverables) — shared ad hoc, not committed.
 /branding/reference/
 

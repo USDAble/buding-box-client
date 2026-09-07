@@ -37,6 +37,19 @@ Please confirm before requesting review. See [CONTRIBUTING.md](../CONTRIBUTING.m
 - [ ] Commit messages and this PR are written in English
 - [ ] This branch was created from the latest `main` and is currently up to date with it
 
+### 4. Fork rules
+
+<!-- OCTO-FORK: downstream section. Rules and rationale in dev-docs-usdable/开发规范.md §3 and §5. -->
+
+- [ ] Design doc: links to the `P<n>` doc under `dev-docs-usdable/需求/<batch>/技术方案/`, and the implementation matches it (or the doc was updated in this PR)
+- [ ] Data paths: no `os.UserHomeDir()`, no `".octo"` literal — everything goes through `internal/datapath` (`datapath-guard` green)
+- [ ] Brand strings: product names interpolate `{brand}` / `{brandShort}`; no hardcoded literals (`brand-guard` green)
+- [ ] Upstream files touched are marked `// OCTO-FORK: <why> — see <doc>`; nothing upstream was deleted where it could be made unreachable instead
+- [ ] If this wraps `agent.Sender`: there is a test asserting the wrapper still satisfies `ToolStreamingSender`
+- [ ] If this adds an HTTP route: stated whether it is product-gate exempt or protected (default is protected)
+- [ ] If this adds user-visible text: both zh and en entries added, in the `product.*` block at the end of `i18n.ts`
+- [ ] Manual acceptance steps from the design doc were run; results pasted under "Notes for reviewers"
+
 ### Bonus
 
 - [ ] This PR was authored using Octo itself

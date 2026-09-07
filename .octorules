@@ -6,6 +6,8 @@ The canonical project guidance for contributors and AI coding agents. Keep this 
 
 `octo-agent` is a Go AI agent CLI (Go 1.25+, single binary). Module path `github.com/open-octo/octo-agent`. Ships as CLI + embedded Web UI + IM bridges (see `octo serve`).
 
+**This repository is a downstream fork** shipping the 布丁盒子 / Pudding Box portable desktop product. Fork-specific rules live in `dev-docs-usdable/开发规范.md`; upstream merge policy in `dev-docs-usdable/上游合并策略.md`. The three hard rules under "Fork rules" below override anything here that conflicts.
+
 ## Commands
 
 ```bash
@@ -38,7 +40,17 @@ Dependency direction is one-way: `provider → agent`, `tools → agent`, never 
 
 - **New provider** — implement `provider.Provider` (required) and optionally `provider.StreamingProvider`, `provider.ToolProvider`, `provider.ToolStreamingProvider`. Put it under `internal/provider/<name>/`. Each protocol's wire-format quirks are isolated inside the package; the agent layer must not learn about them.
 - **New tool** — implement `agent.ToolExecutor` and `Definition() agent.ToolDefinition` returning the JSON Schema the LLM sees. Place it under `internal/tools/<name>.go`. Register it in `tools.DefaultRegistry` and add it to `tools.DefaultTools()` if it belongs in the default set.
-- **New skill** — `~/.octo/skills/<name>/SKILL.md` with the same frontmatter format Claude Code uses. The skill loader composes existing tools — adding a skill should not require new tool code.
+- **New skill** — `<data root>/skills/<name>/SKILL.md` with the same frontmatter format Claude Code uses. The skill loader composes existing tools — adding a skill should not require new tool code.
+
+## Fork rules
+
+Enforced by CI. Full text and rationale in `dev-docs-usdable/开发规范.md` §3.
+
+1. **Never resolve a data path yourself.** No `os.UserHomeDir()`, no `".octo"` literal — everything goes through `internal/datapath`. The data root is `<exe dir>/data`, overridable only by `$OCTO_DATA_ROOT`. `~/.octo` is gone from this fork **including the CLI**, which is what lets `datapath-guard` reject the `".octo"` literal with zero exceptions. Genuine host-home access goes in `scripts/homedir-allowlist.txt` with a written reason.
+2. **Never hardcode a brand string.** Interpolate `{brand}` / `{brandShort}` from `branding/brand.json` (`brand-guard`). Annotate the two exceptions: "Octo" in the port-conflict message names the *upstream* product; `BUDING-DEMO-0001` and `buding-*` model ids are fixed ASCII data keys that do not follow the English brand name.
+3. **Mark every change to an upstream file** with `// OCTO-FORK: <why> — see <design doc>`. Prefer making an upstream feature unreachable over deleting it; deletions cause delete-vs-modify conflicts git cannot auto-resolve.
+
+Upstream merges use `merge`, never `rebase`, and land as their own PR with no functional changes riding along.
 
 ## Code style
 
@@ -74,6 +86,14 @@ See `CLAUDE.md` for the full write-up of each incident.
 - Verify external claims (API endpoints, third-party SDK existence, dates) before committing them.
 - If `go test ./...` fails because of an environment issue (missing key, blocked network), say so explicitly rather than commenting out the test.
 
-## What lives in `dev-docs/`
+## Where documentation lives
 
-Architecture decisions and verified-fact dumps. One Markdown file per topic. Don't commit speculative or unverified claims — verify before writing.
+| Content | Location |
+|---|---|
+| Upstream architecture decisions, verified-fact dumps | `dev-docs/` — one Markdown file per topic |
+| This fork's requirements, plans, per-PR design docs | `dev-docs-usdable/需求/<batch>/` |
+| This fork's engineering norms and upstream-merge policy | `dev-docs-usdable/开发规范.md`, `dev-docs-usdable/上游合并策略.md` |
+
+**Do not put downstream documents in `dev-docs/`** — it is an upstream directory, and anything added there conflicts on every merge.
+
+Don't commit speculative or unverified claims — verify before writing.

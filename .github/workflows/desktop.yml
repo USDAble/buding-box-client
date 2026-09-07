@@ -19,6 +19,11 @@ on:
       - 'internal/server/**'
       # The app embeds the web UI built from web/ (webdist is gitignored).
       - 'web/**'
+      # The tray menu and dialogs take the product name from internal/brand,
+      # which embeds branding/brand.json. Without these, renaming the product
+      # would skip the only job that runs cmd/octo-desktop's tests.
+      - 'branding/**'
+      - 'internal/brand/**'
       # Root-module dep bumps flow into the nested desktop module via its
       # replace directive, so they must build-verify the desktop app too.
       - 'go.mod'
@@ -32,6 +37,8 @@ on:
       - 'cmd/octo-desktop/**'
       - 'internal/server/**'
       - 'web/**'
+      - 'branding/**'
+      - 'internal/brand/**'
       - 'go.mod'
       - 'go.sum'
       - 'scripts/package-desktop-macos.sh'
@@ -163,7 +170,7 @@ jobs:
         env:
           GOARCH: ${{ matrix.goarch }}
           CGO_ENABLED: '0'
-        run: go build -v -tags embedrg -ldflags "-H windowsgui" -o octo-desktop.exe .
+        run: go build -v -tags embedrg -ldflags "-H windowsgui" -o PuddingBox.exe .
 
       # Raw .exe for now; wrapping it in an installer rides the existing Inno
       # Setup track (see windows-installer-check.yml), a separate change.
@@ -171,5 +178,5 @@ jobs:
         if: runner.os == 'Windows'
         uses: actions/upload-artifact@v7
         with:
-          name: octo-desktop-windows-${{ matrix.goarch }}
-          path: cmd/octo-desktop/octo-desktop.exe
+          name: PuddingBox-windows-${{ matrix.goarch }}
+          path: cmd/octo-desktop/PuddingBox.exe

@@ -191,15 +191,25 @@ func (s State) Activated() bool {
 
 // PublicState is the de-identified view of State handed to the frontend: the
 // account's phone plaintext and token are stripped, since neither is needed
-// client-side (the token is a server-side-only fake).
+// client-side (the token is a server-side-only fake). The activation record's
+// code stays server-side too; only the timestamps go out, so the account panel
+// can render "active · N days left" / "expired" (需求 §5.4.2, P5).
 type PublicState struct {
-	SchemaVersion int         `json:"schemaVersion"`
-	LoggedIn      bool        `json:"loggedIn"`
-	Activated     bool        `json:"activated"`
-	Account       *PublicAcct `json:"account,omitempty"`
-	Credits       Credits     `json:"credits"`
-	Plan          Plan        `json:"plan"`
-	Prefs         Prefs       `json:"prefs"`
+	SchemaVersion int               `json:"schemaVersion"`
+	LoggedIn      bool              `json:"loggedIn"`
+	Activated     bool              `json:"activated"`
+	Activation    *PublicActivation `json:"activation,omitempty"`
+	Account       *PublicAcct       `json:"account,omitempty"`
+	Credits       Credits           `json:"credits"`
+	Plan          Plan              `json:"plan"`
+	Prefs         Prefs             `json:"prefs"`
+}
+
+// PublicActivation is the activation timestamps the UI may see. Activated (the
+// bool) is still exposed separately for P4's login-form branching.
+type PublicActivation struct {
+	ActivatedAt time.Time `json:"activatedAt"`
+	ExpiresAt   time.Time `json:"expiresAt"`
 }
 
 // PublicAcct is the account fields the UI may see.
@@ -218,6 +228,12 @@ func (s State) Public() PublicState {
 		Credits:       s.Credits,
 		Plan:          s.Plan,
 		Prefs:         s.Prefs,
+	}
+	if s.Activation != nil && s.Activation.Activated {
+		p.Activation = &PublicActivation{
+			ActivatedAt: s.Activation.ActivatedAt,
+			ExpiresAt:   s.Activation.ExpiresAt,
+		}
 	}
 	if s.Account != nil {
 		p.Account = &PublicAcct{

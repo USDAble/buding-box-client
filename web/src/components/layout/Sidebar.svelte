@@ -1,7 +1,7 @@
 <script lang="ts">
   import { onMount, onDestroy } from 'svelte'
   import { get } from 'svelte/store'
-  import { view, sidebar, sessions, sessionGroups, pinnedSessions, collapsedSessions, editGroupId, editGroupDraft, activeSessionId, selMode, sel, menuFor, editId, editDraft, showToast, mcpServers, createNewSession, createSessionInGroup, clearPendingSessionOpts, settingsModalOpen, cmdkOpen, nativeShell, dirLeaf } from '../../lib/stores'
+  import { view, sidebar, sessions, sessionGroups, pinnedSessions, collapsedSessions, editGroupId, editGroupDraft, activeSessionId, selMode, sel, menuFor, editId, editDraft, showToast, mcpServers, createNewSession, createSessionInGroup, clearPendingSessionOpts, cmdkOpen, accountPanelOpen, nativeShell, dirLeaf } from '../../lib/stores'
   import * as api from '../../lib/api'
   import { titlebarDblClick } from '../../lib/nativeWindow'
   import { t, tr } from '../../lib/i18n'
@@ -11,8 +11,9 @@
   import { ago, clockTick } from '../../lib/relTime'
   import { isUnread, sessionSeenAt, sessionTouchedAt } from '../../lib/unread'
   import { ws } from '../../lib/ws'
-  import VersionBadge from './VersionBadge.svelte'
   import OctoLogo from './OctoLogo.svelte'
+  import AccountCorner from './AccountCorner.svelte'
+  import AccountPanel from './AccountPanel.svelte'
   import ProjectModal from '../overlays/ProjectModal.svelte'
   import type { SessionGroup } from '../../lib/types'
 
@@ -26,6 +27,12 @@
   // The project whose settings modal (rename / source folders / output marker)
   // is open; null when closed.
   let settingsGroup = $state<SessionGroup | null>(null)
+
+  // The P5 account corner's DOM node — actually the footer container holding
+  // it, whichever mode is mounted (full footer or rail footer, never both).
+  // The account panel measures this element's rect to anchor itself so the
+  // corner stays visible below as the collapse anchor.
+  let cornerEl = $state<HTMLElement | null>(null)
 
   // Agent list for the new-session picker dropdown.
   let agents: api.Agent[] = $state([])
@@ -1076,12 +1083,11 @@
       </div>
     </div>
     {:else}
-    <div class="footer">
-      <div class="footer-settings" style="color:{$settingsModalOpen ? 'var(--blue-6)' : 'var(--text-secondary)'}" onclick={() => settingsModalOpen.set(true)}>
-        <iconify-icon icon="ant-design:setting-outlined" width="14"></iconify-icon>
-        <span>{$t('nav.settings')}</span>
-      </div>
-      <VersionBadge />
+    <!-- OCTO-FORK: the footer's "settings + version" pair is the account
+         corner (P5): avatar/nickname/points, opening the account panel. The
+         version badge moved into the panel's About page. -->
+    <div class="footer" bind:this={cornerEl}>
+      <AccountCorner />
     </div>
     {/if}
   </div>
@@ -1131,14 +1137,16 @@
       </button>
       {/each}
     </div>
-    <div class="rail-footer">
-      <button class="rail-btn" class:active={$settingsModalOpen} title={$t('nav.settings')} onclick={() => settingsModalOpen.set(true)}>
-        <iconify-icon icon="ant-design:setting-outlined" width="16"></iconify-icon>
-      </button>
+    <div class="rail-footer" bind:this={cornerEl}>
+      <AccountCorner rail />
     </div>
   </div>
   {/if}
 </aside>
+
+{#if $accountPanelOpen && cornerEl}
+  <AccountPanel anchorEl={cornerEl} fixedWidth={$sidebar === 'rail' ? fullWidth : undefined} />
+{/if}
 
 {#if settingsGroup}
   <ProjectModal group={settingsGroup} onClose={() => (settingsGroup = null)} onSaved={() => (settingsGroup = null)} />
@@ -1425,14 +1433,8 @@
 .del:hover { color: var(--error) !important; }
 .footer {
   flex: 0 0 auto; border-top: 1px solid var(--border-secondary);
-  padding: 10px 12px; display: flex; align-items: center; justify-content: space-between;
+  padding: 8px;
 }
-.footer-settings {
-  display: flex; align-items: center; gap: 8px;
-  cursor: pointer; padding: 4px 8px; border-radius: 9999px;
-}
-.footer-settings:hover { background: var(--hover-neutral); }
-.footer-settings span { font-size: 13px; }
 /* Rail */
 .rail {
   width: 64px; height: 100%; display: flex; flex-direction: column;

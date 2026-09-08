@@ -54,10 +54,14 @@ for arch in amd64 arm64; do
 	# also fully eliminates the SDK-vs-link-target warning this flag was
 	# added for in the first place.
 	macos_ver="11.0"
+	# OCTO-FORK: CGO_LDFLAGS below dropped -Wl,-no_warn_duplicate_libraries —
+	# the flag is a warning-only suppression the Xcode 15 ld_prime linker no
+	# longer accepts (ld: unknown option); its absence only restores the
+	# harmless duplicate-library warning. — see P2-启动与生命周期.md §9.
 	( cd "$MOD_DIR" && \
 		GOOS=darwin GOARCH="$arch" CGO_ENABLED=1 CC="clang -arch $cc_arch" \
 		CGO_CFLAGS="-mmacosx-version-min=$macos_ver" \
-		CGO_LDFLAGS="-Wl,-macos_version_min,$macos_ver -Wl,-no_warn_duplicate_libraries" \
+		CGO_LDFLAGS="-Wl,-macos_version_min,$macos_ver" \
 		go build -tags embedrg -ldflags "$LDFLAGS" -o "$out" . )
 	slices+=("$out")
 done

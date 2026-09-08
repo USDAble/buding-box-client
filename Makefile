@@ -104,10 +104,14 @@ build-full: build
 # builder happens to run into the binary's LC_VERSION_MIN, silently raising
 # the real minimum macOS required to launch it.
 DESKTOP_MACOS_VERSION ?= 11.0
+# OCTO-FORK: CGO_LDFLAGS below dropped -Wl,-no_warn_duplicate_libraries — the
+# flag is a warning-only suppression the Xcode 15 ld_prime linker no longer
+# accepts (ld: unknown option); its absence only restores the harmless
+# duplicate-library warning. — see dev-docs-usdable/需求/2260906/技术方案/P2-启动与生命周期.md §9.
 desktop: web-build
 	cd cmd/octo-desktop && CGO_ENABLED=1 \
 		CGO_CFLAGS="-mmacosx-version-min=$(DESKTOP_MACOS_VERSION)" \
-		CGO_LDFLAGS="-Wl,-macos_version_min,$(DESKTOP_MACOS_VERSION) -Wl,-no_warn_duplicate_libraries" \
+		CGO_LDFLAGS="-Wl,-macos_version_min,$(DESKTOP_MACOS_VERSION)" \
 		go build -ldflags='$(DESKTOP_LDFLAGS)' -o ../../octo-desktop .
 
 # Package the desktop shell into a double-clickable macOS Octo.app bundle

@@ -24,7 +24,7 @@ Common issues and their fixes.
 ### `octo` says "no API key"
 
 - Check that the env var is set: `echo $ANTHROPIC_API_KEY` (or `OPENAI_API_KEY`)
-- Or run `octo config` to store the key in `~/.octo/config.yml` (mode 0600)
+- Or run `octo config` to store the key in `<data root>/config.yml` (mode 0600)
 - Check `octo config show` to see where the provider/model resolve from
 
 ### Provider/model not what I expected
@@ -73,8 +73,8 @@ rules. There is no UI for these keys.
 
 ### Input history not persisting
 
-- History is saved to `~/.octo/history` (or `$OCTO_HISTORY_FILE`)
-- Ensure `~/.octo` is writable
+- History is saved to `<data root>/history` (or `$OCTO_HISTORY_FILE`)
+- Ensure `<data root>` is writable
 
 ## Serve (Web UI / IM bridge)
 
@@ -82,23 +82,23 @@ rules. There is no UI for these keys.
 
 - Web UI and IM bridge both run inside the same `octo serve` process — check it's actually up: `octo serve --status`
 - Foreground (no `-d`) prints errors straight to the terminal it was started in
-- Started with `-d`/`--daemon`? There's no terminal, so output goes to `~/.octo/serve.log` instead — tail it for the real error:
+- Started with `-d`/`--daemon`? There's no terminal, so output goes to `<data root>/serve.log` instead — tail it for the real error:
   ```bash
-  tail -f ~/.octo/serve.log
+  tail -f <data root>/serve.log
   ```
-- The daemon's pid is tracked in `~/.octo/serve.pid`; `octo serve --status`/`--stop` read it directly
+- The daemon's pid is tracked in `<data root>/serve.pid`; `octo serve --status`/`--stop` read it directly
 
 ### IM channel (Feishu/WeChat/Telegram/DingTalk/WeCom/Discord) not connecting
 
-- The bridge has no log of its own — connection and credential errors land in the same `~/.octo/serve.log` as the rest of `octo serve`
-- Credentials live in `~/.octo/channels.yml`; edits made through the Web UI's Channels panel hot-reload immediately, but a direct edit to the file (no filesystem watcher) needs `octo serve --stop` + restart to take effect — see the `channel-manager` skill
+- The bridge has no log of its own — connection and credential errors land in the same `<data root>/serve.log` as the rest of `octo serve`
+- Credentials live in `<data root>/channels.yml`; edits made through the Web UI's Channels panel hot-reload immediately, but a direct edit to the file (no filesystem watcher) needs `octo serve --stop` + restart to take effect — see the `channel-manager` skill
 - For a precise per-platform status instead of grepping logs, use the `channel-manager` skill's `doctor` subcommand, which reads `/api/channels`
 - `octo serve --no-channel` disables the bridge entirely — useful to isolate whether an issue is the bridge or the API server
 
 ### "daemon already running" but nothing responds
 
 - A stale pid pointing at a dead process clears itself on the next `--status`/`--stop`/start
-- If the pid is alive but the port doesn't answer, the worker is likely stuck mid-startup — check the tail of `~/.octo/serve.log` for the last line logged before it stalled
+- If the pid is alive but the port doesn't answer, the worker is likely stuck mid-startup — check the tail of `<data root>/serve.log` for the last line logged before it stalled
 
 ### Port already in use
 
@@ -115,14 +115,14 @@ rules. There is no UI for these keys.
 
 ### "No MCP servers connected"
 
-- Verify `~/.octo/mcp.json` exists and is valid JSON
+- Verify `<data root>/mcp.json` exists and is valid JSON
 - Check that the server command is on `$PATH` (or use absolute path)
 - Run with `--verbose` to see connection errors
 
 ### MCP server keeps disconnecting
 
 - Some servers (especially stdio-based) crash on malformed input — check their logs
-- OAuth servers: delete `~/.octo/mcp-tokens/<server>.json` to force re-auth
+- OAuth servers: delete `<data root>/mcp-tokens/<server>.json` to force re-auth
 
 ## Permissions
 
@@ -130,7 +130,7 @@ rules. There is no UI for these keys.
 
 - Check current mode with `Shift+Tab` (cycles interactive → strict → auto)
 - In strict mode, all unmatched operations are denied — switch to interactive
-- Or add an allow rule to `~/.octo/permissions.yml`
+- Or add an allow rule to `<data root>/permissions.yml`
 
 ### Accidentally denied "always allow this session"
 
@@ -141,13 +141,13 @@ rules. There is no UI for these keys.
 
 ### Session not found when resuming
 
-- Sessions are saved to `~/.octo/sessions/`
+- Sessions are saved to `<data root>/sessions/`
 - Resume with `octo -c <session-id>`
 - List recent sessions with `/sessions` in TUI
 
 ### Session file corrupted
 
-- Sessions are JSON — validate with `python3 -m json.tool ~/.octo/sessions/<id>.json`
+- Sessions are JSON — validate with `python3 -m json.tool <data root>/sessions/<id>.json`
 - Corrupted sessions are skipped at load; remove the file to clear the error
 
 ## Performance

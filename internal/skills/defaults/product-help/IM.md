@@ -1,10 +1,10 @@
 # IM bridge — chat with octo from WeChat, Feishu, Telegram, etc.
 
-octo can run as a chat bot on WeChat (iLink), Feishu, DingTalk, WeCom, Discord, and Telegram. The bridge runs **inside `octo serve`** — no separate process. Each platform is connected, tested, and can send a one-off test message from the web UI's **Channels** panel (WeChat is scan-to-login; the rest use app/bot credentials). Credentials persist to `~/.octo/channels.yml` and hot-reload — no restart needed after editing a platform in the panel.
+octo can run as a chat bot on WeChat (iLink), Feishu, DingTalk, WeCom, Discord, and Telegram. The bridge runs **inside `octo serve`** — no separate process. Each platform is connected, tested, and can send a one-off test message from the web UI's **Channels** panel (WeChat is scan-to-login; the rest use app/bot credentials). Credentials persist to `<data root>/channels.yml` and hot-reload — no restart needed after editing a platform in the panel.
 
 Each chat is a session like any other — per-user history and permission context, slash commands (a different set than the TUI/web; see the reference below), attachments bridge both ways, and a session goal works the same as elsewhere — `/goal <objective>` starts pursuing it right away, without waiting for your next message.
 
-IM-specific slash commands include `/model` (list models), `/model <endpoint>::<model>` to switch the current chat session to a specific model, and `/model default` to make it follow the server-wide default. Switching only affects this chat session; it does not change the global default in `~/.octo/config.yml`.
+IM-specific slash commands include `/model` (list models), `/model <endpoint>::<model>` to switch the current chat session to a specific model, and `/model default` to make it follow the server-wide default. Switching only affects this chat session; it does not change the global default in `<data root>/config.yml`.
 
 ## Proactive messaging (`send_message` / `send_file`)
 

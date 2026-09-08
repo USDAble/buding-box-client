@@ -142,7 +142,7 @@ Fix any wiring error and re-run before saving.
 
 ### 5. Save it and show how to run it
 Call `workflow_save(name, script, description)` — it writes to
-`~/.octo/workflows`, available across every project. Confirm the name with
+`<data root>/workflows`, available across every project. Confirm the name with
 the user first.
 
 Then tell them the three ways to run it:

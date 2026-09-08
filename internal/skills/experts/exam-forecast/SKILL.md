@@ -132,7 +132,7 @@ metadata:
 
 ### 第五步：保存
 
-写入 `~/.octo/learning-data/exam-forecasts/[课程]/forecast-[YYYY-MM-DD].md`。
+写入 `<data root>/learning-data/exam-forecasts/[课程]/forecast-[YYYY-MM-DD].md`。
 按版本保存——如果学期中又拿到新的真题，重新分析并追加，不覆盖之前的版本。
 
 ## 和其他技能的配合

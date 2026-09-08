@@ -1,6 +1,6 @@
 # octo Configuration Reference
 
-Path: `~/.octo/config.yml`. Every field is optional — a missing file or field falls back to the built-in default. Manage with `octo config` rather than hand-editing where possible. (A pre-rename `~/.octo/config.yaml` is read as a fallback if `config.yml` is absent, and migrates automatically on first save — old file parked as `config.yaml.bak`. A flat top-level `models:` list from before the two-level schema is likewise rewritten into `endpoints:` on first save, each entry becoming a `legacy-<host>-<n>` endpoint.)
+Path: `<data root>/config.yml`. Every field is optional — a missing file or field falls back to the built-in default. Manage with `octo config` rather than hand-editing where possible. (A pre-rename `<data root>/config.yaml` is read as a fallback if `config.yml` is absent, and migrates automatically on first save — old file parked as `config.yaml.bak`. A flat top-level `models:` list from before the two-level schema is likewise rewritten into `endpoints:` on first save, each entry becoming a `legacy-<host>-<n>` endpoint.)
 
 ## Top-level keys
 

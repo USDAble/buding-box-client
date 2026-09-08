@@ -2,7 +2,7 @@
 
 Skills bundled for the built-in experts (`internal/agentprofile/defaults/`).
 Each subdirectory holding a `SKILL.md` ships embedded in the binary and is
-materialized to `~/.octo/skills-expert` at startup, discovered with
+materialized to `<data root>/skills-expert` at startup, discovered with
 `Source: "expert"`.
 
 Unlike `../defaults/`, these skills never appear in the global "Available

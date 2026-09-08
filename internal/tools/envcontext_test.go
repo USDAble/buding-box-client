@@ -21,6 +21,16 @@ func TestBuildEnvContext_RendersSharedLines(t *testing.T) {
 	}
 }
 
+func TestBuildEnvContext_IncludesDataRoot(t *testing.T) {
+	// Pin the data root so the line renders deterministically without touching
+	// the real <exe>/data (datapath.Root probes writability with a temp file).
+	t.Setenv("OCTO_DATA_ROOT", t.TempDir())
+	out := BuildEnvContext("/w", "", false, false)
+	if !strings.Contains(out, "Data root:") {
+		t.Errorf("env context missing the Data root line:\n%s", out)
+	}
+}
+
 func TestBuildEnvContext_GitLineOnlyWhenOK(t *testing.T) {
 	out := BuildEnvContext("/w", "main", true, true)
 	if !strings.Contains(out, "Git branch: main (uncommitted changes)") {

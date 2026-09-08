@@ -2,7 +2,7 @@
 
 octo can shell out to your own scripts at 7 lifecycle points (`SessionStart`, `UserPromptSubmit`, `PreToolUse`, `PostToolUse`, `Stop`, `SubagentStop`, `PreCompact`) — inject retrieved context, log every tool call, or block a dangerous command before it runs. One engine, shared by the CLI, `octo serve` (web + IM), and sub-agents.
 
-Configured in `~/.octo/hooks.yml` (user-level, always loaded) and `<project>/.octo/hooks.yml` (project-level — trust-on-first-use prompt, since it can run shell commands):
+Configured in `<data root>/hooks.yml` (user-level, always loaded) and `<project>/.octo/hooks.yml` (project-level — trust-on-first-use prompt, since it can run shell commands):
 
 ```yaml
 hooks:

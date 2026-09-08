@@ -1,12 +1,12 @@
 ---
 name: cron-task-creator
-description: Create, inspect, run, edit, enable/disable, and delete octo's scheduled cron tasks — recurring agent prompts stored in ~/.octo/tasks/*.json and executed by the octo serve scheduler. Use when the user wants to schedule a recurring task, e.g. "run X every morning", "schedule a daily report", "set up a cron job", "定时任务", "每天自动跑".
+description: Create, inspect, run, edit, enable/disable, and delete octo's scheduled cron tasks — recurring agent prompts stored in <data root>/tasks/*.json and executed by the octo serve scheduler. Use when the user wants to schedule a recurring task, e.g. "run X every morning", "schedule a daily report", "set up a cron job", "定时任务", "每天自动跑".
 ---
 
 # Create and manage octo cron tasks
 
 octo runs an agent prompt on a schedule. Each task is a JSON file in
-`~/.octo/tasks/`, loaded by the scheduler inside `octo serve`. When a task
+`<data root>/tasks/`, loaded by the scheduler inside `octo serve`. When a task
 fires, the scheduler runs one agent turn with the task's prompt and **reuses the
 same session across runs**, so the task accumulates history from earlier runs.
 Each run is bounded by a **30-minute wall-clock timeout** (the only hard cap on
@@ -117,7 +117,7 @@ is `/api/tasks` now.)
 
 ### Fallback — direct file write (server not running)
 
-Write `~/.octo/tasks/<id>.json` with `write_file` (`id` format
+Write `<data root>/tasks/<id>.json` with `write_file` (`id` format
 `task_<unix-millis>`; filename must equal `<id>.json`):
 
 ```json
@@ -154,7 +154,7 @@ pushed: `[{"platform":"feishu","chat_id":"oc_..."}, ...]`.
 
 | Platform | `chat_id` | Notes |
 |----------|-----------|-------|
-| `feishu` | `oc_…` chat id | Works with app creds in `~/.octo/channels.yml`; get the id from chat settings or the server log after messaging the bot. |
+| `feishu` | `oc_…` chat id | Works with app creds in `<data root>/channels.yml`; get the id from chat settings or the server log after messaging the bot. |
 | `dingtalk` | staff id (1:1) or `cid…` openConversationId (group) | A DM's conversation id does NOT work — use the staff id. Needs "robot message send" permission. |
 | `weixin` | iLink user id | User must have messaged the bot once (refreshes the `context_token` the push reads); a long-stale token may be rejected. |
 | `telegram` | Telegram chat id (user/group/channel) | Bot must be able to message it (user started it, or bot is a member). |

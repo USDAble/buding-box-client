@@ -6,7 +6,7 @@ octo's TUI is a bubbletea-based interactive interface launched by `octo` with no
 
 Type `/` to open the completion menu (↑/↓ to navigate, Enter to run, Tab to fill in for arguments). Commands: `/help`, `/model`, `/thinking`, `/compact`, `/transcript`, `/goal` (create/edit/pause/resume/clear/replace a standing session objective — see below), `/clear`, `/skills` (trigger one directly with `/<name>`), `/mcp`, `/workflows`, `/memory`, `/init`, `/save`, `/sessions`, `/exit`/`/quit`.
 
-`/model` lists the configured models; `/model <endpoint>::<model>` switches the current TUI session to that model, and `/model default` makes it follow the server-wide default again. Switching only affects this session — the global default in `~/.octo/config.yml` is not changed. You cannot switch while a turn is running.
+`/model` lists the configured models; `/model <endpoint>::<model>` switches the current TUI session to that model, and `/model default` makes it follow the server-wide default again. Switching only affects this session — the global default in `<data root>/config.yml` is not changed. You cannot switch while a turn is running.
 
 `/goal <objective>` sets a goal; once set, octo auto-continues turns on its own until it completes, is paused, or hits its token/turn budget. `/goal edit` here is **prefill-only** (fills the input box with the current objective to revise) — unlike the web UI/IM where `/goal edit <text>` edits inline in one step.
 

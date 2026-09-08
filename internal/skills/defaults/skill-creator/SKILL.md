@@ -44,7 +44,7 @@ Check available skills and tools — if useful for research, use subagents to se
 
 ### Where the skill lives
 
-A skill is a directory holding a `SKILL.md` under `~/.octo/skills/<name>/SKILL.md` —
+A skill is a directory holding a `SKILL.md` under `<data root>/skills/<name>/SKILL.md` —
 available in every session, regardless of which project you're working in.
 `octo skills add` and the web Skills panel install here.
 
@@ -106,7 +106,7 @@ After writing the draft, come up with 2–3 realistic test prompts. Share them w
 **How to test in octo:**
 1. Create a test workspace directory
 2. For each test prompt, spawn a subagent:
-   - Give it the skill path (`~/.octo/skills/<name>/`)
+   - Give it the skill path (`<data root>/skills/<name>/`)
    - Give it the test prompt as a task
    - Have it save outputs to a designated directory
 3. Review outputs — both qualitatively and, if possible, with simple assertions

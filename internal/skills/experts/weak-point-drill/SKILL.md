@@ -33,7 +33,7 @@ metadata:
 
 ## 加载上下文
 
-如果存在 `~/.octo/learning-data/study-plan.yaml`，读取该学科的
+如果存在 `<data root>/learning-data/study-plan.yaml`，读取该学科的
 `session_history`，看看之前哪些子主题错得多——出题权重往那些子主题倾斜。
 没有这个文件也没关系，直接问用户"最近在哪几个知识点上容易出错"。
 
@@ -64,9 +64,9 @@ metadata:
 稳。"]
 ```
 
-5. 把结果追加到 `~/.octo/learning-data/study-plan.yaml` 的
+5. 把结果追加到 `<data root>/learning-data/study-plan.yaml` 的
    `session_history`（如果文件不存在，写到
-   `~/.octo/learning-data/session-history.yaml`）：
+   `<data root>/learning-data/session-history.yaml`）：
 
 ```yaml
 session_history:

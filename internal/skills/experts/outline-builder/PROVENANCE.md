@@ -60,7 +60,7 @@ subject, not just law.
   `exam-forecast`, and `study-plan`, this skill does not mandate a fixed
   file location; the source doesn't either (the student's outline can live
   wherever they already keep it), so this skill preserves that
-  flexibility rather than imposing a `~/.octo/learning-data/` path.
+  flexibility rather than imposing a `<data root>/learning-data/` path.
 
 ## Conclusion
 

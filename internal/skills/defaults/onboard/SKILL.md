@@ -1,6 +1,6 @@
 ---
 name: onboard
-description: Onboard a new user OR curate a single piece of the assistant's inner state. Without arguments, runs the full first-run ceremony (AI name, personality, user profile, soul.md + user.md). With `scope:soul` or `scope:user`, runs a quick chat to update just that one profile file. With `path:<abs>`, runs a quick chat to update / keep / delete one memory file under ~/.octo/memories/. Use when the user wants to change the assistant's name/personality, update their own profile, or review/edit a saved memory, e.g. "改一下你的性格", "更新一下我的资料", "帮我看看记忆里的内容", "重新做一遍引导".
+description: Onboard a new user OR curate a single piece of the assistant's inner state. Without arguments, runs the full first-run ceremony (AI name, personality, user profile, soul.md + user.md). With `scope:soul` or `scope:user`, runs a quick chat to update just that one profile file. With `path:<abs>`, runs a quick chat to update / keep / delete one memory file under <data root>/memories/. Use when the user wants to change the assistant's name/personality, update their own profile, or review/edit a saved memory, e.g. "改一下你的性格", "更新一下我的资料", "帮我看看记忆里的内容", "重新做一遍引导".
 ---
 
 # Skill: onboard
@@ -14,8 +14,8 @@ This single skill covers three modes, dispatched by the invocation arguments:
 | Args                      | Mode                | What it does                                               |
 |---------------------------|---------------------|------------------------------------------------------------|
 | *(none)*                  | **first-run**       | Full intro: name the AI, pick personality, learn user, write soul.md + user.md. |
-| `scope:soul`              | **curate SOUL**     | Short chat to tweak `~/.octo/soul.md` only.                |
-| `scope:user`              | **curate USER**     | Short chat to tweak `~/.octo/user.md` only.                |
+| `scope:soul`              | **curate SOUL**     | Short chat to tweak `<data root>/soul.md` only.                |
+| `scope:user`              | **curate USER**     | Short chat to tweak `<data root>/user.md` only.                |
 | `path:<abs>`              | **curate memory**   | Short chat to update / keep / delete one memory file at the given path. |
 
 `lang:zh` or `lang:en` may be combined with any mode to pin the language.
@@ -143,14 +143,14 @@ Parse freely. Store the user's name as `user.name` (default `"老大"` for zh, `
 
 ### A.6. Collect behaviour preferences
 
-These three settings are saved to `~/.octo/config.yml` and affect every session.
+These three settings are saved to `<data root>/config.yml` and affect every session.
 All have fixed choices with a sensible default, so present each as an
 `ask_user_question` (clickable cards) — make the default option's label say
 "(default)". Do NOT print a markdown list and tell the user to "press Enter" to
 skip: an empty message can't be sent (both the terminal UI and the web composer
 ignore a blank Enter), so an un-clickable list would strand them.
 
-**Before asking any behaviour question, read `~/.octo/config.yml`** and check
+**Before asking any behaviour question, read `<data root>/config.yml`** and check
 for existing values. If a field is already present in the config (e.g. the user
 set it via `octo config`), **skip** that question and reuse its value. Only ask
 when the field is absent from the file.
@@ -213,7 +213,7 @@ Silently skip unreachable links.
 
 ### A.8. Write soul.md
 
-Write to `~/.octo/soul.md`. Shape by `ai.name` + `ai.personality`.
+Write to `<data root>/soul.md`. Shape by `ai.name` + `ai.personality`.
 Write in the chosen language. If `zh`, add a line near the top of Identity:
 `**始终用中文回复用户。**`
 
@@ -250,7 +250,7 @@ I am [AI Name], a personal assistant and technical co-founder.
 
 ### A.9. Write user.md
 
-Write to `~/.octo/user.md`.
+Write to `<data root>/user.md`.
 
 en template:
 ```markdown
@@ -286,7 +286,7 @@ zh template:
 
 ### A.10. Update config.yml
 
-Read `~/.octo/config.yml` (it already exists — the setup panel wrote provider/model/base_url/api_key earlier).
+Read `<data root>/config.yml` (it already exists — the setup panel wrote provider/model/base_url/api_key earlier).
 Use `write_file` to rewrite it with the behaviour-preference fields appended:
 
 - `permission_mode` — `prefs.permission_mode` (or omit if default `"interactive"`)
@@ -346,8 +346,8 @@ conversation and a clean write.
 
 ### B.1. Resolve target
 
-- `scope:soul` → target file is `~/.octo/soul.md`, topic is the AI's personality
-- `scope:user` → target file is `~/.octo/user.md`, topic is the user's profile
+- `scope:soul` → target file is `<data root>/soul.md`, topic is the AI's personality
+- `scope:user` → target file is `<data root>/user.md`, topic is the user's profile
 
 Language:
 - `lang:zh` / `lang:en` → use that
@@ -441,14 +441,14 @@ en: "Good to write? Reply ✅ Save / ✏️ Let me tweak again / ❌ Cancel"
 
 - Never touch the other profile file. If the user clearly wants the other one,
   tell them to close this session and click the other tab's button.
-- Do **not** write `~/.octo/memories/*.md` here.
+- Do **not** write `<data root>/memories/*.md` here.
 - Keep the whole flow under ~5 messages.
 
 ---
 
 ## C. Curate memory mode (`path:<abs>`)
 
-Walk through one memory file under `~/.octo/memories/` so the user can
+Walk through one memory file under `<data root>/memories/` so the user can
 curate it without opening a text editor. The agent does the reading, reasoning,
 and writing. The human only confirms the direction (keep / update / delete).
 

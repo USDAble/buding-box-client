@@ -28,7 +28,7 @@ coauthor                          model names
 workspace_dir                     default / lite model
 ```
 
-All of these live in `~/.octo/config.yml` and are editable through the REST API
+All of these live in `<data root>/config.yml` and are editable through the REST API
 on the running octo server at `http://localhost:<port>` (use `curl` via the `terminal` tool — do NOT use `web_fetch`, localhost is blocked by SSRF).
 
 ## Reaching the server
@@ -39,14 +39,14 @@ server uses the same port). Loopback requests need no access key.
 1. **Try the default first**: `curl -s http://127.0.0.1:8088/api/config`.
    JSON back = you're connected; skip the rest of this section.
 2. **Connection refused?** The server may be on a custom port:
-   - Started as a daemon (`octo serve -d`): `cat ~/.octo/serve.pid` for the PID,
+   - Started as a daemon (`octo serve -d`): `cat <data root>/serve.pid` for the PID,
      then find its listen port — macOS/Linux:
      `lsof -iTCP -sTCP:LISTEN -P -n -a -p <PID>`; Windows (PowerShell):
      `Get-NetTCPConnection -State Listen -OwningProcess <PID>`.
    - A foreground `octo serve` writes no pid file — ask the user which port they
      started it on (it's also in the web UI's address bar).
 3. **No server running at all?** Don't stop — fall back to editing
-   `~/.octo/config.yml` directly (it is the same file every API call below
+   `<data root>/config.yml` directly (it is the same file every API call below
    mutates). Read the file first, apply the smallest edit that matches the
    structure you see, then validate with `octo doctor`. Changes are picked up
    by new CLI sessions and by the server next time it starts.

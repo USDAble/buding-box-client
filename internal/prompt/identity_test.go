@@ -51,7 +51,7 @@ func TestCompose_IdentityLayers(t *testing.T) {
 	if !(baseIdx < soulIdx && soulIdx < envIdx && envIdx < skillsIdx && skillsIdx < profileIdx) {
 		t.Errorf("order wrong: base=%d soul=%d env=%d skills=%d profile=%d", baseIdx, soulIdx, envIdx, skillsIdx, profileIdx)
 	}
-	if !strings.Contains(out, "~/.octo/soul.md") || !strings.Contains(out, "~/.octo/user.md") {
+	if !strings.Contains(out, "<data root>/soul.md") || !strings.Contains(out, "<data root>/user.md") {
 		t.Error("identity layers should be labelled with their source paths")
 	}
 }

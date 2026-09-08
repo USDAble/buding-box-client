@@ -72,8 +72,8 @@ no `NOTICE` file exists):
   `weak-point-drill` and `flashcards`.
 - **Plugin config paths**
   (`~/.claude/plugins/config/claude-for-legal/law-student/...`) — replaced
-  with `~/.octo/learning-data/`, following this repository's
-  `~/.octo/site-patterns/` precedent for skill data that must survive a
+  with `<data root>/learning-data/`, following this repository's
+  `<data root>/site-patterns/` precedent for skill data that must survive a
   version-bump re-materialization of the skill directory.
 
 ## Consolidation note

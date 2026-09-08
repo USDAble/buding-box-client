@@ -1,6 +1,6 @@
 # Cross-session memory
 
-octo remembers preferences, project conventions, and past corrections across sessions — stored locally as plain markdown in `~/.octo/memories/<repo-slug>/`, never in the cloud. There's no dedicated remember/forget tool and no background consolidation: the agent manages memory with its own file tools (`read_file`/`write_file`/`edit_file`), keeping to one convention:
+octo remembers preferences, project conventions, and past corrections across sessions — stored locally as plain markdown in `<data root>/memories/<repo-slug>/`, never in the cloud. There's no dedicated remember/forget tool and no background consolidation: the agent manages memory with its own file tools (`read_file`/`write_file`/`edit_file`), keeping to one convention:
 
 - `MEMORY.md` — the index, loaded into the system prompt every session (capped at 200 lines / 25KB).
 - `<topic>.md` — detail files the agent creates and reads on demand, linked from the index.
@@ -25,6 +25,6 @@ Three backends, pick at most one: [hindsight](https://github.com/vectorize-io/hi
 
 - **Storing is automatic and silent** — after every turn, in the background, no tool involved.
 - **Recall is a tool** — the agent calls `memory_recall` when it suspects something relevant was discussed before; this one blocks and its errors surface.
-- **Configure** via `memory_backend` in `~/.octo/config.yml`: `type` (`hindsight`\|`mem0`\|`agentmemory`; unset disables the feature entirely), `base_url`, `api_key` (backend-dependent — hindsight/agentmemory default to no auth, mem0 requires it by default), `namespace` (scopes stored/recalled memories).
+- **Configure** via `memory_backend` in `<data root>/config.yml`: `type` (`hindsight`\|`mem0`\|`agentmemory`; unset disables the feature entirely), `base_url`, `api_key` (backend-dependent — hindsight/agentmemory default to no auth, mem0 requires it by default), `namespace` (scopes stored/recalled memories).
 
 Full backend-specific auth/setup notes: **https://octo-agent.dev/docs/guides/memory-backends/** (`web_fetch`).

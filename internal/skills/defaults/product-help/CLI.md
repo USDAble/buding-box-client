@@ -1,6 +1,6 @@
 # octo CLI Reference
 
-Precedence is **CLI flag > env var > `~/.octo/config.yml` > built-in default**. Run `octo <command> --help` for any subcommand's full flag list.
+Precedence is **CLI flag > env var > `<data root>/config.yml` > built-in default**. Run `octo <command> --help` for any subcommand's full flag list.
 
 ## `octo [message]`
 

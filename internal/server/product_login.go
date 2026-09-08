@@ -34,6 +34,10 @@ const (
 
 	codeTTL      = 10 * time.Minute
 	codeCooldown = 60 * time.Second
+
+	// initialCredits is the fake points balance seeded on first activation
+	// (需求 §5.4.4: 1280 balance, 0 used this month). P6 later deducts from it.
+	initialCredits = 1280
 )
 
 // loginCodeSession is the in-memory verification-code record keyed by the
@@ -157,6 +161,9 @@ func (s *Server) handleProductLogin(w http.ResponseWriter, r *http.Request) {
 				ActivatedAt: now,
 				ExpiresAt:   now.AddDate(1, 0, 0),
 			}
+			// Seed the fake points balance on first activation (需求 §5.4.4:
+			// 1280 balance, 0 used). P6 owns the deduction rules.
+			st.Credits = productstate.Credits{Balance: initialCredits}
 		}
 		st.Account = &productstate.Account{
 			Phone:       phone,

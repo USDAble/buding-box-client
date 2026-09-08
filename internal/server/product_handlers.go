@@ -32,7 +32,12 @@ func (s *Server) handleProductState(w http.ResponseWriter, r *http.Request) {
 // accumulated points).
 func (s *Server) handleProductLogout(w http.ResponseWriter, r *http.Request) {
 	err := s.productState.Mutate(func(st *productstate.State) error {
-		st.Account = nil
+		// Clear the login token only — the bound phone/nickname stay so the
+		// second-login form can prefill and compare against them (需求 §5.3.4).
+		// LoggedIn is derived from token presence, not account presence.
+		if st.Account != nil {
+			st.Account.Token = ""
+		}
 		return nil
 	})
 	if err != nil {

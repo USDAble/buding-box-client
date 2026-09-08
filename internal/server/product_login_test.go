@@ -147,6 +147,45 @@ func TestProductLoginFirstActivation(t *testing.T) {
 	if snap.Account.Token == "" {
 		t.Fatal("account token must be minted")
 	}
+	if snap.Credits.Balance != 1280 || snap.Credits.MonthUsed != 0 {
+		t.Fatalf("credits = %+v, want 1280 balance / 0 used on first activation", snap.Credits)
+	}
+}
+
+// TestProductLoginSecondLoginPreservesCredits: a second login (after logout)
+// must not re-seed the 1280 credits balance — that is written only on first
+// activation (需求 §5.4.4) — and must mint a fresh token while keeping the
+// binding.
+func TestProductLoginSecondLoginPreservesCredits(t *testing.T) {
+	productTestEnv(t)
+	srv := mustServer(t, Config{Addr: "127.0.0.1:0", Tools: false})
+	sendCodeReq(t, srv, "13800001234")
+	if w := loginReq(t, srv, map[string]any{"phone": "13800001234", "code": "123456", "nickname": "用户1234", "activationCode": "BUDING-DEMO-0001"}); w.Code != http.StatusOK {
+		t.Fatalf("first login status = %d (%s)", w.Code, w.Body.String())
+	}
+
+	// Simulate spending points, then logout (token cleared, binding kept).
+	if err := srv.productState.Mutate(func(st *productstate.State) error {
+		st.Credits.Balance = 5
+		st.Credits.MonthUsed = 3
+		st.Account.Token = ""
+		return nil
+	}); err != nil {
+		t.Fatalf("Mutate = %v", err)
+	}
+
+	// Second login (no activationCode): the code session from above is still
+	// valid, and the bound phone matches.
+	if w := loginReq(t, srv, map[string]any{"phone": "13800001234", "code": "123456", "nickname": "用户1234"}); w.Code != http.StatusOK {
+		t.Fatalf("second login status = %d (%s)", w.Code, w.Body.String())
+	}
+	snap := srv.productState.Snapshot()
+	if snap.Credits.Balance != 5 || snap.Credits.MonthUsed != 3 {
+		t.Fatalf("credits = %+v, want preserved 5/3", snap.Credits)
+	}
+	if !snap.LoggedIn() || snap.Account.Token == "" {
+		t.Fatal("second login must mint a fresh token")
+	}
 }
 
 func TestProductLoginActivationCodeWrong(t *testing.T) {

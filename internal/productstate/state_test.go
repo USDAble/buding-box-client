@@ -92,32 +92,42 @@ func TestMutateFailureKeepsOriginal(t *testing.T) {
 	_ = before
 }
 
-func TestLogoutKeepsActivationAndCredits(t *testing.T) {
+func TestLogoutClearsTokenKeepsBinding(t *testing.T) {
 	s, err := Open(filepath.Join(t.TempDir(), "product-state.json"))
 	if err != nil {
 		t.Fatalf("Open = %v", err)
 	}
 	if err := s.Mutate(func(st *State) error {
-		st.Account = &Account{Phone: "13800001234"}
+		st.Account = &Account{Phone: "13800001234", PhoneMasked: "138****1234", Nickname: "用户1234", Token: "local-tok"}
 		st.Activation = &Activation{Activated: true}
 		st.Credits = Credits{Balance: 1280, MonthUsed: 3}
 		return nil
 	}); err != nil {
 		t.Fatalf("Mutate = %v", err)
 	}
-	// Logout clears only the account.
-	if err := s.Mutate(func(st *State) error { st.Account = nil; return nil }); err != nil {
+	// Logout clears only the token; the binding (phone/nickname) stays for
+	// the second-login form to prefill and compare against (需求 §5.3.4).
+	if err := s.Mutate(func(st *State) error { st.Account.Token = ""; return nil }); err != nil {
 		t.Fatalf("logout Mutate = %v", err)
 	}
 	if s.LoggedIn() {
-		t.Fatal("logout must clear the account")
+		t.Fatal("logout must clear the login token")
 	}
 	st := s.Snapshot()
+	if st.Account == nil || st.Account.Phone != "13800001234" || st.Account.Nickname != "用户1234" {
+		t.Fatalf("logout must keep the binding: %+v", st.Account)
+	}
 	if !st.Activated() {
 		t.Fatal("logout must keep activation")
 	}
 	if st.Credits.Balance != 1280 || st.Credits.MonthUsed != 3 {
 		t.Fatalf("logout must keep credits: %+v", st.Credits)
+	}
+	// The public view must still carry the masked account (for prefill) but
+	// report not-logged-in.
+	p := st.Public()
+	if p.LoggedIn || p.Account == nil || p.Account.Nickname != "用户1234" {
+		t.Fatalf("public view after logout = %+v (want !loggedIn, account kept)", p)
 	}
 }
 

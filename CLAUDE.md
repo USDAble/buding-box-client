@@ -76,7 +76,7 @@ From `.octorules`:
 - **No live network in `go test`.** All HTTP tests use `httptest.NewServer`. Integration tests against real APIs are run by hand with a real key, not in CI.
 - **Comments in English.** Prefer self-documenting names; only comment the **why**, not the **what**.
 - **gofmt is the formatter.** `gofmt -l .` must be empty before push.
-- **Branch off latest main.** Never commit directly on `main`. Squash-and-merge is the default.
+- **Branch off latest `buding`** before editing. Feature PRs target `buding` (the product integration branch); `main` is the upstream-tracking branch. Never commit on either directly. One feature = one PR = one squash commit.
 - **No new third-party dependencies** without justification in the PR description.
 - **One concept per PR.** Mass mechanical changes (rename, move) can ride together but should be a single self-contained change set.
 - **Commit messages and PR descriptions in English.**

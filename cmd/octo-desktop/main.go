@@ -26,6 +26,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"strings"
+	"sync/atomic"
 	"time"
 
 	"github.com/mattn/go-isatty"
@@ -179,9 +180,34 @@ func main() {
 	serveenv.Load()
 
 	// Pick the language for native dialogs/tray from the system UI language.
-
-	// Pick the language for native dialogs/tray from the system UI language.
 	applyLang()
+
+	// ── Boot chain (P2) ──
+	// Fail fast with a readable FatalDialog instead of a panic to a black
+	// window. checkWebView2 / checkDataRoot / checkSingleInstance / checkPort
+	// run before the app object exists; a failure is recorded here and surfaced
+	// as a dialog in the ApplicationStarted hook (the Wails dialog needs the
+	// event loop). See bootstrap.go.
+	var bootFailure atomic.Pointer[BootFailure]
+	if f := checkWebView2(); f != nil {
+		bootFailure.Store(f)
+	} else if f := checkDataRoot(); f != nil {
+		bootFailure.Store(f)
+	} else {
+		// A same-directory relaunch (instance.json pid alive) is resolved by the
+		// Wails single-instance mutex inside app.New: the acquire fails, the
+		// first instance is notified and this process exits. Skip the port probe
+		// in that case — the already-running instance owns 8088, so probing would
+		// wrongly report "port in use" instead of activating the window. A port
+		// probe failure here is *not* fatal yet: it may be this product's other
+		// copy (a different directory), which app.New turns into notify+exit, so
+		// the dialog is deferred to ApplicationStarted (see below).
+		if activateExisting, _ := checkSingleInstance(); !activateExisting {
+			if f := checkPort(hubAddr); f != nil {
+				bootFailure.Store(f)
+			}
+		}
+	}
 
 	settings := loadDesktopSettings()
 
@@ -221,14 +247,32 @@ func main() {
 	// what lets this product run beside an installed Octo rather than being
 	// brought to its window.
 	cfg := brand.Load()
+
+	// The single-instance mutex (UniqueID) is shared by every portable copy on
+	// the machine, so it cannot tell two copies apart. The second instance
+	// sends its own executable path as AdditionalData; on the receiving side we
+	// only raise our window when that path matches ours — a different
+	// directory's launch is a different copy and must be ignored. The
+	// directory-level instance.json (checkSingleInstance) already covers the
+	// same-directory relaunch case, so this guard is purely defensive.
+	selfExe := selfExePath()
 	app := application.New(application.Options{
 		Name:        cfg.Name(brand.DefaultLocale),
 		Description: cfg.Tagline(brand.DefaultLocale),
 		Services:    services,
 		SingleInstance: &application.SingleInstanceOptions{
-			UniqueID: cfg.Identifier(brand.IdentifierSingleInstanceID),
-			OnSecondInstanceLaunch: func(application.SecondInstanceData) {
+			UniqueID:       cfg.Identifier(brand.IdentifierSingleInstanceID),
+			AdditionalData: map[string]string{"exe": selfExe},
+			OnSecondInstanceLaunch: func(d application.SecondInstanceData) {
+				if d.AdditionalData["exe"] == selfExe {
+					bridge.showWindow()
+					return
+				}
+				// A launch from a *different* directory: raise this window and
+				// tell the user this copy is already running (需求 §5.1.2-5) —
+				// otherwise they'd think a second copy opened.
 				bridge.showWindow()
+				bridge.showAlreadyRunning()
 			},
 		},
 		// ShouldQuit is consulted on every termination attempt. On Windows/Linux
@@ -337,6 +381,20 @@ func main() {
 	// prompt (a modal dialog) can run. Doing it here rather than before Run lets
 	// us ask the user before stopping someone else's backend.
 	app.Event.OnApplicationEvent(events.Common.ApplicationStarted, func(*application.ApplicationEvent) {
+		// A boot failure (WebView2 missing, data root unwritable, or the port
+		// owned by another program) surfaces as a FatalDialog and the app stops
+		// before any normal-startup side effect. A relaunch never reaches here:
+		// app.New's single-instance mutex already notified the first instance
+		// and exited this process.
+		if f := bootFailure.Load(); f != nil {
+			fatalDialog(app, bridge, f)
+			return
+		}
+		// Record this process as the data root's owner before serving, so a
+		// same-directory relaunch (checkSingleInstance) and the watchdog's thaw
+		// can both confirm it's still us. Best-effort: a write failure degrades
+		// to "no owner recorded" rather than blocking startup.
+		_ = writeInstanceJSON(selfExe, os.Getpid())
 		// Register the update-toast action category once the notification
 		// service has started (Windows/Linux drop the action buttons if a
 		// notification is sent before its category is registered).
@@ -345,10 +403,6 @@ func main() {
 		// off the UI thread) — without it every toast silently no-ops.
 		go bridge.requestNotificationAuthorization()
 		startHub(app, bridge, settings)
-		// Surface a newer release in the tray without the user asking: a delayed
-		// first check, then daily. Foreground-suppressed toasts don't matter here
-		// — the tray item is the durable signal.
-		go autoUpdateLoop(bridge)
 	})
 
 	// macOS: clicking the dock icon after the window was closed (hidden to the
@@ -360,9 +414,14 @@ func main() {
 	err := app.Run()
 
 	// The app has quit: release our pid-file entry (only if it's still ours —
-	// a successor that took the port over must keep its own) and shut the
+	// a successor that took the port over must keep its own), remove the
+	// portable ownership marker, stop the data-root watchdog, and shut the
 	// server down cleanly.
 	serveproc.ReleaseOwned(os.Getpid())
+	removeInstanceJSON()
+	if wd := bridge.watchdog.Load(); wd != nil {
+		wd.Stop()
+	}
 	if srv := bridge.srv.Load(); srv != nil {
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		_ = srv.Shutdown(ctx)
@@ -505,6 +564,10 @@ func startHub(app *application.App, bridge *nativeBridge, settings desktopSettin
 		return
 	}
 	bridge.srv.Store(srv)
+	// Watch the portable data root from here: only after we own the port and
+	// hold the server does a "data/ vanished" mean "freeze the product" rather
+	// than "still booting". See watchdog.go.
+	startDataRootWatchdog(bridge)
 	go func() {
 		if err := srv.ServeOn(ln); err != nil {
 			log.Printf("octo-desktop: server stopped: %v", err)
@@ -512,6 +575,31 @@ func startHub(app *application.App, bridge *nativeBridge, settings desktopSettin
 	}()
 
 	bridge.showWindow()
+}
+
+// startDataRootWatchdog begins watching the portable data root and freezes the
+// product when the directory disappears (a U盘 pulled out). The freeze/thaw is
+// broadcast to the frontend over WS — the only channel an octo-served page has
+// to the Go process — so the UI can show a full-screen frozen overlay. See
+// watchdog.go and P2-启动与生命周期.md §3.4.
+func startDataRootWatchdog(bridge *nativeBridge) {
+	root, err := datapath.Root()
+	if err != nil {
+		return // no data root → nothing to watch (the boot chain already caught this)
+	}
+	wd := StartWatchdog(root,
+		func() {
+			if srv := bridge.srv.Load(); srv != nil {
+				srv.BroadcastEvent(map[string]any{"type": "datastore:lost"})
+			}
+		},
+		func() {
+			if srv := bridge.srv.Load(); srv != nil {
+				srv.BroadcastEvent(map[string]any{"type": "datastore:restored"})
+			}
+		},
+	)
+	bridge.watchdog.Store(wd)
 }
 
 // checkForUpdates is the tray "Check for updates…" action — a manual check that
@@ -619,17 +707,15 @@ func buildTrayMenu(app *application.App, bridge *nativeBridge) *application.Menu
 	m.Add(L().trayShow).OnClick(func(*application.Context) { bridge.showWindow() })
 	m.Add(L().trayNewSession).OnClick(func(*application.Context) { bridge.openNewSession() })
 	m.Add(L().traySettings).OnClick(func(*application.Context) { bridge.openSettings() })
-	// A known-newer release replaces the "check" item with a one-click update
-	// (in-place when this build supports it, else the download page) — the
-	// durable prompt when the toast was suppressed. Otherwise the manual check.
-	if v := bridge.updateAvailable.Load(); v != nil {
-		m.Add(fmt.Sprintf(L().trayUpdateAvailFmt, *v)).OnClick(func(*application.Context) {
-			go startUpdateFlow(bridge)
-		})
-	} else {
-		m.Add(L().trayCheckUpdates).OnClick(func(*application.Context) { go checkForUpdates(bridge) })
-	}
+	// OCTO-FORK: no "Check for updates" / "Update to vX" item — the portable
+	// product has no in-place update (canInplaceUpdate is always false) and no
+	// auto-update loop (需求 §5.1.2-13). The update flow stays reachable code
+	// upstream, just not surfaced in the tray here.
 	m.AddSeparator()
+	// The USB-unplug reminder: a portable app runs from removable media, so a
+	// quit must precede pulling the drive (需求 §5.1.2-8, P2 §3.6). A disabled
+	// line like the status block — it is a hint, not an action.
+	m.Add(L().trayUnplugHint).SetEnabled(false)
 	m.Add(L().trayQuit).OnClick(func(*application.Context) { bridge.requestQuit() })
 	return m
 }

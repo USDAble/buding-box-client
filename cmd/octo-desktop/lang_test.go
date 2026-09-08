@@ -34,6 +34,14 @@ var brandLiteral = regexp.MustCompile(`\bOcto\b`)
 func TestNativeStringsCarryNoBrandLiteral(t *testing.T) {
 	for setName, set := range map[string]uiStrings{"en": enStrings, "zh": zhStrings} {
 		for field, value := range fields(t, set) {
+			if field == "fatalPortFmt" {
+				// fatalPortFmt names the *upstream* product "Octo" as an
+				// external program (需求 §5.1.2-6 / P2 §3.3) — an intentional
+				// literal, not a missed {brand} interpolation. Its presence is
+				// pinned elsewhere (TestNativeFormatVerbsPreserved covers the
+				// fixed "Port 8088" text).
+				continue
+			}
 			if brandLiteral.MatchString(value) {
 				t.Errorf("%s.%s still names the product literally: %q", setName, field, value)
 			}
@@ -117,6 +125,8 @@ func TestNativeFormatVerbsPreserved(t *testing.T) {
 		"errStartFmt":        "%v",
 		"updLatestFmt":       "%s",
 		"updAvailableFmt":    "%s",
+		"fatalDataRootFmt":   "%s",
+		"fatalUnknownFmt":    "%s",
 	}
 	for setName, set := range map[string]uiStrings{"en": enStrings, "zh": zhStrings} {
 		values := fields(t, set)

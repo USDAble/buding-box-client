@@ -47,6 +47,22 @@ type uiStrings struct {
 	updOpen          string
 	updInstall       string
 	updInplaceFailed string
+
+	// Boot-chain FatalDialog (bootstrap.go). Each maps one BootFailure reason;
+	// the port one names the upstream product "Octo" as an external program.
+	fatalQuit             string // the single dialog button
+	fatalWebView2Download string // the WebView2 download-page button
+	fatalWebView2         string
+	fatalDataRootFmt      string // "...%s" (the failing path)
+	fatalPortFmt          string // fixed copy; "Octo" in it names the upstream product
+	fatalUnknownFmt       string // "...%s" (the reason)
+
+	// Second-copy launch prompt (P2 §3.2): shown by the first instance when a
+	// launch from a *different* directory arrives.
+	alreadyRunningMsg string
+
+	// Tray / quit "unplug" hints (P2 §3.6).
+	trayUnplugHint string
 }
 
 // The product name is not written into these tables. It comes from
@@ -81,7 +97,7 @@ func enStringsFor(name, short string) uiStrings {
 		takeoverCancel: "Quit",
 
 		quitTitle:  "Quit " + short,
-		quitMsg:    "Quitting stops the " + name + " backend on this machine. Connected editors, browsers, and IM channels will disconnect.\n\nQuit anyway?",
+		quitMsg:    "Quitting stops the " + name + " backend on this machine. Connected editors, browsers, and IM channels will disconnect.\n\nQuit before unplugging the USB drive.\n\nQuit anyway?",
 		quitOK:     "Quit",
 		quitCancel: "Cancel",
 
@@ -98,6 +114,17 @@ func enStringsFor(name, short string) uiStrings {
 		updOpen:          "Open Download Page",
 		updInstall:       "Update Now",
 		updInplaceFailed: "Automatic update failed — opening the download page.",
+
+		fatalQuit:             "Quit",
+		fatalWebView2Download: "Download WebView2",
+		fatalWebView2:         "This app needs the Microsoft WebView2 Runtime to show its window, but it isn't installed on this computer.\n\nPlease install WebView2, then start " + name + " again.",
+		fatalDataRootFmt:      "The data directory couldn't be created or written to:\n\n%s\n\n" + name + " keeps all its data in a data/ folder next to the executable, which must be writable.",
+		fatalPortFmt:          "Port 8088 is already in use. If Octo or another program is running on this computer, quit it first, then open " + name + " again.", // upstream product name, not our brand
+		fatalUnknownFmt:       name + " couldn't start (%s).",
+
+		alreadyRunningMsg: name + " is already running. Quit it before opening another copy.",
+
+		trayUnplugHint: "Quit before unplugging the USB drive",
 	}
 }
 
@@ -120,7 +147,7 @@ func zhStringsFor(name, short string) uiStrings {
 		takeoverCancel: "退出",
 
 		quitTitle:  "退出" + short,
-		quitMsg:    "退出会停止本机的" + name + "后端，已连接的编辑器、浏览器和 IM channel 都会断开。\n\n仍要退出？",
+		quitMsg:    "退出会停止本机的" + name + "后端，已连接的编辑器、浏览器和 IM channel 都会断开。\n\n退出后再拔出 U 盘。\n\n仍要退出？",
 		quitOK:     "退出",
 		quitCancel: "取消",
 
@@ -137,6 +164,17 @@ func zhStringsFor(name, short string) uiStrings {
 		updOpen:          "打开下载页",
 		updInstall:       "立即更新",
 		updInplaceFailed: "自动更新失败,已打开下载页。",
+
+		fatalQuit:             "退出",
+		fatalWebView2Download: "下载 WebView2",
+		fatalWebView2:         "本程序需要 Microsoft WebView2 运行时才能显示窗口,但此电脑未安装。\n\n请先安装 WebView2,再重新打开" + name + "。",
+		fatalDataRootFmt:      "数据目录无法创建或写入:\n\n%s\n\n" + name + "把所有数据保存在可执行文件旁的 data/ 目录,该目录需可写。",
+		fatalPortFmt:          "端口 8088 已被占用。若本机正在运行 Octo 或其它程序,请先退出后再打开" + name + "。", // upstream product name, not our brand
+		fatalUnknownFmt:       name + "无法启动(%s)。",
+
+		alreadyRunningMsg: name + "已在运行，请先退出再打开另一份。",
+
+		trayUnplugHint: "退出后再拔出 U 盘",
 	}
 }
 

@@ -13,6 +13,7 @@
 #   make clean      remove build artefacts
 #   make brand      regenerate the branding files from branding/brand.json
 #   make brand-check validate brand.json + fail if a generated copy is stale
+#   make datapath-check  fail if product code reintroduces a ~/.octo path
 #
 # octo-eval — lightweight eval (manual; needs a model key, NOT in CI):
 #   make eval-build           build the ./octo-eval tool
@@ -59,7 +60,7 @@ RG_EMBED_DIR := internal/tools/rgembed/binaries
 RG_EMBED_BIN := $(RG_EMBED_DIR)/rg
 
 .PHONY: all build install test cover vet fmt fmt-check tidy clean \
-        brand brand-check \
+        brand brand-check datapath-check \
         eval-build eval-list eval \
         rg-embed rg-embed-clean \
         bundle-tools-windows bundle-tools-macos \
@@ -171,6 +172,14 @@ brand-check:
 	node scripts/brand-schema.mjs
 	node scripts/sync-branding.mjs --check
 	node --test scripts/brand-schema.test.mjs scripts/sync-branding.test.mjs
+
+# ── portable data root guard ──────────────────────────────────────────────────
+# Rejects any reintroduction of the pre-fork ~/.octo data root: a ".octo"
+# string literal, or an os.UserHomeDir() call outside scripts/homedir-allowlist.txt.
+# CI's datapath-guard job runs the same script.
+datapath-check:
+	node scripts/datapath-guard.mjs
+	node --test scripts/datapath-guard.test.mjs
 
 # ── ripgrep embed (build-time only) ──────────────────────────────────────────
 # Downloads the matching rg release for GOOS/GOARCH, extracts the binary,

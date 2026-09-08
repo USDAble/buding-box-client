@@ -14,7 +14,7 @@
     ['plan', 'product.account_plan'], ['credits', 'product.account_credits'],
     ['license', 'product.account_license'], ['settings', 'product.account_settings'],
     ['sensitive', 'product.account_sensitive'], ['help', 'product.account_help'],
-    ['about', 'product.account_about'],
+    ['updates', 'product.account_updates'], ['about', 'product.account_about'],
   ] as const
 
   $effect(() => {
@@ -39,7 +39,9 @@
     try { await updateProductPrefs({ locale: value }); setLocale(value) } catch { /* keep current language on failure */ }
   }
   async function saveMode(value: 'privacy' | 'smart' | 'default') {
-    try { await updateProductPrefs({ defaultChatMode: value }) } catch { /* selection remains server-backed */ }
+    try { await updateProductPrefs({ defaultChatMode: value }) } catch {
+      // The select is controlled by productState, so failed writes snap back.
+    }
   }
   async function doLogout() {
     const ok = await confirmDialog(tr('product.logout_message'), { title: tr('product.logout_title'), danger: true, confirmLabel: tr('product.logout') })
@@ -52,7 +54,7 @@
 <svelte:window onkeydown={closeOnEscape} onclick={outside} />
 
 {#if $accountPanelOpen}
-  <section class="account-panel" role="dialog" aria-label={$t('product.account')}>
+    <section class="account-panel" role="dialog" aria-label={$t('product.account')}>
     {#if $accountPanelPage === 'root'}
       <div class="summary">
         <span class="avatar">{Array.from($productState?.account?.nickname ?? '?')[0] ?? '?'}</span>
@@ -86,6 +88,8 @@
           <button class="secondary" onclick={() => { closeAccountPanel(); settingsModalOpen.set(true) }}>{$t('product.open_full_settings')}</button>
         {:else if $accountPanelPage === 'help'}
           <p>{$t('product.help_demo')}</p><p>{$t('product.help_credits')}</p><p>{$t('product.help_portable')}</p><p>{$t('product.help_contact')}</p><p>{$t('product.help_smartscreen')}</p>
+        {:else if $accountPanelPage === 'updates'}
+          <p>{$t('product.coming_soon')}</p>
         {:else if $accountPanelPage === 'about'}
           <h3>{$t('product.account')}</h3><VersionBadge /><p>{$t('product.coming_soon')}</p>
         {:else}

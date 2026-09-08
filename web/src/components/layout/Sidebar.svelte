@@ -1,7 +1,8 @@
 <script lang="ts">
   import { onMount, onDestroy } from 'svelte'
   import { get } from 'svelte/store'
-  import { view, sidebar, sessions, sessionGroups, pinnedSessions, collapsedSessions, editGroupId, editGroupDraft, activeSessionId, selMode, sel, menuFor, editId, editDraft, showToast, mcpServers, createNewSession, createSessionInGroup, clearPendingSessionOpts, cmdkOpen, nativeShell, dirLeaf, accountPanelOpen } from '../../lib/stores'
+  import { view, sidebar, sessions, sessionGroups, pinnedSessions, collapsedSessions, editGroupId, editGroupDraft, activeSessionId, selMode, sel, menuFor, editId, editDraft, showToast, mcpServers, createNewSession, createSessionInGroup, clearPendingSessionOpts, settingsModalOpen, cmdkOpen, nativeShell, dirLeaf, accountPanelOpen } from '../../lib/stores'
+  import { productState } from '../../lib/product'
   import * as api from '../../lib/api'
   import { titlebarDblClick } from '../../lib/nativeWindow'
   import { t, tr } from '../../lib/i18n'
@@ -1077,10 +1078,20 @@
       </div>
     </div>
     {:else}
-    <!-- OCTO-FORK: P5 account corner replaces the settings/version footer — see
+    <!-- OCTO-FORK: P5 account corner replaces the settings/version footer when
+         product state is available; plain `octo serve` keeps the upstream
+         footer because it has no product gate — see
          dev-docs-usdable/需求/2260906/技术方案/P5-个人中心.md. -->
     <div class="footer">
-      <AccountCorner />
+      {#if $productState?.account}
+        <AccountCorner />
+      {:else}
+        <div class="footer-settings" style="color:{$settingsModalOpen ? 'var(--blue-6)' : 'var(--text-secondary)'}" onclick={() => settingsModalOpen.set(true)}>
+          <iconify-icon icon="ant-design:setting-outlined" width="14"></iconify-icon>
+          <span>{$t('nav.settings')}</span>
+        </div>
+        <VersionBadge />
+      {/if}
     </div>
     {/if}
   </div>
@@ -1131,7 +1142,13 @@
       {/each}
     </div>
     <div class="rail-footer">
-      <AccountCorner rail />
+      {#if $productState?.account}
+        <AccountCorner rail />
+      {:else}
+        <button class="rail-btn" class:active={$settingsModalOpen} title={$t('nav.settings')} onclick={() => settingsModalOpen.set(true)}>
+          <iconify-icon icon="ant-design:setting-outlined" width="16"></iconify-icon>
+        </button>
+      {/if}
     </div>
   </div>
   {/if}

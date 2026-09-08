@@ -108,7 +108,9 @@ export async function logout(): Promise<void> {
   if (token) headers[WINDOW_TOKEN_HEADER] = token;
   const res = await fetch("/api/product/logout", { method: "POST", headers });
   if (!res.ok) throw new Error(`${res.status} ${res.statusText}`);
-  productState.set(null);
+  // Keep the public account/activation data so the blocked view can render the
+  // second-login form without asking for an activation code again.
+  productState.update(state => state ? { ...state, loggedIn: false } : state);
   productPhase.set("blocked");
 }
 

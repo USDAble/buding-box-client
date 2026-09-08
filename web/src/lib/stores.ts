@@ -60,7 +60,7 @@ export const mcpModalOpen = writable(false)
 export const settingsModalOpen = writable(false)
 
 // OCTO-FORK: P5 account panel state — see dev-docs-usdable/需求/2260906/技术方案/P5-个人中心.md.
-export type AccountPanelPage = 'root' | 'plan' | 'credits' | 'license' | 'settings' | 'sensitive' | 'help' | 'about'
+export type AccountPanelPage = 'root' | 'plan' | 'credits' | 'license' | 'settings' | 'sensitive' | 'help' | 'updates' | 'about'
 export const accountPanelOpen = writable(false)
 export const accountPanelPage = writable<AccountPanelPage>('root')
 let accountPanelWasRail = false

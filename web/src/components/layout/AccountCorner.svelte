@@ -33,7 +33,7 @@
 </button>
 
 <style>
-.account-corner { width:100%; display:flex; align-items:center; gap:10px; padding:9px 10px; border:0; border-radius:8px; background:transparent; color:var(--text); cursor:pointer; text-align:left; font:inherit; }
+.account-corner { position:relative; z-index:30; width:100%; display:flex; align-items:center; gap:10px; padding:9px 10px; border:0; border-radius:8px; background:transparent; color:var(--text); cursor:pointer; text-align:left; font:inherit; }
 .account-corner:hover,.account-corner.active { background:var(--hover-neutral); }
 .avatar { width:32px; height:32px; flex:0 0 32px; display:grid; place-items:center; border-radius:50%; background:var(--blue-2); color:var(--blue-7); font-size:14px; font-weight:600; }
 .account-copy { min-width:0; display:flex; flex-direction:column; gap:2px; }

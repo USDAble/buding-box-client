@@ -14,9 +14,17 @@ import (
 
 // handleProductState serves the de-identified product state. It is exempt from
 // the product gate so the frontend can decide whether to render the login
-// gate or the main UI before any other request.
+// gate or the main UI before any other request. When the user has not chosen a
+// language yet, prefs.locale is filled with the system-derived language so the
+// login page opens in the right language — derived here, not persisted (需求
+// §5.3.1 / §10 T10). OCTO-FORK: P4 — see
+// dev-docs-usdable/需求/2260906/技术方案/P4-拦截页.md.
 func (s *Server) handleProductState(w http.ResponseWriter, r *http.Request) {
-	writeJSON(w, http.StatusOK, s.productState.Snapshot().Public())
+	pub := s.productState.Snapshot().Public()
+	if pub.Prefs.Locale == "" {
+		pub.Prefs.Locale = productstate.SystemLocale()
+	}
+	writeJSON(w, http.StatusOK, pub)
 }
 
 // handleProductLogout clears only the account, keeping activation and credits

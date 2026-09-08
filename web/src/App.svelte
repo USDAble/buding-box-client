@@ -19,6 +19,7 @@
   import AuthGate from './components/overlays/AuthGate.svelte'
   import FirstRunSetup from './components/overlays/FirstRunSetup.svelte'
   import FrozenOverlay from './components/overlays/FrozenOverlay.svelte'
+  import BlockedView from './views/BlockedView.svelte'
   import Header from './components/layout/Header.svelte'
   import Sidebar from './components/layout/Sidebar.svelte'
   import AgentsView from './views/AgentsView.svelte'
@@ -570,9 +571,9 @@
 {:else if $productPhase === 'unknown'}
   <div class="splash"><div class="spinner"></div></div>
 {:else if $productPhase === 'blocked'}
-  <!-- OCTO-FORK: the product gate refused the window (not logged in). P4
-       replaces this placeholder with the real login/activation gate. -->
-  <div class="splash"><div class="spinner"></div></div>
+  <!-- OCTO-FORK: the product gate refused the window (not logged in) — render
+       the login/activation form (P4). No skip/guest path (需求 §5.3.1). -->
+  <BlockedView />
 {:else if $onboardPhase === 'unknown'}
   <div class="splash"><div class="spinner"></div></div>
 {:else if $onboardPhase === 'key_setup'}

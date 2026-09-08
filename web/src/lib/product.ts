@@ -103,3 +103,99 @@ export async function logout(): Promise<void> {
   productState.set(null);
   productPhase.set("blocked");
 }
+
+// ─── P4 login form ──────────────────────────────────────────────────────────
+//
+// send-code / login / locale round-trips for the blocked (login) page. Errors
+// come back as machine codes, never copy — the view renders the message in the
+// current language so a zh→en switch never leaks a hardcoded string.
+
+/** Error thrown by the product API calls, carrying the machine-code payloads. */
+export class ProductError extends Error {
+  constructor(
+    public status: number,
+    public fieldErrors: Record<string, string> = {},
+    public code: string | null = null,
+    public retryAfterSec: number | null = null,
+    public phoneMasked: string | null = null,
+  ) {
+    super(`product api ${status}`);
+    this.name = "ProductError";
+  }
+}
+
+function jsonHeaders(): Record<string, string> {
+  const headers: Record<string, string> = { "Content-Type": "application/json" };
+  const token = windowToken();
+  if (token) headers[WINDOW_TOKEN_HEADER] = token;
+  return headers;
+}
+
+/** Login form input; activationCode is required on first activation only. */
+export interface LoginInput {
+  phone: string;
+  code: string;
+  nickname: string;
+  activationCode?: string;
+}
+
+/**
+ * Requests a verification code. Resolves with the cooldown seconds; throws
+ * ProductError with fieldErrors.phone === "invalid_phone" or retryAfterSec on
+ * a too-soon resend (429).
+ */
+export async function sendCode(phone: string): Promise<number> {
+  const res = await fetch("/api/product/send-code", {
+    method: "POST",
+    headers: jsonHeaders(),
+    body: JSON.stringify({ phone }),
+  });
+  const body = (await res.json().catch(() => ({}))) as Record<string, unknown>;
+  if (!res.ok) {
+    if (res.status === 429) {
+      throw new ProductError(res.status, {}, null, body.retryAfterSec as number | null);
+    }
+    throw new ProductError(res.status, { phone: (body.code as string) ?? "invalid_phone" });
+  }
+  return body.cooldownSec as number;
+}
+
+/**
+ * Submits the login (or activation+login) form. On success it updates the
+ * product stores and flips the phase to ready; on failure it throws a
+ * ProductError carrying either fieldErrors (round-one format) or a business
+ * code + phoneMasked (round two).
+ */
+export async function login(input: LoginInput): Promise<ProductStateDTO> {
+  const res = await fetch("/api/product/login", {
+    method: "POST",
+    headers: jsonHeaders(),
+    body: JSON.stringify(input),
+  });
+  const body = (await res.json().catch(() => ({}))) as Record<string, unknown>;
+  if (!res.ok) {
+    const fieldErrors = body.fieldErrors as Record<string, string> | undefined;
+    if (fieldErrors) throw new ProductError(res.status, fieldErrors);
+    throw new ProductError(
+      res.status,
+      {},
+      (body.code as string) ?? null,
+      null,
+      (body.phoneMasked as string) ?? null,
+    );
+  }
+  const state = body.state as ProductStateDTO;
+  productState.set(state);
+  productPhase.set(state.loggedIn ? "ready" : "blocked");
+  return state;
+}
+
+/** Persists the UI language before login (PUT /api/product/locale). */
+export async function setProductLocale(locale: "zh" | "en"): Promise<void> {
+  const res = await fetch("/api/product/locale", {
+    method: "PUT",
+    headers: jsonHeaders(),
+    body: JSON.stringify({ locale }),
+  });
+  if (!res.ok) throw new Error(`${res.status} ${res.statusText}`);
+}

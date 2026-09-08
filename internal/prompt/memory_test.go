@@ -48,7 +48,7 @@ func TestCompose_UserLayerBetweenEnvAndProject(t *testing.T) {
 	if !(envIdx < userIdx && userIdx < projIdx && projIdx < sysIdx) {
 		t.Errorf("order wrong: env=%d user=%d proj=%d sys=%d", envIdx, userIdx, projIdx, sysIdx)
 	}
-	if !strings.Contains(out, "~/.octo/octorules.md") {
+	if !strings.Contains(out, "<data root>/octorules.md") {
 		t.Error("user layer should be labelled with its source path")
 	}
 }

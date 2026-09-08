@@ -16,7 +16,7 @@ identifiers (`agent_id`, `/api/agents`, etc.) are unaffected.
 
 octo's multi-agent system lets users define **agent profiles** — each with its
 own system prompt, model, tool allowlist, and IM chat bindings. User-created
-profiles are stored as Markdown files in `~/.octo/agents/<id>.md` (body =
+profiles are stored as Markdown files in `<data root>/agents/<id>.md` (body =
 system prompt, YAML frontmatter = metadata).
 
 This skill manages profiles by calling the REST API on the running octo
@@ -30,14 +30,14 @@ allowlist).
 distinguished by a `source` field on every response:
 
 - **`"source": "user"`** — created via this skill or the Web UI form, stored
-  in `~/.octo/agents/`. Freely editable and deletable.
+  in `<data root>/agents/`. Freely editable and deletable.
 - **`"source": "default"`** — an **officially curated expert** shipped in the
   binary (the ones shown in the Web UI's expert gallery, e.g. copywriter,
   resume-coach, trip-planner). These are **read-only**: `PUT` and `DELETE` on
   one both refuse. They can only be **hidden**. An official expert is
   identical on every machine and keeps receiving content updates when octo
   ships a new curated-persona revision — editing one used to fork it into a
-  `~/.octo/agents/<id>.md` override and silently forfeit those updates, which
+  `<data root>/agents/<id>.md` override and silently forfeit those updates, which
   is why it no longer does.
 
   **When the user asks to change a curated expert**, don't try to edit it:
@@ -94,7 +94,7 @@ a curated expert" below) genuinely requires a running server.
 
 ### Creating/editing a user agent by hand-writing its file
 
-`~/.octo/agents/<id>.md` is the exact on-disk form of a user profile — the
+`<data root>/agents/<id>.md` is the exact on-disk form of a user profile — the
 Store is read-through (any path that touches this directory takes effect on
 the very next read, no restart, no reload call). Writing this file directly
 with the `write_file` tool is a fully supported, first-class way to manage
@@ -104,8 +104,8 @@ the API normally does for you:
 1. **Pick an id** matching `^[a-z0-9][a-z0-9-]{0,31}$` (lowercase, digits,
    hyphens, 1-32 chars, starts alphanumeric) and not `default`/`explore`/
    `general`/`code-review` (the four reserved builtin ids).
-2. **Check for a collision yourself** — `ls ~/.octo/agents/` and
-   `ls ~/.octo/agents-default/`. The API refuses to silently overwrite an
+2. **Check for a collision yourself** — `ls <data root>/agents/` and
+   `ls <data root>/agents-default/`. The API refuses to silently overwrite an
    existing profile (409); a raw `write_file` has no such guard and will just
    clobber whatever's already at that path.
 3. **Write the file**:
@@ -135,18 +135,18 @@ the API normally does for you:
      an unresolvable model just fails at the next turn, not at save time.
 
 **You cannot edit a curated (`source: "default"`) expert this way either.** A
-user file whose id matches one under `~/.octo/agents-default/` is ignored on
+user file whose id matches one under `<data root>/agents-default/` is ignored on
 load, so writing one leaves a file that never takes effect. Give the new
-persona its own id instead (check `ls ~/.octo/agents-default/` for the ids
+persona its own id instead (check `ls <data root>/agents-default/` for the ids
 that are taken).
 
-**Deleting a user agent created this way**: `rm ~/.octo/agents/<id>.md` after
+**Deleting a user agent created this way**: `rm <data root>/agents/<id>.md` after
 confirming with the user (same destructive-operation rule as always).
 
 ### Hiding a curated expert without a server
 
 There's no file-based equivalent for this one — the hidden/shown state lives
-in `~/.octo/config.yml`'s `agents.disabled_defaults` list, and that file also
+in `<data root>/config.yml`'s `agents.disabled_defaults` list, and that file also
 holds endpoint credentials, so freehand edits there carry real risk. If asked
 to hide/show a curated expert and no server is reachable:
 
@@ -177,8 +177,8 @@ to hide/show a curated expert and no server is reachable:
 - `id`: filename slug (lowercase, `[a-z0-9-]`); immutable after creation.
 - `name`: display name.
 - `description`: required; shown in listings.
-- `system_prompt`: the agent's system prompt (the Markdown body of `~/.octo/agents/<id>.md`); required for the agent to behave differently from the default agent.
-- `model`: optional model override (must be in `~/.octo/config.yml`'s models).
+- `system_prompt`: the agent's system prompt (the Markdown body of `<data root>/agents/<id>.md`); required for the agent to behave differently from the default agent.
+- `model`: optional model override (must be in `<data root>/config.yml`'s models).
 - `tools`: tool allowlist; `[]` = no tools. User-created agents with empty `tools` get nothing (unlike the default agent which gets all tools with empty allowlist).
 - `tool_skills`: skills exposed as tools.
 - `source` (`"user"` or `"default"`) and `enabled` (bool): **response-only** —
@@ -386,7 +386,7 @@ existing profile are preserved unless the user explicitly changes them.
 - **Always confirm before destructive operations** (delete, overwrite).
 - **Show the user the current state** before modifying — don't guess.
 - **Model must exist in config** — the server validates against
-  `~/.octo/config.yml`'s `models` list. An invalid model returns 400.
+  `<data root>/config.yml`'s `models` list. An invalid model returns 400.
 - **This skill only works on the Default Agent** — if you detect you're running
   as an expert agent (narrow tool access, specific system prompt), refuse and
   tell the user to switch to the Default Agent.

@@ -10,6 +10,16 @@
 //   - os.UserHomeDir() — fails unless the file is in scripts/homedir-allowlist.txt
 //     (the real-host-home access list; one written reason per entry).
 //
+// It ALSO scans the runtime prompt/skill text under internal/prompt and
+// internal/skills (every .md and non-_test.go file) for the "~/.octo" host-home
+// path reference. Unlike ".octo" (which only matches the bare directory-name
+// literal), "~/.octo/…" spells out a write to the host home and slipped through
+// the original Go-literal guard — the agent prompt once told the agent to
+// `write_file` Light Apps to `~/.octo/light-apps/`, polluting the host home.
+// Those strings are the runtime instructions the agent reads, so they must
+// reference the data root (via the `<data root>` placeholder) instead. Zero
+// exceptions — LICENSE.txt attribution and _test.go files are excluded.
+//
 // Usage:
 //   node scripts/datapath-guard.mjs
 //
@@ -23,12 +33,22 @@ import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 const SCAN_DIRS = ['internal', 'cmd', 'shared']
+// Runtime prompt/skill text — the strings the agent actually reads and acts on.
+// Only these two trees are checked for "~/.octo"; the rest of the repo's
+// developer-facing comments and CLI help text are a separate, non-runtime
+// cleanup (and would otherwise trip a zero-exception guard with historical
+// prose).
+const PROMPT_DIRS = ['internal/prompt', 'internal/skills']
 const ALLOWLIST_REL = 'scripts/homedir-allowlist.txt'
 
 // The pre-fork data-root segment as a Go string literal. Match the exact
 // double-quoted ".octo" so ".octo-hooks.yml" (the renamed project-level hooks
 // file), ".octorules", and the ".octo" path name in prose never trip it.
 export const OCTO_LITERAL = /"\.octo"/
+
+// "~/.octo/…" — an explicit host-home data path, not the bare directory-name
+// literal. Banned in runtime prompt/skill text (see check's second pass).
+export const OCTO_HOME_PATH = /~\/\.octo/
 
 // os.UserHomeDir() call — the function that, used outside internal/datapath,
 // reaches the host home.
@@ -97,6 +117,37 @@ export async function collectGoFiles(root) {
   }
 }
 
+// collectPromptFiles returns repo-relative paths of every .md file and
+// non-_test.go Go file under internal/prompt and internal/skills — the runtime
+// text the agent reads and acts on. LICENSE.txt and other attribution files
+// are .txt, so they fall outside the .md/.go filter and are left alone.
+export async function collectPromptFiles(root) {
+  const files = []
+  for (const dir of PROMPT_DIRS) {
+    await walk(path.join(root, dir), files)
+  }
+  return files
+
+  async function walk(dir, out) {
+    let entries
+    try {
+      entries = await fs.readdir(dir, { withFileTypes: true })
+    } catch (error) {
+      if (error?.code === 'ENOENT') return
+      throw error
+    }
+    for (const entry of entries) {
+      const abs = path.join(dir, entry.name)
+      if (entry.isDirectory()) {
+        await walk(abs, out)
+      } else if (entry.isFile() &&
+        (entry.name.endsWith('.md') || (entry.name.endsWith('.go') && !entry.name.endsWith('_test.go')))) {
+        out.push(path.relative(root, abs))
+      }
+    }
+  }
+}
+
 // check returns a list of human-readable problems; an empty list means clean.
 export async function check(root) {
   const entries = await loadAllowlist(root)
@@ -112,6 +163,17 @@ export async function check(root) {
       problems.push(`${rel}: calls os.UserHomeDir() and is not in ${ALLOWLIST_REL}`)
     }
   }
+
+  // Runtime prompt/skill text must not reference the host-home "~/.octo" path:
+  // those are the instructions the agent reads, so a reference there teaches
+  // the agent to write outside the data root.
+  const promptFiles = await collectPromptFiles(root)
+  for (const rel of promptFiles) {
+    const content = await fs.readFile(path.join(root, rel), 'utf8')
+    if (OCTO_HOME_PATH.test(content)) {
+      problems.push(`${rel}: runtime prompt/skill text references "~/.octo" (zero exceptions — use "<data root>")`)
+    }
+  }
   return problems
 }
 
@@ -124,7 +186,7 @@ async function main() {
     process.exitCode = 1
     return
   }
-  console.log('datapath-guard passed: no ".octo" literals, all os.UserHomeDir() calls allowlisted.')
+  console.log('datapath-guard passed: no ".octo" literals, no "~/.octo" in prompt/skill text, all os.UserHomeDir() calls allowlisted.')
 }
 
 // Only run the CLI when invoked directly, so importing check/loadAllowlist for

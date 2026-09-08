@@ -52,11 +52,11 @@ User: "what does permission_mode do?"
 
 User: "how do I switch to OpenAI?"
 → Read `CONFIG.md` and `CLI.md`
-→ Explain `octo config` wizard vs. editing `~/.octo/config.yml` directly
+→ Explain `octo config` wizard vs. editing `<data root>/config.yml` directly
 
 User: "my IM bot stopped responding" / "daemon won't start"
 → Read `TROUBLESHOOTING.md` from the skill directory
-→ Point at `~/.octo/serve.log` / `~/.octo/serve.pid` and `octo serve --status` before guessing at a cause
+→ Point at `<data root>/serve.log` / `<data root>/serve.pid` and `octo serve --status` before guessing at a cause
 
 User: "how does the loop feature work?" / "what's the difference between /loop and cron?"
 → No bundled summary covers this — `web_fetch` `guides/loop/` (and `guides/cron-tasks/` for the comparison)

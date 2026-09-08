@@ -7,7 +7,7 @@
 //
 // A skill is a directory containing a SKILL.md file with YAML frontmatter:
 //
-//	~/.octo/skills/<name>/SKILL.md  (user-level, cross-project)
+//	data/skills/<name>/SKILL.md  (user-level, cross-project)
 //
 // The directory name is the authoritative trigger name (matching Claude Code);
 // the frontmatter `name` is display-only. The format is identical to
@@ -71,8 +71,8 @@ func Discover() *Registry {
 	r := &Registry{skills: make(map[string]Skill)}
 	// Lowest precedence first; scanRoot overwrites by name, so user wins.
 	// Default skills (shipped with the binary, materialized to
-	// ~/.octo/skills-default) are the floor — a user overrides one by dropping
-	// a same-named skill in ~/.octo/skills. Expert skills sit between: shipped
+	// data/skills-default) are the floor — a user overrides one by dropping
+	// a same-named skill in data/skills. Expert skills sit between: shipped
 	// too, but scoped to the experts whose tool_skills name them (see
 	// RenderManifest and the skill tool's profile check).
 	if root := defaultSkillsRoot(); root != "" {
@@ -185,7 +185,7 @@ func (r *Registry) Get(name string) (Skill, bool) {
 // edited since the registry was first discovered. The system-prompt manifest is
 // intentionally NOT refreshed (recomputing it mid-session would change the
 // cached prompt prefix); this only refreshes what the `skill` tool can load, so
-// a skill dropped into ~/.octo/skills mid-session becomes loadable without a
+// a skill dropped into data/skills mid-session becomes loadable without a
 // restart. Safe to call concurrently with Get/List/Len. The disabled set is
 // preserved across reloads.
 func (r *Registry) Reload() {

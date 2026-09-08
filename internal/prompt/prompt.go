@@ -78,7 +78,7 @@ var userRulesPath = func() string {
 //
 //  1. base     — embedded octo foundation (always present)
 //
-//  2. soul     — ~/.octo/soul.md, if present (agent identity & behavior)
+//  2. soul     — <data root>/soul.md, if present (agent identity & behavior)
 //
 //  3. env      — environment snapshot (cwd, git, date, OS) the caller renders
 //
@@ -88,9 +88,9 @@ var userRulesPath = func() string {
 //
 //  6. memory   — cross-session memory the caller renders, if any (C9; includes inherited home-dir memories)
 //
-//  7. profile  — ~/.octo/user.md, if present (who the user is)
+//  7. profile  — <data root>/user.md, if present (who the user is)
 //
-//  8. user     — ~/.octo/octorules.md, if present (cross-project user rules)
+//  8. user     — <data root>/octorules.md, if present (cross-project user rules)
 //
 //  9. project  — ProjectContextFile in cwd, if present (repo conventions)
 //
@@ -130,7 +130,7 @@ func Compose(userSystem, cwd, env, skills, mcpTools, memory string, coauthor, ex
 
 	if !expertMode {
 		if s := readSoul(); s != "" {
-			layers = append(layers, "# Agent identity (~/.octo/soul.md)\n\n"+s)
+			layers = append(layers, "# Agent identity (<data root>/soul.md)\n\n"+s)
 		}
 	}
 	if e := strings.TrimSpace(env); e != "" {
@@ -147,10 +147,10 @@ func Compose(userSystem, cwd, env, skills, mcpTools, memory string, coauthor, ex
 	}
 	if !expertMode {
 		if p := readUserProfile(); p != "" {
-			layers = append(layers, "# User profile (~/.octo/user.md)\n\n"+p)
+			layers = append(layers, "# User profile (<data root>/user.md)\n\n"+p)
 		}
 		if u := readUserContext(); u != "" {
-			layers = append(layers, "# User conventions (~/.octo/octorules.md)\n\n"+u)
+			layers = append(layers, "# User conventions (<data root>/octorules.md)\n\n"+u)
 		}
 		if proj := readProjectContext(cwd); proj != "" {
 			layers = append(layers, "# Project conventions ("+ProjectContextFile+")\n\n"+proj)
@@ -224,7 +224,7 @@ var userProfilePath = func() string {
 	return IdentityPath(root, "user.md")
 }
 
-// readSoul returns the trimmed, include-expanded contents of ~/.octo/soul.md
+// readSoul returns the trimmed, include-expanded contents of <data root>/soul.md
 // (agent identity & behavior), or "" if it's absent/unreadable/empty.
 func readSoul() string {
 	if p := soulPath(); p != "" {
@@ -234,7 +234,7 @@ func readSoul() string {
 }
 
 // readUserProfile returns the trimmed, include-expanded contents of
-// ~/.octo/user.md (who the user is), or "" if it's absent/unreadable/empty.
+// <data root>/user.md (who the user is), or "" if it's absent/unreadable/empty.
 func readUserProfile() string {
 	if p := userProfilePath(); p != "" {
 		return readContextFile(p)

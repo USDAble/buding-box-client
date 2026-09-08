@@ -49,9 +49,9 @@ plugin's `socratic-drill` and `bar-prep-questions` skills.
   或权威来源核实".
 - **Plugin config paths**
   (`~/.claude/plugins/config/claude-for-legal/law-student/...`) — replaced
-  with a persistent path under `~/.octo/learning-data/`, following this
+  with a persistent path under `<data root>/learning-data/`, following this
   repository's existing convention (`internal/skills/defaults/web-access`'s
-  `~/.octo/site-patterns/`) for skill data that must survive a
+  `<data root>/site-patterns/`) for skill data that must survive a
   version-bump re-materialization of the skill directory itself.
 
 ## Conclusion

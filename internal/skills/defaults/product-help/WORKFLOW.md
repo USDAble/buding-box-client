@@ -31,7 +31,7 @@ Dependency direction is one-way: `provider → agent`, `tools → agent`, never 
 
 - **New provider** — implement `provider.Provider` (required) and optionally the streaming/tool variants, under `internal/provider/<name>/`.
 - **New tool** — implement `agent.ToolExecutor` under `internal/tools/<name>.go`, register in `tools.DefaultRegistry`.
-- **New skill** — `~/.octo/skills/<name>/SKILL.md`, or `internal/skills/defaults/<name>/SKILL.md` to ship it as a default.
+- **New skill** — `<data root>/skills/<name>/SKILL.md`, or `internal/skills/defaults/<name>/SKILL.md` to ship it as a default.
 
 ## Before opening a PR
 

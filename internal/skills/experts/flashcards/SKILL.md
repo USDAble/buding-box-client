@@ -37,7 +37,7 @@ metadata:
 ## 存储
 
 ```
-~/.octo/learning-data/flashcards/[学科]/cards.md
+<data root>/learning-data/flashcards/[学科]/cards.md
 ```
 
 每个学科一个文件，跨会话持久（不受技能本身版本更新影响）。
@@ -73,7 +73,7 @@ Flag: `--generate | --drill | --review | --stats | --session <n>`（不带 flag 
 **输入：** 学科/主题、来源材料（笔记路径、教材节选，或"就用我已有的大纲"）、
 可选的目标卡片数量（默认每次10-20张）。
 
-按上面的卡片结构和写卡规则生成，写入 `~/.octo/learning-data/flashcards/
+按上面的卡片结构和写卡规则生成，写入 `<data root>/learning-data/flashcards/
 [学科]/cards.md`（已有文件则增量追加，不要覆盖）。
 
 **如果是从模型知识生成的**：每张卡的规则/答案是模型生成的，未经核实。用户
@@ -115,7 +115,7 @@ Flag: `--generate | --drill | --review | --stats | --session <n>`（不带 flag 
 
 用户说"来5张合同法的卡"或类似需求时用这个模式。
 
-- 读取 `~/.octo/learning-data/study-plan.yaml`（如果存在）里该学科的
+- 读取 `<data root>/learning-data/study-plan.yaml`（如果存在）里该学科的
   `session_history`。
 - 优先级：之前答错的卡 > 到期卡 > 新卡。
 - 按 `--drill` 流程逐张跑完N张。
@@ -133,7 +133,7 @@ session_history:
     stuck_topics: [不可抗力条款]
 ```
 
-如果 `study-plan.yaml` 不存在，写到 `~/.octo/learning-data/session-history.yaml`。
+如果 `study-plan.yaml` 不存在，写到 `<data root>/learning-data/session-history.yaml`。
 
 ## 和其他技能的配合
 

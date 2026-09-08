@@ -1,6 +1,6 @@
 # Permission System
 
-Every tool call — CLI, web, or IM — passes through the same rule-driven engine before it runs. Rules live in `~/.octo/permissions.yml` (fully replaces the embedded default list per tool it mentions — it doesn't merge) plus the embedded defaults for everything else. First matching rule wins; no match falls through to `ask`.
+Every tool call — CLI, web, or IM — passes through the same rule-driven engine before it runs. Rules live in `<data root>/permissions.yml` (fully replaces the embedded default list per tool it mentions — it doesn't merge) plus the embedded defaults for everything else. First matching rule wins; no match falls through to `ask`.
 
 ```yaml
 terminal:
@@ -27,7 +27,7 @@ web_fetch:
 | **strict** | Auto-deny — default for non-interactive callers (HTTP server, IM bridge) |
 | **auto** | Auto-allow — trusted, repetitive workflows only |
 
-Cycle in the TUI with **Shift+Tab**; a web session can also override just its own mode via the composer status bar or `PATCH /api/sessions/{id}/permission_mode` — per-session only, never touches the global default in `~/.octo/config.yml`.
+Cycle in the TUI with **Shift+Tab**; a web session can also override just its own mode via the composer status bar or `PATCH /api/sessions/{id}/permission_mode` — per-session only, never touches the global default in `<data root>/config.yml`.
 
 Answering an interactive prompt with "always" remembers that exact `(tool, input)` pair for the rest of the session only — never written to `permissions.yml`.
 

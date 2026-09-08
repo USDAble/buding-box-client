@@ -63,14 +63,14 @@ var expertSkillsRoot = func() string {
 }
 
 // DefaultRoot is the on-disk location of the materialized default skills
-// (~/.octo/skills-default), exported for `octo skills path`.
+// (data/skills-default), exported for `octo skills path`.
 func DefaultRoot() string { return defaultSkillsRoot() }
 
 // ExpertRoot is the on-disk location of the materialized expert skills
-// (~/.octo/skills-expert), exported for `octo skills path`.
+// (data/skills-expert), exported for `octo skills path`.
 func ExpertRoot() string { return expertSkillsRoot() }
 
-// UserRoot is the user-level skills directory (~/.octo/skills), exported for
+// UserRoot is the user-level skills directory (data/skills), exported for
 // `octo skills path`.
 func UserRoot() string { return userSkillsRoot() }
 
@@ -109,7 +109,7 @@ func materializeEmbedded(src embed.FS, prefix, root, version string, force bool)
 	}
 
 	// The default root is exclusively octo-managed (users override in
-	// ~/.octo/skills), so a wholesale wipe-and-rewrite is safe and keeps the
+	// data/skills), so a wholesale wipe-and-rewrite is safe and keeps the
 	// set in lockstep with the binary — stale skills removed, renames handled.
 	// One exception predates that rule: earlier web-access versions had the
 	// agent write site-experience notes inside the managed tree; rescue those
@@ -146,7 +146,7 @@ func materializeEmbedded(src embed.FS, prefix, root, version string, force bool)
 
 // rescueSitePatterns moves site-experience notes an earlier web-access skill
 // accumulated under the managed default root (web-access/references/
-// site-patterns/) into the persistent sibling directory ~/.octo/site-patterns,
+// site-patterns/) into the persistent sibling directory data/site-patterns,
 // where the skill reads and writes them today. They are user data written by
 // the agent, not shipped skill content, so the wipe-and-rewrite must not eat
 // them. Best-effort: an existing file in the destination wins (it is the copy

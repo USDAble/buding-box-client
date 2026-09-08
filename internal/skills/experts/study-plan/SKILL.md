@@ -142,7 +142,7 @@ metadata:
 
 ### 第四步：写入计划
 
-写入 `~/.octo/learning-data/study-plan.yaml`：
+写入 `<data root>/learning-data/study-plan.yaml`：
 
 ```yaml
 plan_type: exam  # 或 semester
@@ -206,7 +206,7 @@ session_history: []  # 由 flashcards / weak-point-drill / study-plan 的 sessio
 
 1. 解析学科和N。缺失就问："哪个学科，多少题/卡片？（比如'有机化学 10'
    或'合同法 5 --论述'）"
-2. 读取 `~/.octo/learning-data/study-plan.yaml`（如果存在），看
+2. 读取 `<data root>/learning-data/study-plan.yaml`（如果存在），看
    `session_history` 里这个学科之前哪些子主题错得多，按此加权。
 3. 按方式分流：
    - 练习题模式：加载 `weak-point-drill` 技能，跑N道题。
@@ -215,7 +215,7 @@ session_history: []  # 由 flashcards / weak-point-drill / study-plan 的 sessio
 5. 小节结束，写入结果：
    - 如果 `study-plan.yaml` 存在：追加到 `session_history`（格式见上面
      `flashcards`/`weak-point-drill` 里的示例）。
-   - 不存在就写到 `~/.octo/learning-data/session-history.yaml`。
+   - 不存在就写到 `<data root>/learning-data/session-history.yaml`。
 6. 汇报：得分/正确率、错题子主题、这次的薄弱子主题、和之前小节的对比
    （如果历史记录有2次以上）、计划接下来建议学什么。
 

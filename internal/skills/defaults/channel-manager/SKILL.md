@@ -3,7 +3,7 @@ name: channel-manager
 system: true
 description: |
   Configure IM platform channels (Feishu, Weixin/WeChat, WeCom, DingTalk, Discord, Telegram) for octo.
-  Guides the user through platform consoles, collects credentials, writes ~/.octo/channels.yml,
+  Guides the user through platform consoles, collects credentials, writes <data root>/channels.yml,
   and diagnoses connection problems.
   Trigger on: "channel setup", "setup feishu", "setup weixin", "setup wechat", "setup wecom",
   "setup dingtalk", "setup discord", "setup telegram",
@@ -26,7 +26,7 @@ Configure IM platform channels for octo. Supported platforms: `feishu`, `weixin`
 
 ## How channels work in octo
 
-- Config lives in `~/.octo/channels.yml` (YAML, mode 600). Edit it directly with
+- Config lives in `<data root>/channels.yml` (YAML, mode 600). Edit it directly with
   `read_file` / `write_file`.
 - Each platform can have **multiple bot instances** — e.g. 3 Feishu bots in one group,
   each bound to a different expert agent. Instances are named; the name becomes the
@@ -34,7 +34,7 @@ Configure IM platform channels for octo. Supported platforms: `feishu`, `weixin`
 - Adapters run inside `octo serve`, started alongside the HTTP server (skip with
   `--no-channel`). Config changes are applied on save via `POST /api/channels/<platform>`
   — no full restart needed.
-- Weixin login state lives separately in `~/.octo/weixin-credentials.json`, written by
+- Weixin login state lives separately in `<data root>/weixin-credentials.json`, written by
   the QR-login flow this skill drives (`POST /api/channels/weixin/login` on the running serve).
 
 `channels.yml` schema (multi-instance):
@@ -55,7 +55,7 @@ channels:
   weixin:
     - enabled: true | false
       token: string               # bot token; optional if cred_path exists
-      cred_path: string           # optional, default ~/.octo/weixin-credentials.json
+      cred_path: string           # optional, default <data root>/weixin-credentials.json
       base_url: string            # optional, default https://ilinkai.weixin.qq.com
       allowed_users: string
   dingtalk:
@@ -117,7 +117,7 @@ hot-reload via the API is the only zero-downtime path.
 
 ## `status`
 
-1. Read `~/.octo/channels.yml`. If missing or empty: "No channels configured yet. Run `/channel-manager setup` to get started." and stop.
+1. Read `<data root>/channels.yml`. If missing or empty: "No channels configured yet. Run `/channel-manager setup` to get started." and stop.
 2. Check whether the server (which hosts the adapters) is responding:
    ```bash
    curl -s -o /dev/null -w "%{http_code}" http://127.0.0.1:8088/api/health
@@ -137,7 +137,7 @@ dingtalk   ❌ no     (not configured)
 ```
 
 - Feishu: show `app_id` truncated to 12 chars.
-- Weixin: show whether `token` is set or a credential file exists (`cred_path`, else `~/.octo/weixin-credentials.json`). Never print the token value.
+- Weixin: show whether `token` is set or a credential file exists (`cred_path`, else `<data root>/weixin-credentials.json`). Never print the token value.
 - DingTalk: show `client_id` truncated to 12 chars. Never print `client_secret`.
 - WeCom: show `bot_id` truncated to 12 chars. Never print `secret`.
 - Discord: show whether `bot_token` is set (`token: present`). Never print the token value.
@@ -244,7 +244,7 @@ response — the returned agent JSON must not list the removed binding.
      -d '{"app_id":"<APP_ID>","app_secret":"<APP_SECRET>"}'
    ```
    Check for `"code":0`. On failure show the error and re-ask for credentials (up to 3 tries).
-6. Merge into `~/.octo/channels.yml` (preserve other platforms), then `chmod 600 ~/.octo/channels.yml`:
+6. Merge into `<data root>/channels.yml` (preserve other platforms), then `chmod 600 <data root>/channels.yml`:
    ```yaml
    channels:
      feishu:
@@ -290,18 +290,18 @@ Weixin uses a QR-code login — no app credentials needed.
    ```bash
    curl -s http://127.0.0.1:8088/api/channels/weixin/login
    ```
-   - `"status":"done"` — credentials are saved to `~/.octo/weixin-credentials.json`. Continue.
+   - `"status":"done"` — credentials are saved to `<data root>/weixin-credentials.json`. Continue.
    - `"status":"pending"` with a new `qr_url` — the QR expired and was refreshed; relay the new link.
    - `"status":"failed"` — show the `error` and offer to retry from step 1.
    This agent-driven flow is the only way to log in; the web Channels panel
    intentionally has no inline QR button.
-5. Enable the platform in `~/.octo/channels.yml` (preserve other platforms), then `chmod 600`:
+5. Enable the platform in `<data root>/channels.yml` (preserve other platforms), then `chmod 600`:
    ```yaml
    channels:
      weixin:
        - enabled: true
    ```
-   The adapter reads `~/.octo/weixin-credentials.json` automatically; only set `cred_path` if the user keeps credentials elsewhere.
+   The adapter reads `<data root>/weixin-credentials.json` automatically; only set `cred_path` if the user keeps credentials elsewhere.
 6. After writing `channels.yml`, trigger a hot reload (see "Hot-reload after config change") so the new adapter starts immediately. If the server isn't running, tell the user to start `octo serve`.
 7. "✅ Weixin channel configured. Once `octo serve` is running, message the bot on WeChat."
 
@@ -318,7 +318,7 @@ Weixin uses a QR-code login — no app credentials needed.
      -d '{"appKey":"<CLIENT_ID>","appSecret":"<CLIENT_SECRET>"}'
    ```
    Success returns an `accessToken` field. On failure show the error and re-ask (up to 3 tries).
-5. Merge into `~/.octo/channels.yml` (preserve other platforms), then `chmod 600`:
+5. Merge into `<data root>/channels.yml` (preserve other platforms), then `chmod 600`:
    ```yaml
    channels:
      dingtalk:
@@ -338,7 +338,7 @@ WeCom "API mode" intelligent robots connect over a WebSocket long connection —
 2. "Click 'Add' next to 'Visible Range' (可见范围), select the top-level company node, and confirm. Reply done." Wait for "done".
 3. "If the Secret is not visible, click 'Get Secret' (获取 Secret). Copy the Bot ID and Secret **before** clicking Save, and paste them here as: Bot ID: xxx, Secret: xxx". Parse the reply. Trim whitespace; the `bot_id` starts with `aib` — if the two values look swapped, swap them back.
 4. "Click Save, enter a name (e.g. octo) and description, confirm, and click Save again. Reply done." Wait for "done".
-5. Merge into `~/.octo/channels.yml` (preserve other platforms), then `chmod 600`:
+5. Merge into `<data root>/channels.yml` (preserve other platforms), then `chmod 600`:
    ```yaml
    channels:
      wecom:
@@ -371,7 +371,7 @@ Discord requires manual portal interaction (hCaptcha gates application creation)
      https://discord.com/api/v10/users/@me
    ```
    Success returns the bot user JSON with an `id`. A 401 means a bad token — re-ask.
-3. Merge into `~/.octo/channels.yml` (preserve other platforms), then `chmod 600`:
+3. Merge into `<data root>/channels.yml` (preserve other platforms), then `chmod 600`:
    ```yaml
    channels:
      discord:
@@ -399,7 +399,7 @@ Telegram is the simplest — no browser automation, no QR. The user creates a bo
    curl -s "<BASE_URL_OR_https://api.telegram.org>/bot<TOKEN>/getMe"
    ```
    Success returns `"ok":true`. `401 Unauthorized` means a wrong token — re-ask.
-3. Merge into `~/.octo/channels.yml` (preserve other platforms; omit `base_url` unless the user gave one), then `chmod 600`:
+3. Merge into `<data root>/channels.yml` (preserve other platforms; omit `base_url` unless the user gave one), then `chmod 600`:
    ```yaml
    channels:
      telegram:
@@ -414,9 +414,9 @@ Telegram is the simplest — no browser automation, no QR. The user creates a bo
 
 ## `enable` / `disable`
 
-1. Read `~/.octo/channels.yml`. If the platform has no entry (or required fields are missing), redirect to `setup`.
+1. Read `<data root>/channels.yml`. If the platform has no entry (or required fields are missing), redirect to `setup`.
 2. Toggle `enabled: true|false` for that platform only; preserve every other field and platform.
-3. Write back, `chmod 600 ~/.octo/channels.yml`.
+3. Write back, `chmod 600 <data root>/channels.yml`.
 4. Say "✅ `<platform>` channel enabled." / "❌ `<platform>` channel disabled.", then trigger a hot reload (see "Hot-reload after config change"). If the server isn't running, remind the user to start `octo serve`.
 
 ---
@@ -425,10 +425,10 @@ Telegram is the simplest — no browser automation, no QR. The user creates a bo
 
 Check each item, report ✅ / ❌ with remediation:
 
-1. **Config file** — `~/.octo/channels.yml` exists, is valid YAML, and has mode 600 (`stat -f %Lp` on macOS, `stat -c %a` on Linux).
+1. **Config file** — `<data root>/channels.yml` exists, is valid YAML, and has mode 600 (`stat -f %Lp` on macOS, `stat -c %a` on Linux).
 2. **Required fields** — for each enabled **instance** (list under each platform):
    - Feishu: `app_id`, `app_secret` non-empty.
-   - Weixin: `token` non-empty, or a readable credential file (`cred_path`, else `~/.octo/weixin-credentials.json`).
+   - Weixin: `token` non-empty, or a readable credential file (`cred_path`, else `<data root>/weixin-credentials.json`).
    - DingTalk: `client_id`, `client_secret` non-empty.
    - WeCom: `bot_id` (starts with `aib`), `secret` non-empty.
    - Discord: `bot_token` non-empty.
@@ -452,5 +452,5 @@ Check each item, report ✅ / ❌ with remediation:
 ## Security
 
 - Always mask secrets in output — show at most the first 4 and last 4 characters.
-- `~/.octo/channels.yml` must be mode 600; fix with `chmod 600` after every write.
+- `<data root>/channels.yml` must be mode 600; fix with `chmod 600` after every write.
 - Never echo `app_secret`, `client_secret`, `secret`, `bot_token`, or `token` values back to the user.

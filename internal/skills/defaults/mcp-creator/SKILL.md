@@ -1,12 +1,12 @@
 ---
 name: mcp-creator
 system: true
-description: Configure and connect MCP (Model Context Protocol) servers through guided conversation — find the right server package or endpoint, build the config entry, write it to ~/.octo/mcp.json, and verify the connection. Use when the user wants to add, set up, or connect an MCP server, e.g. "add an MCP server", "connect X via MCP", "set up the filesystem MCP", "添加 MCP", "接入 MCP 服务".
+description: Configure and connect MCP (Model Context Protocol) servers through guided conversation — find the right server package or endpoint, build the config entry, write it to <data root>/mcp.json, and verify the connection. Use when the user wants to add, set up, or connect an MCP server, e.g. "add an MCP server", "connect X via MCP", "set up the filesystem MCP", "添加 MCP", "接入 MCP 服务".
 ---
 
 # Configure an MCP server
 
-octo connects to MCP servers declared in `~/.octo/mcp.json`, using the
+octo connects to MCP servers declared in `<data root>/mcp.json`, using the
 Claude Code-compatible `mcpServers` shape. This is the file you write to.
 
 Your job is to turn "I want my assistant to talk to X" into a working entry in
@@ -54,7 +54,7 @@ The web UI's per-row "Edit with Agent" button routes here too. This skips
 most of the Workflow below; there's no new package to find or transport to
 choose:
 
-1. **Locate the entry** in `~/.octo/mcp.json`.
+1. **Locate the entry** in `<data root>/mcp.json`.
 2. **Show the user the current entry** before changing anything.
 3. **Ask what they want changed.** Apply the smallest edit that satisfies
    the request — preserve every other field and every other server entry
@@ -108,7 +108,7 @@ Use this for adding a brand-new server. (Editing one? See above.)
    where it comes from and put it in `env` (stdio) or `headers` (http). Never
    invent placeholder keys without flagging them as placeholders.
 
-5. **Write the config.** Write to `~/.octo/mcp.json` (create it with
+5. **Write the config.** Write to `<data root>/mcp.json` (create it with
    `{"mcpServers": {}}` if absent). Merge the new entry in, preserve existing
    entries verbatim, and echo the final entry back to the user.
 

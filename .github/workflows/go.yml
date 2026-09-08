@@ -44,6 +44,28 @@ jobs:
       - name: Run branding pipeline tests
         run: node --test scripts/brand-schema.test.mjs scripts/sync-branding.test.mjs
 
+  # Guards the portable-data-root rule (开发规范.md §3.1): product code must
+  # not write to the host home. Scans internal/, cmd/, shared/ for non-_test.go
+  # Go files and fails on a ".octo" string literal (zero exceptions) or an
+  # os.UserHomeDir() call outside scripts/homedir-allowlist.txt. This is the
+  # safety net that catches an upstream merge silently bringing back a
+  # ~/.octo write point. No npm dependencies, so no install step.
+  datapath-guard:
+    name: Data Path Guard
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '22'
+
+      - name: Run datapath guard
+        run: node scripts/datapath-guard.mjs
+
+      - name: Run datapath guard tests
+        run: node --test scripts/datapath-guard.test.mjs
+
   svelte-check:
     name: Svelte Check
     runs-on: ubuntu-latest

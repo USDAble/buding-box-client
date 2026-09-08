@@ -1,0 +1,31 @@
+# scripts/homedir-allowlist.txt
+#
+# Files (or directories) allowed to call os.UserHomeDir() to reach the REAL
+# host home directory. None of these are product data paths — they serve user
+# intent (expanding a user-typed ~/ path, locating the host Chrome profile,
+# sandbox rules) or host environment discovery. Every product data path goes
+# through internal/datapath instead, which is why datapath-guard treats any
+# os.UserHomeDir() outside this list as a regression.
+#
+# One entry per line: <path>  <reason>
+# A trailing "/" means the directory matches recursively. Blank lines and
+# lines starting with "#" are ignored. scripts/datapath-guard.mjs reads this
+# file; keep the two in step. Each entry must carry a written reason (see
+# dev-docs-usdable/开发规范.md §3.1).
+
+internal/datapath/  The data-root resolver itself — the one place product paths are decided.
+internal/tools/read_file.go  Expands a user-typed ~/ path (user intent, not product data).
+internal/browser/chrome.go  Locates the host's real Chrome profile directory, which cannot be redirected.
+internal/sandbox/sandbox_darwin.go  Sandbox rules need the literal host home path (macOS seatbelt profile).
+internal/shellpath/  Reads the user's shell rc files — host environment discovery.
+cmd/octo/tuirepl_view.go  Renders the home path as ~ for display only.
+internal/prompt/prompt.go  resolveIncludePath expands a user-typed ~/ include path.
+internal/browser/actions.go  Upload expands a user-typed ~/ path.
+internal/tools/detached.go  expandHome expands a user-typed ~/ path.
+internal/server/handlers.go  expandDir expands a user-typed ~/ path.
+internal/server/skill_import_handler.go  Expands a user-typed ~/ import path.
+internal/tools/envcontext.go  Reports the host home to the model in the env block (discovery, not a write).
+internal/server/fs_handlers.go  File browser defaults an empty path to the host home (browse only).
+internal/tools/config_guard.go  expandHomePath expands a user-typed ~/ path when comparing files.
+internal/memory/memory.go  HomeDir uses the host home path as the stable identity for the global memory tier (not a data root; redesigned in P3).
+cmd/octo-desktop/octo_cli.go  Installs the bundled octo CLI into the host's ~/.local/bin and shell rc files (user-level PATH entry, host-environment write — not a product data root).

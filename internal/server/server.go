@@ -965,6 +965,11 @@ func (s *Server) registerRoutes() {
 	s.api("POST /api/product/send-code", s.handleProductSendCode)
 	s.api("POST /api/product/login", s.handleProductLogin)
 	s.apiProduct("POST /api/product/logout", s.handleProductLogout)
+	// P5 account panel: nickname + prefs edits only exist once logged in, so
+	// both sit behind the product gate like logout. OCTO-FORK: P5 — see
+	// dev-docs-usdable/需求/2260906/技术方案/P5-个人中心.md.
+	s.apiProduct("PUT /api/product/nickname", s.handleProductNickname)
+	s.apiProduct("PUT /api/product/prefs", s.handleProductPrefs)
 	s.apiProduct("GET /api/channels", s.handleListChannels)
 	s.apiProduct("GET /api/channels/available", s.handleAvailableChannels)
 	s.apiProduct("GET /api/channels/{platform}", s.handleGetChannel)

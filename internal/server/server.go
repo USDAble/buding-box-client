@@ -965,6 +965,8 @@ func (s *Server) registerRoutes() {
 	s.api("POST /api/product/send-code", s.handleProductSendCode)
 	s.api("POST /api/product/login", s.handleProductLogin)
 	s.apiProduct("POST /api/product/logout", s.handleProductLogout)
+	s.apiProduct("PUT /api/product/nickname", s.handleProductNickname)
+	s.apiProduct("PUT /api/product/prefs", s.handleProductPrefs)
 	s.apiProduct("GET /api/channels", s.handleListChannels)
 	s.apiProduct("GET /api/channels/available", s.handleAvailableChannels)
 	s.apiProduct("GET /api/channels/{platform}", s.handleGetChannel)

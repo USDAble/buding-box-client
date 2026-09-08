@@ -193,13 +193,22 @@ func (s State) Activated() bool {
 // account's phone plaintext and token are stripped, since neither is needed
 // client-side (the token is a server-side-only fake).
 type PublicState struct {
-	SchemaVersion int         `json:"schemaVersion"`
-	LoggedIn      bool        `json:"loggedIn"`
-	Activated     bool        `json:"activated"`
-	Account       *PublicAcct `json:"account,omitempty"`
-	Credits       Credits     `json:"credits"`
-	Plan          Plan        `json:"plan"`
-	Prefs         Prefs       `json:"prefs"`
+	SchemaVersion int               `json:"schemaVersion"`
+	LoggedIn      bool              `json:"loggedIn"`
+	Activated     bool              `json:"activated"`
+	Activation    *PublicActivation `json:"activation,omitempty"`
+	Account       *PublicAcct       `json:"account,omitempty"`
+	Credits       Credits           `json:"credits"`
+	Plan          Plan              `json:"plan"`
+	Prefs         Prefs             `json:"prefs"`
+}
+
+// PublicActivation exposes only the dates needed to render the account panel.
+// The activation code remains private to the product state file.
+type PublicActivation struct {
+	Activated   bool      `json:"activated"`
+	ActivatedAt time.Time `json:"activatedAt"`
+	ExpiresAt   time.Time `json:"expiresAt"`
 }
 
 // PublicAcct is the account fields the UI may see.
@@ -218,6 +227,13 @@ func (s State) Public() PublicState {
 		Credits:       s.Credits,
 		Plan:          s.Plan,
 		Prefs:         s.Prefs,
+	}
+	if s.Activation != nil {
+		p.Activation = &PublicActivation{
+			Activated:   s.Activation.Activated,
+			ActivatedAt: s.Activation.ActivatedAt,
+			ExpiresAt:   s.Activation.ExpiresAt,
+		}
 	}
 	if s.Account != nil {
 		p.Account = &PublicAcct{

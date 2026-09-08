@@ -33,6 +33,11 @@ export interface ProductStateDTO {
   schemaVersion: number;
   loggedIn: boolean;
   activated: boolean;
+  activation?: {
+    activated: boolean;
+    activatedAt: string;
+    expiresAt: string;
+  } | null;
   account?: {
     phoneMasked: string;
     nickname: string;
@@ -201,4 +206,21 @@ export async function setProductLocale(locale: "zh" | "en"): Promise<void> {
     body: JSON.stringify({ locale }),
   });
   if (!res.ok) throw new Error(`${res.status} ${res.statusText}`);
+}
+
+async function updateProductState(path: string, body: unknown): Promise<ProductStateDTO> {
+  const res = await fetch(path, { method: "PUT", headers: jsonHeaders(), body: JSON.stringify(body) });
+  const data = await res.json().catch(() => ({})) as { state?: ProductStateDTO; code?: string };
+  if (!res.ok) throw new ProductError(res.status, {}, data.code ?? null);
+  if (!data.state) throw new Error("product state missing from response");
+  productState.set(data.state);
+  return data.state;
+}
+
+export function updateNickname(nickname: string): Promise<ProductStateDTO> {
+  return updateProductState("/api/product/nickname", { nickname });
+}
+
+export function updateProductPrefs(prefs: { locale?: "zh" | "en"; defaultChatMode?: "privacy" | "smart" | "default" }): Promise<ProductStateDTO> {
+  return updateProductState("/api/product/prefs", prefs);
 }

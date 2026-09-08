@@ -58,6 +58,23 @@ export const cmdkOpen = writable(false)
 export const mcpModalOpen = writable(false)
 // Drives the Settings modal (replaces the old full-page 'settings' view).
 export const settingsModalOpen = writable(false)
+
+// OCTO-FORK: P5 account panel state — see dev-docs-usdable/需求/2260906/技术方案/P5-个人中心.md.
+export type AccountPanelPage = 'root' | 'plan' | 'credits' | 'license' | 'settings' | 'sensitive' | 'help' | 'about'
+export const accountPanelOpen = writable(false)
+export const accountPanelPage = writable<AccountPanelPage>('root')
+let accountPanelWasRail = false
+export function openAccountPanel(wasRail = false) {
+  accountPanelWasRail = wasRail
+  accountPanelPage.set('root')
+  accountPanelOpen.set(true)
+}
+export function closeAccountPanel() {
+  accountPanelOpen.set(false)
+  accountPanelPage.set('root')
+  if (accountPanelWasRail) sidebar.set('rail')
+  accountPanelWasRail = false
+}
 // Optional deep link consumed by the next Settings open: which category, and
 // for 数据管理 which sub-view. Callers that just want the modal set only
 // settingsModalOpen and land on the default category. The modal clears this

@@ -217,6 +217,8 @@ export async function setProductLocale(locale: "zh" | "en"): Promise<void> {
 export interface AccountPrefs {
   locale?: "zh" | "en";
   defaultChatMode?: string;
+  /** Input sensitive-word check toggle (P8); omitted means "leave unchanged". */
+  inputSensitiveCheck?: boolean;
 }
 
 /**

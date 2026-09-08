@@ -44,6 +44,7 @@ import (
 	"github.com/open-octo/octo-agent/internal/productstate"
 	"github.com/open-octo/octo-agent/internal/prompt"
 	"github.com/open-octo/octo-agent/internal/scheduler"
+	"github.com/open-octo/octo-agent/internal/sensitive"
 	"github.com/open-octo/octo-agent/internal/skills"
 	"github.com/open-octo/octo-agent/internal/tasks"
 	"github.com/open-octo/octo-agent/internal/tools"
@@ -397,6 +398,14 @@ type Server struct {
 	// dev-docs-usdable/需求/2260906/技术方案/P3-登录态与产品门.md.
 	productState *productstate.Store
 
+	// sensitiveEngine is the P7 engine the server wraps every Sender with and
+	// drives the input/nickname checks from. Built once at New from the
+	// product's dictionary file (data/sensitive-words.txt); nil only if the
+	// data root can't be resolved, in which case filtering degrades to no-op.
+	// OCTO-FORK: P8 敏感词接入 — see
+	// dev-docs-usdable/需求/2260906/技术方案/P8-敏感词接入.md.
+	sensitiveEngine *sensitive.Engine
+
 	// productGate blocks the desktop window (and its requests) while not logged
 	// in. Nil under `octo serve` (WindowToken empty), where nothing is gated.
 	// OCTO-FORK: P3 product gate — see
@@ -461,6 +470,17 @@ func New(cfg Config) (*Server, error) {
 	if err != nil {
 		return nil, err
 	}
+
+	// P8: build the sensitive-word engine once and use it for (1) output
+	// filtering — by wrapping the freshly built default sender — and (2)
+	// nickname/input checks via the productstate.Sensitive hook P4 left. The
+	// dictionary is data/sensitive-words.txt so a user can extend it; a
+	// missing/unreadable file degrades to the built-in list, never fails
+	// startup. OCTO-FORK: P8 敏感词接入 — see
+	// dev-docs-usdable/需求/2260906/技术方案/P8-敏感词接入.md.
+	engine := newSensitiveEngine()
+	sender = app.WrapSensitive(sender, engine)
+	productstate.Sensitive = func(v string) bool { return engine.Filter(v).Matched() }
 
 	// Surface async-hook (spill queue) errors through the server log.
 	hooks.SetSpillNotify(func(m string) { slog.Warn("hook", "err", m) })
@@ -542,6 +562,7 @@ func New(cfg Config) (*Server, error) {
 		cfg:                 cfg,
 		mux:                 http.NewServeMux(),
 		sender:              sender,
+		sensitiveEngine:     engine,
 		model:               model,
 		provider:            provName,
 		system:              cfg.System,
@@ -970,6 +991,7 @@ func (s *Server) registerRoutes() {
 	// dev-docs-usdable/需求/2260906/技术方案/P5-个人中心.md.
 	s.apiProduct("PUT /api/product/nickname", s.handleProductNickname)
 	s.apiProduct("PUT /api/product/prefs", s.handleProductPrefs)
+	s.apiProduct("POST /api/product/sensitive/check", s.handleProductSensitiveCheck)
 	s.apiProduct("GET /api/channels", s.handleListChannels)
 	s.apiProduct("GET /api/channels/available", s.handleAvailableChannels)
 	s.apiProduct("GET /api/channels/{platform}", s.handleGetChannel)
@@ -1582,6 +1604,27 @@ func writeInvalidJSONBody(w http.ResponseWriter, err error) {
 // the result to app.NewSender — internal/app is the single place that builds the
 // vendor client, so the server no longer imports internal/provider.
 
+// newSensitiveEngine builds the P7 engine over the product dictionary file.
+// data/sensitive-words.txt holds user-extensible words; an unresolvable data
+// root or missing file degrades to the built-in list (sensitive.New(path) falls
+// back to its embedded dictionary when the file is absent) rather than failing
+// server startup. OCTO-FORK: P8 敏感词接入.
+func newSensitiveEngine() *sensitive.Engine {
+	p, err := datapath.Join("sensitive-words.txt")
+	if err != nil {
+		return sensitive.New("")
+	}
+	return sensitive.New(p)
+}
+
+// wrapSensitive decorates a freshly built sender with the output filter so the
+// model's visible text is masked before it reaches the agent loop. nil engine
+// (unresolvable data root) or nil sender pass through unchanged — app.
+// WrapSensitive handles both.
+func (s *Server) wrapSensitive(sender agent.Sender) agent.Sender {
+	return app.WrapSensitive(sender, s.sensitiveEngine)
+}
+
 func resolveProviderAndModel(flagProvider, flagModel string) (agent.Sender, string, string, error) {
 	cfg, err := config.Load()
 	if err != nil {
@@ -1767,8 +1810,8 @@ func (s *Server) cachedSenderForEntry(ref string, entry config.ModelEntry) (agen
 	if s.senderCache == nil {
 		s.senderCache = make(map[string]agent.Sender)
 	}
-	s.senderCache[key] = sender
-	return sender, nil
+	s.senderCache[key] = s.wrapSensitive(sender)
+	return s.senderCache[key], nil
 }
 
 // invalidateEndpointSenders drops every cached sender whose key is prefixed
@@ -2138,7 +2181,7 @@ func (s *Server) ensureSender() error {
 		s.senderMu.Unlock()
 		return fmt.Errorf("server not configured: complete setup via the Web UI")
 	}
-	s.sender = sender
+	s.sender = s.wrapSensitive(sender)
 	s.model = model
 	s.provider = provName
 	enableTools := s.cfg.Tools
@@ -2194,7 +2237,7 @@ func (s *Server) reloadDefaultSender() error {
 	}
 	s.model = model
 	if sender != nil {
-		s.sender = sender
+		s.sender = s.wrapSensitive(sender)
 		s.provider = provName
 	}
 	return nil

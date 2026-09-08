@@ -19,7 +19,9 @@
   import type { McpServerDetail, McpTool, SessionGroup } from '../../lib/types'
   import { getMcpServer } from '../../lib/api'
   import ComposerNotices, { type Notice } from './ComposerNotices.svelte'
+  import SensitiveToggle from './SensitiveToggle.svelte'
   import { productState } from '../../lib/product'
+  import { checkSensitive } from '../../lib/sensitive'
 
   let { onSend }: { onSend?: (text: string, files?: any[], queued?: boolean) => void } = $props()
 
@@ -1103,8 +1105,18 @@
   // their own entries here later — the ordering rule stays in this one array.
   // OCTO-FORK: P6 入口隐藏与积分 — see
   // dev-docs-usdable/需求/2260906/技术方案/P6-入口隐藏与积分.md §3.6.
+  // P8: 敏感词命中提示的开关。命中时置 true 让通知条显示；用户修改文本或
+  // 下次发送重新检测时按结果更新。用 $state 而非 derived 内部局部变量，
+  // 因为 send() 需要读写它（命中置位 / 未命中清除）。
+  let sensitiveHit = $state(false)
+
   const notices = $derived.by<Notice[]>(() => {
     const list: Notice[] = []
+    // 敏感词命中（拦截，warn）：排在积分不足之前（需求 §5.4.4 顺序）。读
+    // $state 的 sensitiveHit 建立响应式依赖，命中/清除即时反映到通知条。
+    if (sensitiveHit) {
+      list.push({ id: 'sensitive', level: 'warn', text: $t('sensitive.hit_notice'), slot: 'below' })
+    }
     // 积分不足 (balance 0) shows before send but does NOT block it (§5.4.4).
     if ($productState && $productState.credits.balance <= 0) {
       list.push({ id: 'credits', level: 'info', text: $t('credits.insufficient'), slot: 'below' })
@@ -1117,7 +1129,7 @@
   // queued=true parks the message as its own follow-up turn instead of steering
   // the turn in flight (Cmd/Ctrl+Enter — the web counterpart of the TUI's
   // Ctrl+Q). Idle it makes no difference: the server just starts the turn.
-  function send(queued = false) {
+  async function send(queued = false) {
     if (!text.trim() && attachments.length === 0) return
     // Don't send while an attachment upload is still in flight — the file
     // would be dropped and re-appear on the next message.
@@ -1137,6 +1149,26 @@
       return
     }
     const v = text.trim()
+
+    // P8: 输入敏感词检测（默认开启，开关关闭则跳过）。命中即回填输入框 +
+    // 下方提示 + 不发送；未命中清除提示继续。这是即时回填的体验层——服务端
+    // 在扣分前还会再查一次（checkInputSensitive），所以这里失败不阻塞。
+    // OCTO-FORK: P8 敏感词接入 — see
+    // dev-docs-usdable/需求/2260906/技术方案/P8-敏感词接入.md §3.5.
+    if ($productState?.prefs.inputSensitiveCheck !== false) {
+      try {
+        const res = await checkSensitive(v)
+        if (res.hit) {
+          text = res.masked
+          sensitiveHit = true
+          return
+        }
+      } catch {
+        // check 接口失败不阻塞发送 —— 服务端会再查。
+      }
+    }
+    sensitiveHit = false
+
     const files = attachments.length ? [...attachments] : undefined
     pushHistory(sid, v)
     // Enter sends whenever no menu row is highlighted, so the menu can outlive
@@ -1430,6 +1462,7 @@
       {#if noticesBelow.length > 0}
         <ComposerNotices notices={noticesBelow} />
       {/if}
+      <SensitiveToggle />
       {#if slashMenu}
         <div class="skill-menu" bind:this={skillMenuEl}>
           {#each filteredItems() as item, i (item.kind + ':' + (item.kind === 'builtin' ? item.name : item.kind === 'skill' ? item.skill.name : item.kind === 'workflow' ? item.workflow.name : item.kind === 'mcp-server' ? item.name : item.kind === 'agent' ? item.id : item.kind === 'agent-create' ? '' : item.server + '/' + item.tool.name))}

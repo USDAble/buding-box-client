@@ -202,6 +202,7 @@ func TestRestart_DrainTimeoutForcesShutdown(t *testing.T) {
 func TestHandleTurn_DrainingReturns503(t *testing.T) {
 	tmp := t.TempDir()
 	t.Setenv("HOME", tmp)
+	t.Setenv("OCTO_DATA_ROOT", tmp)
 	t.Setenv("USERPROFILE", tmp)
 
 	srv := mustServer(t, Config{Addr: "127.0.0.1:0", Tools: false})

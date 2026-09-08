@@ -7,6 +7,8 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+
+	"github.com/open-octo/octo-agent/internal/datapath"
 )
 
 // This file is the management view of the MCP config — what a settings UI
@@ -32,8 +34,7 @@ type ManagedServer struct {
 func LoadManaged() ([]ManagedServer, error) {
 	byName := map[string]ManagedServer{}
 
-	if home, err := os.UserHomeDir(); err == nil {
-		userPath := filepath.Join(home, ".octo", "mcp.json")
+	if userPath, err := datapath.Join("mcp.json"); err == nil {
 		cfg, err := readConfigFile(userPath)
 		if err != nil {
 			return nil, err
@@ -62,13 +63,11 @@ func managedEntry(name string, e ServerEntry) ManagedServer {
 }
 
 // UserConfigPath returns the absolute path of the user-global MCP config
-// (~/.octo/mcp.json).
+// (data/mcp.json).
+// OCTO-FORK: the portable product keeps MCP config next to the executable, not
+// in the host home — see dev-docs-usdable/需求/2260906/技术方案/P1-便携数据根.md.
 func UserConfigPath() (string, error) {
-	home, err := os.UserHomeDir()
-	if err != nil {
-		return "", err
-	}
-	return filepath.Join(home, ".octo", "mcp.json"), nil
+	return datapath.Join("mcp.json")
 }
 
 // ValidateServerName rejects names that would break the mcp__<server>__<tool>

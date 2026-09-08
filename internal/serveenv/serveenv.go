@@ -1,5 +1,5 @@
-// Package serveenv loads ~/.octo/serve.env (if it exists) into the process
-// environment at startup. It lets a GUI-launched process (desktop app, launchd
+// Package serveenv loads the data-root serve.env (if it exists) into the
+// process environment at startup. It lets a GUI-launched process (desktop app, launchd
 // agent, .desktop session) pick up API keys and other variables that it can't
 // inherit from a login shell — the same file the systemd/launchd packaging
 // templates ship as EnvironmentFile. Without it, `octo-desktop` can't see
@@ -21,28 +21,31 @@ package serveenv
 
 import (
 	"os"
-	"path/filepath"
 	"strings"
+
+	"github.com/open-octo/octo-agent/internal/datapath"
 )
 
 // envPath returns the absolute path to the serve.env file. Kept as a var so
 // tests can redirect it.
+// OCTO-FORK: the portable product keeps serve.env next to the executable, not
+// in the host home — see dev-docs-usdable/需求/2260906/技术方案/P1-便携数据根.md.
 var envPath = func() string {
-	home, err := os.UserHomeDir()
+	p, err := datapath.Join("serve.env")
 	if err != nil {
 		return ""
 	}
-	return filepath.Join(home, ".octo", "serve.env")
+	return p
 }
 
-// Load reads ~/.octo/serve.env and sets any KEY=VALUE pair whose key is not
-// already present in the process environment. Call once at startup — safe to
+// Load reads the data-root serve.env and sets any KEY=VALUE pair whose key is
+// not already present in the process environment. Call once at startup — safe to
 // call repeatedly if no concurrent goroutines are reading these keys yet
 // (os.Setenv mutates process-global state, so concurrent Load + Getenv races).
 func Load() {
 	path := envPath()
 	if path == "" {
-		// No home dir — nothing to load.
+		// No data root — nothing to load.
 		return
 	}
 	data, err := os.ReadFile(path)

@@ -17,6 +17,7 @@ import (
 func TestRecoverTurn_RecoversPanicAndUnsticksUI(t *testing.T) {
 	tmp := t.TempDir()
 	t.Setenv("HOME", tmp)
+	t.Setenv("OCTO_DATA_ROOT", tmp)
 	t.Setenv("USERPROFILE", tmp)
 
 	srv := mustServer(t, Config{Addr: "127.0.0.1:0"})
@@ -63,6 +64,7 @@ func TestRecoverTurn_RecoversPanicAndUnsticksUI(t *testing.T) {
 func TestSendContextUsage_UsesPersistedTokens(t *testing.T) {
 	tmp := t.TempDir()
 	t.Setenv("HOME", tmp)
+	t.Setenv("OCTO_DATA_ROOT", tmp)
 	t.Setenv("USERPROFILE", tmp)
 
 	srv := mustServer(t, Config{Addr: "127.0.0.1:0"})
@@ -116,6 +118,7 @@ func TestSendContextUsage_UsesPersistedTokens(t *testing.T) {
 func TestSendContextUsage_PrefersPersistedOverLiveEstimate(t *testing.T) {
 	tmp := t.TempDir()
 	t.Setenv("HOME", tmp)
+	t.Setenv("OCTO_DATA_ROOT", tmp)
 	t.Setenv("USERPROFILE", tmp)
 
 	srv := mustServer(t, Config{Addr: "127.0.0.1:0"})

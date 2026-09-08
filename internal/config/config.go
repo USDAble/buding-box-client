@@ -32,6 +32,7 @@ import (
 
 	"gopkg.in/yaml.v3"
 
+	"github.com/open-octo/octo-agent/internal/datapath"
 	"github.com/open-octo/octo-agent/internal/lockfile"
 )
 
@@ -1014,22 +1015,16 @@ func Mutate(fn func(*Config) error) error {
 	return cfg.saveLocked(path)
 }
 
-// Path returns the absolute path to the config file (~/.octo/config.yml).
+// Path returns the absolute path to the config file (data/config.yml).
+// OCTO-FORK: the portable product keeps config next to the executable, not in
+// the host home — see dev-docs-usdable/需求/2260906/技术方案/P1-便携数据根.md.
 func Path() (string, error) {
-	home, err := os.UserHomeDir()
-	if err != nil {
-		return "", err
-	}
-	return filepath.Join(home, ".octo", "config.yml"), nil
+	return datapath.Join("config.yml")
 }
 
-// legacyPath returns the pre-rename location (~/.octo/config.yaml).
+// legacyPath returns the pre-rename location (data/config.yaml).
 func legacyPath() (string, error) {
-	home, err := os.UserHomeDir()
-	if err != nil {
-		return "", err
-	}
-	return filepath.Join(home, ".octo", "config.yaml"), nil
+	return datapath.Join("config.yaml")
 }
 
 // onboardMarkerPath returns ~/.octo/.onboard_attempted — a standalone marker

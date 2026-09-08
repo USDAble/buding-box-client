@@ -12,6 +12,8 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
+
+	"github.com/open-octo/octo-agent/internal/datapath"
 )
 
 // renameFile is os.Rename, indirected so tests can exercise the race
@@ -104,7 +106,7 @@ func extract() (string, error) {
 // re-extracts. Unix keeps the bit check as an extra guard.
 //
 // Matching size is taken as proof the copy is ours. Anyone able to plant a
-// same-sized file in the user's own ~/.octo/bin can already do worse, so the
+// same-sized file in the user's own data/bin can already do worse, so the
 // cheaper check wins over hashing 5 MB on every grep and glob.
 func extracted(bin string) bool {
 	info, err := os.Stat(bin)
@@ -114,17 +116,11 @@ func extracted(bin string) bool {
 	return runtime.GOOS == "windows" || info.Mode()&0111 != 0
 }
 
-// octoBinDir returns ~/.octo/bin, creating it if necessary.
+// octoBinDir returns data/bin, creating it if necessary.
+// OCTO-FORK: the portable product keeps helper binaries next to the executable,
+// not in the host home — see dev-docs-usdable/需求/2260906/技术方案/P1-便携数据根.md.
 func octoBinDir() (string, error) {
-	home, err := os.UserHomeDir()
-	if err != nil {
-		return "", err
-	}
-	dir := filepath.Join(home, ".octo", "bin")
-	if err := os.MkdirAll(dir, 0755); err != nil {
-		return "", err
-	}
-	return dir, nil
+	return datapath.Sub("bin")
 }
 
 // rgBinName returns the platform-specific binary name.

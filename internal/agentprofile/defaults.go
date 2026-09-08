@@ -5,6 +5,8 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+
+	"github.com/open-octo/octo-agent/internal/datapath"
 )
 
 // defaultsFS holds the curated expert profiles shipped with the binary — the
@@ -21,16 +23,18 @@ var defaultsFS embed.FS
 // agents, so MaterializeDefaults can no-op until the version changes.
 const defaultStampFile = ".octo-version"
 
-// defaultAgentsRoot returns ~/.octo/agents-default — a dedicated, octo-managed
-// directory kept separate from ~/.octo/agents so refreshing the curated
+// defaultAgentsRoot returns data/agents-default — a dedicated, octo-managed
+// directory kept separate from data/agents so refreshing the curated
 // experts never touches a user's own saved agents. A var so tests can
 // redirect it.
+// OCTO-FORK: the portable product keeps agents next to the executable, not in
+// the host home — see dev-docs-usdable/需求/2260906/技术方案/P1-便携数据根.md.
 var defaultAgentsRoot = func() string {
-	home, err := os.UserHomeDir()
-	if err != nil || home == "" {
+	p, err := datapath.Join("agents-default")
+	if err != nil {
 		return ""
 	}
-	return filepath.Join(home, ".octo", "agents-default")
+	return p
 }
 
 // DefaultRoot is the on-disk location of the materialized curated experts

@@ -6,6 +6,8 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+
+	"github.com/open-octo/octo-agent/internal/datapath"
 )
 
 // defaultsFS holds the skills shipped with the binary. They are the curated
@@ -36,26 +38,28 @@ var expertsFS embed.FS
 // skills, so MaterializeDefaults can no-op until the version changes.
 const defaultStampFile = ".octo-version"
 
-// defaultSkillsRoot returns ~/.octo/skills-default — a dedicated, octo-managed
-// directory kept separate from ~/.octo/skills so refreshing the defaults never
+// defaultSkillsRoot returns data/skills-default — a dedicated, octo-managed
+// directory kept separate from data/skills so refreshing the defaults never
 // touches a user's own skills. A var so tests can redirect it.
+// OCTO-FORK: the portable product keeps skills next to the executable, not in
+// the host home — see dev-docs-usdable/需求/2260906/技术方案/P1-便携数据根.md.
 var defaultSkillsRoot = func() string {
-	home, err := os.UserHomeDir()
+	p, err := datapath.Join("skills-default")
 	if err != nil {
 		return ""
 	}
-	return filepath.Join(home, ".octo", "skills-default")
+	return p
 }
 
-// expertSkillsRoot returns ~/.octo/skills-expert — the materialized expert
+// expertSkillsRoot returns data/skills-expert — the materialized expert
 // skills, octo-managed like the default root and equally safe to wipe and
 // rewrite. A var so tests can redirect it.
 var expertSkillsRoot = func() string {
-	home, err := os.UserHomeDir()
+	p, err := datapath.Join("skills-expert")
 	if err != nil {
 		return ""
 	}
-	return filepath.Join(home, ".octo", "skills-expert")
+	return p
 }
 
 // DefaultRoot is the on-disk location of the materialized default skills

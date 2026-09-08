@@ -24,6 +24,7 @@ func findTurnError(seen []map[string]any) map[string]any {
 func TestDoAgentTurn_FirstRoundError_TurnErrorMarksInputRolledBack(t *testing.T) {
 	tmp := t.TempDir()
 	t.Setenv("HOME", tmp)
+	t.Setenv("OCTO_DATA_ROOT", tmp)
 	t.Setenv("USERPROFILE", tmp)
 
 	srv := mustServer(t, Config{Addr: "127.0.0.1:0", Tools: false})
@@ -62,6 +63,7 @@ func TestDoAgentTurn_FirstRoundError_TurnErrorMarksInputRolledBack(t *testing.T)
 func TestDoAgentTurn_MidTurnError_TurnErrorKeepsInput(t *testing.T) {
 	tmp := t.TempDir()
 	t.Setenv("HOME", tmp)
+	t.Setenv("OCTO_DATA_ROOT", tmp)
 	t.Setenv("USERPROFILE", tmp)
 
 	srv := mustServer(t, Config{Addr: "127.0.0.1:0", Tools: true})

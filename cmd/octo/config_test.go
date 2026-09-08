@@ -173,6 +173,7 @@ func TestResolveProviderModel_ProviderEnv(t *testing.T) {
 func TestRunConfig_Path(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
+	t.Setenv("OCTO_DATA_ROOT", home)
 	t.Setenv("USERPROFILE", home)
 	var stdout, stderr bytes.Buffer
 	if code := runConfig([]string{"path"}, strings.NewReader(""), &stdout, &stderr); code != 0 {
@@ -186,6 +187,7 @@ func TestRunConfig_Path(t *testing.T) {
 func TestRunConfig_Wizard_WritesFile(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
+	t.Setenv("OCTO_DATA_ROOT", home)
 	t.Setenv("USERPROFILE", home)
 	t.Setenv("ANTHROPIC_API_KEY", "set-so-wizard-skips-key-prompt")
 
@@ -221,6 +223,7 @@ func TestRunConfig_Wizard_WritesFile(t *testing.T) {
 func TestRunConfig_Wizard_PreservesOtherEntriesAndGlobals(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
+	t.Setenv("OCTO_DATA_ROOT", home)
 	t.Setenv("USERPROFILE", home)
 	t.Setenv("ANTHROPIC_API_KEY", "set-so-wizard-skips-key-prompt")
 
@@ -346,6 +349,7 @@ func TestRunConfig_Wizard_PreservesHandEditedEndpointFields(t *testing.T) {
 func TestRunConfig_Show_ReportsSourcesNotKey(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
+	t.Setenv("OCTO_DATA_ROOT", home)
 	t.Setenv("USERPROFILE", home)
 	t.Setenv("ANTHROPIC_API_KEY", "secret-value-should-not-print")
 
@@ -376,6 +380,7 @@ func TestRunConfig_Wizard_SwitchesProviderAndPromptsForKey(t *testing.T) {
 	// the old provider's key is useless for the new one.
 	home := t.TempDir()
 	t.Setenv("HOME", home)
+	t.Setenv("OCTO_DATA_ROOT", home)
 	t.Setenv("USERPROFILE", home)
 	t.Setenv("ANTHROPIC_API_KEY", "")
 	t.Setenv("OPENAI_API_KEY", "")
@@ -416,6 +421,7 @@ func TestRunConfig_Wizard_SwitchesProviderAndPromptsForKey(t *testing.T) {
 func TestRunConfig_Wizard_AddModel_DeclineKeepsDefault(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
+	t.Setenv("OCTO_DATA_ROOT", home)
 	t.Setenv("USERPROFILE", home)
 	t.Setenv("ANTHROPIC_API_KEY", "")
 	t.Setenv("OPENAI_API_KEY", "")
@@ -462,6 +468,7 @@ func TestRunConfig_Wizard_AddModel_DeclineKeepsDefault(t *testing.T) {
 func TestRunConfigWizard_FirstRun_MinimalAndKeyDirect(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
+	t.Setenv("OCTO_DATA_ROOT", home)
 	t.Setenv("USERPROFILE", home)
 	t.Setenv("ANTHROPIC_API_KEY", "")
 	t.Setenv("OPENAI_API_KEY", "")
@@ -597,6 +604,7 @@ func TestHTTPStatusFromErr(t *testing.T) {
 func TestRunConfig_Wizard_CustomProviderRequiresProtocolModelAndBaseURL(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
+	t.Setenv("OCTO_DATA_ROOT", home)
 	t.Setenv("USERPROFILE", home)
 	t.Setenv("CUSTOM_API_KEY", "set-so-wizard-skips-key-prompt")
 
@@ -645,6 +653,7 @@ func TestRunConfig_Wizard_CustomProviderRequiresProtocolModelAndBaseURL(t *testi
 func TestRunConfig_Wizard_PinnedVendorRejectsForeignEndpoint(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
+	t.Setenv("OCTO_DATA_ROOT", home)
 	t.Setenv("USERPROFILE", home)
 	t.Setenv("MOONSHOT_API_KEY", "set-so-wizard-skips-key-prompt")
 

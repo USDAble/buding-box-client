@@ -5,10 +5,10 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
-	"path/filepath"
 	"runtime"
 	"strings"
 
+	"github.com/open-octo/octo-agent/internal/datapath"
 	"github.com/open-octo/octo-agent/internal/executil"
 	"github.com/open-octo/octo-agent/internal/sandbox"
 	"github.com/open-octo/octo-agent/internal/trash"
@@ -177,12 +177,14 @@ func shellCommand(ctx context.Context, command string) (*exec.Cmd, error) {
 // install / build-from-source / Linux-without-an-installer users never get
 // this directory, so the empty-string case is the normal, silent no-op path
 // for them — not an error.
+// bundledBinDir returns data/bin if it exists on disk, or "" otherwise.
+// OCTO-FORK: the portable product keeps helper binaries next to the executable,
+// not in the host home — see dev-docs-usdable/需求/2260906/技术方案/P1-便携数据根.md.
 func bundledBinDir() string {
-	home, err := os.UserHomeDir()
-	if err != nil || home == "" {
+	dir, err := datapath.Join("bin")
+	if err != nil {
 		return ""
 	}
-	dir := filepath.Join(home, ".octo", "bin")
 	if info, err := os.Stat(dir); err != nil || !info.IsDir() {
 		return ""
 	}

@@ -15,15 +15,13 @@ import (
 func TestSourceDirHooks_MountIsTheTrustGrant(t *testing.T) {
 	tmp := t.TempDir()
 	t.Setenv("HOME", tmp)
+	t.Setenv("OCTO_DATA_ROOT", tmp)
 	t.Setenv("USERPROFILE", tmp)
 	t.Setenv("OCTO_HOOK_PRE_TURN", "")
 	t.Setenv("OCTO_HOOK_POST_TURN", "")
 
 	src := t.TempDir()
-	if err := os.MkdirAll(filepath.Join(src, ".octo"), 0o755); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(filepath.Join(src, ".octo", "hooks.yml"), []byte("hooks:\n  Stop:\n    - command: \"echo hi\"\n"), 0o600); err != nil {
+	if err := os.WriteFile(filepath.Join(src, ".octo-hooks.yml"), []byte("hooks:\n  Stop:\n    - command: \"echo hi\"\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
 
@@ -41,6 +39,7 @@ func TestSourceDirHooks_MountIsTheTrustGrant(t *testing.T) {
 func TestCompose_MountedFolderRules(t *testing.T) {
 	tmp := t.TempDir()
 	t.Setenv("HOME", tmp)
+	t.Setenv("OCTO_DATA_ROOT", tmp)
 	t.Setenv("USERPROFILE", tmp)
 
 	src := t.TempDir()

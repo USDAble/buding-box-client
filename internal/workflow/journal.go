@@ -13,6 +13,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/open-octo/octo-agent/internal/datapath"
 )
 
 // scriptHash returns a hex SHA-256 of the user script. Used to validate that a
@@ -47,17 +49,11 @@ func NewRunID() string {
 	return "wf-" + now.Format("20060102-150405") + "-" + hex.EncodeToString(b[:])
 }
 
-// journalsDir returns (and creates if needed) ~/.octo/workflow-journals.
+// journalsDir returns (and creates if needed) data/workflow-journals.
+// OCTO-FORK: the portable product keeps workflow journals next to the
+// executable, not in the host home — see dev-docs-usdable/需求/2260906/技术方案/P1-便携数据根.md.
 func journalsDir() (string, error) {
-	home, err := os.UserHomeDir()
-	if err != nil {
-		return "", fmt.Errorf("workflow: home dir: %w", err)
-	}
-	dir := filepath.Join(home, ".octo", "workflow-journals")
-	if err := os.MkdirAll(dir, 0o700); err != nil {
-		return "", fmt.Errorf("workflow: mkdir %s: %w", dir, err)
-	}
-	return dir, nil
+	return datapath.Sub("workflow-journals")
 }
 
 // journalMaxAge is how long a journal file is kept before PruneJournals

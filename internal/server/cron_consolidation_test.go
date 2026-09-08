@@ -49,6 +49,7 @@ func listTasksForTest(t *testing.T, srv *Server) []taskResponse {
 func TestCreateTask_PersistsDirectory(t *testing.T) {
 	tmp := t.TempDir()
 	t.Setenv("HOME", tmp)
+	t.Setenv("OCTO_DATA_ROOT", tmp)
 	t.Setenv("USERPROFILE", tmp)
 	srv := mustServer(t, Config{Addr: "127.0.0.1:0", Tools: false})
 
@@ -68,6 +69,7 @@ func TestCreateTask_PersistsDirectory(t *testing.T) {
 func TestPatchTask_UpdatesFields(t *testing.T) {
 	tmp := t.TempDir()
 	t.Setenv("HOME", tmp)
+	t.Setenv("OCTO_DATA_ROOT", tmp)
 	t.Setenv("USERPROFILE", tmp)
 	srv := mustServer(t, Config{Addr: "127.0.0.1:0", Tools: false})
 
@@ -131,6 +133,7 @@ func groupByID(t *testing.T, id string) *sessionGroup {
 func TestCreateTask_CreatesSessionGroup(t *testing.T) {
 	tmp := t.TempDir()
 	t.Setenv("HOME", tmp)
+	t.Setenv("OCTO_DATA_ROOT", tmp)
 	t.Setenv("USERPROFILE", tmp)
 	srv := mustServer(t, Config{Addr: "127.0.0.1:0", Tools: false})
 
@@ -163,6 +166,7 @@ func TestCreateTask_CreatesSessionGroup(t *testing.T) {
 func TestPatchTask_RenamesSessionGroup(t *testing.T) {
 	tmp := t.TempDir()
 	t.Setenv("HOME", tmp)
+	t.Setenv("OCTO_DATA_ROOT", tmp)
 	t.Setenv("USERPROFILE", tmp)
 	srv := mustServer(t, Config{Addr: "127.0.0.1:0", Tools: false})
 
@@ -191,6 +195,7 @@ func TestPatchTask_RenamesSessionGroup(t *testing.T) {
 func TestPatchTask_RejectsEmptyName(t *testing.T) {
 	tmp := t.TempDir()
 	t.Setenv("HOME", tmp)
+	t.Setenv("OCTO_DATA_ROOT", tmp)
 	t.Setenv("USERPROFILE", tmp)
 	srv := mustServer(t, Config{Addr: "127.0.0.1:0", Tools: false})
 
@@ -216,6 +221,7 @@ func TestPatchTask_RejectsEmptyName(t *testing.T) {
 func TestDeleteTask_DeletesGroupKeepsSessions(t *testing.T) {
 	tmp := t.TempDir()
 	t.Setenv("HOME", tmp)
+	t.Setenv("OCTO_DATA_ROOT", tmp)
 	t.Setenv("USERPROFILE", tmp)
 	srv := mustServer(t, Config{Addr: "127.0.0.1:0", Tools: false})
 
@@ -251,6 +257,7 @@ func TestDeleteTask_DeletesGroupKeepsSessions(t *testing.T) {
 func TestRetiredCronEndpoints_NotRouted(t *testing.T) {
 	tmp := t.TempDir()
 	t.Setenv("HOME", tmp)
+	t.Setenv("OCTO_DATA_ROOT", tmp)
 	t.Setenv("USERPROFILE", tmp)
 	srv := mustServer(t, Config{Addr: "127.0.0.1:0", Tools: false})
 
@@ -278,6 +285,7 @@ func TestRetiredCronEndpoints_NotRouted(t *testing.T) {
 func TestCreateTask_RejectsInvalidAgentID(t *testing.T) {
 	tmp := t.TempDir()
 	t.Setenv("HOME", tmp)
+	t.Setenv("OCTO_DATA_ROOT", tmp)
 	t.Setenv("USERPROFILE", tmp)
 	srv := mustServer(t, Config{Addr: "127.0.0.1:0", Tools: false})
 
@@ -296,6 +304,7 @@ func TestCreateTask_RejectsInvalidAgentID(t *testing.T) {
 func TestCreateTask_AcceptsValidAgentID(t *testing.T) {
 	tmp := t.TempDir()
 	t.Setenv("HOME", tmp)
+	t.Setenv("OCTO_DATA_ROOT", tmp)
 	t.Setenv("USERPROFILE", tmp)
 	srv := mustServer(t, Config{Addr: "127.0.0.1:0", Tools: false})
 
@@ -315,6 +324,7 @@ func TestCreateTask_AcceptsValidAgentID(t *testing.T) {
 func TestTransferTask_RejectsInvalidAgentID(t *testing.T) {
 	tmp := t.TempDir()
 	t.Setenv("HOME", tmp)
+	t.Setenv("OCTO_DATA_ROOT", tmp)
 	t.Setenv("USERPROFILE", tmp)
 	srv := mustServer(t, Config{Addr: "127.0.0.1:0", Tools: false})
 
@@ -335,6 +345,7 @@ func TestTransferTask_RejectsInvalidAgentID(t *testing.T) {
 func TestPatchTask_RejectsInvalidAgentID(t *testing.T) {
 	tmp := t.TempDir()
 	t.Setenv("HOME", tmp)
+	t.Setenv("OCTO_DATA_ROOT", tmp)
 	t.Setenv("USERPROFILE", tmp)
 	srv := mustServer(t, Config{Addr: "127.0.0.1:0", Tools: false})
 

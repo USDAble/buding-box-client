@@ -82,6 +82,7 @@ func TestLatestVersion_DevBuildNeverNags(t *testing.T) {
 func TestVersionUpgradeMode(t *testing.T) {
 	tmp := t.TempDir()
 	t.Setenv("HOME", tmp)
+	t.Setenv("OCTO_DATA_ROOT", tmp)
 	t.Setenv("USERPROFILE", tmp)
 
 	get := func(srv *Server) (mode, downloadURL string) {
@@ -112,6 +113,7 @@ func TestVersionUpgradeMode(t *testing.T) {
 func TestVersionSelfUpdateFlag(t *testing.T) {
 	tmp := t.TempDir()
 	t.Setenv("HOME", tmp)
+	t.Setenv("OCTO_DATA_ROOT", tmp)
 	t.Setenv("USERPROFILE", tmp)
 
 	get := func(srv *Server) bool {
@@ -143,6 +145,7 @@ func TestVersionSelfUpdateFlag(t *testing.T) {
 func TestVersionUpgradeRefusedInInstallerMode(t *testing.T) {
 	tmp := t.TempDir()
 	t.Setenv("HOME", tmp)
+	t.Setenv("OCTO_DATA_ROOT", tmp)
 	t.Setenv("USERPROFILE", tmp)
 
 	srv := mustServer(t, Config{Addr: "127.0.0.1:0", Native: &fakeNative{}})

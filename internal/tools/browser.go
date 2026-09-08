@@ -16,6 +16,7 @@ import (
 	"github.com/open-octo/octo-agent/internal/agent"
 	"github.com/open-octo/octo-agent/internal/browser"
 	"github.com/open-octo/octo-agent/internal/config"
+	"github.com/open-octo/octo-agent/internal/datapath"
 	"github.com/open-octo/octo-agent/internal/panics"
 )
 
@@ -166,9 +167,10 @@ func BrowserRecordingsDir() string {
 	if d := os.Getenv("OCTO_BROWSER_SKILLS_DIR"); d != "" { // pre-rename name
 		return d
 	}
-	home, _ := os.UserHomeDir()
-	dir := filepath.Join(home, ".octo", "browser-recordings")
-	old := filepath.Join(home, ".octo", "browser-skills")
+	// OCTO-FORK: the portable product keeps browser recordings next to the
+	// executable, not in the host home — see dev-docs-usdable/需求/2260906/技术方案/P1-便携数据根.md.
+	dir, _ := datapath.Join("browser-recordings")
+	old, _ := datapath.Join("browser-skills")
 	if _, err := os.Stat(dir); os.IsNotExist(err) {
 		if _, err := os.Stat(old); err == nil {
 			if err := os.Rename(old, dir); err != nil {

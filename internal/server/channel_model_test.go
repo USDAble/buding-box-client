@@ -19,6 +19,7 @@ import (
 func TestApplyChannelModel_HonorsStoreBinding(t *testing.T) {
 	tmp := t.TempDir()
 	t.Setenv("HOME", tmp)
+	t.Setenv("OCTO_DATA_ROOT", tmp)
 	t.Setenv("USERPROFILE", tmp)
 
 	seed := config.Config{
@@ -76,6 +77,7 @@ func TestApplyChannelModel_HonorsStoreBinding(t *testing.T) {
 func TestChannelModelOps_Resolve(t *testing.T) {
 	tmp := t.TempDir()
 	t.Setenv("HOME", tmp)
+	t.Setenv("OCTO_DATA_ROOT", tmp)
 	t.Setenv("USERPROFILE", tmp)
 
 	seed := config.Config{

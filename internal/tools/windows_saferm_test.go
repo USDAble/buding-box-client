@@ -33,6 +33,7 @@ func TestWindowsSafeRm_EndToEnd(t *testing.T) {
 	// Build the octo binary the wrapper calls back into.
 	home := t.TempDir()
 	t.Setenv("HOME", home)
+	t.Setenv("OCTO_DATA_ROOT", home)
 	t.Setenv("USERPROFILE", home)
 	exe := filepath.Join(t.TempDir(), "octo.exe")
 	build := exec.Command("go", "build", "-o", exe, "github.com/open-octo/octo-agent/cmd/octo")

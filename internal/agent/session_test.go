@@ -15,6 +15,7 @@ func setTempHome(t *testing.T) string {
 	t.Helper()
 	tmp := t.TempDir()
 	t.Setenv("HOME", tmp)
+	t.Setenv("OCTO_DATA_ROOT", tmp)
 	t.Setenv("USERPROFILE", tmp) // Windows: os.UserHomeDir() reads USERPROFILE
 	return tmp
 }
@@ -771,7 +772,7 @@ func TestDeleteSession(t *testing.T) {
 
 	// The transcript is gone for good — a session delete bypasses the trash.
 	trashed := 0
-	_ = filepath.WalkDir(filepath.Join(home, ".octo", "trash"), func(_ string, d fs.DirEntry, err error) error {
+	_ = filepath.WalkDir(filepath.Join(home, "trash"), func(_ string, d fs.DirEntry, err error) error {
 		if err == nil && !d.IsDir() {
 			trashed++
 		}

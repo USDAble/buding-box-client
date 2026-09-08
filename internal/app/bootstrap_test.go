@@ -89,6 +89,7 @@ func TestWireTools_TasksDisabled(t *testing.T) {
 func TestWireTools_WiresMemoryBackendFromConfig(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
+	t.Setenv("OCTO_DATA_ROOT", home)
 	t.Setenv("USERPROFILE", home)
 	t.Cleanup(func() { tools.SetSpawner(nil); tools.SetTaskStore(nil); tools.SetMemoryBackend(nil) })
 
@@ -115,6 +116,7 @@ func TestWireTools_WiresMemoryBackendFromConfig(t *testing.T) {
 func TestWireTools_WiresAutoRecallFromConfig(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
+	t.Setenv("OCTO_DATA_ROOT", home)
 	t.Setenv("USERPROFILE", home)
 	t.Cleanup(func() {
 		tools.SetSpawner(nil)
@@ -144,6 +146,7 @@ func TestWireTools_WiresAutoRecallFromConfig(t *testing.T) {
 func TestWireTools_NoMemoryBackendConfigured(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
+	t.Setenv("OCTO_DATA_ROOT", home)
 	t.Setenv("USERPROFILE", home)
 	t.Cleanup(func() { tools.SetSpawner(nil); tools.SetTaskStore(nil); tools.SetMemoryBackend(nil) })
 

@@ -20,6 +20,7 @@ import (
 func TestNativeRoutes_RefuseARelayedPeer(t *testing.T) {
 	tmp := t.TempDir()
 	t.Setenv("HOME", tmp)
+	t.Setenv("OCTO_DATA_ROOT", tmp)
 	t.Setenv("USERPROFILE", tmp)
 
 	srv := mustServer(t, Config{Addr: "127.0.0.1:0", Native: &fakeNative{retPath: "/x"}})
@@ -53,6 +54,7 @@ func TestNativeRoutes_RefuseARelayedPeer(t *testing.T) {
 func TestNativeRoutes_AllowAGenuinelyLocalPeer(t *testing.T) {
 	tmp := t.TempDir()
 	t.Setenv("HOME", tmp)
+	t.Setenv("OCTO_DATA_ROOT", tmp)
 	t.Setenv("USERPROFILE", tmp)
 
 	srv := mustServer(t, Config{Addr: "127.0.0.1:0", Native: &fakeNative{retPath: "/picked"}})

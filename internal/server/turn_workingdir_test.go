@@ -70,6 +70,7 @@ func (s *cwdProbeSender) StreamMessagesWithTools(_ context.Context, _, _ string,
 func TestDoAgentTurn_TerminalRunsInSessionWorkingDir(t *testing.T) {
 	tmp := t.TempDir()
 	t.Setenv("HOME", tmp)
+	t.Setenv("OCTO_DATA_ROOT", tmp)
 	t.Setenv("USERPROFILE", tmp)
 
 	sender := &cwdProbeSender{}
@@ -89,7 +90,7 @@ func TestDoAgentTurn_TerminalRunsInSessionWorkingDir(t *testing.T) {
 	if err := sess.Save(); err != nil {
 		t.Fatalf("save: %v", err)
 	}
-	want := filepath.Join(tmp, "Octo", "tasks", sess.ID)
+	want := filepath.Join(tmp, "workspace", "tasks", sess.ID)
 	if sess.WorkingDir != want {
 		t.Fatalf("precondition: seeded WorkingDir = %q, want the task workspace %q", sess.WorkingDir, want)
 	}

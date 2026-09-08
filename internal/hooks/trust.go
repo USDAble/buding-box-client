@@ -7,6 +7,8 @@ import (
 	"os"
 	"path/filepath"
 	"sync"
+
+	"github.com/open-octo/octo-agent/internal/datapath"
 )
 
 // Project-level hooks.yml is loaded from a repo the user may have just cloned,
@@ -15,16 +17,21 @@ import (
 // tools) the moment octo starts in that directory. Trust-on-first-use gates
 // this — the first time a project hooks.yml (or a changed one) is seen, the
 // user is asked once; the approved content's fingerprint is remembered so it
-// never re-prompts until the file changes. The user-level ~/.octo/hooks.yml is
+// never re-prompts until the file changes. The user-level data/hooks.yml is
 // the user's own and needs no such gate.
 
-// ProjectConfigPath returns <cwd>/.octo/hooks.yml, mirroring the project-level
-// skills/agents layout.
+// ProjectConfigPath returns <cwd>/.octo-hooks.yml, the flat project-level
+// hooks file a repo may carry. It mirrors the .octorules convention of a
+// single repo-local dotfile.
+// OCTO-FORK: upstream used <cwd>/.octo/hooks.yml; the fork flattens it to one
+// dotfile so the `.octo` directory name is gone entirely — datapath-guard
+// treats the `.octo` literal as a zero-exception regression. See
+// dev-docs-usdable/需求/2260906/技术方案/P1-便携数据根.md.
 func ProjectConfigPath(cwd string) string {
 	if cwd == "" {
 		return ""
 	}
-	return filepath.Join(cwd, ".octo", "hooks.yml")
+	return filepath.Join(cwd, ".octo-hooks.yml")
 }
 
 // Fingerprint is the content hash a trust decision is keyed on, so editing a
@@ -39,14 +46,16 @@ func Fingerprint(content []byte) string {
 // just re-prompts once).
 var trustStoreMu sync.Mutex
 
-// trustStorePath returns ~/.octo/hooks-trust.json, or "" when home is
+// trustStorePath returns data/hooks-trust.json, or "" when the data root is
 // unavailable.
+// OCTO-FORK: the portable product keeps hook trust next to the executable, not
+// in the host home — see dev-docs-usdable/需求/2260906/技术方案/P1-便携数据根.md.
 func trustStorePath() string {
-	home, err := os.UserHomeDir()
-	if err != nil || home == "" {
+	p, err := datapath.Join("hooks-trust.json")
+	if err != nil {
 		return ""
 	}
-	return filepath.Join(home, ".octo", "hooks-trust.json")
+	return p
 }
 
 func loadTrustStore() map[string]string {

@@ -18,10 +18,11 @@ func skillRegFor(t *testing.T, m map[string]string) *skills.Registry {
 	t.Helper()
 	home := t.TempDir()
 	t.Setenv("HOME", home)
+	t.Setenv("OCTO_DATA_ROOT", home)
 	t.Setenv("USERPROFILE", home)
 
 	for name, content := range m {
-		dir := filepath.Join(home, ".octo", "skills", name)
+		dir := filepath.Join(home, "skills", name)
 		if err := os.MkdirAll(dir, 0o755); err != nil {
 			t.Fatal(err)
 		}

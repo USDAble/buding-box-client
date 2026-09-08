@@ -13,6 +13,7 @@ import (
 
 	"github.com/open-octo/octo-agent/internal/agent"
 	"github.com/open-octo/octo-agent/internal/channel"
+	"github.com/open-octo/octo-agent/internal/datapath"
 )
 
 // inboundFileNotes persists an inbound IM event's file attachments and
@@ -64,11 +65,17 @@ func docChipRefs(text string) (cleaned string, refs []string) {
 
 // isImageUpload reports whether path is an image file persisted in the uploads
 // directory, i.e. one that can be served back under /api/uploads/.
+// OCTO-FORK: uploads live under data/uploads, not ~/.octo/uploads — see
+// dev-docs-usdable/需求/2260906/技术方案/P1-便携数据根.md.
 func isImageUpload(path string) bool {
 	ext := strings.ToLower(filepath.Ext(path))
 	switch ext {
 	case ".jpg", ".jpeg", ".png", ".gif", ".webp", ".bmp", ".svg":
-		return strings.Contains(filepath.ToSlash(path), "/.octo/"+uploadsDirName+"/")
+		uploadsDir, err := datapath.Join(uploadsDirName)
+		if err != nil {
+			return false
+		}
+		return strings.Contains(filepath.ToSlash(path), filepath.ToSlash(uploadsDir)+"/")
 	}
 	return false
 }
@@ -93,17 +100,11 @@ type userAttachments struct {
 	notes []string
 }
 
-// ensureUploadsDir returns ~/.octo/uploads, creating it if needed.
+// ensureUploadsDir returns data/uploads, creating it if needed.
+// OCTO-FORK: the portable product keeps uploads next to the executable, not in
+// the host home — see dev-docs-usdable/需求/2260906/技术方案/P1-便携数据根.md.
 func ensureUploadsDir() (string, error) {
-	home, err := os.UserHomeDir()
-	if err != nil {
-		return "", fmt.Errorf("uploads: home dir: %w", err)
-	}
-	dir := filepath.Join(home, ".octo", uploadsDirName)
-	if err := os.MkdirAll(dir, 0o700); err != nil {
-		return "", fmt.Errorf("uploads: mkdir: %w", err)
-	}
-	return dir, nil
+	return datapath.Sub(uploadsDirName)
 }
 
 // parseUserFiles converts a WS files payload into model blocks, display refs,

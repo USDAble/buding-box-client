@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"time"
 
+	"github.com/open-octo/octo-agent/internal/datapath"
 	"github.com/open-octo/octo-agent/internal/memory"
 	"github.com/open-octo/octo-agent/internal/prompt"
 	"github.com/open-octo/octo-agent/internal/trash"
@@ -15,7 +16,12 @@ import (
 // ─── Profile API ──────────────────────────────────────────────────────────
 
 func (s *Server) handleGetProfileSoul(w http.ResponseWriter, r *http.Request) {
-	path := prompt.IdentityPath(octoDir(), "soul.md")
+	root, err := datapath.Root()
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	path := prompt.IdentityPath(root, "soul.md")
 	content, err := os.ReadFile(path)
 	if err != nil {
 		// No soul.md yet is the normal not-customized-yet state, not an error the
@@ -34,7 +40,12 @@ func (s *Server) handleGetProfileSoul(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleGetProfileUser(w http.ResponseWriter, r *http.Request) {
-	path := prompt.IdentityPath(octoDir(), "user.md")
+	root, err := datapath.Root()
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	path := prompt.IdentityPath(root, "user.md")
 	content, err := os.ReadFile(path)
 	if err != nil {
 		if !os.IsNotExist(err) {
@@ -213,12 +224,4 @@ func (s *Server) handleDeleteTrash(w http.ResponseWriter, r *http.Request) {
 		"ok":         true,
 		"freed_size": freed,
 	})
-}
-
-func octoDir() string {
-	home, err := os.UserHomeDir()
-	if err != nil {
-		return filepath.Join(".octo")
-	}
-	return filepath.Join(home, ".octo")
 }

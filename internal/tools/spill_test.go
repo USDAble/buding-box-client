@@ -9,11 +9,13 @@ import (
 	"unicode/utf8"
 )
 
-// spillHome points ~/.octo at a temp dir so spill files don't touch the real
-// home, and cleans up after the test.
+// spillHome points the portable data root at a temp dir so spill files don't
+// touch the real one, and cleans up after the test.
 func spillHome(t *testing.T) {
 	t.Helper()
-	t.Setenv("HOME", t.TempDir())
+	tmp := t.TempDir()
+	t.Setenv("HOME", tmp)
+	t.Setenv("OCTO_DATA_ROOT", tmp)
 }
 
 func TestMaybeSpillOutput_SmallPassesThrough(t *testing.T) {

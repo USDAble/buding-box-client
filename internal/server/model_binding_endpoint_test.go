@@ -20,6 +20,7 @@ func sameModelTwoEndpointsConfig(t *testing.T) {
 	t.Helper()
 	tmp := t.TempDir()
 	t.Setenv("HOME", tmp)
+	t.Setenv("OCTO_DATA_ROOT", tmp)
 	t.Setenv("USERPROFILE", tmp)
 	seed := config.Config{
 		Endpoints: []config.Endpoint{

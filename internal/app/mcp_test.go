@@ -39,6 +39,7 @@ func TestToolSearchConfigFrom(t *testing.T) {
 func TestConnectMCPNoServers(t *testing.T) {
 	tmp := t.TempDir()
 	t.Setenv("HOME", tmp)
+	t.Setenv("OCTO_DATA_ROOT", tmp)
 	t.Setenv("USERPROFILE", tmp) // Windows home
 
 	cleanup, err := ConnectMCP(context.Background(), io.Discard)

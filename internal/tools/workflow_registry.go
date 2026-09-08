@@ -8,6 +8,8 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+
+	"github.com/open-octo/octo-agent/internal/datapath"
 )
 
 // ErrWorkflowNotFound and ErrBuiltinWorkflow let callers (e.g. the HTTP
@@ -56,14 +58,16 @@ type workflowParam struct {
 	description string
 }
 
-// userWorkflowsRoot returns ~/.octo/workflows, or "" when the home dir can't be
+// userWorkflowsRoot returns data/workflows, or "" when the data root can't be
 // resolved. A var so tests can point discovery at a temp directory.
+// OCTO-FORK: the portable product keeps workflows next to the executable, not
+// in the host home — see dev-docs-usdable/需求/2260906/技术方案/P1-便携数据根.md.
 var userWorkflowsRoot = func() string {
-	home, err := os.UserHomeDir()
-	if err != nil || home == "" {
+	p, err := datapath.Join("workflows")
+	if err != nil {
 		return ""
 	}
-	return filepath.Join(home, ".octo", "workflows")
+	return p
 }
 
 // discoverWorkflows seeds the embedded default workflows, overlays the

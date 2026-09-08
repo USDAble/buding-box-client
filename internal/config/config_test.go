@@ -22,13 +22,14 @@ func setHome(t *testing.T) string {
 	t.Helper()
 	home := t.TempDir()
 	t.Setenv("HOME", home)
-	t.Setenv("USERPROFILE", home) // Windows
+	t.Setenv("USERPROFILE", home)    // Windows
+	t.Setenv("OCTO_DATA_ROOT", home) // portable data root
 	return home
 }
 
 func writeOcto(t *testing.T, home, name, content string) string {
 	t.Helper()
-	dir := filepath.Join(home, ".octo")
+	dir := home
 	if err := os.MkdirAll(dir, 0o700); err != nil {
 		t.Fatal(err)
 	}
@@ -316,7 +317,7 @@ func TestSave_FileMode0600(t *testing.T) {
 	if err := cfg.Save(); err != nil {
 		t.Fatalf("Save: %v", err)
 	}
-	info, err := os.Stat(filepath.Join(home, ".octo", "config.yml"))
+	info, err := os.Stat(filepath.Join(home, "config.yml"))
 	if err != nil {
 		t.Fatalf("stat: %v", err)
 	}

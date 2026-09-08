@@ -27,8 +27,10 @@ func writeSkillDir(t *testing.T, root, name, desc string) {
 // manifest, and appears in an expert's manifest only when tool_skills names it.
 func TestExpertSkills_ScopedToNamingProfiles(t *testing.T) {
 	// Isolate the user root too — Discover reads ~/.octo/skills via HOME.
-	t.Setenv("HOME", t.TempDir())
-	t.Setenv("USERPROFILE", t.TempDir())
+	tmp := t.TempDir()
+	t.Setenv("HOME", tmp)
+	t.Setenv("USERPROFILE", tmp)
+	t.Setenv("OCTO_DATA_ROOT", tmp)
 	defRoot := filepath.Join(t.TempDir(), "skills-default")
 	expRoot := filepath.Join(t.TempDir(), "skills-expert")
 	useDefaultRoot(t, defRoot)
@@ -71,8 +73,10 @@ func TestExpertSkills_ScopedToNamingProfiles(t *testing.T) {
 // A registry holding ONLY expert skills renders an empty global manifest, not
 // a header with no entries.
 func TestRenderManifest_OnlyExpertSkillsIsEmpty(t *testing.T) {
-	t.Setenv("HOME", t.TempDir())
-	t.Setenv("USERPROFILE", t.TempDir())
+	tmp := t.TempDir()
+	t.Setenv("HOME", tmp)
+	t.Setenv("USERPROFILE", tmp)
+	t.Setenv("OCTO_DATA_ROOT", tmp)
 	expRoot := filepath.Join(t.TempDir(), "skills-expert")
 	useDefaultRoot(t, filepath.Join(t.TempDir(), "none"))
 	useExpertRoot(t, expRoot)
@@ -88,8 +92,10 @@ func TestRenderManifest_OnlyExpertSkillsIsEmpty(t *testing.T) {
 // the root would not re-materialize until the next version bump, leaving the
 // experts naming the skill silently crippled.
 func TestRegistryDelete_RefusesExpertSkill(t *testing.T) {
-	t.Setenv("HOME", t.TempDir())
-	t.Setenv("USERPROFILE", t.TempDir())
+	tmp := t.TempDir()
+	t.Setenv("HOME", tmp)
+	t.Setenv("USERPROFILE", tmp)
+	t.Setenv("OCTO_DATA_ROOT", tmp)
 	expRoot := filepath.Join(t.TempDir(), "skills-expert")
 	useDefaultRoot(t, filepath.Join(t.TempDir(), "none"))
 	useExpertRoot(t, expRoot)

@@ -18,9 +18,10 @@ func writeTestConfig(t *testing.T, cfg config.Config) {
 	t.Helper()
 	tmp := t.TempDir()
 	t.Setenv("HOME", tmp)
+	t.Setenv("OCTO_DATA_ROOT", tmp)
 	t.Setenv("USERPROFILE", tmp)
 
-	dir := filepath.Join(tmp, ".octo")
+	dir := tmp
 	if err := os.MkdirAll(dir, 0o700); err != nil {
 		t.Fatalf("mkdir .octo: %v", err)
 	}
@@ -34,9 +35,10 @@ func writeTestConfig(t *testing.T, cfg config.Config) {
 func TestEnsureSender_ConfigLoadFailure(t *testing.T) {
 	tmp := t.TempDir()
 	t.Setenv("HOME", tmp)
+	t.Setenv("OCTO_DATA_ROOT", tmp)
 	t.Setenv("USERPROFILE", tmp)
 
-	dir := filepath.Join(tmp, ".octo")
+	dir := tmp
 	if err := os.MkdirAll(dir, 0o700); err != nil {
 		t.Fatalf("mkdir .octo: %v", err)
 	}

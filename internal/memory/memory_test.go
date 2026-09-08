@@ -10,13 +10,14 @@ import (
 func TestDir_PerRepoUnderHome(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
+	t.Setenv("OCTO_DATA_ROOT", home)
 	t.Setenv("USERPROFILE", home)
 
 	d, err := Dir("/some/path/to/myrepo")
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !strings.HasPrefix(d, filepath.Join(home, ".octo", "memories")) {
+	if !strings.HasPrefix(d, filepath.Join(home, "memories")) {
 		t.Errorf("dir %q not under ~/.octo/memories", d)
 	}
 	if !strings.Contains(filepath.Base(d), "myrepo") {
@@ -53,13 +54,14 @@ func TestLoadIndex_TruncatesToBudget(t *testing.T) {
 func TestHomeDir_ResolvesUnderHome(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
+	t.Setenv("OCTO_DATA_ROOT", home)
 	t.Setenv("USERPROFILE", home)
 
 	d, err := HomeDir()
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !strings.HasPrefix(d, filepath.Join(home, ".octo", "memories")) {
+	if !strings.HasPrefix(d, filepath.Join(home, "memories")) {
 		t.Errorf("HomeDir %q not under ~/.octo/memories", d)
 	}
 	if !strings.Contains(filepath.Base(d), filepath.Base(home)) {
@@ -184,9 +186,10 @@ func TestRenderInjection_EmptyInheritedDirDropped(t *testing.T) {
 func TestIsMemoryPath(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
+	t.Setenv("OCTO_DATA_ROOT", home)
 	t.Setenv("USERPROFILE", home)
 
-	prefix := filepath.Join(home, ".octo", "memories", "some-repo")
+	prefix := filepath.Join(home, "memories", "some-repo")
 
 	cases := []struct {
 		path string
@@ -195,8 +198,8 @@ func TestIsMemoryPath(t *testing.T) {
 		{filepath.Join(prefix, "MEMORY.md"), true},
 		{filepath.Join(prefix, "preferences.md"), true},
 		{filepath.Join(prefix, "deep", "nested.md"), true},
-		{filepath.Join(home, ".octo", "config.yaml"), false},
-		{filepath.Join(home, ".octo", "memory-stuff.md"), false}, // not under memories/
+		{filepath.Join(home, "config.yaml"), false},
+		{filepath.Join(home, "memory-stuff.md"), false}, // not under memories/
 		{"/etc/passwd", false},
 		{"", false},
 	}

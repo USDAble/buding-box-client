@@ -50,6 +50,7 @@ func TestHistoryRewriteDirty(t *testing.T) {
 func TestSessionSave_RewriteAfterHistoryRewrite(t *testing.T) {
 	tmp := t.TempDir()
 	t.Setenv("HOME", tmp)
+	t.Setenv("OCTO_DATA_ROOT", tmp)
 	t.Setenv("USERPROFILE", tmp)
 
 	sess := NewSession("m", "")
@@ -89,6 +90,7 @@ func TestSessionSave_RewriteAfterHistoryRewrite(t *testing.T) {
 func TestSessionSave_NoopWhenUnchanged(t *testing.T) {
 	tmp := t.TempDir()
 	t.Setenv("HOME", tmp)
+	t.Setenv("OCTO_DATA_ROOT", tmp)
 	t.Setenv("USERPROFILE", tmp)
 
 	sess := NewSession("m", "")
@@ -118,6 +120,7 @@ func TestSessionSave_NoopWhenUnchanged(t *testing.T) {
 func TestLoadSession_DropsPartialTail(t *testing.T) {
 	tmp := t.TempDir()
 	t.Setenv("HOME", tmp)
+	t.Setenv("OCTO_DATA_ROOT", tmp)
 	t.Setenv("USERPROFILE", tmp)
 
 	sess := NewSession("m", "")
@@ -166,6 +169,7 @@ func TestLoadSession_DropsPartialTail(t *testing.T) {
 func TestSessionBoundRoundTrip(t *testing.T) {
 	tmp := t.TempDir()
 	t.Setenv("HOME", tmp)
+	t.Setenv("OCTO_DATA_ROOT", tmp)
 	t.Setenv("USERPROFILE", tmp)
 
 	sess := NewSession("m", "")
@@ -192,6 +196,7 @@ func TestSessionBoundRoundTrip(t *testing.T) {
 func TestContentUpdatedAt_AdvancesOnRealContent(t *testing.T) {
 	tmp := t.TempDir()
 	t.Setenv("HOME", tmp)
+	t.Setenv("OCTO_DATA_ROOT", tmp)
 	t.Setenv("USERPROFILE", tmp)
 
 	sess := NewSession("m", "")
@@ -226,6 +231,7 @@ func TestContentUpdatedAt_AdvancesOnRealContent(t *testing.T) {
 func TestContentUpdatedAt_SurvivesAppendDeltaReload(t *testing.T) {
 	tmp := t.TempDir()
 	t.Setenv("HOME", tmp)
+	t.Setenv("OCTO_DATA_ROOT", tmp)
 	t.Setenv("USERPROFILE", tmp)
 
 	sess := NewSession("m", "")
@@ -261,6 +267,7 @@ func TestContentUpdatedAt_SurvivesAppendDeltaReload(t *testing.T) {
 func TestContentUpdatedAt_UnaffectedByBindingChurn(t *testing.T) {
 	tmp := t.TempDir()
 	t.Setenv("HOME", tmp)
+	t.Setenv("OCTO_DATA_ROOT", tmp)
 	t.Setenv("USERPROFILE", tmp)
 
 	sess := NewSession("m", "")
@@ -317,6 +324,7 @@ func TestContentUpdatedAt_UnaffectedByBindingChurn(t *testing.T) {
 func TestContentUpdatedAt_AdvancesOnSameLengthCompaction(t *testing.T) {
 	tmp := t.TempDir()
 	t.Setenv("HOME", tmp)
+	t.Setenv("OCTO_DATA_ROOT", tmp)
 	t.Setenv("USERPROFILE", tmp)
 
 	sess := NewSession("m", "")
@@ -349,6 +357,7 @@ func TestContentUpdatedAt_AdvancesOnSameLengthCompaction(t *testing.T) {
 func TestSetTitle_RewritesAfterPartialTail(t *testing.T) {
 	tmp := t.TempDir()
 	t.Setenv("HOME", tmp)
+	t.Setenv("OCTO_DATA_ROOT", tmp)
 	t.Setenv("USERPROFILE", tmp)
 
 	sess := NewSession("m", "")

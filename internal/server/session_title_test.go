@@ -71,6 +71,7 @@ func waitForRename(t *testing.T, conn *wsConn, sid string) string {
 func TestDoAgentTurn_GeneratesSessionTitle(t *testing.T) {
 	tmp := t.TempDir()
 	t.Setenv("HOME", tmp)
+	t.Setenv("OCTO_DATA_ROOT", tmp)
 	t.Setenv("USERPROFILE", tmp)
 
 	srv := mustServer(t, Config{Addr: "127.0.0.1:0", Tools: false})
@@ -128,6 +129,7 @@ func TestDoAgentTurn_GeneratesSessionTitle(t *testing.T) {
 func TestSessionList_ReflectsGeneratedTitle(t *testing.T) {
 	tmp := t.TempDir()
 	t.Setenv("HOME", tmp)
+	t.Setenv("OCTO_DATA_ROOT", tmp)
 	t.Setenv("USERPROFILE", tmp)
 
 	srv := mustServer(t, Config{Addr: "127.0.0.1:0", Tools: false})
@@ -216,6 +218,7 @@ func (s *titleSpySender) SendMessages(_ context.Context, _, system string, msgs 
 func TestDoAgentTurn_SkipsTitleForEmptyFirstMessage(t *testing.T) {
 	tmp := t.TempDir()
 	t.Setenv("HOME", tmp)
+	t.Setenv("OCTO_DATA_ROOT", tmp)
 	t.Setenv("USERPROFILE", tmp)
 
 	srv := mustServer(t, Config{Addr: "127.0.0.1:0", Tools: false})
@@ -296,6 +299,7 @@ func (s *blockingTitleFailSender) StreamMessages(_ context.Context, _, _ string,
 func TestDoAgentTurn_TitleGenerationFailureIsLogged(t *testing.T) {
 	tmp := t.TempDir()
 	t.Setenv("HOME", tmp)
+	t.Setenv("OCTO_DATA_ROOT", tmp)
 	t.Setenv("USERPROFILE", tmp)
 
 	logBuf := &syncBuffer{}

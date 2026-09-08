@@ -55,9 +55,10 @@ func postImport(t *testing.T, srv *Server, body string) *httptest.ResponseRecord
 func TestHandleImportSkill_UploadedZip(t *testing.T) {
 	tmp := t.TempDir()
 	t.Setenv("HOME", tmp)
+	t.Setenv("OCTO_DATA_ROOT", tmp)
 	t.Setenv("USERPROFILE", tmp)
 
-	base := writeSkillZip(t, filepath.Join(tmp, ".octo", "uploads"), "123_zipped.zip")
+	base := writeSkillZip(t, filepath.Join(tmp, "uploads"), "123_zipped.zip")
 	srv := mustServer(t, Config{Addr: "127.0.0.1:0", Tools: false})
 
 	w := postImport(t, srv, `{"source":"/api/uploads/`+base+`"}`)
@@ -72,7 +73,7 @@ func TestHandleImportSkill_UploadedZip(t *testing.T) {
 		t.Fatalf("name = %v, want zipped", body["name"])
 	}
 	for _, f := range []string{"SKILL.md", "scripts/__init__.py"} {
-		if _, err := os.Stat(filepath.Join(tmp, ".octo", "skills", "zipped", f)); err != nil {
+		if _, err := os.Stat(filepath.Join(tmp, "skills", "zipped", f)); err != nil {
 			t.Errorf("expected %s installed: %v", f, err)
 		}
 	}
@@ -93,6 +94,7 @@ func TestHandleImportSkill_UploadedZip(t *testing.T) {
 func TestHandleImportSkill_LocalDir(t *testing.T) {
 	tmp := t.TempDir()
 	t.Setenv("HOME", tmp)
+	t.Setenv("OCTO_DATA_ROOT", tmp)
 	t.Setenv("USERPROFILE", tmp)
 
 	src := filepath.Join(tmp, "my-skill")
@@ -115,7 +117,7 @@ func TestHandleImportSkill_LocalDir(t *testing.T) {
 	if w.Code != http.StatusOK {
 		t.Fatalf("status = %d, want 200; body=%s", w.Code, w.Body.String())
 	}
-	if _, err := os.Stat(filepath.Join(tmp, ".octo", "skills", "local-dir", "SKILL.md")); err != nil {
+	if _, err := os.Stat(filepath.Join(tmp, "skills", "local-dir", "SKILL.md")); err != nil {
 		t.Errorf("skill not installed: %v", err)
 	}
 }
@@ -126,9 +128,10 @@ func TestHandleImportSkill_LocalDir(t *testing.T) {
 func TestHandleImportSkill_InvalidZipContent(t *testing.T) {
 	tmp := t.TempDir()
 	t.Setenv("HOME", tmp)
+	t.Setenv("OCTO_DATA_ROOT", tmp)
 	t.Setenv("USERPROFILE", tmp)
 
-	uploadsDir := filepath.Join(tmp, ".octo", "uploads")
+	uploadsDir := filepath.Join(tmp, "uploads")
 	if err := os.MkdirAll(uploadsDir, 0o700); err != nil {
 		t.Fatal(err)
 	}
@@ -159,6 +162,7 @@ func TestHandleImportSkill_InvalidZipContent(t *testing.T) {
 func TestHandleImportSkill_BadSources(t *testing.T) {
 	tmp := t.TempDir()
 	t.Setenv("HOME", tmp)
+	t.Setenv("OCTO_DATA_ROOT", tmp)
 	t.Setenv("USERPROFILE", tmp)
 	srv := mustServer(t, Config{Addr: "127.0.0.1:0", Tools: false})
 

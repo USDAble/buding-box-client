@@ -14,6 +14,7 @@ import (
 	"github.com/open-octo/octo-agent/internal/agent"
 	"github.com/open-octo/octo-agent/internal/app"
 	"github.com/open-octo/octo-agent/internal/config"
+	"github.com/open-octo/octo-agent/internal/datapath"
 	"github.com/open-octo/octo-agent/internal/prompt"
 	"github.com/open-octo/octo-agent/internal/tools"
 )
@@ -156,7 +157,10 @@ func detectOnboardPhase() string {
 	// user.md (who the user is) absent. If either already exists the user has
 	// some identity set up, so don't nudge. (IdentityPath also finds the legacy
 	// uppercase SOUL.md/USER.md spellings.)
-	if identityMissing(octoDir()) {
+	// OCTO-FORK: identity files live in the data root, not the host home — see
+	// dev-docs-usdable/需求/2260906/技术方案/P1-便携数据根.md.
+	root, err := datapath.Root()
+	if err == nil && identityMissing(root) {
 		return "soul_setup"
 	}
 
@@ -177,8 +181,8 @@ func identityMissing(dir string) bool {
 // ─── POST /api/onboard/complete ─────────────────────────────────────────────
 
 func (s *Server) handleOnboardComplete(w http.ResponseWriter, r *http.Request) {
-	// Ensure the ~/.octo directory exists.
-	_ = os.MkdirAll(octoDir(), 0o700)
+	// Ensure the data root exists.
+	_, _ = datapath.Root()
 	writeJSON(w, http.StatusOK, map[string]any{"ok": true})
 }
 

@@ -19,6 +19,7 @@ import (
 func TestRunMemory_PathWithDirArg(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
+	t.Setenv("OCTO_DATA_ROOT", home)
 	t.Setenv("USERPROFILE", home)
 
 	project := t.TempDir()
@@ -47,6 +48,7 @@ func TestRunMemory_PathWithDirArg(t *testing.T) {
 func TestRunMemory_PathWithNonRepoDirArg(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
+	t.Setenv("OCTO_DATA_ROOT", home)
 	t.Setenv("USERPROFILE", home)
 
 	scratch := filepath.Join(home, "notes")
@@ -73,6 +75,7 @@ func TestRunMemory_PathWithNonRepoDirArg(t *testing.T) {
 func TestRunMemory_PathInHomeIsSharedDir(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
+	t.Setenv("OCTO_DATA_ROOT", home)
 	t.Setenv("USERPROFILE", home)
 
 	want, err := memory.HomeDir()
@@ -96,6 +99,7 @@ func TestRunMemory_PathInHomeIsSharedDir(t *testing.T) {
 func TestMemoryWriteRoots_CLI(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
+	t.Setenv("OCTO_DATA_ROOT", home)
 	t.Setenv("USERPROFILE", home)
 
 	root, err := memory.RootDir()
@@ -116,6 +120,7 @@ func TestMemoryWriteRoots_CLI(t *testing.T) {
 func TestRunMemory_RejectsNonDirArg(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
+	t.Setenv("OCTO_DATA_ROOT", home)
 	t.Setenv("USERPROFILE", home)
 
 	file := filepath.Join(home, "notadir.txt")

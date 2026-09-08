@@ -12,6 +12,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/open-octo/octo-agent/internal/datapath"
 	"github.com/open-octo/octo-agent/internal/logfile"
 )
 
@@ -58,14 +59,16 @@ func NewAt(path string) *Logger {
 	return &Logger{path: path}
 }
 
-// defaultPath returns ~/.octo/audit.log, or the empty string if the home
-// directory cannot be resolved.
+// defaultPath returns data/audit.log, or the empty string if the data root
+// cannot be resolved.
+// OCTO-FORK: the portable product keeps the audit log next to the executable,
+// not in the host home — see dev-docs-usdable/需求/2260906/技术方案/P1-便携数据根.md.
 func defaultPath() string {
-	home, err := os.UserHomeDir()
+	p, err := datapath.Join("audit.log")
 	if err != nil {
 		return ""
 	}
-	return filepath.Join(home, ".octo", "audit.log")
+	return p
 }
 
 // Log appends a single event to the audit log. It is safe for concurrent use.

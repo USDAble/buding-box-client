@@ -26,6 +26,7 @@ func writeCfg(t *testing.T, body string) {
 func TestConfigGuard_ValidateConfigFile(t *testing.T) {
 	tmp := t.TempDir()
 	t.Setenv("HOME", tmp)
+	t.Setenv("OCTO_DATA_ROOT", tmp)
 	t.Setenv("USERPROFILE", tmp)
 
 	// Malformed YAML → the "did not take effect" parse warning.
@@ -51,6 +52,7 @@ func TestConfigGuard_ValidateConfigFile(t *testing.T) {
 func TestConfigGuard_TouchedConfigFile(t *testing.T) {
 	tmp := t.TempDir()
 	t.Setenv("HOME", tmp)
+	t.Setenv("OCTO_DATA_ROOT", tmp)
 	t.Setenv("USERPROFILE", tmp)
 	cfgPath, _ := config.Path()
 
@@ -61,9 +63,9 @@ func TestConfigGuard_TouchedConfigFile(t *testing.T) {
 		want  bool
 	}{
 		{"edit_file abs path", "edit_file", map[string]any{"path": cfgPath}, true},
-		{"write_file ~ path", "write_file", map[string]any{"path": "~/.octo/config.yml"}, true},
+		{"write_file ~ path", "write_file", map[string]any{"path": "~/config.yml"}, true},
 		{"edit_file other file", "edit_file", map[string]any{"path": "/tmp/other.yml"}, false},
-		{"terminal touches config", "terminal", map[string]any{"command": "sed -i '' s/x/y/ ~/.octo/config.yml"}, true},
+		{"terminal touches config", "terminal", map[string]any{"command": "sed -i '' s/x/y/ ~/config.yml"}, true},
 		{"terminal unrelated", "terminal", map[string]any{"command": "go test ./..."}, false},
 		{"terminal other project config.yml", "terminal", map[string]any{"command": "cat ./project/config.yml"}, false},
 		{"read_file is not a write", "read_file", map[string]any{"path": cfgPath}, false},

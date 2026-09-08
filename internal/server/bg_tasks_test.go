@@ -195,6 +195,7 @@ func TestNotifyAgentBgExit_IdleGoesToSteerQueue(t *testing.T) {
 func TestDeliverModelNote_IdleKicksTurn(t *testing.T) {
 	tmp := t.TempDir()
 	t.Setenv("HOME", tmp)
+	t.Setenv("OCTO_DATA_ROOT", tmp)
 	t.Setenv("USERPROFILE", tmp)
 
 	srv := mustServer(t, Config{Addr: "127.0.0.1:0"})
@@ -243,6 +244,7 @@ func TestDeliverModelNote_IdleKicksTurn(t *testing.T) {
 func TestKickIdleSteerTurn_SkipsWhenBoundToOtherEntry(t *testing.T) {
 	tmp := t.TempDir()
 	t.Setenv("HOME", tmp)
+	t.Setenv("OCTO_DATA_ROOT", tmp)
 	t.Setenv("USERPROFILE", tmp)
 
 	srv := mustServer(t, Config{Addr: "127.0.0.1:0"})
@@ -282,6 +284,7 @@ func TestKickIdleSteerTurn_SkipsWhenBoundToOtherEntry(t *testing.T) {
 func TestPrepareToolTurn_SessionScopedAsyncManager(t *testing.T) {
 	tmp := t.TempDir()
 	t.Setenv("HOME", tmp)
+	t.Setenv("OCTO_DATA_ROOT", tmp)
 	t.Setenv("USERPROFILE", tmp)
 
 	srv := mustServer(t, Config{Tools: true})
@@ -320,6 +323,7 @@ func TestPrepareToolTurn_SessionScopedAsyncManager(t *testing.T) {
 func TestPrepareToolTurn_ReadTrackerPersistsAcrossTurns(t *testing.T) {
 	tmp := t.TempDir()
 	t.Setenv("HOME", tmp)
+	t.Setenv("OCTO_DATA_ROOT", tmp)
 	t.Setenv("USERPROFILE", tmp)
 
 	srv := mustServer(t, Config{Tools: true})
@@ -392,6 +396,7 @@ func TestPrepareToolTurn_ReadTrackerPersistsAcrossTurns(t *testing.T) {
 func TestPrepareToolTurn_AdvertisesSubAgentAndWorkflow(t *testing.T) {
 	tmp := t.TempDir()
 	t.Setenv("HOME", tmp)
+	t.Setenv("OCTO_DATA_ROOT", tmp)
 	t.Setenv("USERPROFILE", tmp)
 
 	// Preserve and restore global state so this test doesn't leak to others.
@@ -444,6 +449,7 @@ func TestPrepareToolTurn_AdvertisesSubAgentAndWorkflow(t *testing.T) {
 func TestPrepareToolTurn_DoesNotTouchGlobalSpawner(t *testing.T) {
 	tmp := t.TempDir()
 	t.Setenv("HOME", tmp)
+	t.Setenv("OCTO_DATA_ROOT", tmp)
 	t.Setenv("USERPROFILE", tmp)
 
 	prevSpawner := tools.ActiveSpawner()
@@ -522,6 +528,7 @@ func (toolInputSpawner) Continue(_ context.Context, _, _ string) (tools.SpawnRes
 func TestPrepareToolTurn_SubAgentToolEventCarriesToolInput(t *testing.T) {
 	tmp := t.TempDir()
 	t.Setenv("HOME", tmp)
+	t.Setenv("OCTO_DATA_ROOT", tmp)
 	t.Setenv("USERPROFILE", tmp)
 
 	srv := mustServer(t, Config{Addr: "127.0.0.1:0", Tools: true})

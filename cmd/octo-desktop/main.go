@@ -16,7 +16,9 @@ package main
 
 import (
 	"context"
+	"crypto/rand"
 	_ "embed"
+	"encoding/hex"
 	"fmt"
 	"log"
 	"log/slog"
@@ -61,6 +63,21 @@ var trayColorIcon []byte
 // `octo serve` binds, so every existing client (Web, VS Code, Obsidian, CLI)
 // finds it without configuration. LAN exposure stays a CLI concern.
 const hubAddr = "127.0.0.1:8088"
+
+// OCTO-FORK: newWindowToken mints the process-in-memory product-gate token —
+// 32 random bytes, hex-encoded — which lets the product gate recognise "this
+// desktop window's requests" (see internal/productgate). Memory-only: a
+// restart mints a fresh one, so there is nothing to persist or revoke. See
+// dev-docs-usdable/需求/2260906/技术方案/P3-登录态与产品门.md.
+func newWindowToken() string {
+	b := make([]byte, 32)
+	if _, err := rand.Read(b); err != nil {
+		// crypto/rand failing is essentially unheard of; a timestamp token
+		// keeps the window usable rather than refusing to open.
+		return fmt.Sprintf("octo-%d", time.Now().UnixNano())
+	}
+	return hex.EncodeToString(b)
+}
 
 // isBundled reports whether we're running inside a .app. The Wails
 // notifications service needs a bundle identifier and hard-fails startup
@@ -220,7 +237,7 @@ func main() {
 	// it runs before the bridge takes its copy of settings below.
 	ensureBundledOcto(&settings)
 
-	bridge := &nativeBridge{settings: settings, url: "http://" + hubAddr}
+	bridge := &nativeBridge{settings: settings, url: "http://" + hubAddr, windowToken: newWindowToken()}
 	// On Windows/Linux a window close would otherwise quit the app; start with
 	// quit allowed only when the user opted out of keep-running-in-background.
 	bridge.allowQuit.Store(!settings.KeepRunningInBackground)
@@ -557,6 +574,10 @@ func startHub(app *application.App, bridge *nativeBridge, settings desktopSettin
 		// dead backend. Omit the tool; the desktop shell owns its own update
 		// lifecycle (Check for Updates → installer).
 		DisableRestart: true,
+		// The product gate keys on this in-memory token to distinguish the
+		// desktop window's requests from other loopback peers (CLI, VS Code,
+		// Obsidian). Empty under `octo serve`, where nothing is gated.
+		WindowToken: bridge.windowToken,
 	})
 	if err != nil {
 		bridge.showError(L().errTitle, fmt.Sprintf(L().errStartFmt, err))

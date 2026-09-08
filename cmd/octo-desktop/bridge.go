@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net/url"
 	"os"
 	"os/exec"
 	"runtime"
@@ -11,6 +12,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/open-octo/octo-agent/internal/productgate"
 	"github.com/open-octo/octo-agent/internal/serveproc"
 	"github.com/open-octo/octo-agent/internal/server"
 	"github.com/wailsapp/wails/v3/pkg/application"
@@ -30,6 +32,11 @@ type nativeBridge struct {
 	// ApplicationStarted goroutine) writes it while the tray-refresh loop reads it.
 	srv atomic.Pointer[server.Server]
 	url string // http://127.0.0.1:8088, set once bound
+	// windowToken is the process-in-memory product-gate token, injected into the
+	// webview URL so the frontend can stamp it on its requests and the product
+	// gate can recognise "this window". It never touches disk. OCTO-FORK: P3
+	// product gate — see dev-docs-usdable/需求/2260906/技术方案/P3-登录态与产品门.md.
+	windowToken string
 
 	// closeLog releases the rotating serve.log writer that startHub installs once
 	// this process owns the port. Written by startHub (the ApplicationStarted
@@ -167,14 +174,20 @@ const (
 const desktopShellQuery = "shell=octo-desktop"
 
 // shellURL builds the desktop-shell window URL for a frontend route hash,
-// always carrying the desktopShellQuery marker. base is b.url, e.g.
-// "http://127.0.0.1:8088". Fresh-window loads and SetURL navigations share it,
-// so they produce the identical path+query and a route change stays a pure
-// hashchange (no reload). The exact query string is contracted with the
-// frontend reader isDesktopShell in web/src/lib/stores.ts — keep both sides in
-// sync (TestShellURL pins the Go side).
-func shellURL(base, hash string) string {
+// always carrying the desktopShellQuery marker and, when set, the in-memory
+// window token. base is b.url, e.g. "http://127.0.0.1:8088". Fresh-window loads
+// and SetURL navigations share it, so they produce the identical path+query and
+// a route change stays a pure hashchange (no reload). The exact query string is
+// contracted with the frontend readers isDesktopShell in web/src/lib/stores.ts
+// and windowToken in web/src/lib/product.ts — keep all sides in sync
+// (TestShellURL pins the Go side). OCTO-FORK: the window token rides this URL
+// so the webview adopts it into sessionStorage (P3 product gate) — see
+// dev-docs-usdable/需求/2260906/技术方案/P3-登录态与产品门.md.
+func shellURL(base, hash, token string) string {
 	u := base + "/?" + desktopShellQuery
+	if token != "" {
+		u += "&" + productgate.QueryWindowToken + "=" + url.QueryEscape(token)
+	}
 	if hash != "" {
 		u += "#" + hash
 	}
@@ -508,7 +521,7 @@ func (b *nativeBridge) openNewSession() { b.showWindowAt("new") }
 func (b *nativeBridge) showWindowAt(hash string) {
 	// The marker rides on every navigation the shell performs (fresh window and
 	// SetURL alike) so nativeShell stays true across reloads and route changes.
-	target := shellURL(b.url, hash)
+	target := shellURL(b.url, hash, b.windowToken)
 	// Snapshot the pointer once: the frame probe's goroutine can clear it
 	// concurrently, and a lock-free re-read mid-function could see that nil and
 	// panic. Everything below works off win, then publishes it back.
@@ -643,7 +656,7 @@ func (b *nativeBridge) showWindowAt(hash string) {
 				if b.currentWindow() != w {
 					return
 				}
-				w.SetURL(shellURL(b.url, ""))
+				w.SetURL(shellURL(b.url, "", b.windowToken))
 			})
 		}
 		win = w

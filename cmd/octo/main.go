@@ -39,7 +39,7 @@ func run(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 	// (the common terminal launch).
 	shellpath.SyncToLoginShell()
 
-	// Load ~/.octo/serve.env for variables the launcher can't inherit (GUI /
+	// Load data/serve.env for variables the launcher can't inherit (GUI /
 	// launchd / .desktop start with a minimal environment, missing the user's
 	// shell profile). Best-effort — a missing file is a no-op, and explicit
 	// env (CLI / systemd Environment=) always wins over the file. Done early
@@ -47,10 +47,10 @@ func run(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 	// any tool or subcommand reads the environment.
 	serveenv.Load()
 
-	// Materialize the binary's default skills/workflows to ~/.octo/skills-default
+	// Materialize the binary's default skills/workflows to data/skills-default
 
-	// Materialize the binary's default skills/workflows to ~/.octo/skills-default
-	// and ~/.octo/workflows-default so they're discoverable like any user
+	// Materialize the binary's default skills/workflows to data/skills-default
+	// and data/workflows-default so they're discoverable like any user
 	// skill/workflow, and prune stale workflow run journals. Best-effort and a
 	// fast no-op/pass once current; skipped for the internal fast-path commands.
 	// Done before the len(args)==0 REPL early-return so a bare `octo` (the common
@@ -150,11 +150,11 @@ func printUsage(w io.Writer) {
 	fmt.Fprintln(w, "Common flags:")
 	fmt.Fprintln(w, "  -c, --continue [id]      Resume a session — 'last', short ID, or substring; no ID = pick from a list")
 	fmt.Fprintln(w, "  --take-over              When resuming, take over a session bound to another entry")
-	fmt.Fprintln(w, "  --agent <id>             Start the session bound to a specific agent (from ~/.octo/agents)")
+	fmt.Fprintln(w, "  --agent <id>             Start the session bound to a specific agent (from data/agents)")
 	fmt.Fprintln(w, "  --no-tools               Disable built-in tools (terminal, edit_file, …) + MCP/skills")
 	fmt.Fprintln(w, "  --provider <name>        anthropic (default) | openai")
 	fmt.Fprintln(w, "  --model <name>           Override the default model for the provider")
-	fmt.Fprintln(w, "  --no-save                Don't auto-save the session to ~/.octo/sessions")
+	fmt.Fprintln(w, "  --no-save                Don't auto-save the session to data/sessions")
 	fmt.Fprintln(w, "  --no-memory              Disable cross-session memory injection")
 	fmt.Fprintln(w, "  --sandbox                OS-enforced confinement for terminal commands (macOS/Linux)")
 	fmt.Fprintln(w, "  --permission-mode <m>    interactive (default; prompts on ask) | strict | auto")

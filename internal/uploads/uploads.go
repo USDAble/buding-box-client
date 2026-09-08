@@ -1,6 +1,6 @@
 // Package uploads holds shared primitives for the on-disk lifetime of files
 // the agent receives as attachments: web uploads and IM-channel images under
-// ~/.octo/uploads (managed by internal/server), and IM-channel document/file
+// data/uploads (managed by internal/server), and IM-channel document/file
 // attachments under per-adapter OS-temp directories (this package). Neither
 // location is ever swept by the code that writes into it — this package lets
 // a single startup housekeeping pass (cmd/octo) age both out, without

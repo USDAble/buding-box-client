@@ -13,7 +13,7 @@ import (
 // changed, from broadcasts this process emits as it makes those changes. That
 // covers nothing another process does — and another process routinely does:
 // `octo` in a terminal creates sessions and files them under projects
-// (EnsureProjectForDir) against the same ~/.octo, and a second `octo serve` or
+// (EnsureProjectForDir) against the same data root, and a second `octo serve` or
 // the desktop shell can too.
 //
 // Nothing was ever wrong on screen, since every read goes to disk: listSessions
@@ -90,7 +90,7 @@ func sampleStore() storeFingerprint {
 	return fp
 }
 
-// startStoreWatch begins sampling ~/.octo for changes made outside this
+// startStoreWatch begins sampling the data root for changes made outside this
 // process, broadcasting the events an open sidebar already knows how to act
 // on. Started by serveOn; stopped by doShutdown closing watchStop.
 //

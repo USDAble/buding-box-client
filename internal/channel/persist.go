@@ -13,7 +13,7 @@ import (
 )
 
 // IM sessions persist their conversation history to the same store web
-// sessions use (~/.octo/sessions, agent.Session JSONL). The store ID is
+// sessions use (data/sessions, agent.Session JSONL). The store ID is
 // derived deterministically from the session key, so after a server restart
 // the first message from a chat reloads its history — before this, IM
 // context lived only in process memory and a restart (now a routine event:

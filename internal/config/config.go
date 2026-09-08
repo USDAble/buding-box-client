@@ -1,5 +1,5 @@
 // Package config holds the user's persisted CLI defaults at
-// ~/.octo/config.yml — a list of named model configurations plus global
+// data/config.yml — a list of named model configurations plus global
 // settings, so a fresh `octo` works without re-typing flags or
 // re-exporting env vars every session.
 //
@@ -9,7 +9,7 @@
 // plaintext, mode 0600), so callers fall back to the entry's APIKey only when
 // the matching env var is empty.
 //
-// The file was previously ~/.octo/config.yaml with a single top-level
+// The file was previously data/config.yaml with a single top-level
 // provider/model pair. Load reads that legacy file (and legacy fields) when
 // config.yml is absent, normalising it into a one-entry Models list; the
 // first Save writes the new schema to config.yml and parks the legacy file
@@ -223,7 +223,7 @@ type Config struct {
 	// Trash configures the file recycle bin (agent-issued deletes and
 	// overwrites are staged there for recovery).
 	Trash TrashConfig `yaml:"trash,omitempty"`
-	// Uploads configures age-out for web/IM attachment files (~/.octo/uploads
+	// Uploads configures age-out for web/IM attachment files (data/uploads
 	// and IM-channel temp attachments).
 	Uploads UploadsConfig `yaml:"uploads,omitempty"`
 	// Notify controls whether the TUI sends a desktop notification when a turn
@@ -237,7 +237,7 @@ type Config struct {
 	TerminalTitle *bool `yaml:"terminal_title,omitempty"`
 	// OnboardAttempted is the LEGACY location of the soul_setup nudge marker.
 	// It is only READ now (see the package-level OnboardAttempted /
-	// MarkOnboardAttempted, which use the standalone ~/.octo/.onboard_attempted
+	// MarkOnboardAttempted, which use the standalone data/.onboard_attempted
 	// file so a config.yml rewrite can't clobber it — #1660). Kept as a field
 	// so installs that recorded it in config.yml before the marker file existed
 	// still count as attempted; nothing writes it anymore.
@@ -250,7 +250,7 @@ type Config struct {
 type AgentsConfig struct {
 	// DisabledDefaults lists curated expert-agent IDs the user has hidden from
 	// the gallery. Hidden, not deleted — the underlying
-	// ~/.octo/agents-default/<id>.md is untouched and can be re-shown.
+	// data/agents-default/<id>.md is untouched and can be re-shown.
 	DisabledDefaults []string `yaml:"disabled_defaults,omitempty"`
 }
 
@@ -873,7 +873,7 @@ func (c *Config) SetDefaultComposite(cid string) {
 // concurrent Save can't interleave and drop the reference update (design §6).
 //
 // Session files (which carry their own model_config composite-id references
-// in ~/.octo/sessions/*.jsonl) are NOT scanned or updated — that's
+// in data/sessions/*.jsonl) are NOT scanned or updated — that's
 // intentionally deferred. A stale composite id whose endpoint was renamed
 // falls through EntryByModel's bare-model path (Slice 2.2), which finds the
 // model in c.Models (still populated during PR1-3) and degrades gracefully.
@@ -992,7 +992,7 @@ func legacyPath() (string, error) {
 	return datapath.Join("config.yaml")
 }
 
-// onboardMarkerPath returns ~/.octo/.onboard_attempted — a standalone marker
+// onboardMarkerPath returns data/.onboard_attempted — a standalone marker
 // that records the soul_setup auto-nudge has fired once. It lives OUTSIDE
 // config.yml on purpose: config.yml is rewritten by many non-atomic
 // Load+modify+Save callers during first-run (the setup panel's key save,
@@ -1512,8 +1512,8 @@ func migrateEntryProvider(e *ModelEntry) {
 	}
 }
 
-// Load reads ~/.octo/config.yml, falling back to the legacy
-// ~/.octo/config.yaml. A missing file is not an error — it returns the zero
+// Load reads data/config.yml, falling back to the legacy
+// data/config.yaml. A missing file is not an error — it returns the zero
 // Config so first-run callers need no special-casing. A present but malformed
 // file IS an error, so a typo surfaces instead of silently reverting to
 // defaults.
@@ -1600,8 +1600,8 @@ func resetLastGoodForTest() {
 	lastGood.byPath = nil
 }
 
-// Save writes the config to ~/.octo/config.yml with mode 0600 (it may hold
-// API keys), creating ~/.octo if needed. A legacy config.yaml present at that
+// Save writes the config to data/config.yml with mode 0600 (it may hold
+// API keys), creating the data root if needed. A legacy config.yaml present at that
 // moment is renamed to config.yaml.bak — best effort, because config.yml wins
 // the read order regardless.
 //

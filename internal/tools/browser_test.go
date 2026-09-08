@@ -328,7 +328,7 @@ func TestResolveReplayParams_MissingReturnsError(t *testing.T) {
 }
 
 // TestBrowserRecordingsDir_MigratesLegacyDir: with no env override, a pre-rename
-// ~/.octo/browser-skills directory is renamed to browser-recordings on first
+// data/browser-skills directory is renamed to browser-recordings on first
 // use; env vars (new name first, then legacy) override the default.
 func TestBrowserRecordingsDir_MigratesLegacyDir(t *testing.T) {
 	tmp := t.TempDir()
@@ -581,7 +581,7 @@ func TestWrapBrowserConnectError(t *testing.T) {
 // empty profile carries no login session and trips the macOS "Chrome Safe
 // Storage" keychain prompt.
 func TestBrowserPage_NoLaunchFallback(t *testing.T) {
-	// An empty HOME means no ~/.octo/config.yml — so ConnectPort=0 and
+	// An empty HOME means no data/config.yml — so ConnectPort=0 and
 	// AttachRunning=false, i.e. the default branch — and Chrome's default profile
 	// dirs resolve under this empty home, so discovery finds no running Chrome.
 	// Deterministic across runners, and it never touches the user's real profile.

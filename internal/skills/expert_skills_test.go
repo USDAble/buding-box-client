@@ -26,7 +26,7 @@ func writeSkillDir(t *testing.T, root, name, desc string) {
 // An expert skill is discovered with its own source, stays out of the global
 // manifest, and appears in an expert's manifest only when tool_skills names it.
 func TestExpertSkills_ScopedToNamingProfiles(t *testing.T) {
-	// Isolate the user root too — Discover reads ~/.octo/skills via HOME.
+	// Isolate the user root too — Discover reads data/skills via HOME.
 	tmp := t.TempDir()
 	t.Setenv("HOME", tmp)
 	t.Setenv("USERPROFILE", tmp)

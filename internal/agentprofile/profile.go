@@ -6,8 +6,8 @@
 // Profiles come from three sources, in increasing precedence:
 //
 //   - builtin: code-defined (default, explore, general, code-review)
-//   - default: ~/.octo/agents-default/<id>.md (curated experts, officially shipped)
-//   - user:    ~/.octo/agents/<id>.md       (conversation + delegation modes)
+//   - default: data/agents-default/<id>.md (curated experts, officially shipped)
+//   - user:    data/agents/<id>.md       (conversation + delegation modes)
 //
 // A profile is consumed in two modes:
 //
@@ -38,7 +38,7 @@ const (
 	// code-review) and have no .md file.
 	SourceBuiltin Source = "builtin"
 	// SourceDefault profiles are officially-curated expert personas shipped in
-	// the binary and materialized to ~/.octo/agents-default (mirrors
+	// the binary and materialized to data/agents-default (mirrors
 	// internal/skills' "default" source). Unlike SourceBuiltin they ARE
 	// surfaced through Store.List()/the REST API — they're user-facing
 	// content, not internal capability tiers. Like SourceBuiltin they are
@@ -47,7 +47,7 @@ const (
 	// keeps receiving content updates. The user-facing knob is hiding it
 	// (SetDisabledDefaults), not editing it.
 	SourceDefault Source = "default"
-	// SourceUser profiles live in ~/.octo/agents/*.md and support both
+	// SourceUser profiles live in data/agents/*.md and support both
 	// conversation and delegation modes.
 	SourceUser Source = "user"
 )
@@ -80,7 +80,7 @@ type ChannelBinding struct {
 }
 
 // Profile describes one agent: identity, capability slice, and platform
-// slice. User-level profiles are stored as ~/.octo/agents/<id>.md (Markdown
+// slice. User-level profiles are stored as data/agents/<id>.md (Markdown
 // body = system prompt, YAML frontmatter = everything else).
 type Profile struct {
 	ID          string // file-name slug (without .md); fixed name for builtins

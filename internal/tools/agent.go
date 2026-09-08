@@ -52,7 +52,7 @@ func profileNames(store *agentprofile.Store) string {
 //   - prompt:      the task. Self-contained — the child starts with zero
 //     conversation context and can't see this conversation.
 //   - subagent_type: agent type (explore, general, code-review, or a
-//     user-defined agent from ~/.octo/agents). Required.
+//     user-defined agent from data/agents). Required.
 //   - run_in_background: when true the agent runs async and you are notified
 //     on completion. When false (default) it blocks and returns the result.
 //   - model: optional model override ("lite" resolves to the endpoint's lite
@@ -102,7 +102,7 @@ func (AgentTool) DefinitionFor(sessionModel string) agent.ToolDefinition {
 				},
 				"subagent_type": map[string]any{
 					"type":        "string",
-					"description": "Required agent type: 'explore' (read-only research), 'general' (full toolbelt), 'code-review' (read-only review), or a user-defined agent from ~/.octo/agents.",
+					"description": "Required agent type: 'explore' (read-only research), 'general' (full toolbelt), 'code-review' (read-only review), or a user-defined agent from <data root>/agents.",
 				},
 				"run_in_background": map[string]any{
 					"type":        "boolean",

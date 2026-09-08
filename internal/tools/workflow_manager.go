@@ -91,7 +91,7 @@ type WorkflowRunRequest struct {
 	// here).
 	WorkingDir string
 	// JournalDir overrides the workflow runtime's journal directory
-	// (~/.octo/workflow-journals by default). Empty leaves the runtime
+	// (data/workflow-journals by default). Empty leaves the runtime
 	// default in place — real entry points never set this; tests point it at
 	// a temp dir so running the suite doesn't write into a developer's real
 	// journal directory (see ActiveWorkflowJournalDir).
@@ -346,7 +346,7 @@ func (m *WorkflowManager) Start(req WorkflowRunRequest) (string, error) {
 	// not in every caller that builds a WorkflowRunRequest, means a caller that
 	// forgets to set it (or builds the request directly, bypassing WorkflowTool)
 	// still respects the override — the tools package's tests rely on this to
-	// avoid writing into a developer's real ~/.octo/workflow-journals.
+	// avoid writing into a developer's real data/workflow-journals.
 	journalDir := req.JournalDir
 	if journalDir == "" {
 		journalDir = ActiveWorkflowJournalDir()

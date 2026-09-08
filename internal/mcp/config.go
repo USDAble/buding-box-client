@@ -59,7 +59,7 @@ type ServerEntry struct {
 	//	""        — no auth beyond what's in Headers (default)
 	//	"oauth"   — run Authorization Code + PKCE OAuth on first connect
 	//	            and on every 401 response; cached at
-	//	            ~/.octo/mcp-tokens/<server>.json
+	//	            data/mcp-tokens/<server>.json
 	//
 	// Future values may add bearer or client_credentials; the strict
 	// string match in Validate keeps typos visible.
@@ -119,7 +119,7 @@ func isAllowedURLScheme(rawURL string) bool {
 	return strings.HasPrefix(rawURL, "http://") || strings.HasPrefix(rawURL, "https://")
 }
 
-// LoadConfig reads the user-global MCP server config at ~/.octo/mcp.json.
+// LoadConfig reads the user-global MCP server config at data/mcp.json.
 //
 // Disabled entries are filtered out at load time. A missing file is not an
 // error — it produces a zero-server config.

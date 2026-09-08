@@ -7,7 +7,7 @@ import (
 )
 
 // TestMain neutralizes the default-agents root for the whole package so tests
-// never read the real ~/.octo/agents-default (which an installed binary
+// never read the real data/agents-default (which an installed binary
 // populates). Tests that exercise defaults opt in via useDefaultAgentsRoot.
 func TestMain(m *testing.M) {
 	tmp, _ := os.MkdirTemp("", "octo-agents-default-empty")

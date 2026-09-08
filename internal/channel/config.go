@@ -60,7 +60,7 @@ func (il *InstanceList) UnmarshalYAML(value *yaml.Node) error {
 }
 
 // Config manages IM platform credentials (Feishu, WeCom, etc.).
-// Stored in ~/.octo/channels.yml.
+// Stored in data/channels.yml.
 type Config struct {
 	Channels map[string]InstanceList `yaml:"channels,omitempty"`
 }
@@ -72,7 +72,7 @@ func ConfigPath() (string, error) {
 	return datapath.Join(ConfigFile)
 }
 
-// LoadConfig reads ~/.octo/channels.yml. A missing file returns an empty
+// LoadConfig reads data/channels.yml. A missing file returns an empty
 // Config rather than an error.
 func LoadConfig() (*Config, error) {
 	path, err := ConfigPath()
@@ -105,7 +105,7 @@ func LoadConfig() (*Config, error) {
 	return &cfg, nil
 }
 
-// Save writes the config to ~/.octo/channels.yml with mode 0600.
+// Save writes the config to data/channels.yml with mode 0600.
 func (c *Config) Save() error {
 	path, err := ConfigPath()
 	if err != nil {

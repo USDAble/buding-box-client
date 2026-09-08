@@ -15,7 +15,7 @@ import (
 //
 // It also neutralizes the default-workflows root and the workflow journal
 // directory for the whole package so tests never touch the real
-// ~/.octo/workflows-default or ~/.octo/workflow-journals (which an installed
+// data/workflows-default or data/workflow-journals (which an installed
 // binary populates and every workflow run appends to) — mirrors
 // internal/skills/defaults_test.go's TestMain. Without the journal redirect,
 // every test that runs a workflow (most of workflow_test.go) leaves a .jsonl
@@ -28,9 +28,9 @@ func TestMain(m *testing.M) {
 		os.Exit(sandbox.ShimMain())
 	}
 	// Point HOME at a throwaway dir for the whole package so nothing touches
-	// the developer's real ~/.octo — in particular the overwrite-protection
+	// the developer's real data root — in particular the overwrite-protection
 	// path (backupBeforeOverwrite) would otherwise stage every edit_file /
-	// write_file overwrite into the real ~/.octo/trash. A per-test
+	// write_file overwrite into the real data/trash. A per-test
 	// t.Setenv("HOME", …) still overrides this default for its own duration.
 	//
 	// The throwaway HOME is created UNDER the real home dir, not under TMPDIR:

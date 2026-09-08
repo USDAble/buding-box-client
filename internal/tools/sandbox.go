@@ -169,7 +169,7 @@ func shellCommand(ctx context.Context, command string) (*exec.Cmd, error) {
 	return cmd, nil
 }
 
-// bundledBinDir returns ~/.octo/bin if it exists on disk, or "" otherwise.
+// bundledBinDir returns data/bin if it exists on disk, or "" otherwise.
 // The Windows/macOS installers stage helper binaries there (bundled uv — see
 // the Makefile's bundle-tools-windows/-macos targets and
 // packaging/windows/octo.iss + packaging/macos/scripts/postinstall;
@@ -191,12 +191,12 @@ func bundledBinDir() string {
 	return dir
 }
 
-// withBundledBinPath returns env with ~/.octo/bin appended to the PATH entry
+// withBundledBinPath returns env with data/bin appended to the PATH entry
 // (or a new PATH entry added if none exists), so a child process can resolve
 // octo-bundled uv as a last resort. Appended, not prepended: a system
 // install of uv already on PATH is found first and takes precedence — the
 // bundled copy is a fallback, never a shadow. No-op (returns env unchanged)
-// when ~/.octo/bin doesn't exist, e.g. on non-installer installs. The caller
+// when data/bin doesn't exist, e.g. on non-installer installs. The caller
 // owns env's backing array (typically a fresh os.Environ() call), so this
 // mutates in place rather than reallocating on the common no-op path.
 func withBundledBinPath(env []string) []string {

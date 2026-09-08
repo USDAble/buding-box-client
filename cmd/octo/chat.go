@@ -71,7 +71,7 @@ func identityMissing() bool {
 }
 
 // onboardAttempted reports whether the soul_setup auto-nudge has already fired
-// once (see config.OnboardAttempted, backed by ~/.octo/.onboard_attempted). A
+// once (see config.OnboardAttempted, backed by data/.onboard_attempted). A
 // missing marker is treated as "not attempted yet" — the nudge firing once
 // more is harmless, while silently skipping it forever would not be.
 func onboardAttempted() bool {
@@ -521,7 +521,7 @@ func runChat(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 	var sandboxWrite, sandboxRead stringList
 	fs.Var(&sandboxWrite, "sandbox-write", "Under --sandbox, an extra writable directory (repeatable)")
 	fs.Var(&sandboxRead, "sandbox-read", "Under --sandbox, an extra read-only directory (repeatable)")
-	agentName := fs.String("agent", "", "Start the session bound to a specific agent (by ID from ~/.octo/agents)")
+	agentName := fs.String("agent", "", "Start the session bound to a specific agent (by ID from data/agents)")
 
 	if err := fs.Parse(args); err != nil {
 		return 2
@@ -560,7 +560,7 @@ func runChat(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 	cfg, err := config.Load()
 	if err != nil {
 		fmt.Fprintf(stderr, "octo: %v\n", err)
-		fmt.Fprintln(stderr, "Run `octo config` to rewrite ~/.octo/config.yml.")
+		fmt.Fprintln(stderr, "Run `octo config` to rewrite data/config.yml.")
 		return 1
 	}
 
@@ -612,7 +612,7 @@ func runChat(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 	}
 	resolvedShowReasoning := resolveShowReasoning(showReasoningFlagSet, *showReasoning, cfg)
 
-	// Resolve the --agent profile (if specified) from ~/.octo/agents.
+	// Resolve the --agent profile (if specified) from data/agents.
 	// When the profile carries its own SystemPrompt, it replaces the
 	// server's base prompt — so expert agents actually use their persona.
 	// The profile ID is stamped onto the session so it routes to the right
@@ -1148,7 +1148,7 @@ func runChat(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 	// Suggest saving a workflow once the model chains >=2 skills by hand in a
 	// turn — independent of memory, so wired unconditionally.
 	tools.NewWorkflowNudger().RegisterHooks(hookEngine)
-	// Validate ~/.octo/config.yml right after the agent edits it.
+	// Validate data/config.yml right after the agent edits it.
 	tools.NewConfigGuard().RegisterHooks(hookEngine)
 	// Auto-store into the external memory backend (if configured) after each
 	// turn — independent of memDir/MEMORY.md, so wired unconditionally; a
@@ -1361,7 +1361,7 @@ func runChat(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 		// Backs /reload: re-renders every layer that can go stale mid-session
 		// (skills manifest, MCP manifest, memory injection) and re-composes,
 		// rather than just the MCP layer above. skillReg.Reload() rescans
-		// ~/.octo/skills and ./.octo/skills so a skill installed after this
+		// data/skills and ./.octo/skills so a skill installed after this
 		// session started is picked up.
 		cfg.recomposeSystemPrompt = func() {
 			skillReg.Reload()

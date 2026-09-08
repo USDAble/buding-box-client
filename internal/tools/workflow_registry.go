@@ -25,7 +25,7 @@ var (
 // "default" tier from this embed.FS directly, so the built-in set is always
 // available even in a process that never calls MaterializeDefaultWorkflows
 // (a library consumer of this package, or a test). MaterializeDefaultWorkflows
-// (workflow_defaults.go) additionally writes them to ~/.octo/workflows-default
+// (workflow_defaults.go) additionally writes them to data/workflows-default
 // so they're discoverable, listable and editable on disk exactly like a
 // user-level workflow (mirrors internal/skills/defaults.go); when
 // present, that materialized copy overlays the embedded one of the same name,

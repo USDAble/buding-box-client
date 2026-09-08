@@ -31,7 +31,7 @@ func recordingAsk(allow, remember bool, err error, calls *int) PermissionAsk {
 }
 
 // quietGate builds a gate with a no-op audit logger, so test checks never
-// append to the real ~/.octo/audit.log (NewPermissionGate writes there by
+// append to the real data/audit.log (NewPermissionGate writes there by
 // default).
 func quietGate(t *testing.T, ask PermissionAsk) *permissionGate {
 	t.Helper()
@@ -40,7 +40,7 @@ func quietGate(t *testing.T, ask PermissionAsk) *permissionGate {
 
 func TestGate_AuditLogsDenyAndAsk(t *testing.T) {
 	// Inject an audit logger at a temp path instead of the default
-	// ~/.octo/audit.log. (Redirecting $HOME would not work on Windows, where
+	// data/audit.log. (Redirecting $HOME would not work on Windows, where
 	// os.UserHomeDir reads %USERPROFILE%.)
 	logPath := filepath.Join(t.TempDir(), "audit.log")
 	g := &permissionGate{engine: newEngine(t, permission.ModeInteractive), audit: audit.NewAt(logPath)}

@@ -61,7 +61,7 @@ func parseStdioCommand(name, line string, allowArbitrary bool) (string, []string
 	return base, fields[1:], nil
 }
 
-// MCP server management API. Reads and writes both go to ~/.octo/mcp.json
+// MCP server management API. Reads and writes both go to data/mcp.json
 // (internal/mcp.LoadManaged). Mutations apply to the live registry
 // incrementally (connect/disconnect just the touched server), so a change is
 // effective for the next turn of every session without a restart. All
@@ -278,7 +278,7 @@ func (s *Server) handleGetMCPServer(w http.ResponseWriter, r *http.Request) {
 //
 // This is the only way to add a server through the API — the structured
 // single-server "Add Server" form was removed from the web UI in favor of
-// the mcp-creator skill, which edits ~/.octo/mcp.json directly and isn't
+// the mcp-creator skill, which edits data/mcp.json directly and isn't
 // subject to this endpoint's command allowlist.
 func (s *Server) handleCreateMCPServer(w http.ResponseWriter, r *http.Request) {
 	var req struct {

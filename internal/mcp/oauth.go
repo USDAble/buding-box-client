@@ -94,7 +94,7 @@ type cachedTokenProvider interface {
 }
 
 // OAuthClient implements OAuthProvider against a single MCP resource URL.
-// Persists state under ~/.octo/mcp-tokens/<server>.json so a fresh
+// Persists state under data/mcp-tokens/<server>.json so a fresh
 // `octo` session reuses the access token + refresh token from the
 // previous run.
 type OAuthClient struct {

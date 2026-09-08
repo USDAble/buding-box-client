@@ -39,7 +39,7 @@ var (
 
 // isolateTestInputHistory points OCTO_INPUT_HISTORY_FILE at a fresh,
 // nonexistent path per call, so newTestModel never reads or writes the
-// developer's real ~/.octo/input_history, and successive tests in this
+// developer's real data/input_history, and successive tests in this
 // package don't leak history entries into each other.
 func isolateTestInputHistory() {
 	testHistoryDirOnce.Do(func() {

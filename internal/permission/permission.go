@@ -8,7 +8,7 @@
 // reaches the agent (CLI, future M8 HTTP server, future M9 IM bridge)
 // can drive arbitrary tools, including `terminal: rm -rf`. With it,
 // CLI users get an interactive prompt for risky operations and remote
-// callers are denied unless explicitly whitelisted in ~/.octo/permissions.yml.
+// callers are denied unless explicitly whitelisted in data/permissions.yml.
 //
 // Embedding rules:
 //
@@ -62,7 +62,7 @@ const (
 )
 
 // ResolveDefaultMode reads the global default permission mode from
-// ~/.octo/config.yml. This is the value a brand-new session snapshots at
+// data/config.yml. This is the value a brand-new session snapshots at
 // creation time (see agent.Session.PermissionMode) — once a session has its
 // own mode, it never calls back into this. An unset or unrecognized value
 // falls back to ModeInteractive, matching New's own zero-value default.
@@ -81,7 +81,7 @@ func ResolveDefaultMode() Mode {
 // ResolveUnattendedDefaultMode is ResolveDefaultMode for sessions that run
 // with nobody present to answer an ask prompt — currently cron task
 // sessions (see tasks_handlers.go's CreateSession). An explicit
-// ~/.octo/config.yml `permission_mode` is honored exactly like
+// data/config.yml `permission_mode` is honored exactly like
 // ResolveDefaultMode; only the "nothing configured" fallback differs. Since
 // write_file/edit_file no longer blanket-allow $CWD (see defaults.yml),
 // ModeInteractive's implicit ask has no one to answer it — every write
@@ -880,7 +880,7 @@ func formatRuleReason(toolName string, r Rule) string {
 		}
 	case Ask:
 		return fmt.Sprintf("permission_denied: %s matched ask rule but caller is non-interactive. "+
-			"Add an explicit allow rule to ~/.octo/permissions.yml.", toolName)
+			"Add an explicit allow rule to data/permissions.yml.", toolName)
 	}
 	return fmt.Sprintf("permission_denied: %s rejected.", toolName)
 }

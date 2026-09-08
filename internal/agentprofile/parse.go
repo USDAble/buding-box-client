@@ -101,7 +101,7 @@ func parseFile(path string) (*Profile, error) {
 //
 //   - enable_own_skill let an expert add skills to its own profile; removed
 //     when experts became configurable only by the Default agent. Its own
-//     forks (~/.octo/agents overrides) are exactly the files that carry it.
+//     forks (data/agents overrides) are exactly the files that carry it.
 var retiredTools = map[string]bool{
 	"enable_own_skill": true,
 }

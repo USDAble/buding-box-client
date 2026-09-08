@@ -37,7 +37,7 @@ func scanForSecrets(content string) string {
 // secret in newContent already existed verbatim in oldContent. The guard's job
 // is to stop the agent from introducing a live credential, not to stop it from
 // preserving one it didn't author: a read-modify-write of a credential-bearing
-// file (e.g. rewriting ~/.octo/config.yml to add a preference while keeping the
+// file (e.g. rewriting data/config.yml to add a preference while keeping the
 // existing api_key) carries the same secret through both sides and is allowed,
 // while a brand-new or changed credential is still refused.
 func newSecretsIntroduced(oldContent, newContent string) string {

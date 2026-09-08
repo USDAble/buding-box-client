@@ -45,7 +45,7 @@ func inboundFileNotes(files []channel.FileAttachment) []string {
 
 // docChipRefs strips "[Attached file: …]" notes from display text and returns
 // the cleaned text plus one chip ref per note. Image attachments persisted
-// under ~/.octo/uploads are returned as "/api/uploads/<name>" so the frontend
+// under data/uploads are returned as "/api/uploads/<name>" so the frontend
 // renders a thumbnail; documents and non-uploaded local paths are returned as
 // "pdf:<name>" for the document chip. The note in the message text is the only
 // persisted trace of an attachment, so this is the single source of chips for
@@ -65,7 +65,7 @@ func docChipRefs(text string) (cleaned string, refs []string) {
 
 // isImageUpload reports whether path is an image file persisted in the uploads
 // directory, i.e. one that can be served back under /api/uploads/.
-// OCTO-FORK: uploads live under data/uploads, not ~/.octo/uploads — see
+// OCTO-FORK: uploads live under data/uploads, not in the host home — see
 // dev-docs-usdable/需求/2260906/技术方案/P1-便携数据根.md.
 func isImageUpload(path string) bool {
 	ext := strings.ToLower(filepath.Ext(path))
@@ -174,7 +174,7 @@ func parseUserFiles(files []wsUserFile, allowLocalPath, sendImageBlocks bool) us
 }
 
 // saveImageAttachment decodes a base64 data URL, persists the bytes under
-// ~/.octo/uploads (the transcript stores the path, never the bytes), and
+// data/uploads (the transcript stores the path, never the bytes), and
 // returns the model-facing image block plus the /api/uploads/ display URL.
 func saveImageAttachment(name, dataURL string) (agent.ContentBlock, string, error) {
 	mime, data, err := decodeDataURL(dataURL)

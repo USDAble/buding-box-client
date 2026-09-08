@@ -63,7 +63,7 @@ var builtInPresets = []agentPreset{
 }
 
 // lookupAgentPreset resolves a subagent_type name to its preset.
-// User-defined agents (loaded from ~/.octo/agents/*.md) are checked first so
+// User-defined agents (loaded from data/agents/*.md) are checked first so
 // they override built-ins when names collide.
 func lookupAgentPreset(name string) (agentPreset, bool) {
 	discoverAgents() // cheap: one directory scan, populated into cache

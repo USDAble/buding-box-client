@@ -104,7 +104,7 @@ func renderToolCard(toolName string, input map[string]any, output string, isErr 
 		// link — same threshold the generic card path uses to decide whether
 		// to fold at all. Spilling every read unconditionally, even a 1-line
 		// read, would widen every file the agent touches into a plaintext
-		// copy under ~/.octo/tmp for no reason: nothing is hidden when the
+		// copy under data/tmp for no reason: nothing is hidden when the
 		// whole thing already fits in the one-liner.
 		if n > outputCardMaxLines {
 			if path, err := tools.WriteCardSpill(toolName, output); err == nil {

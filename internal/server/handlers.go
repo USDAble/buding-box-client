@@ -1494,7 +1494,7 @@ type updateSessionPermissionModeRequest struct {
 // handleUpdateSessionPermissionMode updates THIS session's own permission
 // mode — the Web equivalent of the TUI's shift+tab cycle. Valid values:
 // "interactive", "auto", "strict". Per-session: it never touches the global
-// default (~/.octo/config.yml, edited instead via Settings → default model),
+// default (data/config.yml, edited instead via Settings → default model),
 // so it only affects this session, not other sessions and not what a
 // brand-new session inherits. The per-turn permission engine reads
 // sess.PermissionMode (see prepareToolTurn/runChannelTurns), so the change

@@ -3,7 +3,7 @@ package channel
 import "fmt"
 
 // SendOnce delivers a single outbound message to an IM chat by constructing
-// the platform adapter from ~/.octo/channels.yml on the fly. It exists for
+// the platform adapter from data/channels.yml on the fly. It exists for
 // proactive pushes (e.g. scheduled-task results) from processes that don't run
 // inbound adapters, such as octo serve. Every registered platform can be
 // pushed to, each with its own credential/target rules (documented in the

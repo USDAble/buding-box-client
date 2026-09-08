@@ -448,7 +448,7 @@ func TestRunChat_TakeOverFlagUsage(t *testing.T) {
 	})
 
 	t.Run("with continue accepted", func(t *testing.T) {
-		// Isolate HOME so a local ~/.octo/sessions cannot accidentally match
+		// Isolate HOME so a local data/sessions cannot accidentally match
 		// the nonexistent ID and change the exit path.
 		tmp := t.TempDir()
 		t.Setenv("HOME", tmp)
@@ -606,7 +606,7 @@ func TestRunChat_OpenAI_EndToEnd(t *testing.T) {
 	defer srv.Close()
 
 	// Isolate HOME so the tools-on session reads an empty mcp.json instead of
-	// the developer's real ~/.octo/mcp.json — connecting to live MCP servers
+	// the developer's real data/mcp.json — connecting to live MCP servers
 	// would block the headless turn indefinitely (no connect timeout).
 	tmp := t.TempDir()
 	t.Setenv("HOME", tmp)
@@ -740,7 +740,7 @@ func TestRunChat_Headless_MCPManifestReflectsLiveRegistry(t *testing.T) {
 }
 
 func TestRunChat_OpenAI_MissingAPIKey(t *testing.T) {
-	// Isolate $HOME: the developer's real ~/.octo/config.yml may hold a stored
+	// Isolate $HOME: the developer's real data/config.yml may hold a stored
 	// key (or a base URL pointing somewhere live), which would turn this
 	// missing-key test into a real network call.
 	home := t.TempDir()

@@ -22,7 +22,7 @@ type Store struct {
 	disabledDefaults map[string]bool // curated-expert IDs hidden by the user; mirrors skills.Registry's disabled set
 }
 
-// New builds a Store over the user-level directory (~/.octo/agents).
+// New builds a Store over the user-level directory (data/agents).
 func New(userDir string) *Store {
 	return &Store{userDir: userDir}
 }
@@ -30,7 +30,7 @@ func New(userDir string) *Store {
 // SetDisabledDefaults replaces the set of curated-expert IDs hidden from
 // Get/List. Called once at startup with the persisted config value, and again
 // whenever the toggle endpoint flips one. Hidden, not deleted — the
-// underlying ~/.octo/agents-default/<id>.md is untouched and can be re-shown.
+// underlying data/agents-default/<id>.md is untouched and can be re-shown.
 func (s *Store) SetDisabledDefaults(ids []string) {
 	m := make(map[string]bool, len(ids))
 	for _, id := range ids {
@@ -56,7 +56,7 @@ func (s *Store) isDisabledDefault(p *Profile) bool {
 //
 // A user file may NOT shadow a curated expert: an official expert is what it
 // ships as, on every machine, and stays that way across content updates. A
-// leftover ~/.octo/agents/<curated-id>.md (written back when editing one
+// leftover data/agents/<curated-id>.md (written back when editing one
 // forked it into an override) is ignored rather than obeyed — the write paths
 // refuse to create new ones, so the set can only shrink. Builtins are
 // deliberately still shadowable: they are the sub-agent capability tiers
@@ -208,7 +208,7 @@ func (s *Store) Create(p *Profile) error {
 
 // Update rewrites a user profile's file. Curated (SourceDefault) experts are
 // read-only: editing one used to fork it into a permanent
-// ~/.octo/agents/<id>.md override, which silently detached that machine from
+// data/agents/<id>.md override, which silently detached that machine from
 // every future content update to the expert. An official expert is now the
 // same everywhere; to get a customized one, create your own agent.
 func (s *Store) Update(p *Profile) error {

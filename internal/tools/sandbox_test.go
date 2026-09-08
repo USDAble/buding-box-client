@@ -69,7 +69,7 @@ func TestWithBundledBinPath_AppendsAfterExistingSystemPath(t *testing.T) {
 
 // TestWithBundledBinPath_NoOpWhenBundledDirMissing confirms non-installer
 // installs (go install, build-from-source, Linux without a packaged
-// installer) get an unmodified env, since ~/.octo/bin never exists for them.
+// installer) get an unmodified env, since data/bin never exists for them.
 func TestWithBundledBinPath_NoOpWhenBundledDirMissing(t *testing.T) {
 	home := t.TempDir() // deliberately no .octo/bin under it
 	t.Setenv("HOME", home)
@@ -79,7 +79,7 @@ func TestWithBundledBinPath_NoOpWhenBundledDirMissing(t *testing.T) {
 	in := []string{"PATH=/usr/bin", "OTHER=1"}
 	out := withBundledBinPath(in)
 	if len(out) != len(in) || out[0] != in[0] || out[1] != in[1] {
-		t.Errorf("expected env unchanged when ~/.octo/bin is absent, got %v", out)
+		t.Errorf("expected env unchanged when data/bin is absent, got %v", out)
 	}
 }
 
@@ -105,7 +105,7 @@ func TestShellCommand_WindowsUTF8EncodingPrefix(t *testing.T) {
 }
 
 // real child process via shellCommand and confirms the child can execute a
-// fake tool that exists ONLY under a fake ~/.octo/bin — never on the real
+// fake tool that exists ONLY under a fake data/bin — never on the real
 // system PATH — proving the PATH-append actually makes the bundled directory
 // resolvable end to end, the way a skill script invoking bundled uv would
 // rely on.

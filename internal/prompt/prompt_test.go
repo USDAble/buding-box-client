@@ -64,7 +64,7 @@ func TestCompose_LayersInOrder(t *testing.T) {
 }
 
 func TestCompose_SkipsAbsentLayers(t *testing.T) {
-	// Isolate from real ~/.octo/{soul,user,octorules}.md so the test runs the
+	// Isolate from real data/{soul,user,octorules}.md so the test runs the
 	// same on a developer machine and on a fresh CI runner.
 	useIdentityFiles(t, "", "")
 	// No env, no skills, no mcp tools, no .octorules, no user prompt → just the base, no separators.

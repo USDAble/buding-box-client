@@ -104,7 +104,7 @@ func effectiveEndpoint(provider string, entry config.ModelEntry) string {
 }
 
 // runConfig handles `octo config [show|path]` and, with no subcommand, an
-// interactive setup wizard that writes ~/.octo/config.yml.
+// interactive setup wizard that writes data/config.yml.
 func runConfig(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 	sub := ""
 	if len(args) > 0 {
@@ -132,7 +132,7 @@ func runConfig(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 	}
 }
 
-// runConfigFix repairs ~/.octo/config.yml. If it no longer parses (the case that
+// runConfigFix repairs data/config.yml. If it no longer parses (the case that
 // stops octo from starting), it restores the last good backup. If it parses but
 // has semantic problems, it auto-fixes the safe ones (dangling default_model /
 // lite_model) and reports the rest for manual attention.
@@ -169,7 +169,7 @@ func runConfigFix(stdout, stderr io.Writer) int {
 		}
 	}
 	if len(unfixable) > 0 {
-		fmt.Fprintln(stdout, "Needs manual attention (edit ~/.octo/config.yml):")
+		fmt.Fprintln(stdout, "Needs manual attention (edit data/config.yml):")
 		for _, u := range unfixable {
 			fmt.Fprintf(stdout, "  • %s\n", u)
 		}
@@ -349,7 +349,7 @@ func runConfigWizard(stdin io.Reader, stdout, stderr io.Writer, firstRun bool) i
 	}
 	defer reader.Close()
 
-	fmt.Fprintln(stdout, "octo config — set your default provider and model (~/.octo/config.yml).")
+	fmt.Fprintln(stdout, "octo config — set your default provider and model (data/config.yml).")
 	if tty {
 		fmt.Fprintln(stdout, "Use ↑/↓ to choose, Enter to confirm. CLI flags and env vars still override per run.")
 	} else {

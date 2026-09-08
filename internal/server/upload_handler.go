@@ -13,19 +13,19 @@ import (
 
 // ─── POST /api/upload ───────────────────────────────────────────────────────
 
-// Upload destination under ~/.octo/uploads/.
+// Upload destination under data/uploads/.
 const uploadsDirName = "uploads"
 
 // maxUploadBytes is the hard cap on a single upload request body. Uploads
 // stream to disk (memory use is bounded by maxUploadMemory below), so the cap
-// only guards against a runaway multi-GB drop filling ~/.octo/uploads. Keep in
+// only guards against a runaway multi-GB drop filling data/uploads. Keep in
 // sync with MAX_FILE_BYTES in web/src/components/chat/Composer.svelte. A var,
 // not a const, so the oversize-rejection test doesn't have to build a >512 MB
 // body.
 var maxUploadBytes int64 = 512 << 20 // 512 MB
 
 // maxUploadMemory bounds the multipart parser's in-memory buffering; anything
-// beyond it spills to temp files on the way to ~/.octo/uploads.
+// beyond it spills to temp files on the way to data/uploads.
 const maxUploadMemory = 32 << 20
 
 func (s *Server) handleUpload(w http.ResponseWriter, r *http.Request) {

@@ -19,7 +19,7 @@ import (
 // POST …/oauth/start launches the connect in a goroutine with a prompt that
 // builds the authorize URL and blocks waiting for GET …/oauth/callback to
 // deliver the code, while the panel polls GET …/oauth/status until the state
-// settles. The token lands in the usual ~/.octo/mcp-tokens/<server>.json
+// settles. The token lands in the usual data/mcp-tokens/<server>.json
 // cache, so every later connect (including `octo serve` restarts) reuses it
 // without re-authorizing.
 

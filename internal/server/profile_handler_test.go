@@ -11,7 +11,7 @@ import (
 )
 
 // TestHandleGetProfileSoul_LegacyUppercase: pre-0.19 onboarding wrote
-// ~/.octo/SOUL.md; the profile API must keep serving it. Content-based
+// data/SOUL.md; the profile API must keep serving it. Content-based
 // assertions keep the test meaningful on case-sensitive filesystems and
 // trivially consistent elsewhere.
 func TestHandleGetProfileSoul_LegacyUppercase(t *testing.T) {

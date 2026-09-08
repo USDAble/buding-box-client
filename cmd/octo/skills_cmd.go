@@ -37,7 +37,7 @@ func runSkills(args []string, stdout, stderr io.Writer) int {
 }
 
 // skillsAdd installs a skill from a public GitHub repository into the
-// user-level root (~/.octo/skills). The skill's content is fetched directly
+// user-level root (data/skills). The skill's content is fetched directly
 // from the source repository onto this machine — octo redistributes nothing,
 // so source-available skills (e.g. the document skills in anthropics/skills)
 // can be installed without octo shipping their content.
@@ -85,7 +85,7 @@ func skillsList(stdout io.Writer) int {
 	all := reg.List()
 	if len(all) == 0 {
 		fmt.Fprintln(stdout, "No skills found.")
-		fmt.Fprintln(stdout, "Defaults ship with the binary; add your own under ~/.octo/skills.")
+		fmt.Fprintln(stdout, "Defaults ship with the binary; add your own under data/skills.")
 		return 0
 	}
 	// Group by source for a readable overview: default → expert → user.

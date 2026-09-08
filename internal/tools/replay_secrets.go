@@ -25,7 +25,7 @@ import (
 //     funnel through before calling ReplayRecording.
 //
 // Resolution order for a missing secret param: session cache →
-// OCTO_BROWSER_SECRET_<NAME> env (process env or ~/.octo/serve.env, which the
+// OCTO_BROWSER_SECRET_<NAME> env (process env or data/serve.env, which the
 // existing serveenv loader injects) → masked ask. Explicit caller params
 // always win by virtue of never being "missing". Non-secret missing params
 // keep the status-quo plain error (the model decides whether to ask or fill).
@@ -178,7 +178,7 @@ func resolveReplayParams(ctx context.Context, rec *browser.Recording, name strin
 			// plain chat message would persist it in platform history (WeChat
 			// can't delete user messages) — manufacturing the very leak this
 			// design closes. Point at the two safe paths instead.
-			return fmt.Errorf("browser: replay %q requires secret param(s): %s — secrets can't be collected in this chat (messages persist). Set %s in ~/.octo/serve.env, or replay from the Web UI / TUI",
+			return fmt.Errorf("browser: replay %q requires secret param(s): %s — secrets can't be collected in this chat (messages persist). Set %s in <data root>/serve.env, or replay from the Web UI / TUI",
 				name, strings.Join(secrets, ", "), secretEnvName(p))
 		}
 		v, cancelled, err := asker.AskSecret(ctx, fmt.Sprintf("Enter secret for recording %q: %s", name, p))

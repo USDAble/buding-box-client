@@ -40,7 +40,7 @@ func (s *stubSender) StreamMessages(
 
 // makeREPLFixture returns a replConfig wired to a stubSender and in-memory
 // buffers. HOME/USERPROFILE is redirected to a temp dir so session files don't
-// pollute ~/.octo (USERPROFILE is needed for Windows where os.UserHomeDir()
+// pollute the data root (USERPROFILE is needed for Windows where os.UserHomeDir()
 // ignores HOME).
 func makeREPLFixture(t *testing.T, input string) (replConfig, *bytes.Buffer, *bytes.Buffer, *stubSender) {
 	t.Helper()

@@ -29,7 +29,7 @@ import (
 // dissolvePlainGroups retires the ones already on disk.
 //
 // The registry lives entirely in one file
-// (~/.octo/session-groups.json) and never touches the session transcript format
+// (data/session-groups.json) and never touches the session transcript format
 // — group membership is stored here as group→session-ID lists, and no session
 // field is added. The CLI reads it (a session in a project belongs to the
 // project's directory, which is what `octo -c` scopes its listing by) and
@@ -44,7 +44,7 @@ import (
 // is negligible.
 //
 // The desktop app (cmd/octo-desktop) runs this same server in-process against
-// the same ~/.octo, so groups and their collapsed state are shared between the
+// the same data root, so groups and their collapsed state are shared between the
 // Web UI and the desktop shell with no extra wiring.
 
 // sessionGroup is one project in the registry: a working directory plus the
@@ -121,7 +121,7 @@ type groupFile struct {
 // buffered events channel makes that non-blocking in practice, same as every
 // other broadcast issued under a lock.
 //
-// Package-level like groupMu/regCache: the registry is per-~/.octo process
+// Package-level like groupMu/regCache: the registry is per-data-root process
 // state, and the last Server to start owns the notification. A no-op when nil
 // (tests that never construct a Server).
 var notifyGroupsChanged func()
@@ -269,7 +269,7 @@ func loadCollapsedSessions() ([]string, error) {
 //
 // Invalidation is belt-and-braces: saveRegistry drops the cache outright
 // (exact for this process's own writes), and every load re-stats the file so a
-// write by another process serving the same ~/.octo (the desktop shell) is
+// write by another process serving the same data root (the desktop shell) is
 // picked up too. Callers must treat the returned data as READ-ONLY — it is the
 // cached copy, not a clone. The read-modify-write paths deliberately keep
 // using loadSessionGroups, which always re-reads from disk and hands back

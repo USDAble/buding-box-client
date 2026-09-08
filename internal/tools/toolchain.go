@@ -16,10 +16,10 @@ import (
 // pays for on every turn.
 //
 // bundledFallback marks probes that also resolve via the octo-managed
-// ~/.octo/bin fallback (populated by the Windows/macOS installers — see
+// data/bin fallback (populated by the Windows/macOS installers — see
 // internal/tools/sandbox.go's withBundledBinPath). Scoped to just uv:
 // every other probe here is a real developer-machine dependency octo never
-// bundles, so checking ~/.octo/bin for them would be pointless.
+// bundles, so checking data/bin for them would be pointless.
 var toolchainProbes = []struct {
 	name            string
 	cmds            []string
@@ -38,7 +38,7 @@ var toolchainProbes = []struct {
 }
 
 // DetectToolchain reports which curated developer tools resolve on the current
-// PATH, plus (for uv) octo's own bundled ~/.octo/bin fallback. The PATH
+// PATH, plus (for uv) octo's own bundled data/bin fallback. The PATH
 // check is via exec.LookPath — a filesystem lookup, not a subprocess — so it
 // stays cheap enough to call on every context build (once per process for the
 // CLI/TUI, once per session for the server — see Session.SetComposedSystem).
@@ -79,7 +79,7 @@ func DetectToolchain() (present, missing []string) {
 }
 
 // bundledBinName returns the platform-specific file name for cmd inside
-// ~/.octo/bin (the installer stages a plain "uv" on macOS/Linux and
+// data/bin (the installer stages a plain "uv" on macOS/Linux and
 // "uv.exe" on Windows).
 func bundledBinName(cmd string) string {
 	if runtime.GOOS == "windows" {

@@ -34,9 +34,9 @@ func BuildEnvContext(cwd, branch string, dirty, ok bool) string {
 	if home, err := os.UserHomeDir(); err == nil && home != "" {
 		fmt.Fprintf(&b, "- Home directory: %s\n", home)
 	}
-	// OCTO-FORK: the portable product's data root is <exe>/data, not ~/.octo.
-	// Tell the agent where it is so prompt/skill text can reference it without
-	// hardcoding a host-home path — see 需求/2260906/技术方案/P1-便携数据根.md.
+	// OCTO-FORK: the portable product's data root is <exe>/data, not in the
+	// host home. Tell the agent where it is so prompt/skill text can reference
+	// it without hardcoding a host-home path — see 需求/2260906/技术方案/P1-便携数据根.md.
 	if root, err := datapath.Root(); err == nil && root != "" {
 		fmt.Fprintf(&b, "- Data root: %s\n", root)
 	}

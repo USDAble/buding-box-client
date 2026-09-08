@@ -1,5 +1,5 @@
 // Package logfile provides a size-bounded, self-rotating log file for the
-// backends that write ~/.octo/serve.log directly with no service manager in
+// backends that write data/serve.log directly with no service manager in
 // front of them: the desktop hub (in-process) and `octo serve -d`. systemd
 // users are unaffected — they capture stderr into the journal, which rotates
 // itself; this exists for the paths that don't have that.

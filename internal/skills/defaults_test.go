@@ -7,13 +7,13 @@ import (
 )
 
 // TestMain neutralizes the default-skills root for the whole package so tests
-// never read the real ~/.octo/skills-default (which an installed binary
+// never read the real data/skills-default (which an installed binary
 // populates). Tests that exercise defaults opt in via useDefaultRoot.
 func TestMain(m *testing.M) {
 	tmp, _ := os.MkdirTemp("", "octo-skills-default-empty")
 	defaultSkillsRoot = func() string { return tmp }
 	// Redirected for the same reason: MaterializeDefaults writes both roots,
-	// and a test must never touch the real ~/.octo.
+	// and a test must never touch the real data root.
 	tmpExpert, _ := os.MkdirTemp("", "octo-skills-expert-empty")
 	expertSkillsRoot = func() string { return tmpExpert }
 	code := m.Run()
@@ -156,7 +156,7 @@ func TestMaterializeDefaults_RescuesLegacySitePatterns(t *testing.T) {
 	// Earlier web-access versions had the agent write per-domain
 	// site-experience notes inside the managed default root, which the
 	// version-bump wipe destroyed. The rewrite must move them to the
-	// persistent sibling ~/.octo/site-patterns first.
+	// persistent sibling data/site-patterns first.
 	octoDir := t.TempDir()
 	root := filepath.Join(octoDir, "skills-default")
 	useDefaultRoot(t, root)

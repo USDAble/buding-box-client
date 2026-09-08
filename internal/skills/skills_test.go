@@ -31,7 +31,7 @@ func useUserRoot(t *testing.T, dir string) {
 // Discover becomes available without rebuilding the registry — the mechanism
 // that lets the `skill` tool load a skill dropped in mid-session.
 func TestReload_PicksUpLateSkill(t *testing.T) {
-	useDefaultRoot(t, t.TempDir()) // isolate from real ~/.octo/skills-default
+	useDefaultRoot(t, t.TempDir()) // isolate from real data/skills-default
 	userRoot := t.TempDir()
 	useUserRoot(t, userRoot)
 
@@ -256,7 +256,7 @@ func TestRenderSkill(t *testing.T) {
 }
 
 func TestSetDisabled(t *testing.T) {
-	useDefaultRoot(t, t.TempDir()) // isolate from real ~/.octo/skills-default
+	useDefaultRoot(t, t.TempDir()) // isolate from real data/skills-default
 	userRoot := t.TempDir()
 	useUserRoot(t, userRoot)
 	writeSkill(t, userRoot, "alpha", "---\ndescription: a\n---\nbody")

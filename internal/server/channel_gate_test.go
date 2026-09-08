@@ -27,7 +27,7 @@ func TestChannelPerTurnGate(t *testing.T) {
 	if err != nil {
 		t.Fatalf("permission engine: %v", err)
 	}
-	// No-op audit logger: test checks must not land in the real ~/.octo/audit.log.
+	// No-op audit logger: test checks must not land in the real data/audit.log.
 	gate := app.NewPermissionGate(engine, srv.channelPermissionAsk(sess, ad, ev), audit.NewAt(""))
 
 	ctx := context.Background()

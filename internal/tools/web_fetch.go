@@ -442,7 +442,7 @@ func markdownOutline(lines []string, maxHeadings int) string {
 	return b.String()
 }
 
-// writeWebFetchSpillFile persists body under ~/.octo/tmp and returns the
+// writeWebFetchSpillFile persists body under data/tmp and returns the
 // absolute path. The filename is derived from the URL host + a timestamp (so
 // concurrent fetches never collide) and ends with the pid so CleanSpillFiles
 // reclaims it on a clean exit, the same way it does for `term-` files.

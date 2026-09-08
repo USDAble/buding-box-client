@@ -141,7 +141,7 @@ func TestTurnCount(t *testing.T) {
 }
 
 func TestSaveAndLoad(t *testing.T) {
-	// Point sessions dir at a temp directory so we don't pollute ~/.octo.
+	// Point sessions dir at a temp directory so we don't pollute the data root.
 	setTempHome(t)
 
 	s := NewSession("model-x", "sys")
@@ -462,7 +462,7 @@ func TestLoadSession_RejectsTraversal(t *testing.T) {
 
 	// Session ids reach LoadSession straight from HTTP/WS requests, so a
 	// traversal payload must be refused before it can resolve outside
-	// ~/.octo/sessions (go/path-injection).
+	// data/sessions (go/path-injection).
 	for _, id := range []string{
 		"../../../etc/passwd",
 		"..",

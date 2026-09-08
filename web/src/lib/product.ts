@@ -93,7 +93,10 @@ export async function refreshProductState(): Promise<void> {
   }
 }
 
-// logout clears the account server-side and flips the phase back to blocked.
+// logout clears the login token server-side and flips the phase back to
+// blocked. The bound phone/nickname stay in the data root so the second-login
+// form can prefill and compare against them (需求 §5.3.4). The logout button
+// itself is P5's; this helper is wired there.
 export async function logout(): Promise<void> {
   const token = windowToken();
   const headers: Record<string, string> = {};

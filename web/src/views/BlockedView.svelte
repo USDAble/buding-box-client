@@ -37,16 +37,19 @@
     // already filled prefs.locale with the system language when unset.
     const loc = $productState?.prefs?.locale
     if (loc === 'zh' || loc === 'en') setLocale(loc)
-    nickname = randomNickname($locale === 'zh' ? 'zh' : 'en')
+    // Second login prefills the last nickname; first activation seeds a fresh
+    // random default in the current UI language (需求 §5.3.3 / §5.3.4).
+    nickname = $productState?.account?.nickname || randomNickname($locale === 'zh' ? 'zh' : 'en')
     return () => { if (timer) clearInterval(timer) }
   })
 
   function pickLang(l: 'zh' | 'en') {
     setLocale(l)
     setProductLocale(l).catch(() => {})
-    // Regenerate the default nickname only if the user hasn't edited it, so a
-    // language switch doesn't wipe their typed name (需求 §5.3.3).
-    if (!nicknameEdited) nickname = randomNickname(l)
+    // Regenerate the default nickname only when there is no bound account and
+    // the user hasn't edited it — a language switch must not wipe a typed name
+    // (需求 §5.3.3) nor replace a prefilled last nickname (§5.3.4).
+    if (!nicknameEdited && !$productState?.account?.nickname) nickname = randomNickname(l)
   }
 
   function startCountdown(secs: number) {

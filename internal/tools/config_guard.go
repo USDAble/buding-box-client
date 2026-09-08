@@ -3,6 +3,7 @@ package tools
 import (
 	"context"
 	"os"
+	"path"
 	"path/filepath"
 	"strings"
 
@@ -67,9 +68,12 @@ func touchedConfigFile(tool string, input map[string]any) bool {
 		}
 		// Best-effort: match the config's full path, or the ~-relative
 		// spelling of it. A bare "config.yml" under some other directory (a
-		// project's own config) must not match.
+		// project's own config) must not match. path.Join (not filepath.Join)
+		// keeps the "~/config.yml" spelling on a forward slash so the same
+		// model-written command matches on Windows too (需求 §5.7.9 test
+		// suite runs cross-platform).
 		return strings.Contains(cmd, cfgPath) ||
-			strings.Contains(cmd, filepath.Join("~", filepath.Base(cfgPath)))
+			strings.Contains(cmd, path.Join("~", filepath.Base(cfgPath)))
 	}
 	return false
 }

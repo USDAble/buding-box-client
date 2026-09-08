@@ -18,6 +18,8 @@
   import ProjectModal from '../overlays/ProjectModal.svelte'
   import type { McpServerDetail, McpTool, SessionGroup } from '../../lib/types'
   import { getMcpServer } from '../../lib/api'
+  import ComposerNotices, { type Notice } from './ComposerNotices.svelte'
+  import { productState } from '../../lib/product'
 
   let { onSend }: { onSend?: (text: string, files?: any[], queued?: boolean) => void } = $props()
 
@@ -1095,6 +1097,23 @@
     return cut < 0 ? p : p.slice(cut)
   }
 
+  // Composer notices (P6). The array order is the display order; the strip
+  // splits on `slot` so 'above' entries render over the input card and 'below'
+  // entries under it. P8 (sensitive-word hit) and P10 (privacy notice) append
+  // their own entries here later — the ordering rule stays in this one array.
+  // OCTO-FORK: P6 入口隐藏与积分 — see
+  // dev-docs-usdable/需求/2260906/技术方案/P6-入口隐藏与积分.md §3.6.
+  const notices = $derived.by<Notice[]>(() => {
+    const list: Notice[] = []
+    // 积分不足 (balance 0) shows before send but does NOT block it (§5.4.4).
+    if ($productState && $productState.credits.balance <= 0) {
+      list.push({ id: 'credits', level: 'info', text: $t('credits.insufficient'), slot: 'below' })
+    }
+    return list
+  })
+  const noticesAbove = $derived(notices.filter(n => n.slot === 'above'))
+  const noticesBelow = $derived(notices.filter(n => n.slot === 'below'))
+
   // queued=true parks the message as its own follow-up turn instead of steering
   // the turn in flight (Cmd/Ctrl+Enter — the web counterpart of the TUI's
   // Ctrl+Q). Idle it makes no difference: the server just starts the turn.
@@ -1322,6 +1341,9 @@
         {/if}
       </div>
     {/if}
+    {#if noticesAbove.length > 0}
+      <ComposerNotices notices={noticesAbove} />
+    {/if}
     <div
       class="input-card"
       class:drag-over={dragOver}
@@ -1405,6 +1427,9 @@
           <iconify-icon icon="lucide:send" width="16"></iconify-icon>
         </button>
       </div>
+      {#if noticesBelow.length > 0}
+        <ComposerNotices notices={noticesBelow} />
+      {/if}
       {#if slashMenu}
         <div class="skill-menu" bind:this={skillMenuEl}>
           {#each filteredItems() as item, i (item.kind + ':' + (item.kind === 'builtin' ? item.name : item.kind === 'skill' ? item.skill.name : item.kind === 'workflow' ? item.workflow.name : item.kind === 'mcp-server' ? item.name : item.kind === 'agent' ? item.id : item.kind === 'agent-create' ? '' : item.server + '/' + item.tool.name))}

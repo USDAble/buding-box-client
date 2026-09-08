@@ -6,6 +6,7 @@
   import { titlebarDblClick } from '../../lib/nativeWindow'
   import { t, tr } from '../../lib/i18n'
   import { confirmDialog } from '../../lib/confirm'
+  import { viewHidden, visibleNav } from '../../lib/features'
   import { splitSections, swapWithinSection, parseSectionFold, type SectionFold } from '../../lib/sidebarSections'
   import { SIDEBAR_MIN, SIDEBAR_MAX, CENTER_MIN, readSidebarWidth, saveSidebarWidth } from '../../lib/sidebarWidth'
   import { ago, clockTick } from '../../lib/relTime'
@@ -386,6 +387,15 @@
     ...topNav.map(item => ({ icon: item.icon, title: item.label, v: item.v })),
   ]
 
+  // P6: filter the hidden upstream capability views (mcp/channels/lightapps)
+  // out of navigation WITHOUT touching the arrays themselves, so upstream
+  // additions to these arrays merge cleanly (需求 §5.4.3: 隐藏不删代码).
+  // OCTO-FORK: P6 入口隐藏 — see
+  // dev-docs-usdable/需求/2260906/技术方案/P6-入口隐藏与积分.md.
+  const visibleTopNav = $derived(visibleNav(topNav))
+  const visibleMoreCategories = $derived(visibleNav(moreCategories))
+  const visibleRailNav = $derived(visibleNav(railNav))
+
   function navActive(v: string) { return $view === v }
   function moreActive() { return moreCategories.some(c => c.v === $view) }
 
@@ -668,7 +678,7 @@
           <iconify-icon icon="ant-design:plus-circle-outlined" width="14" style="color:{onLanding ? 'var(--blue-6)' : 'var(--text-tertiary)'}"></iconify-icon>
           <span style="font-size:13px;color:{onLanding ? 'var(--blue-6)' : 'var(--text-secondary)'};font-weight:{onLanding ? '600' : '400'};">{$t('nav.new_session')}</span>
         </div>
-        {#each topNav as item (item.v)}
+        {#each visibleTopNav as item (item.v)}
         <div class="nav-row" class:solid={navActive(item.v)} onclick={() => view.set(item.v as any)}>
           <iconify-icon icon={item.icon} width="14" style="color:{navActive(item.v) ? 'var(--blue-6)' : 'var(--text-tertiary)'}"></iconify-icon>
           <span style="font-size:13px;color:{navActive(item.v) ? 'var(--blue-6)' : 'var(--text-secondary)'};font-weight:{navActive(item.v) ? '600' : '400'};">{$t(item.label)}</span>
@@ -681,7 +691,7 @@
           </div>
           {#if morePopoverOpen}
           <div class="more-popover" use:portal style="top:{morePos.top}px; left:{morePos.left}px; width:{morePos.width}px;">
-            {#each moreCategories as c (c.v)}
+            {#each visibleMoreCategories as c (c.v)}
             <button class="ap-item" onclick={() => goToMore(c.v)}>
               <iconify-icon icon={c.icon} width="14" style="color:var(--text-tertiary)"></iconify-icon>
               <span>{$t(c.label)}</span>
@@ -1101,7 +1111,7 @@
       </button>
     </div>
     <div class="rail-scroll">
-      {#each railNav.slice(0, 3) as item}
+      {#each visibleRailNav.slice(0, 3) as item}
       <button
         class="rail-btn"
         class:active={navActive(item.v)}
@@ -1117,7 +1127,7 @@
         </button>
         {#if morePopoverOpen}
         <div class="more-popover" use:portal style="top:{morePos.top}px; left:{morePos.left}px; width:{morePos.width}px;">
-          {#each moreCategories as c (c.v)}
+          {#each visibleMoreCategories as c (c.v)}
           <button class="ap-item" onclick={() => goToMore(c.v)}>
             <iconify-icon icon={c.icon} width="14" style="color:var(--text-tertiary)"></iconify-icon>
             <span>{$t(c.label)}</span>
@@ -1126,7 +1136,7 @@
         </div>
         {/if}
       </div>
-      {#each railNav.slice(3) as item}
+      {#each visibleRailNav.slice(3) as item}
       <button
         class="rail-btn"
         class:active={navActive(item.v)}

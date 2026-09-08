@@ -1031,6 +1031,10 @@ export const en: Record<string, string> = {
   "product.panel.help.drive_loss": "Losing the USB drive is treated as account compromise",
   "product.panel.help.smartscreen": "If SmartScreen warns, choose “Run anyway”",
   "product.panel.help.docs_note": "More product help lives in the docs bundled with the program directory",
+  // OCTO-FORK: P6 hidden entries + credits — see
+  // dev-docs-usdable/需求/2260906/技术方案/P6-入口隐藏与积分.md.
+  "feature.not_available": "This entry isn't available in this version",
+  "credits.insufficient": "Insufficient points",
 };
 
 export const zh: Record<string, string> = {
@@ -2058,6 +2062,10 @@ export const zh: Record<string, string> = {
   "product.panel.help.drive_loss": "丢失 U 盘视同账号泄露",
   "product.panel.help.smartscreen": "若出现 SmartScreen 提示，请选择「仍要运行」",
   "product.panel.help.docs_note": "更多产品帮助见随程序目录提供的说明文档",
+  // OCTO-FORK: P6 入口隐藏与积分 — see
+  // dev-docs-usdable/需求/2260906/技术方案/P6-入口隐藏与积分.md.
+  "feature.not_available": "本期不提供此入口",
+  "credits.insufficient": "积分不足",
 };
 
 const dictionaries: Record<string, Record<string, string>> = { en, zh };

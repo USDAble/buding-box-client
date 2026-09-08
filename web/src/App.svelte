@@ -1,7 +1,7 @@
 <script lang="ts">
   import { onMount } from 'svelte'
-  import { view, sessions, sessionGroups, pinnedSessions, collapsedSessions, activeSessionId, onboardPhase, openAgentSession, chatShowReasoning, globalPermissionMode, globalReasoningEffort, nativeShell, mobileShell, panelContent, panelExpanded, cmdkOpen, settingsModalOpen, createNewSession, clearPendingSessionOpts, isDesktopShell, readLastRoute, writeLastRoute, frozen } from './lib/stores'
-  import { productPhase, adoptWindowToken, refreshProductState } from './lib/product'
+  import { view, sessions, sessionGroups, pinnedSessions, collapsedSessions, activeSessionId, onboardPhase, openAgentSession, chatShowReasoning, globalPermissionMode, globalReasoningEffort, nativeShell, mobileShell, panelContent, panelExpanded, cmdkOpen, settingsModalOpen, createNewSession, clearPendingSessionOpts, isDesktopShell, readLastRoute, writeLastRoute, frozen, showToast } from './lib/stores'
+  import { productPhase, productState, adoptWindowToken, refreshProductState } from './lib/product'
   import MobileApp from './mobile/MobileApp.svelte'
   import { ws, wsState } from './lib/ws'
   import { notificationsEnabled } from './lib/notifications'
@@ -12,6 +12,7 @@
   import { installExternalLinkInterceptor } from './lib/externalLinks'
   import { startNativeHeartbeat } from './lib/nativeHeartbeat'
   import { normalizeHash, hashPicksChatTarget } from './lib/hashRouting'
+  import { viewHidden } from './lib/features'
   import { pruneSessions } from './lib/genui/panel-state'
   import { onTurnEnded as onDiffTurnEnded, resetDiff } from './lib/diff'
   import { globalKeyIntent } from './lib/globalKeys'
@@ -234,6 +235,18 @@
     writeLastRoute(v, sid)
   })
 
+  // P6: a hidden view can still be reached via a hand-typed #/mcp or a stale
+  // last-route entry (Sidebar already filters it out of navigation). Bounce it
+  // back to chat and tell the user why, rather than silently resetting them.
+  // OCTO-FORK: P6 入口隐藏 — see
+  // dev-docs-usdable/需求/2260906/技术方案/P6-入口隐藏与积分.md.
+  $effect(() => {
+    if (viewHidden($view)) {
+      view.set('chat')
+      showToast($t('feature.not_available'))
+    }
+  })
+
   function bootMain() {
     ws.connect()
 
@@ -244,6 +257,16 @@
     // the overlay's Quit — clears it.
     ws.on('datastore:lost', () => { frozen.set(true) })
     ws.on('datastore:restored', () => { frozen.set(false) })
+
+    // P6: the server broadcasts the fresh credits after each successful send
+    // (ws_handlers.go handleWSUserMessage). Merge them into the global product
+    // state so the sidebar corner + account panel update live without a round
+    // trip. OCTO-FORK: P6 credits — see
+    // dev-docs-usdable/需求/2260906/技术方案/P6-入口隐藏与积分.md.
+    ws.on('credits_update', (ev: any) => {
+      if (!ev?.credits) return
+      productState.update(s => (s ? { ...s, credits: ev.credits } : s))
+    })
 
     // Restore the persisted UI language from server config so a refresh
     // keeps the user's locale choice. Also seed globalPermissionMode and

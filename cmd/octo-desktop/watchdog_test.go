@@ -5,6 +5,8 @@ import (
 	"path/filepath"
 	"testing"
 	"time"
+
+	"github.com/open-octo/octo-agent/internal/datapath"
 )
 
 // startWatchdog is exercised with a tiny interval so the tests don't wait the
@@ -12,6 +14,9 @@ import (
 // channels (capacity 1) so the watch loop never blocks a tick on the test.
 
 func TestWatchdog_LostThenRestored(t *testing.T) {
+	datapath.Thaw()          // the freeze gate is process-global; start clear
+	t.Cleanup(datapath.Thaw) // and never leak a frozen gate into the next test
+
 	base := t.TempDir()
 	root := filepath.Join(base, "data")
 	if err := os.MkdirAll(root, 0o755); err != nil {
@@ -55,6 +60,9 @@ func TestWatchdog_LostThenRestored(t *testing.T) {
 }
 
 func TestWatchdog_NewPathDoesNotRestore(t *testing.T) {
+	datapath.Thaw()          // the freeze gate is process-global; start clear
+	t.Cleanup(datapath.Thaw) // and never leak a frozen gate into the next test
+
 	base := t.TempDir()
 	root := filepath.Join(base, "data")
 	if err := os.MkdirAll(root, 0o755); err != nil {

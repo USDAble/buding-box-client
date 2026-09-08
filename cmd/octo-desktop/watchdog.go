@@ -5,8 +5,9 @@ package main
 
 import (
 	"os"
-	"sync/atomic"
 	"time"
+
+	"github.com/open-octo/octo-agent/internal/datapath"
 )
 
 // watchdogInterval is how often the watchdog re-checks the data root. A stat
@@ -25,9 +26,8 @@ type Watchdog struct {
 	onLost     func()
 	onRestored func()
 
-	frozen atomic.Bool
-	stop   chan struct{}
-	done   chan struct{}
+	stop chan struct{}
+	done chan struct{}
 }
 
 // StartWatchdog begins watching root and returns the running Watchdog. It
@@ -53,7 +53,10 @@ func startWatchdog(root string, interval time.Duration, ownPID int, onLost, onRe
 }
 
 // Frozen reports whether the data root is currently considered unavailable.
-func (w *Watchdog) Frozen() bool { return w.frozen.Load() }
+// It reflects the process-wide datapath freeze gate (datapath.Freeze/Thaw),
+// which the directory-creating entry points check before any write — so a
+// frozen watchdog and a refusing write path are the same bit, not two.
+func (w *Watchdog) Frozen() bool { return datapath.Frozen() }
 
 // Stop terminates the watch loop and waits for it to exit.
 func (w *Watchdog) Stop() {
@@ -74,8 +77,8 @@ func (w *Watchdog) run() {
 		case <-ticker.C:
 			if w.statOK() {
 				consecutiveFailures = 0
-				if w.frozen.Load() && w.isOwnInstance() {
-					w.frozen.Store(false)
+				if datapath.Frozen() && w.isOwnInstance() {
+					datapath.Thaw()
 					if w.onRestored != nil {
 						w.onRestored()
 					}
@@ -83,8 +86,8 @@ func (w *Watchdog) run() {
 				continue
 			}
 			consecutiveFailures++
-			if consecutiveFailures >= 2 && !w.frozen.Load() {
-				w.frozen.Store(true)
+			if consecutiveFailures >= 2 && !datapath.Frozen() {
+				datapath.Freeze()
 				if w.onLost != nil {
 					w.onLost()
 				}

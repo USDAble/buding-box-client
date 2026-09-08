@@ -164,6 +164,9 @@ func (s *Server) handleProductLogin(w http.ResponseWriter, r *http.Request) {
 			// Seed the fake points balance on first activation (需求 §5.4.4:
 			// 1280 balance, 0 used). P6 owns the deduction rules.
 			st.Credits = productstate.Credits{Balance: initialCredits}
+			// The only plan this phase sells is the seeded trial; the account
+			// panel maps the machine code "trial" to the display name (P5 §4.2).
+			st.Plan = productstate.Plan{Name: "trial"}
 		}
 		st.Account = &productstate.Account{
 			Phone:       phone,

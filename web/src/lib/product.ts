@@ -33,6 +33,10 @@ export interface ProductStateDTO {
   schemaVersion: number;
   loggedIn: boolean;
   activated: boolean;
+  /** Activation timestamps (P5): present once activated, so the account
+   *  panel can render "active · N days left". The activation code itself is
+   *  server-side only and never appears here. */
+  activation?: { activatedAt: string; expiresAt: string } | null;
   account?: {
     phoneMasked: string;
     nickname: string;
@@ -201,4 +205,58 @@ export async function setProductLocale(locale: "zh" | "en"): Promise<void> {
     body: JSON.stringify({ locale }),
   });
   if (!res.ok) throw new Error(`${res.status} ${res.statusText}`);
+}
+
+// ─── P5 account panel ───────────────────────────────────────────────────────
+//
+// Nickname and preference edits from the account panel. Both PUTs return the
+// refreshed state (the server re-reads its own store, so the reply IS the
+// persisted truth) and both update the shared productState store, which makes
+// the bottom-left corner change on the same round-trip the panel's form makes.
+
+export interface AccountPrefs {
+  locale?: "zh" | "en";
+  defaultChatMode?: string;
+}
+
+/**
+ * Saves a nickname edit (PUT /api/product/nickname). Throws ProductError with
+ * `code` = "nickname_format" | "nickname_sensitive" on a refusal; the panel
+ * maps those straight to field errors, same machine codes as the login form.
+ */
+export async function updateNickname(nickname: string): Promise<ProductStateDTO> {
+  const res = await fetch("/api/product/nickname", {
+    method: "PUT",
+    headers: jsonHeaders(),
+    body: JSON.stringify({ nickname }),
+  });
+  const body = (await res.json().catch(() => ({}))) as Record<string, unknown>;
+  if (!res.ok) {
+    throw new ProductError(res.status, {}, (body.code as string) ?? "nickname_format");
+  }
+  const state = body.state as ProductStateDTO;
+  productState.set(state);
+  return state;
+}
+
+/**
+ * Saves preference edits (PUT /api/product/prefs): locale and/or the default
+ * chat mode for new sessions (P9 reads defaultChatMode when creating a
+ * session). Unchanged fields may be omitted. Throws ProductError with
+ * fieldErrors[field] = "invalid_value" on an unknown value.
+ */
+export async function updatePrefs(prefs: AccountPrefs): Promise<ProductStateDTO> {
+  const res = await fetch("/api/product/prefs", {
+    method: "PUT",
+    headers: jsonHeaders(),
+    body: JSON.stringify(prefs),
+  });
+  const body = (await res.json().catch(() => ({}))) as Record<string, unknown>;
+  if (!res.ok) {
+    const field = (body.field as string) ?? "prefs";
+    throw new ProductError(res.status, { [field]: (body.code as string) ?? "invalid_value" });
+  }
+  const state = body.state as ProductStateDTO;
+  productState.set(state);
+  return state;
 }

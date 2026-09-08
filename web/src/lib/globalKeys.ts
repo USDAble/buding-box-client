@@ -27,3 +27,17 @@ export function globalKeyIntent(e: GlobalKeyEvent, opts: GlobalKeyOpts): 'palett
   if (k === 'n' && opts.shell) return 'new-session'
   return null
 }
+
+// Plain-Escape dismissal (P5 account panel). Kept OUT of globalKeyIntent on
+// purpose: that one only answers MODIFIED shortcuts, while Esc carries no
+// modifier and must stay claimable by the true modals that own their own Esc
+// (command palette, settings, confirms) — the account panel is non-modal and
+// must not steal their key. Callers decide when an 'overlay' answer applies.
+//
+// OCTO-FORK: P5 account panel — see
+// dev-docs-usdable/需求/2260906/技术方案/P5-个人中心.md §4.2.
+export function dismissIntent(e: GlobalKeyEvent): 'overlay' | null {
+  const mod = e.metaKey || e.ctrlKey || e.altKey || e.shiftKey
+  if (mod) return null
+  return e.key === 'Escape' ? 'overlay' : null
+}

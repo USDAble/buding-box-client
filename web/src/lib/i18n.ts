@@ -986,6 +986,10 @@ export const en: Record<string, string> = {
   "product.send_failed": "Failed to send, please try again",
   "product.submit_failed": "Login failed, please try again",
   "product.legal_close": "Close",
+  // OCTO-FORK: P6 hidden entries + credits — see
+  // dev-docs-usdable/需求/2260906/技术方案/P6-入口隐藏与积分.md.
+  "feature.not_available": "This entry isn't available in this version",
+  "credits.insufficient": "Insufficient points",
 };
 
 export const zh: Record<string, string> = {
@@ -1968,6 +1972,10 @@ export const zh: Record<string, string> = {
   "product.send_failed": "发送失败，请重试",
   "product.submit_failed": "登录失败，请重试",
   "product.legal_close": "关闭",
+  // OCTO-FORK: P6 入口隐藏与积分 — see
+  // dev-docs-usdable/需求/2260906/技术方案/P6-入口隐藏与积分.md.
+  "feature.not_available": "本期不提供此入口",
+  "credits.insufficient": "积分不足",
 };
 
 const dictionaries: Record<string, Record<string, string>> = { en, zh };

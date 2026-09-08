@@ -18,6 +18,12 @@ describe('normalizeHash', () => {
   it('percent-encodes session ids for the URL', () => {
     expect(normalizeHash('chat', 'a/b c?d')).toBe('#/chat/a%2Fb%20c%3Fd')
   })
+
+  it('normalizes hidden views to the chat landing (P6)', () => {
+    expect(normalizeHash('mcp', null)).toBe('#/chat')
+    expect(normalizeHash('channels', 'sess-42')).toBe('#/chat/sess-42')
+    expect(normalizeHash('lightapps', null)).toBe('#/chat')
+  })
 })
 
 describe('hashPicksChatTarget', () => {

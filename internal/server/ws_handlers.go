@@ -546,6 +546,18 @@ func (s *Server) handleWSUserMessage(conn *wsConn, msg *wsMsgUserMessage) {
 	mu := s.sessionTurnLock(sid)
 	mu.Lock()
 
+	// P6: record the credit for a message that reached the turn pipeline. The
+	// deduction runs once here, before either the steer-enqueue or the
+	// direct-turn branch, so both count. Broadcast the fresh credits globally
+	// (not per-session) so the sidebar corner + account panel — which live
+	// outside any session — update live. OCTO-FORK: P6 credits — see
+	// dev-docs-usdable/需求/2260906/技术方案/P6-入口隐藏与积分.md.
+	credits := s.consumeCredit()
+	s.wsHub.broadcast("", map[string]any{
+		"type":    "credits_update",
+		"credits": credits,
+	})
+
 	if s.turnRunning[sid] {
 		mu.Unlock()
 		// An explicit queue request skips the running turn entirely: park it for

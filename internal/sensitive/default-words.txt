@@ -1,0 +1,136 @@
+# Bundled baseline dictionary. One entry per line; blank lines and comments are ignored.
+# Keep entries explicit and at least two characters long to limit substring false positives.
+
+# Required baseline
+赌博
+毒品
+发票
+gambling
+drugs
+invoice
+fapiao
+
+# Obscene content and sexual exploitation
+淫秽色情
+色情直播
+色情网站
+色情视频
+淫秽表演
+裸聊
+招嫖
+卖淫嫖娼
+色情交易
+儿童色情
+未成年人色情
+性侵未成年人
+child pornography
+child sexual abuse
+sexual exploitation
+pornographic content
+prostitution service
+
+# Gambling
+网络赌博
+赌博网站
+在线赌场
+博彩网站
+博彩平台
+地下赌场
+赌球
+赌马
+online gambling
+illegal betting
+betting platform
+
+# Controlled drugs
+贩卖毒品
+制造毒品
+吸食毒品
+冰毒
+海洛因
+可卡因
+摇头丸
+芬太尼
+大麻交易
+drug trafficking
+methamphetamine
+heroin
+cocaine
+fentanyl
+
+# Terrorism, extreme violence, and illegal weapons
+恐怖袭击
+恐怖组织招募
+极端主义宣传
+制造炸弹
+爆炸物教程
+买卖枪支
+非法枪支
+雇凶杀人
+暗杀服务
+terrorist attack
+terrorist recruitment
+bomb making
+illegal firearms
+murder for hire
+
+# Fraud and illegal trade
+电信诈骗
+网络诈骗
+杀猪盘
+兼职刷单
+刷单返利
+钓鱼网站
+冒充客服
+冒充公检法
+洗钱
+跑分洗钱
+非法集资
+高收益骗局
+账号盗取
+买卖个人信息
+贩卖个人信息
+伪造证件
+假证办理
+非法买卖器官
+phishing
+investment scam
+money laundering
+identity theft
+stolen account
+personal data sale
+forged documents
+organ trafficking
+
+# Hate, harassment, and privacy abuse
+煽动民族仇恨
+煽动种族仇恨
+仇恨言论
+人肉搜索
+网络霸凌
+网络暴力
+威胁杀害
+泄露隐私
+racial hatred
+hate speech
+cyberbullying
+doxxing
+death threat
+
+# Suicide and self-harm promotion
+自杀教程
+自残教程
+轻生方法
+自杀挑战
+鼓励自杀
+suicide instructions
+self-harm instructions
+suicide challenge
+
+# Common severe abuse
+操你妈
+草你妈
+傻逼
+妈逼
+狗日的
+去死吧

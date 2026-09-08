@@ -1,6 +1,7 @@
 <script lang="ts">
   import { onMount } from 'svelte'
   import { view, sessions, sessionGroups, pinnedSessions, collapsedSessions, activeSessionId, onboardPhase, openAgentSession, chatShowReasoning, globalPermissionMode, globalReasoningEffort, nativeShell, mobileShell, panelContent, panelExpanded, cmdkOpen, settingsModalOpen, createNewSession, clearPendingSessionOpts, isDesktopShell, readLastRoute, writeLastRoute, frozen } from './lib/stores'
+  import { productPhase, adoptWindowToken, refreshProductState } from './lib/product'
   import MobileApp from './mobile/MobileApp.svelte'
   import { ws, wsState } from './lib/ws'
   import { notificationsEnabled } from './lib/notifications'
@@ -39,6 +40,13 @@
   import FeedbackModal from './components/overlays/FeedbackModal.svelte'
   import Toast from './components/overlays/Toast.svelte'
   import { touchSession, markSessionSeen, markActiveSessionSeenOnLeave, sessionTouchedAt } from './lib/unread'
+
+  // OCTO-FORK: adopt the window token before any fetch — the desktop shell
+  // injects it into the webview URL, and every API/WS call from inside the
+  // window must carry it back (P3 product gate). Runs at module init (before
+  // onMount), so even the earliest gated call is already stamped. No-op outside
+  // the desktop shell. See dev-docs-usdable/需求/2260906/技术方案/P3-登录态与产品门.md.
+  adoptWindowToken()
 
   // The session on screen is read by definition — this is the only place the
   // sidebar's unread dot gets cleared. It re-marks on every list change and
@@ -162,6 +170,12 @@
     // for exactly that reason — see the comment there.
     const stopPanelGC = sessions.subscribe(list => pruneSessions(list.map(s => s.id)))
     const cleanup = () => { cancelled = true; uninstallLinks(); stopHeartbeat(); stopPanelGC(); ws.disconnect() }
+    // OCTO-FORK: load the (de-identified) product state and derive the phase,
+    // in parallel with the auth probe below — the splash clears only when both
+    // answers are in (P3 product gate). A plain browser short-circuits to
+    // "ready" without a call. See
+    // dev-docs-usdable/需求/2260906/技术方案/P3-登录态与产品门.md.
+    refreshProductState()
     // The onboard-status read is issued alongside the auth probe rather than
     // after it, taking one serial round trip out of every cold start. checkAuth
     // goes first: it runs synchronously up to its first await, which is where a
@@ -194,11 +208,13 @@
     return cleanup
   })
 
-  // Boot the normal UI once onboarding doesn't block it. 'key_setup' holds here
-  // until FirstRunSetup completes and flips the phase to ''.
+  // Boot the normal UI once onboarding doesn't block it and the product gate
+  // says the window is logged in (P3). 'key_setup' holds here until
+  // FirstRunSetup completes and flips the phase to ''. A blocked window (not
+  // logged in) never boots the main UI — the template shows the login gate.
   $effect(() => {
     const phase = $onboardPhase
-    if (booted || phase === 'unknown' || phase === 'key_setup') return
+    if (booted || $productPhase !== 'ready' || phase === 'unknown' || phase === 'key_setup') return
     booted = true
     bootMain()
     if (phase === 'soul_setup') maybeLaunchOnboard()
@@ -551,6 +567,12 @@
 
 {#if authDenied}
   <div class="splash splash-msg">{$t('auth.denied')}</div>
+{:else if $productPhase === 'unknown'}
+  <div class="splash"><div class="spinner"></div></div>
+{:else if $productPhase === 'blocked'}
+  <!-- OCTO-FORK: the product gate refused the window (not logged in). P4
+       replaces this placeholder with the real login/activation gate. -->
+  <div class="splash"><div class="spinner"></div></div>
 {:else if $onboardPhase === 'unknown'}
   <div class="splash"><div class="spinner"></div></div>
 {:else if $onboardPhase === 'key_setup'}

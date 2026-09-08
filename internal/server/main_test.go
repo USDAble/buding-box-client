@@ -8,7 +8,7 @@ import (
 // TestMain pins HOME for the entire test binary. Turn paths spawn
 // fire-and-forget goroutines (title generation, follow-up suggestions) that
 // can outlive an individual test's t.Setenv("HOME") scope; once the test ends
-// the env is restored, and a goroutine that resolves ~/.octo after that would
+// the env is restored, and a goroutine that resolves the data root after that would
 // write session files into the developer's real home directory (observed as
 // "stub reply" sessions in the Web UI sidebar). With a process-lifetime temp
 // HOME, nothing a leaked goroutine writes can escape the sandbox. Individual
@@ -17,7 +17,7 @@ import (
 func TestMain(m *testing.M) {
 	// A test that re-execs this binary to exercise cross-process behaviour
 	// hands its children the HOME they must share (sharedHomeEnv). Pinning a
-	// fresh one here would give every child its own ~/.octo and quietly turn
+	// fresh one here would give every child its own data root and quietly turn
 	// the test into a single-process one.
 	if os.Getenv(sharedHomeEnv) != "" {
 		os.Exit(m.Run())

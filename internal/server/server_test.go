@@ -807,7 +807,7 @@ func mustAccessKey(cfg Config) string {
 }
 
 // mustWorkspaceDir resolves the test server's default workspace dir straight
-// from cfg.WorkspaceDir, bypassing ~/.octo/config.yml — mirrors mustAccessKey.
+// from cfg.WorkspaceDir, bypassing data/config.yml — mirrors mustAccessKey.
 func mustWorkspaceDir(cfg Config) string {
 	dir, _ := tools.ResolveWorkspaceDir(cfg.WorkspaceDir)
 	return dir

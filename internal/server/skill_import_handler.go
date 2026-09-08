@@ -67,7 +67,7 @@ func importSkill(source string, force bool) (name, desc string, err error) {
 
 	switch {
 	// Uploaded archive: POST /api/upload returned /api/uploads/<name>; map it
-	// back to ~/.octo/uploads. Basename only — no traversal.
+	// back to data/uploads. Basename only — no traversal.
 	case strings.HasPrefix(source, "/api/uploads/"):
 		dir, err := ensureUploadsDir()
 		if err != nil {

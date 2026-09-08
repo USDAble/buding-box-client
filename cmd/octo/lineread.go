@@ -112,7 +112,7 @@ func newReadlineReader(historyFile string) (*readlineLineReader, error) {
 	if historyFile != "" {
 		if err := os.MkdirAll(filepath.Dir(historyFile), 0o755); err != nil {
 			// Non-fatal: fall through with history disabled rather than
-			// blowing up the REPL because ~/.octo isn't writable.
+			// blowing up the REPL because the data root isn't writable.
 			historyFile = ""
 		}
 	}

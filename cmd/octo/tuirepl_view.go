@@ -1255,7 +1255,7 @@ func (m *tuiModel) modelPickerView() string {
 //
 // Flags:
 //
-//	--default  also persist the model as default_model in ~/.octo/config.yml.
+//	--default  also persist the model as default_model in data/config.yml.
 func (m *tuiModel) dispatchModel(name string) (tea.Model, tea.Cmd) {
 	if name == "" {
 		if m.openModelPicker() {
@@ -1325,7 +1325,7 @@ func (m *tuiModel) dispatchModel(name string) (tea.Model, tea.Cmd) {
 }
 
 // setModelAsDefault persists name as the default composite id in
-// ~/.octo/config.yml. name may be a bare model id (legacy form; resolved to
+// data/config.yml. name may be a bare model id (legacy form; resolved to
 // a composite id via EntryByModel's bare-model path, picking the default
 // endpoint when ambiguous) or a composite id "<endpoint>::<model>" (PR5
 // form, used directly).

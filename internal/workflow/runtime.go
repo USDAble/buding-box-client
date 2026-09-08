@@ -105,7 +105,7 @@ type Options struct {
 	Args string
 
 	// JournalDir is the directory for workflow journal files. When empty,
-	// Run uses ~/.octo/workflow-journals/. Pass a temp dir in tests.
+	// Run uses data/workflow-journals/. Pass a temp dir in tests.
 	JournalDir string
 	// ResumeFrom, when non-empty, is the RunID of a prior run whose journal
 	// provides cached results for already-completed agent() calls. The script

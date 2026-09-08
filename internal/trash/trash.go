@@ -1,7 +1,7 @@
 // Package trash provides a file-level trash (recycle bin) for octo.
 //
 // When the agent deletes or overwrites a file, the old copy is moved to
-// ~/.octo/trash/<project_hash>/<trash_name>, with a sidecar .meta.json
+// data/trash/<project_hash>/<trash_name>, with a sidecar .meta.json
 // recording the original path and deletion timestamp. Entries can be listed,
 // restored (never silently overwriting a file that now sits at the original
 // path), or permanently removed.
@@ -157,7 +157,7 @@ func Backup(originalPath, projectDir string, opts ...Options) (string, error) {
 // On success the original is gone but recoverable from the trash.
 //
 // When the original and the trash share a filesystem (the common case: both
-// live under ~/.octo, or a project on the same volume as $HOME) the move is a
+// live under the data root, or a project on the same volume as $HOME) the move is a
 // single atomic rename — instant, and space-free even for large trees. Across
 // filesystems it falls back to copy-then-remove.
 func Move(originalPath, projectDir string, opts ...Options) error {
@@ -594,7 +594,7 @@ func deriveLabel(original, trashPath string) string {
 }
 
 // isSessionTranscript reports whether original is an octo session JSONL, i.e.
-// ~/.octo/sessions/<id>.jsonl.
+// data/sessions/<id>.jsonl.
 func isSessionTranscript(original string) bool {
 	return strings.HasSuffix(original, ".jsonl") &&
 		filepath.Base(filepath.Dir(original)) == "sessions"

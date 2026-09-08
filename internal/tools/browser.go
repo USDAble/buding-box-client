@@ -157,7 +157,7 @@ func resolveBrowserRecordingGenerator(ctx context.Context) browser.RecordingGene
 
 // BrowserRecordingsDir is where browser recordings live (editable YAML).
 // OCTO_BROWSER_RECORDINGS_DIR overrides it; the legacy OCTO_BROWSER_SKILLS_DIR
-// is still honored. The default moved from ~/.octo/browser-skills with the
+// is still honored. The default moved from data/browser-skills with the
 // recording rename: migrate the old default dir on first sight, and fall back
 // to it when the rename can't happen rather than letting recordings vanish.
 func BrowserRecordingsDir() string {

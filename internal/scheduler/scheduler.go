@@ -1,6 +1,6 @@
 // Package scheduler provides a simple cron-based task scheduler for octo.
 //
-// Tasks are stored as JSON files in ~/.octo/tasks/. The scheduler runs in
+// Tasks are stored as JSON files in data/tasks/. The scheduler runs in
 // a goroutine, checking for due tasks every minute and spawning agent
 // sessions to execute them.
 package scheduler
@@ -127,7 +127,7 @@ type Scheduler struct {
 }
 
 // New creates a Scheduler. dir is where task JSON files are stored
-// (typically ~/.octo/tasks/). runner is called when a task is due.
+// (typically data/tasks/). runner is called when a task is due.
 func New(dir string, runner Runner) (*Scheduler, error) {
 	if err := os.MkdirAll(dir, 0700); err != nil {
 		return nil, fmt.Errorf("create tasks dir: %w", err)

@@ -39,7 +39,7 @@ const spillPreviewMaxBytes = 8 * 1024
 const spillMaxAge = 24 * time.Hour
 
 // spillPrefixes are the filename prefixes of model-facing spill files in
-// ~/.octo/tmp — terminal output (`term-`) and web_fetch bodies (`webfetch-`).
+// data/tmp — terminal output (`term-`) and web_fetch bodies (`webfetch-`).
 // These are session-scoped: removed on clean shutdown (CleanSpillFiles) and
 // age-swept as crash leftovers.
 var spillPrefixes = []string{"term-", "webfetch-"}
@@ -148,7 +148,7 @@ func trimPartialRuneHead(s string) string {
 	return s
 }
 
-// writeSpillFile persists body under ~/.octo/tmp and returns the absolute path.
+// writeSpillFile persists body under data/tmp and returns the absolute path.
 // The filename carries the source id and this process's pid so concurrent
 // sessions never collide and CleanSpillFiles can find its own files.
 func writeSpillFile(id, body string) (string, error) {

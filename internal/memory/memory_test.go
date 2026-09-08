@@ -18,7 +18,7 @@ func TestDir_PerRepoUnderHome(t *testing.T) {
 		t.Fatal(err)
 	}
 	if !strings.HasPrefix(d, filepath.Join(home, "memories")) {
-		t.Errorf("dir %q not under ~/.octo/memories", d)
+		t.Errorf("dir %q not under data/memories", d)
 	}
 	if !strings.Contains(filepath.Base(d), "myrepo") {
 		t.Errorf("dir slug %q should carry the repo basename", filepath.Base(d))
@@ -62,7 +62,7 @@ func TestHomeDir_ResolvesUnderHome(t *testing.T) {
 		t.Fatal(err)
 	}
 	if !strings.HasPrefix(d, filepath.Join(home, "memories")) {
-		t.Errorf("HomeDir %q not under ~/.octo/memories", d)
+		t.Errorf("HomeDir %q not under data/memories", d)
 	}
 	if !strings.Contains(filepath.Base(d), filepath.Base(home)) {
 		t.Errorf("HomeDir slug %q should carry home basename", filepath.Base(d))

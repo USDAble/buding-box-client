@@ -105,7 +105,7 @@ func TestRenderToolCard_ReadFileIsOneLiner(t *testing.T) {
 	}
 	// A read this small has nothing folded/hidden behind a link — spilling it
 	// to disk anyway would needlessly widen every file read into a plaintext
-	// copy under ~/.octo/tmp for no reason (#1097 review feedback).
+	// copy under data/tmp for no reason (#1097 review feedback).
 	if strings.Contains(got, "\x1b]8;;") {
 		t.Errorf("a short read should not spill to disk or link; got:\n%s", got)
 	}

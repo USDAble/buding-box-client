@@ -70,7 +70,7 @@ func runUpgrade(args []string, stdout, stderr io.Writer) int {
 }
 
 // runningServeDaemon reports the pid of a live backend registered in the
-// shared ~/.octo/serve.pid. The owner may be an `octo serve -d` daemon or the
+// shared data/serve.pid. The owner may be an `octo serve -d` daemon or the
 // desktop hub (which serves in-process from a different executable), and the
 // file can't tell them apart — messages built on this must hedge accordingly.
 // A foreground serve has no pid file and is invisible here — that's fine, the

@@ -9,7 +9,7 @@ import (
 
 // useIdentityFiles points soulPath/userProfilePath at temp files (written when
 // content is non-empty, otherwise an absent path) and clears userRulesPath,
-// isolating the test from any real ~/.octo files.
+// isolating the test from any real data root files.
 func useIdentityFiles(t *testing.T, soul, profile string) {
 	t.Helper()
 	dir := t.TempDir()

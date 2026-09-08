@@ -12,7 +12,7 @@ import (
 	"github.com/open-octo/octo-agent/internal/config"
 )
 
-// writeTestConfig writes a config with the given models to ~/.octo/config.yml
+// writeTestConfig writes a config with the given models to data/config.yml
 // in a temp HOME dir.
 func writeTestConfig(t *testing.T, cfg config.Config) {
 	t.Helper()

@@ -64,7 +64,7 @@ func journalsDir() (string, error) {
 // ever deletes these files.
 const journalMaxAge = 7 * 24 * time.Hour
 
-// PruneJournals removes ~/.octo/workflow-journals files last modified more
+// PruneJournals removes data/workflow-journals files last modified more
 // than journalMaxAge ago. Best-effort: the caller should ignore the error so
 // a read-only or missing HOME never blocks a session.
 func PruneJournals() error {

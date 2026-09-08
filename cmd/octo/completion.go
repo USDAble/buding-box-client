@@ -202,8 +202,8 @@ octo completion — print the shell-completion snippet for bash, zsh, fish, or p
 
 Examples:
   source <(octo completion bash)            # one-shot for this shell session
-  octo completion bash > ~/.octo/octo.bash  # permanent: source from .bashrc
-  octo completion zsh  > ~/.octo/_octo      # zsh: drop into fpath and run compinit
+  octo completion bash > data/octo.bash  # permanent: source from .bashrc
+  octo completion zsh  > data/_octo      # zsh: drop into fpath and run compinit
   octo completion fish > ~/.config/fish/completions/octo.fish
   octo completion powershell | Out-String | Invoke-Expression   # PowerShell; add to $PROFILE to persist
 

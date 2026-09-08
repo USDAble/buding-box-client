@@ -31,7 +31,7 @@ var workflowForeground atomic.Bool
 func SetWorkflowForeground(v bool) { workflowForeground.Store(v) }
 
 // workflowJournalDir overrides the workflow runtime's journal directory
-// (~/.octo/workflow-journals by default, resolved by internal/workflow).
+// (data/workflow-journals by default, resolved by internal/workflow).
 // Empty (the zero value) leaves the runtime default in place — every real
 // entry point (CLI, server, IM) never sets this. Tests point it at a temp dir
 // so running the suite doesn't write into a developer's real journal
@@ -193,11 +193,11 @@ func instrumentWorkflowAgent(ctx context.Context, seq *int32, label string) (con
 }
 
 // savedWorkflowsParamDesc builds the `name` parameter description, listing the
-// saved workflows currently in the registry (~/.octo/workflows) so the model
+// saved workflows currently in the registry (data/workflows) so the model
 // knows what it can run by name.
 func savedWorkflowsParamDesc() string {
 	var b strings.Builder
-	b.WriteString("Run a saved workflow by name (from ~/.octo/workflows). " +
+	b.WriteString("Run a saved workflow by name (from <data root>/workflows). " +
 		"Provide exactly one of script or name; args are passed in either way.")
 	saved := listWorkflows()
 	if len(saved) == 0 {
@@ -273,7 +273,7 @@ func (WorkflowTool) Execute(ctx context.Context, _ string, input map[string]any)
 	case name != "":
 		w, ok := lookupWorkflow(name)
 		if !ok {
-			return agent.ToolResult{}, fmt.Errorf("workflow: no saved workflow named %q (looked in ~/.octo/workflows)", name)
+			return agent.ToolResult{}, fmt.Errorf("workflow: no saved workflow named %q (looked in <data root>/workflows)", name)
 		}
 		script = w.script
 		if description == "" {

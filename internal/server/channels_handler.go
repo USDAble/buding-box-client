@@ -180,7 +180,7 @@ func (s *Server) handleDeleteChannel(w http.ResponseWriter, r *http.Request) {
 }
 
 // handleTestChannel tests a connection to a platform with the given credentials.
-// Loads the saved config from ~/.octo/channels.yml rather than requiring a body,
+// Loads the saved config from data/channels.yml rather than requiring a body,
 // since the frontend already stores the fields and just needs a validation trigger.
 func (s *Server) handleTestChannel(w http.ResponseWriter, r *http.Request) {
 	platform := r.PathValue("platform")
@@ -377,7 +377,7 @@ func instanceToInfo(platform, adapterID string, ic channel.InstanceConfig) chann
 		fields[k] = s
 	}
 
-	// Weixin keeps credentials in ~/.octo/weixin-credentials.json rather than
+	// Weixin keeps credentials in data/weixin-credentials.json rather than
 	// channels.yml, so an empty field map can still mean "configured".
 	hasConfig := len(fields) > 0
 	if platform == "weixin" && !hasConfig {

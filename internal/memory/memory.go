@@ -1,7 +1,7 @@
 // Package memory implements octo's cross-session memory as plain markdown
 // files the agent manages with its own file tools — the Claude Code model.
 //
-// Layout: ~/.octo/memories/<project-slug>/
+// Layout: data/memories/<project-slug>/
 //   - MEMORY.md      the index, loaded into the system prompt each session
 //     (first maxInjectLines lines / maxInjectBytes, whichever
 //     comes first)
@@ -62,7 +62,7 @@ func RootDir() (string, error) {
 	return datapath.Join("memories")
 }
 
-// Dir returns the memory directory for projectDir: ~/.octo/memories/<slug>.
+// Dir returns the memory directory for projectDir: data/memories/<slug>.
 // The path is normalized here, the one place it happens, so every caller —
 // DirForProject, HomeDir, a directory named on the command line — agrees on the
 // slug for a given directory however that directory was spelled.
@@ -153,7 +153,7 @@ func DirForProject(projectDir string) (string, error) {
 }
 
 // DirForProjectID returns the memory directory for a project by its stable
-// identity: ~/.octo/memories/<Slugify(base)>-p<hash of id>. base is the
+// identity: data/memories/<Slugify(base)>-p<hash of id>. base is the
 // readable half — callers pass the workspace directory's basename, which is
 // fixed at the project's creation — and the id hash is what actually keys the
 // directory, so neither renaming the project nor anything happening to its

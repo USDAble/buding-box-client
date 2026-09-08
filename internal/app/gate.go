@@ -24,7 +24,7 @@ type PermissionAsk func(ctx context.Context, toolName string, toolInput map[stri
 //
 // The optional auditLog exists for tests: pass audit.NewAt("") (a no-op
 // logger) or a temp-path logger so test checks never land in the real
-// ~/.octo/audit.log. Production callers omit it and audit to the default path.
+// data/audit.log. Production callers omit it and audit to the default path.
 func NewPermissionGate(engine *permission.Engine, ask PermissionAsk, auditLog ...*audit.Logger) agent.PermissionGate {
 	l := audit.New()
 	if len(auditLog) > 0 {

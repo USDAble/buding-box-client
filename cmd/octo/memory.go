@@ -125,7 +125,7 @@ func printLint(w io.Writer, dir string) {
 }
 
 // memoryWriteRoots returns the write-allowlist roots for the permission engine,
-// mirroring the server's Server.memoryWriteRoots: the whole ~/.octo/memories
+// mirroring the server's Server.memoryWriteRoots: the whole data/memories
 // tree rather than just this session's two directories, so a durable fact about
 // ANOTHER repo can be filed in that repo's memory dir (see
 // memory.RenderInjection's cross-project guidance) without a prompt per save.

@@ -38,7 +38,7 @@ server listed in mcp.json gets connected at session start; its tools, resources,
 and prompts ride alongside octo's built-in tools. Pass --no-tools to skip them.
 
 Configuration:
-  ~/.octo/mcp.json                 user-global config
+  data/mcp.json                 user-global config
 
 mcp.json format (mirrors Claude Code):
   {
@@ -67,7 +67,7 @@ Auth (HTTP only):
   ""       — no auth beyond what's in headers (default)
   "oauth"  — discover the server's auth-server metadata on first 401,
              run Authorization Code + PKCE (open a browser tab, redirect
-             back), cache the token at ~/.octo/mcp-tokens/<server>.json.
+             back), cache the token at data/mcp-tokens/<server>.json.
              Refresh tokens are used automatically; expired refresh
              tokens trigger a fresh authorization prompt.
 
@@ -104,9 +104,9 @@ Commands:
                              there rather than in the project it is running in.
 
 Layout:
-  ~/.octo/memories/<repo-slug>/MEMORY.md   Project index, injected every session
-  ~/.octo/memories/<repo-slug>/<topic>.md  Project detail files
-  ~/.octo/memories/<home-slug>/MEMORY.md   Inherited (home) index, available in every project
+  data/memories/<repo-slug>/MEMORY.md   Project index, injected every session
+  data/memories/<repo-slug>/<topic>.md  Project detail files
+  data/memories/<home-slug>/MEMORY.md   Inherited (home) index, available in every project
 
 The project directory is keyed by git repo root. Home-directory memories are
 inherited into every project. A directory that is not a git repo (the default
@@ -114,7 +114,7 @@ inherited into every project. A directory that is not a git repo (the default
 inherited set instead — a session there is usually working on code elsewhere,
 and notes filed under the scratch directory would be read by nothing.
 
-The whole ~/.octo/memories tree is writable without a prompt, so the agent can
+The whole data/memories tree is writable without a prompt, so the agent can
 file a fact into another project's memory. To disable memory injection — and
 that write rule — for a single session, run "octo --no-memory".`)
 }
@@ -177,7 +177,7 @@ Run "octo serve --help" for the full flag list.`)
 
 func configHelp(w io.Writer) {
 	fmt.Fprintln(w, `octo config — save your default provider, model, and (optionally) base URL to
-~/.octo/config.yml so a bare `+"`octo`"+` works without re-typing flags.
+data/config.yml so a bare `+"`octo`"+` works without re-typing flags.
 
 Precedence (highest first): CLI flag (--provider/--model) > env var > this file
 > built-in default. API keys are read from the environment first; storing one
@@ -191,7 +191,7 @@ Usage:
   octo config --fix                Repair the file: restore the last good backup
                                    if it no longer parses, else fix dangling
                                    default_model / lite_model references
-File (~/.octo/config.yml):
+File (data/config.yml):
   provider: openai
   model: gpt-4o-mini
 

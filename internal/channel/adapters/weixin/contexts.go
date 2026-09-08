@@ -19,7 +19,7 @@ import (
 )
 
 // contextStorePath derives the token-store path from the credentials path so
-// both live in the same directory (default ~/.octo/).
+// both live in the same directory (default data/).
 func contextStorePath(credPath string) string {
 	return filepath.Join(filepath.Dir(credPath), "weixin-contexts.json")
 }

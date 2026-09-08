@@ -5,7 +5,7 @@
 //
 // Phase 1 is intentionally in-memory only — tasks vanish when the REPL exits.
 // Cross-session persistence is M11 territory (`octo task` CLI + JSON files
-// under ~/.octo/tasks/) and is deliberately out of scope here.
+// under data/tasks/) and is deliberately out of scope here.
 package tasks
 
 import (

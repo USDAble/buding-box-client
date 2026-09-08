@@ -17,7 +17,7 @@ import (
 // fails hard on invalid ones. LoadManaged answers "which servers exist": it
 // keeps disabled entries and annotates invalid ones instead of failing.
 //
-// All mutations target the user-global file (~/.octo/mcp.json).
+// All mutations target the user-global file (data/mcp.json).
 
 // ManagedServer is one config entry in the management view.
 type ManagedServer struct {
@@ -86,7 +86,7 @@ func ValidateServerName(name string) error {
 }
 
 // UpsertUserServer validates the entry and writes it into the user-global
-// config, creating the file (and ~/.octo) on first use. Existing entries
+// config, creating the file (and the data root) on first use. Existing entries
 // under other names are preserved verbatim.
 func UpsertUserServer(name string, e ServerEntry) error {
 	if err := ValidateServerName(name); err != nil {

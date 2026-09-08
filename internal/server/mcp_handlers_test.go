@@ -52,7 +52,7 @@ func fakeMCPServerForHandlers(t *testing.T) *httptest.Server {
 	}))
 }
 
-// mcpTestHome points HOME at a temp dir and seeds ~/.octo/mcp.json.
+// mcpTestHome points HOME at a temp dir and seeds data/mcp.json.
 func mcpTestHome(t *testing.T, mcpJSON string) string {
 	t.Helper()
 	tmp := t.TempDir()
@@ -439,7 +439,7 @@ func TestToolSearchSettings(t *testing.T) {
 		t.Fatalf("after put: %+v", got)
 	}
 
-	// Written to ~/.octo/config.yml.
+	// Written to data/config.yml.
 	raw, err := os.ReadFile(filepath.Join(home, "config.yml"))
 	if err != nil {
 		t.Fatalf("config.yml not written: %v", err)

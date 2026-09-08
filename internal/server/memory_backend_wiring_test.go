@@ -36,7 +36,7 @@ func hindsightRecallStub(t *testing.T, marker string) string {
 // TestPrepareToolTurn_WiresMemoryBackend guards the serve path: unlike the CLI
 // (app.WireTools), the server wires tools in prepareToolTurn, so it must build
 // and register the configured memory backend itself — otherwise the feature
-// silently doesn't exist under `octo serve` even when ~/.octo/config.yml
+// silently doesn't exist under `octo serve` even when data/config.yml
 // configures one.
 func TestPrepareToolTurn_WiresMemoryBackend(t *testing.T) {
 	setTestHome(t)

@@ -58,7 +58,7 @@ func TestMemoryWriteRoots_CoversOtherProjectsDirs(t *testing.T) {
 		want permission.Decision
 		why  string
 	}{
-		{filepath.Join(octo, "config.yml"), permission.Ask, "~/.octo itself is not covered"},
+		{filepath.Join(octo, "config.yml"), permission.Ask, "the data root itself is not covered"},
 		{filepath.Join(octo, "permissions.yml"), permission.Ask, "the permission config is not covered"},
 		{filepath.Join(octo, "sessions", "abc.json"), permission.Ask, "session transcripts are not covered"},
 		{wantRoot + "-evil/notes.md", permission.Ask, "a sibling sharing the prefix as a string must not match"},

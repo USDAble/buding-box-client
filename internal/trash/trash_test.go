@@ -8,7 +8,7 @@ import (
 )
 
 // isolateHome points the trash root (os.UserHomeDir) at a temp dir so tests
-// don't touch the real ~/.octo/trash.
+// don't touch the real data/trash.
 func isolateHome(t *testing.T) {
 	t.Helper()
 	home := t.TempDir()

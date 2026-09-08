@@ -213,7 +213,7 @@ func TestHandleAgents_UpdateBindings(t *testing.T) {
 	}
 }
 
-// agentsTestServer returns a server with an isolated ~/.octo/agents dir.
+// agentsTestServer returns a server with an isolated data/agents dir.
 func agentsTestServer(t *testing.T) *Server {
 	t.Helper()
 	tmp := t.TempDir()

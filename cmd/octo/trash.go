@@ -17,7 +17,7 @@ import (
 // in a goroutine and is best-effort — the recycle bin working at all never
 // depends on housekeeping having finished.
 // housekeepingDisabled is set by an init() in the test binary so `go test`
-// never runs Enforce against the developer's real ~/.octo/trash (many cmd/octo
+// never runs Enforce against the developer's real data/trash (many cmd/octo
 // tests drive runChat/runServe, which call this).
 var housekeepingDisabled bool
 

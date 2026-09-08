@@ -32,7 +32,7 @@ func (WorkflowSaveTool) Definition() agent.ToolDefinition {
 		Name: "workflow_save",
 		Description: "Save a Ruby workflow script as a reusable named workflow, so you can later " +
 			"run it with the workflow tool's `name` parameter (passing `args` to parameterize it). " +
-			"Writes <name>.rb to ~/.octo/workflows. Use after you've built and validated a workflow " +
+			"Writes <name>.rb to <data root>/workflows. Use after you've built and validated a workflow " +
 			"you'll want again.",
 		Parameters: map[string]any{
 			"type": "object",

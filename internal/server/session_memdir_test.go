@@ -37,7 +37,7 @@ func TestSessionMemDir_ScopedToProject(t *testing.T) {
 	}
 	home, _ := os.UserHomeDir()
 	if !strings.HasPrefix(got, filepath.Join(home, "memories")+string(filepath.Separator)) {
-		t.Errorf("dir %q not under ~/.octo/memories", got)
+		t.Errorf("dir %q not under data/memories", got)
 	}
 
 	// Stable: repeated resolution for the same project returns the same dir,

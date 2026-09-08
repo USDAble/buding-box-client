@@ -10,11 +10,10 @@ import (
 
 func writeMCPFile(t *testing.T, dir, content string) {
 	t.Helper()
-	octoDir := filepath.Join(dir, ".octo")
-	if err := os.MkdirAll(octoDir, 0o700); err != nil {
+	if err := os.MkdirAll(dir, 0o700); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(octoDir, "mcp.json"), []byte(content), 0o600); err != nil {
+	if err := os.WriteFile(filepath.Join(dir, "mcp.json"), []byte(content), 0o600); err != nil {
 		t.Fatal(err)
 	}
 }
@@ -23,6 +22,7 @@ func setupManageHome(t *testing.T) string {
 	t.Helper()
 	tmp := t.TempDir()
 	t.Setenv("HOME", tmp)
+	t.Setenv("OCTO_DATA_ROOT", tmp)
 	t.Setenv("USERPROFILE", tmp)
 	return tmp
 }
@@ -91,7 +91,7 @@ func TestUpsertUserServer_CreatesAndPreserves(t *testing.T) {
 		t.Fatalf("UpsertUserServer update: %v", err)
 	}
 
-	raw, err := os.ReadFile(filepath.Join(home, ".octo", "mcp.json"))
+	raw, err := os.ReadFile(filepath.Join(home, "mcp.json"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -134,7 +134,7 @@ func TestUpsertUserServer_RejectsInvalid(t *testing.T) {
 		}
 	}
 	// Nothing should have been written.
-	if _, err := os.Stat(filepath.Join(os.Getenv("HOME"), ".octo", "mcp.json")); !os.IsNotExist(err) {
+	if _, err := os.Stat(filepath.Join(os.Getenv("OCTO_DATA_ROOT"), "mcp.json")); !os.IsNotExist(err) {
 		t.Error("rejected upserts must not create the config file")
 	}
 }

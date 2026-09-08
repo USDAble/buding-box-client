@@ -11,7 +11,7 @@ import (
 func stageSession(t *testing.T, name, jsonl string) string {
 	t.Helper()
 	home, _ := os.UserHomeDir()
-	sessions := filepath.Join(home, ".octo", "sessions")
+	sessions := filepath.Join(home, "sessions")
 	if err := os.MkdirAll(sessions, 0o755); err != nil {
 		t.Fatal(err)
 	}

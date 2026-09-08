@@ -22,6 +22,8 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+
+	"github.com/open-octo/octo-agent/internal/datapath"
 )
 
 // IndexFile is the per-project memory index, loaded into the system prompt.
@@ -51,15 +53,13 @@ func resolveSymlinks(p string) string {
 	return p
 }
 
-// RootDir returns ~/.octo/memories — the parent holding every per-repo slug
+// RootDir returns data/memories — the parent holding every per-repo slug
 // directory (see Dir). Callers that enumerate all project memories (e.g. the
 // serve memory panel) read it instead of hard-coding the layout.
+// OCTO-FORK: the portable product keeps memories next to the executable, not in
+// the host home — see dev-docs-usdable/需求/2260906/技术方案/P1-便携数据根.md.
 func RootDir() (string, error) {
-	home, err := os.UserHomeDir()
-	if err != nil || home == "" {
-		return "", fmt.Errorf("memory: cannot resolve home dir: %w", err)
-	}
-	return filepath.Join(home, ".octo", "memories"), nil
+	return datapath.Join("memories")
 }
 
 // Dir returns the memory directory for projectDir: ~/.octo/memories/<slug>.
@@ -330,14 +330,13 @@ func RenderInjection(dir string, inheritedDirs ...string) string {
 }
 
 // IsMemoryPath reports whether absPath is inside the per-repo memory
-// directory (~/.octo/memories/<repo-slug>/). Used by the file tools to
+// directory (data/memories/<repo-slug>/). Used by the file tools to
 // emit friendlier output when the agent reads or writes its own notes.
 func IsMemoryPath(absPath string) bool {
-	home, err := os.UserHomeDir()
-	if err != nil || home == "" {
+	prefix, err := datapath.Join("memories")
+	if err != nil {
 		return false
 	}
-	prefix := filepath.Join(home, ".octo", "memories")
 	return strings.HasPrefix(absPath, prefix+string(filepath.Separator))
 }
 

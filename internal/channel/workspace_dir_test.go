@@ -103,7 +103,7 @@ func writeWorkspaceConfig(t *testing.T, dir string) {
 	if err != nil {
 		t.Fatalf("home: %v", err)
 	}
-	octo := filepath.Join(home, ".octo")
+	octo := home
 	if err := os.MkdirAll(octo, 0o700); err != nil {
 		t.Fatalf("mkdir ~/.octo: %v", err)
 	}

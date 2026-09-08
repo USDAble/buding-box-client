@@ -81,6 +81,7 @@ func withFakeHome(t *testing.T) string {
 	t.Helper()
 	dir := t.TempDir()
 	t.Setenv("HOME", dir)
+	t.Setenv("OCTO_DATA_ROOT", dir)
 	t.Setenv("USERPROFILE", dir)
 	return dir
 }
@@ -93,7 +94,7 @@ func TestDetectToolchain_BundledFallback(t *testing.T) {
 	withIsolatedPath(t) // PATH points at an empty temp dir — no uv there
 	home := withFakeHome(t)
 
-	binDir := filepath.Join(home, ".octo", "bin")
+	binDir := filepath.Join(home, "bin")
 	if err := os.MkdirAll(binDir, 0o755); err != nil {
 		t.Fatalf("mkdir bin dir: %v", err)
 	}

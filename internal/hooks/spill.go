@@ -11,6 +11,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/open-octo/octo-agent/internal/datapath"
 )
 
 // Async hooks (Stop / PostToolUse / SubagentStop / PreCompact marked async in
@@ -18,7 +20,7 @@ import (
 // blocks the next prompt — the defect the synchronous post-turn hook had. But
 // retention must not be lost either, so the queue is durable at its edges: an
 // item that can't be handed to a worker in time (overflow, or a not-yet-run
-// backlog at process exit) is written to ~/.octo/hooks-pending/ and re-enqueued
+// backlog at process exit) is written to data/hooks-pending/ and re-enqueued
 // by the next process to start. The common path stays in-memory; disk is only
 // touched under backpressure or shutdown.
 //
@@ -184,12 +186,15 @@ func (q *spillQueue) Drain(deadline time.Duration) {
 // way out so queued retention isn't dropped.
 func DrainSpill(deadline time.Duration) { sharedSpill.Drain(deadline) }
 
+// pendingDir returns data/hooks-pending, creating it if needed.
+// OCTO-FORK: the portable product keeps pending hooks next to the executable,
+// not in the host home — see dev-docs-usdable/需求/2260906/技术方案/P1-便携数据根.md.
 func pendingDir() string {
-	home, err := os.UserHomeDir()
-	if err != nil || home == "" {
+	p, err := datapath.Sub("hooks-pending")
+	if err != nil {
 		return ""
 	}
-	return filepath.Join(home, ".octo", "hooks-pending")
+	return p
 }
 
 // spillToDisk writes item to a uniquely-named pending file (temp + atomic

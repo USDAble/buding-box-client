@@ -290,6 +290,7 @@ func TestRegisterRoutes_OnlyKnownUnauthenticated(t *testing.T) {
 func TestNew_PersistsGeneratedKey(t *testing.T) {
 	tmp := t.TempDir()
 	t.Setenv("HOME", tmp)
+	t.Setenv("OCTO_DATA_ROOT", tmp)
 	t.Setenv("USERPROFILE", tmp)
 	t.Setenv("OCTO_ACCESS_KEY", "")
 	t.Setenv("ANTHROPIC_API_KEY", "")
@@ -332,6 +333,7 @@ func TestNew_SaveFailureKeepsInMemoryKey(t *testing.T) {
 	}
 	t.Cleanup(func() { _ = os.Chmod(ro, 0o700) })
 	t.Setenv("HOME", ro)
+	t.Setenv("OCTO_DATA_ROOT", ro)
 	t.Setenv("USERPROFILE", ro)
 	t.Setenv("OCTO_ACCESS_KEY", "")
 	t.Setenv("ANTHROPIC_API_KEY", "")

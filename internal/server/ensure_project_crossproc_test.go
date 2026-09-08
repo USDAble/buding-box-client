@@ -49,6 +49,7 @@ func TestEnsureProject_CrossProcessLockKeepsEveryGroup(t *testing.T) {
 
 	home := t.TempDir()
 	t.Setenv("HOME", home)
+	t.Setenv("OCTO_DATA_ROOT", home)
 	t.Setenv("USERPROFILE", home)
 
 	const children = 4

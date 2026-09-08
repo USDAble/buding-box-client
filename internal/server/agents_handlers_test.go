@@ -218,9 +218,10 @@ func agentsTestServer(t *testing.T) *Server {
 	t.Helper()
 	tmp := t.TempDir()
 	t.Setenv("HOME", tmp)
+	t.Setenv("OCTO_DATA_ROOT", tmp)
 	t.Setenv("USERPROFILE", tmp)
 	// Ensure the agents dir is empty (no user profiles).
-	_ = os.MkdirAll(filepath.Join(tmp, ".octo", "agents"), 0o755)
+	_ = os.MkdirAll(filepath.Join(tmp, "agents"), 0o755)
 	srv := mustServer(t, Config{Addr: "127.0.0.1:0", Tools: false})
 	return srv
 }

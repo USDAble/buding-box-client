@@ -17,6 +17,7 @@ func TestHomeDir_KeepsTheLegacySlugWhenItHoldsTheNotes(t *testing.T) {
 		t.Skipf("symlinks unavailable: %v", err)
 	}
 	t.Setenv("HOME", link)
+	t.Setenv("OCTO_DATA_ROOT", link)
 	t.Setenv("USERPROFILE", link)
 
 	normalized, err := Dir(link)
@@ -74,6 +75,7 @@ func TestHomeDir_IgnoresAnEmptyLegacyDir(t *testing.T) {
 		t.Skipf("symlinks unavailable: %v", err)
 	}
 	t.Setenv("HOME", link)
+	t.Setenv("OCTO_DATA_ROOT", link)
 	t.Setenv("USERPROFILE", link)
 
 	normalized, err := Dir(link)

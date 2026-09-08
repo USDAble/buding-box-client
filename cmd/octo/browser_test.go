@@ -22,6 +22,7 @@ func isolateHome(t *testing.T) string {
 	t.Helper()
 	home := t.TempDir()
 	t.Setenv("HOME", home)
+	t.Setenv("OCTO_DATA_ROOT", home)
 	t.Setenv("USERPROFILE", home)
 	return home
 }
@@ -40,7 +41,7 @@ func TestBrowserSetup_SuccessSavesPort(t *testing.T) {
 	}
 
 	// The connect port must be persisted so the tool reuses this Chrome.
-	cfgPath := filepath.Join(home, ".octo", "config.yml")
+	cfgPath := filepath.Join(home, "config.yml")
 	cfg, err := config.Load()
 	if err != nil {
 		t.Fatalf("config.Load: %v", err)

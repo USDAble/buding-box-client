@@ -77,7 +77,7 @@ func sourceRuleDirs(cwd string, p *sessionGroup) []string {
 	return out
 }
 
-// sourceHookDirs are the mounted folders whose .octo/hooks.yml the engine
+// sourceHookDirs are the mounted folders whose .octo-hooks.yml the engine
 // loads: cwd-equal mounts are skipped (same double-load as above), and each
 // remaining folder must pass the SAME fingerprint trust gate a working_dir
 // retarget does. "Mounting is the trust grant" holds only for a mount a

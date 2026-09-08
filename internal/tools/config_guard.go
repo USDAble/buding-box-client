@@ -10,12 +10,13 @@ import (
 	"github.com/open-octo/octo-agent/internal/hooks"
 )
 
-// ConfigGuard validates ~/.octo/config.yml immediately after the agent edits it,
+// ConfigGuard validates data/config.yml immediately after the agent edits it,
 // so a broken edit surfaces in the agent's context right away instead of
 // degrading silently. Because LoadCached keeps the last good config on a parse
 // error, a bad edit otherwise looks like it took effect — the agent gets no
 // signal until something downstream misbehaves. This closes that gap by folding
 // a warning into the turn on the very next step after the edit.
+// OCTO-FORK: config lives under data/ — see P1-便携数据根.md.
 type ConfigGuard struct{}
 
 // NewConfigGuard returns a ready guard.
@@ -37,13 +38,12 @@ func (g *ConfigGuard) RegisterHooks(e *hooks.Engine) {
 	})
 }
 
-// touchedConfigFile reports whether a just-run tool wrote ~/.octo/config.yml.
+// touchedConfigFile reports whether a just-run tool wrote data/config.yml.
 // The tool-name switch is first so the common non-writing tools short-circuit
 // before any filesystem/env lookup. edit_file/write_file carry the target in
 // "path"; terminal is best-effort — arbitrary shell can't be parsed, so it
-// requires BOTH ".octo" and "config.yml" in the command (a plain project
-// "config.yml" won't match, only the octo config's distinctive path does; a
-// rare false positive costs one harmless re-validation).
+// matches the config's full path or basename (a rare false positive costs one
+// harmless re-validation).
 func touchedConfigFile(tool string, input map[string]any) bool {
 	switch tool {
 	case "edit_file", "write_file":
@@ -58,7 +58,18 @@ func touchedConfigFile(tool string, input map[string]any) bool {
 		return sameFile(p, cfgPath)
 	case "terminal":
 		cmd, _ := input["command"].(string)
-		return cmd != "" && strings.Contains(cmd, "config.yml") && strings.Contains(cmd, ".octo")
+		if cmd == "" {
+			return false
+		}
+		cfgPath, err := config.Path()
+		if err != nil {
+			return false
+		}
+		// Best-effort: match the config's full path, or the ~-relative
+		// spelling of it. A bare "config.yml" under some other directory (a
+		// project's own config) must not match.
+		return strings.Contains(cmd, cfgPath) ||
+			strings.Contains(cmd, filepath.Join("~", filepath.Base(cfgPath)))
 	}
 	return false
 }
@@ -91,11 +102,11 @@ func expandHomePath(p string) string {
 func validateConfigFile() string {
 	cfg, err := config.Load()
 	if err != nil {
-		return "⚠️ ~/.octo/config.yml no longer parses: " + err.Error() +
+		return "⚠️ config.yml no longer parses: " + err.Error() +
 			" — your change did NOT take effect (the server kept the last valid config). Fix the file before relying on the edit."
 	}
 	if probs := cfg.Validate(); len(probs) > 0 {
-		return "⚠️ ~/.octo/config.yml parsed but has problems: " + strings.Join(probs, "; ") +
+		return "⚠️ config.yml parsed but has problems: " + strings.Join(probs, "; ") +
 			". These fall back silently — fix them if unintended."
 	}
 	return ""

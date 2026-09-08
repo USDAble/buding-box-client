@@ -13,6 +13,7 @@ import (
 func TestDirForProject_TaskUsesHomeDir(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
+	t.Setenv("OCTO_DATA_ROOT", home)
 	t.Setenv("USERPROFILE", home)
 
 	dir, err := DirForProject("")
@@ -34,6 +35,7 @@ func TestDirForProject_TaskUsesHomeDir(t *testing.T) {
 func TestDirForProject_PlainDirGetsOwnSlug(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
+	t.Setenv("OCTO_DATA_ROOT", home)
 	t.Setenv("USERPROFILE", home)
 
 	// Deliberately NOT a git repo — no `git init` anywhere.
@@ -53,7 +55,7 @@ func TestDirForProject_PlainDirGetsOwnSlug(t *testing.T) {
 	if dir == homeDir {
 		t.Errorf("project %q fell back to the shared tier %q", project, dir)
 	}
-	if got := filepath.Dir(dir); got != filepath.Join(home, ".octo", "memories") {
+	if got := filepath.Dir(dir); got != filepath.Join(home, "memories") {
 		t.Errorf("memory dir %q is not under the memories root", dir)
 	}
 }
@@ -62,6 +64,7 @@ func TestDirForProject_PlainDirGetsOwnSlug(t *testing.T) {
 func TestDirForProject_SameBasenameDistinctDirs(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
+	t.Setenv("OCTO_DATA_ROOT", home)
 	t.Setenv("USERPROFILE", home)
 
 	parent := t.TempDir()
@@ -99,6 +102,7 @@ func TestDirForProject_SameBasenameDistinctDirs(t *testing.T) {
 func TestDirForProject_NormalizesSymlinkedPaths(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
+	t.Setenv("OCTO_DATA_ROOT", home)
 	t.Setenv("USERPROFILE", home)
 
 	real := t.TempDir()
@@ -126,6 +130,7 @@ func TestDirForProject_NormalizesSymlinkedPaths(t *testing.T) {
 func TestDirForProject_HomeIsTheSharedTier(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
+	t.Setenv("OCTO_DATA_ROOT", home)
 	t.Setenv("USERPROFILE", home)
 
 	dir, err := DirForProject(home)
@@ -147,6 +152,7 @@ func TestDirForProject_HomeIsTheSharedTier(t *testing.T) {
 func TestDirForProject_SubdirIsItsOwnProject(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
+	t.Setenv("OCTO_DATA_ROOT", home)
 	t.Setenv("USERPROFILE", home)
 
 	root := t.TempDir()

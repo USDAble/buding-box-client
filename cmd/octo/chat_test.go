@@ -25,6 +25,7 @@ func TestRunChat_NoArgs_NoStdin_Errors(t *testing.T) {
 	t.Setenv("ANTHROPIC_API_KEY", "test-key")
 	tmp := t.TempDir()
 	t.Setenv("HOME", tmp)
+	t.Setenv("OCTO_DATA_ROOT", tmp)
 	t.Setenv("USERPROFILE", tmp) // Windows compat
 	var stdout, stderr bytes.Buffer
 	code := runChat(nil, strings.NewReader(""), &stdout, &stderr)
@@ -174,6 +175,7 @@ func TestRunChat_MissingAPIKey(t *testing.T) {
 	// Isolate config so a persisted key doesn't make the test falsely pass.
 	tmp := t.TempDir()
 	t.Setenv("HOME", tmp)
+	t.Setenv("OCTO_DATA_ROOT", tmp)
 	t.Setenv("USERPROFILE", tmp)
 	var stdout, stderr bytes.Buffer
 	code := runChat([]string{"hello"}, strings.NewReader(""), &stdout, &stderr)
@@ -221,6 +223,7 @@ func TestRunChat_HonoursAnthropicBaseURL(t *testing.T) {
 
 	tmp := t.TempDir()
 	t.Setenv("HOME", tmp)
+	t.Setenv("OCTO_DATA_ROOT", tmp)
 	t.Setenv("USERPROFILE", tmp)
 	t.Setenv("ANTHROPIC_API_KEY", "k")
 	t.Setenv("ANTHROPIC_BASE_URL", srv.URL)
@@ -298,6 +301,7 @@ func TestRunChat_OneShot_BackgroundSubAgentForcedSync(t *testing.T) {
 
 	tmp := t.TempDir()
 	t.Setenv("HOME", tmp)
+	t.Setenv("OCTO_DATA_ROOT", tmp)
 	t.Setenv("USERPROFILE", tmp)
 	t.Setenv("ANTHROPIC_API_KEY", "k")
 	t.Setenv("ANTHROPIC_BASE_URL", srv.URL)
@@ -401,6 +405,7 @@ func TestRunChat_PromptFile_SingleTurn(t *testing.T) {
 
 	tmp := t.TempDir()
 	t.Setenv("HOME", tmp)
+	t.Setenv("OCTO_DATA_ROOT", tmp)
 	t.Setenv("USERPROFILE", tmp)
 	t.Setenv("ANTHROPIC_API_KEY", "k")
 	t.Setenv("ANTHROPIC_BASE_URL", srv.URL)
@@ -447,6 +452,7 @@ func TestRunChat_TakeOverFlagUsage(t *testing.T) {
 		// the nonexistent ID and change the exit path.
 		tmp := t.TempDir()
 		t.Setenv("HOME", tmp)
+		t.Setenv("OCTO_DATA_ROOT", tmp)
 		t.Setenv("USERPROFILE", tmp)
 
 		var stdout, stderr bytes.Buffer
@@ -604,6 +610,7 @@ func TestRunChat_OpenAI_EndToEnd(t *testing.T) {
 	// would block the headless turn indefinitely (no connect timeout).
 	tmp := t.TempDir()
 	t.Setenv("HOME", tmp)
+	t.Setenv("OCTO_DATA_ROOT", tmp)
 	t.Setenv("USERPROFILE", tmp)
 	t.Setenv("OPENAI_API_KEY", "test-key")
 	t.Setenv("OPENAI_BASE_URL", srv.URL)
@@ -693,23 +700,24 @@ func TestRunChat_Headless_MCPManifestReflectsLiveRegistry(t *testing.T) {
 
 	tmp := t.TempDir()
 	t.Setenv("HOME", tmp)
+	t.Setenv("OCTO_DATA_ROOT", tmp)
 	t.Setenv("USERPROFILE", tmp)
 	t.Setenv("OPENAI_API_KEY", "test-key")
 	t.Setenv("OPENAI_BASE_URL", llmSrv.URL)
 	t.Setenv("ANTHROPIC_API_KEY", "")
 
-	if err := os.MkdirAll(filepath.Join(tmp, ".octo"), 0o700); err != nil {
+	if err := os.MkdirAll(tmp, 0o700); err != nil {
 		t.Fatal(err)
 	}
 	mcpJSON := `{"mcpServers": {"fake": {"url": "` + mcpSrv.URL + `"}}}`
-	if err := os.WriteFile(filepath.Join(tmp, ".octo", "mcp.json"), []byte(mcpJSON), 0o600); err != nil {
+	if err := os.WriteFile(filepath.Join(tmp, "mcp.json"), []byte(mcpJSON), 0o600); err != nil {
 		t.Fatal(err)
 	}
 	// Force the bridge on regardless of catalog size — a single-tool catalog
 	// would otherwise sit well under the auto activation threshold, and this
 	// test needs the bridge (and its manifest layer) to activate deterministically.
 	cfgYAML := "tools:\n  tool_search:\n    enabled: on\n"
-	if err := os.WriteFile(filepath.Join(tmp, ".octo", "config.yml"), []byte(cfgYAML), 0o600); err != nil {
+	if err := os.WriteFile(filepath.Join(tmp, "config.yml"), []byte(cfgYAML), 0o600); err != nil {
 		t.Fatal(err)
 	}
 
@@ -737,6 +745,7 @@ func TestRunChat_OpenAI_MissingAPIKey(t *testing.T) {
 	// missing-key test into a real network call.
 	home := t.TempDir()
 	t.Setenv("HOME", home)
+	t.Setenv("OCTO_DATA_ROOT", home)
 	t.Setenv("USERPROFILE", home)
 	t.Setenv("OPENAI_API_KEY", "")
 	var stdout, stderr bytes.Buffer
@@ -763,6 +772,7 @@ func TestRunChat_OpenAI_MissingAPIKey(t *testing.T) {
 func TestRunChat_UnknownResumeID(t *testing.T) {
 	tmp := t.TempDir()
 	t.Setenv("HOME", tmp)
+	t.Setenv("OCTO_DATA_ROOT", tmp)
 	t.Setenv("USERPROFILE", tmp)
 	t.Setenv("ANTHROPIC_API_KEY", "test-key")
 	var stdout, stderr bytes.Buffer
@@ -810,6 +820,7 @@ func TestRunChat_Anthropic_StreamingEndToEnd(t *testing.T) {
 
 	tmp := t.TempDir()
 	t.Setenv("HOME", tmp)
+	t.Setenv("OCTO_DATA_ROOT", tmp)
 	t.Setenv("USERPROFILE", tmp)
 	t.Setenv("ANTHROPIC_API_KEY", "k")
 	t.Setenv("ANTHROPIC_BASE_URL", srv.URL)
@@ -843,6 +854,7 @@ func TestRunChat_OpenAI_StreamingEndToEnd(t *testing.T) {
 	// doesn't connect to the developer's real MCP servers and hang.
 	tmp := t.TempDir()
 	t.Setenv("HOME", tmp)
+	t.Setenv("OCTO_DATA_ROOT", tmp)
 	t.Setenv("USERPROFILE", tmp)
 	t.Setenv("OPENAI_API_KEY", "k")
 	t.Setenv("OPENAI_BASE_URL", srv.URL)
@@ -865,6 +877,7 @@ func TestRunChat_OpenAI_StreamingEndToEnd(t *testing.T) {
 func TestRunChat_ResumedToolSession_DefaultOnNoWarning(t *testing.T) {
 	tmp := t.TempDir()
 	t.Setenv("HOME", tmp)
+	t.Setenv("OCTO_DATA_ROOT", tmp)
 	t.Setenv("USERPROFILE", tmp)
 	t.Setenv("ANTHROPIC_API_KEY", "test-key")
 
@@ -907,6 +920,7 @@ func TestRunChat_ResumedToolSession_DefaultOnNoWarning(t *testing.T) {
 func TestRunChat_ResumedToolSession_NoToolsWarns(t *testing.T) {
 	tmp := t.TempDir()
 	t.Setenv("HOME", tmp)
+	t.Setenv("OCTO_DATA_ROOT", tmp)
 	t.Setenv("USERPROFILE", tmp)
 	t.Setenv("ANTHROPIC_API_KEY", "test-key")
 
@@ -945,6 +959,7 @@ func TestRunChat_ResumedToolSession_NoToolsWarns(t *testing.T) {
 func TestRunChat_ResumedPlainSession_NoWarning(t *testing.T) {
 	tmp := t.TempDir()
 	t.Setenv("HOME", tmp)
+	t.Setenv("OCTO_DATA_ROOT", tmp)
 	t.Setenv("USERPROFILE", tmp)
 	t.Setenv("ANTHROPIC_API_KEY", "test-key")
 

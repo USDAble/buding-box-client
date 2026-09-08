@@ -26,6 +26,7 @@ func TestMain(m *testing.M) {
 	tmp, err := os.MkdirTemp("", "octo-server-test-home-")
 	if err == nil {
 		os.Setenv("HOME", tmp)
+		os.Setenv("OCTO_DATA_ROOT", tmp)
 		os.Setenv("USERPROFILE", tmp)
 	}
 	code := m.Run()

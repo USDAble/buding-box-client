@@ -18,6 +18,7 @@ import (
 func TestHandleWSUserMessage_BoundToOtherLeaseActiveEmitsSendRejected(t *testing.T) {
 	tmp := t.TempDir()
 	t.Setenv("HOME", tmp)
+	t.Setenv("OCTO_DATA_ROOT", tmp)
 	t.Setenv("USERPROFILE", tmp)
 
 	srv := mustServer(t, Config{Addr: "127.0.0.1:0", Tools: false})
@@ -84,6 +85,7 @@ drain:
 func TestHandleWSUserMessage_OtherEntryNoLeaseEmitsBindRequired(t *testing.T) {
 	tmp := t.TempDir()
 	t.Setenv("HOME", tmp)
+	t.Setenv("OCTO_DATA_ROOT", tmp)
 	t.Setenv("USERPROFILE", tmp)
 
 	srv := mustServer(t, Config{Addr: "127.0.0.1:0", Tools: false})
@@ -186,6 +188,7 @@ func (s *holdSender) StreamMessagesWithTools(_ context.Context, _, _ string, _ [
 func TestHandleWSUserMessage_ForceTakesOverStaleBinding(t *testing.T) {
 	tmp := t.TempDir()
 	t.Setenv("HOME", tmp)
+	t.Setenv("OCTO_DATA_ROOT", tmp)
 	t.Setenv("USERPROFILE", tmp)
 
 	srv := mustServer(t, Config{Addr: "127.0.0.1:0", Tools: false})
@@ -283,6 +286,7 @@ drainLoop:
 func TestHandleWSUserMessage_ForceTakeoverEmitsSessionTakenOver(t *testing.T) {
 	tmp := t.TempDir()
 	t.Setenv("HOME", tmp)
+	t.Setenv("OCTO_DATA_ROOT", tmp)
 	t.Setenv("USERPROFILE", tmp)
 
 	srv := mustServer(t, Config{Addr: "127.0.0.1:0", Tools: false})
@@ -384,6 +388,7 @@ drain:
 func TestHandleWSUserMessage_DrainWaitsForBindingRelease(t *testing.T) {
 	tmp := t.TempDir()
 	t.Setenv("HOME", tmp)
+	t.Setenv("OCTO_DATA_ROOT", tmp)
 	t.Setenv("USERPROFILE", tmp)
 
 	srv := mustServer(t, Config{Addr: "127.0.0.1:0", Tools: false})
@@ -449,6 +454,7 @@ func TestHandleWSUserMessage_DrainWaitsForBindingRelease(t *testing.T) {
 func TestHandleWSUserMessage_ForceRejectedWhenLeaseActive(t *testing.T) {
 	tmp := t.TempDir()
 	t.Setenv("HOME", tmp)
+	t.Setenv("OCTO_DATA_ROOT", tmp)
 	t.Setenv("USERPROFILE", tmp)
 
 	srv := mustServer(t, Config{Addr: "127.0.0.1:0", Tools: false})

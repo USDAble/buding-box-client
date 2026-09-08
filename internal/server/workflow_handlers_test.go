@@ -13,7 +13,7 @@ import (
 // mirroring how WorkflowSaveTool would persist one at "user" scope.
 func writeUserWorkflow(t *testing.T, home, name, content string) {
 	t.Helper()
-	dir := filepath.Join(home, ".octo", "workflows")
+	dir := filepath.Join(home, "workflows")
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		t.Fatal(err)
 	}
@@ -25,6 +25,7 @@ func writeUserWorkflow(t *testing.T, home, name, content string) {
 func TestHandleGetWorkflow(t *testing.T) {
 	tmp := t.TempDir()
 	t.Setenv("HOME", tmp)
+	t.Setenv("OCTO_DATA_ROOT", tmp)
 	t.Setenv("USERPROFILE", tmp)
 	writeUserWorkflow(t, tmp, "my-flow", "# @description A test workflow\n\"ok\"\n")
 
@@ -51,6 +52,7 @@ func TestHandleGetWorkflow(t *testing.T) {
 func TestHandleGetWorkflow_NotFound(t *testing.T) {
 	tmp := t.TempDir()
 	t.Setenv("HOME", tmp)
+	t.Setenv("OCTO_DATA_ROOT", tmp)
 	t.Setenv("USERPROFILE", tmp)
 
 	srv := mustServer(t, Config{Addr: "127.0.0.1:0", Tools: false})
@@ -65,6 +67,7 @@ func TestHandleGetWorkflow_NotFound(t *testing.T) {
 func TestHandleDeleteWorkflow_RefusesBuiltin(t *testing.T) {
 	tmp := t.TempDir()
 	t.Setenv("HOME", tmp)
+	t.Setenv("OCTO_DATA_ROOT", tmp)
 	t.Setenv("USERPROFILE", tmp)
 
 	srv := mustServer(t, Config{Addr: "127.0.0.1:0", Tools: false})
@@ -79,6 +82,7 @@ func TestHandleDeleteWorkflow_RefusesBuiltin(t *testing.T) {
 func TestHandleDeleteWorkflow_NotFound(t *testing.T) {
 	tmp := t.TempDir()
 	t.Setenv("HOME", tmp)
+	t.Setenv("OCTO_DATA_ROOT", tmp)
 	t.Setenv("USERPROFILE", tmp)
 
 	srv := mustServer(t, Config{Addr: "127.0.0.1:0", Tools: false})
@@ -93,6 +97,7 @@ func TestHandleDeleteWorkflow_NotFound(t *testing.T) {
 func TestHandleDeleteWorkflow_RemovesUserFile(t *testing.T) {
 	tmp := t.TempDir()
 	t.Setenv("HOME", tmp)
+	t.Setenv("OCTO_DATA_ROOT", tmp)
 	t.Setenv("USERPROFILE", tmp)
 	writeUserWorkflow(t, tmp, "scratch", "# @description Throwaway\n\"ok\"\n")
 
@@ -114,7 +119,7 @@ func TestHandleDeleteWorkflow_RemovesUserFile(t *testing.T) {
 	}
 
 	// Trashed, not hard-deleted.
-	if _, err := os.Stat(filepath.Join(tmp, ".octo", "workflows", "scratch.rb")); !os.IsNotExist(err) {
+	if _, err := os.Stat(filepath.Join(tmp, "workflows", "scratch.rb")); !os.IsNotExist(err) {
 		t.Errorf("file still present on disk: err = %v", err)
 	}
 }
@@ -122,6 +127,7 @@ func TestHandleDeleteWorkflow_RemovesUserFile(t *testing.T) {
 func TestHandleExportWorkflow(t *testing.T) {
 	tmp := t.TempDir()
 	t.Setenv("HOME", tmp)
+	t.Setenv("OCTO_DATA_ROOT", tmp)
 	t.Setenv("USERPROFILE", tmp)
 	writeUserWorkflow(t, tmp, "my-flow", "# @description A test workflow\n\"ok\"\n")
 
@@ -143,6 +149,7 @@ func TestHandleExportWorkflow(t *testing.T) {
 func TestHandleExportWorkflow_NotFound(t *testing.T) {
 	tmp := t.TempDir()
 	t.Setenv("HOME", tmp)
+	t.Setenv("OCTO_DATA_ROOT", tmp)
 	t.Setenv("USERPROFILE", tmp)
 
 	srv := mustServer(t, Config{Addr: "127.0.0.1:0", Tools: false})

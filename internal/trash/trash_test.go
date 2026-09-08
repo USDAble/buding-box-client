@@ -12,8 +12,9 @@ import (
 func isolateHome(t *testing.T) {
 	t.Helper()
 	home := t.TempDir()
-	t.Setenv("HOME", home)        // macOS/Linux
-	t.Setenv("USERPROFILE", home) // Windows
+	t.Setenv("HOME", home)
+	t.Setenv("OCTO_DATA_ROOT", home) // macOS/Linux
+	t.Setenv("USERPROFILE", home)    // Windows
 }
 
 func metaCount(t *testing.T, project string) int {

@@ -57,6 +57,7 @@ func goalTestServer(t *testing.T) (*Server, *agent.Session) {
 	t.Helper()
 	tmp := t.TempDir()
 	t.Setenv("HOME", tmp)
+	t.Setenv("OCTO_DATA_ROOT", tmp)
 	t.Setenv("USERPROFILE", tmp)
 
 	srv := mustServer(t, Config{Addr: "127.0.0.1:0", Tools: false})
@@ -459,6 +460,7 @@ func TestSteerPending(t *testing.T) {
 func TestGoalRESTEndpoints(t *testing.T) {
 	tmp := t.TempDir()
 	t.Setenv("HOME", tmp)
+	t.Setenv("OCTO_DATA_ROOT", tmp)
 	t.Setenv("USERPROFILE", tmp)
 
 	sess := agent.NewSession("stub-model", "")
@@ -541,6 +543,7 @@ func TestGoalRESTEndpoints(t *testing.T) {
 func TestGoalSession_PrefersLiveSession(t *testing.T) {
 	tmp := t.TempDir()
 	t.Setenv("HOME", tmp)
+	t.Setenv("OCTO_DATA_ROOT", tmp)
 	t.Setenv("USERPROFILE", tmp)
 
 	sess := agent.NewSession("stub-model", "")
@@ -588,6 +591,7 @@ func TestChannelTurn_GoalContinuationAndZeroProgressStop(t *testing.T) {
 	// zero-progress guard stops the chain after one hidden turn.
 	tmp := t.TempDir()
 	t.Setenv("HOME", tmp)
+	t.Setenv("OCTO_DATA_ROOT", tmp)
 	t.Setenv("USERPROFILE", tmp)
 	srv := chanServer(t)
 	srv.goalsEnabled.Store(true)
@@ -631,6 +635,7 @@ func TestChannelTurn_BudgetCrossingSendsNotice(t *testing.T) {
 	// budget-reached chat notice (IM users aren't watching a status line).
 	tmp := t.TempDir()
 	t.Setenv("HOME", tmp)
+	t.Setenv("OCTO_DATA_ROOT", tmp)
 	t.Setenv("USERPROFILE", tmp)
 	srv := chanServer(t)
 	srv.goalsEnabled.Store(true)
@@ -735,6 +740,7 @@ func goalContextTurns(a *agent.Agent) int {
 func TestChannelGoalCommand_SetsAndStartsTheGoal(t *testing.T) {
 	tmp := t.TempDir()
 	t.Setenv("HOME", tmp)
+	t.Setenv("OCTO_DATA_ROOT", tmp)
 	t.Setenv("USERPROFILE", tmp)
 	srv := chanServer(t)
 	srv.goalsEnabled.Store(true)
@@ -759,6 +765,7 @@ func TestChannelGoalCommand_SetsAndStartsTheGoal(t *testing.T) {
 func TestChannelGoalCommand_PauseDoesNotStartATurn(t *testing.T) {
 	tmp := t.TempDir()
 	t.Setenv("HOME", tmp)
+	t.Setenv("OCTO_DATA_ROOT", tmp)
 	t.Setenv("USERPROFILE", tmp)
 	srv := chanServer(t)
 	srv.goalsEnabled.Store(true)
@@ -786,6 +793,7 @@ func TestChannelGoalCommand_PauseDoesNotStartATurn(t *testing.T) {
 func TestChannelGoalCommand_RespectsGoalsDisabled(t *testing.T) {
 	tmp := t.TempDir()
 	t.Setenv("HOME", tmp)
+	t.Setenv("OCTO_DATA_ROOT", tmp)
 	t.Setenv("USERPROFILE", tmp)
 	srv := chanServer(t)
 	srv.goalsEnabled.Store(false)

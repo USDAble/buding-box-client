@@ -14,6 +14,7 @@ import (
 func TestLoadSession_RehydratesImageBlocks(t *testing.T) {
 	tmp := t.TempDir()
 	t.Setenv("HOME", tmp)
+	t.Setenv("OCTO_DATA_ROOT", tmp)
 	t.Setenv("USERPROFILE", tmp)
 
 	imgPath := filepath.Join(tmp, "pic.png")
@@ -55,6 +56,7 @@ func TestLoadSession_RehydratesImageBlocks(t *testing.T) {
 func TestLoadSession_MissingImageFileBecomesPlaceholder(t *testing.T) {
 	tmp := t.TempDir()
 	t.Setenv("HOME", tmp)
+	t.Setenv("OCTO_DATA_ROOT", tmp)
 	t.Setenv("USERPROFILE", tmp)
 
 	sess := NewSession("m", "")
@@ -90,6 +92,7 @@ func TestLoadSession_MissingImageFileBecomesPlaceholder(t *testing.T) {
 func TestLoadSession_KeepsDescriptionWhenBytesAreGone(t *testing.T) {
 	tmp := t.TempDir()
 	t.Setenv("HOME", tmp)
+	t.Setenv("OCTO_DATA_ROOT", tmp)
 	t.Setenv("USERPROFILE", tmp)
 
 	sess := NewSession("m", "")
@@ -124,6 +127,7 @@ func TestLoadSession_KeepsDescriptionWhenBytesAreGone(t *testing.T) {
 func TestLoadSession_ResetsImageDescFailures(t *testing.T) {
 	tmp := t.TempDir()
 	t.Setenv("HOME", tmp)
+	t.Setenv("OCTO_DATA_ROOT", tmp)
 	t.Setenv("USERPROFILE", tmp)
 
 	imgPath := filepath.Join(tmp, "pic.png")

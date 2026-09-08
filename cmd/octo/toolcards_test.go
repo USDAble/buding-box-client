@@ -288,6 +288,7 @@ func setSpillHome(t *testing.T) {
 	t.Helper()
 	tmp := t.TempDir()
 	t.Setenv("HOME", tmp)
+	t.Setenv("OCTO_DATA_ROOT", tmp)
 	t.Setenv("USERPROFILE", tmp)
 }
 
@@ -338,7 +339,7 @@ func TestRenderToolCard_BlankHeavyOutputNoSpill(t *testing.T) {
 		t.Errorf("blank-heavy output should neither fold nor link; got:\n%q", got)
 	}
 	home, _ := os.UserHomeDir()
-	entries, _ := os.ReadDir(filepath.Join(home, ".octo", "tmp"))
+	entries, _ := os.ReadDir(filepath.Join(home, "tmp"))
 	for _, e := range entries {
 		if strings.HasPrefix(e.Name(), "card-") {
 			t.Errorf("no spill file expected, found %s", e.Name())

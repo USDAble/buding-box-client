@@ -21,6 +21,7 @@ func jpegDataURL(payload []byte) string {
 func TestParseUserFiles_ImageDataURL(t *testing.T) {
 	tmp := t.TempDir()
 	t.Setenv("HOME", tmp)
+	t.Setenv("OCTO_DATA_ROOT", tmp)
 	t.Setenv("USERPROFILE", tmp)
 
 	payload := []byte{0xFF, 0xD8, 0xFF, 1, 2, 3}
@@ -67,6 +68,7 @@ func TestParseUserFiles_ImageDataURL(t *testing.T) {
 func TestParseUserFiles_ImageDataURL_NonVision(t *testing.T) {
 	tmp := t.TempDir()
 	t.Setenv("HOME", tmp)
+	t.Setenv("OCTO_DATA_ROOT", tmp)
 	t.Setenv("USERPROFILE", tmp)
 
 	payload := []byte{0xFF, 0xD8, 0xFF, 1, 2, 3}
@@ -81,7 +83,7 @@ func TestParseUserFiles_ImageDataURL_NonVision(t *testing.T) {
 			len(att.blocks), len(att.images), len(att.notes))
 	}
 	path := strings.TrimPrefix(strings.TrimSuffix(att.notes[0], "]"), "[Attached file: ")
-	if !strings.Contains(filepath.ToSlash(path), ".octo/uploads") {
+	if !strings.Contains(filepath.ToSlash(path), "/uploads/") {
 		t.Errorf("note should reference the persisted upload path, got %q", att.notes[0])
 	}
 	onDisk, err := os.ReadFile(path)
@@ -93,6 +95,7 @@ func TestParseUserFiles_ImageDataURL_NonVision(t *testing.T) {
 func TestParseUserFiles_DocPath(t *testing.T) {
 	tmp := t.TempDir()
 	t.Setenv("HOME", tmp)
+	t.Setenv("OCTO_DATA_ROOT", tmp)
 	t.Setenv("USERPROFILE", tmp)
 
 	dir, err := ensureUploadsDir()
@@ -120,8 +123,12 @@ func TestParseUserFiles_DocPath(t *testing.T) {
 }
 
 func TestDocChipRefs(t *testing.T) {
+	tmp := t.TempDir()
+	t.Setenv("OCTO_DATA_ROOT", tmp)
+	up := filepath.Join(tmp, "uploads")
+
 	// Document attachment → "pdf:<name>" chip.
-	in := "look at this\n\n" + agent.AttachmentNote("/home/u/.octo/uploads/1720000000000000000_report.pdf")
+	in := "look at this\n\n" + agent.AttachmentNote(filepath.Join(up, "1720000000000000000_report.pdf"))
 	cleaned, refs := docChipRefs(in)
 	if cleaned != "look at this" {
 		t.Errorf("cleaned = %q, want %q", cleaned, "look at this")
@@ -131,7 +138,7 @@ func TestDocChipRefs(t *testing.T) {
 	}
 
 	// Image attachment persisted under uploads → "/api/uploads/" thumbnail URL.
-	in = "look at this\n\n" + agent.AttachmentNote("/home/u/.octo/uploads/1720000000000000000_shot.jpg")
+	in = "look at this\n\n" + agent.AttachmentNote(filepath.Join(up, "1720000000000000000_shot.jpg"))
 	cleaned, refs = docChipRefs(in)
 	if cleaned != "look at this" {
 		t.Errorf("cleaned = %q, want %q", cleaned, "look at this")
@@ -151,6 +158,7 @@ func TestDocChipRefs(t *testing.T) {
 func TestParseUserFiles_SkipsBadEntries(t *testing.T) {
 	tmp := t.TempDir()
 	t.Setenv("HOME", tmp)
+	t.Setenv("OCTO_DATA_ROOT", tmp)
 	t.Setenv("USERPROFILE", tmp)
 
 	att := parseUserFiles([]wsUserFile{
@@ -168,13 +176,14 @@ func TestParseUserFiles_SkipsBadEntries(t *testing.T) {
 func TestHandleGetSessionMessages_ImageAttachmentReplay(t *testing.T) {
 	tmp := t.TempDir()
 	t.Setenv("HOME", tmp)
+	t.Setenv("OCTO_DATA_ROOT", tmp)
 	t.Setenv("USERPROFILE", tmp)
 
 	sess := agent.NewSession("deepseek-v4-pro", "")
 	sess.Title = "fixed"
 	sess.Messages = []agent.Message{{
 		Role:    agent.RoleUser,
-		Content: "analyze this\n\n" + agent.AttachmentNote("/home/u/.octo/uploads/9_shot.jpg"),
+		Content: "analyze this\n\n" + agent.AttachmentNote(filepath.Join(tmp, "uploads", "9_shot.jpg")),
 	}}
 	if err := sess.Save(); err != nil {
 		t.Fatalf("save: %v", err)
@@ -222,13 +231,14 @@ func TestHandleGetSessionMessages_ImageAttachmentReplay(t *testing.T) {
 func TestHandleGetSessionMessages_DocAttachmentReplay(t *testing.T) {
 	tmp := t.TempDir()
 	t.Setenv("HOME", tmp)
+	t.Setenv("OCTO_DATA_ROOT", tmp)
 	t.Setenv("USERPROFILE", tmp)
 
 	sess := agent.NewSession("stub-model", "")
 	sess.Title = "fixed"
 	sess.Messages = []agent.Message{{
 		Role:    agent.RoleUser,
-		Content: "analyze this\n\n" + agent.AttachmentNote("/home/u/.octo/uploads/9_data.csv"),
+		Content: "analyze this\n\n" + agent.AttachmentNote(filepath.Join(tmp, "uploads", "9_data.csv")),
 	}}
 	if err := sess.Save(); err != nil {
 		t.Fatalf("save: %v", err)
@@ -271,6 +281,7 @@ func TestHandleGetSessionMessages_DocAttachmentReplay(t *testing.T) {
 func TestHandleGetUpload(t *testing.T) {
 	tmp := t.TempDir()
 	t.Setenv("HOME", tmp)
+	t.Setenv("OCTO_DATA_ROOT", tmp)
 	t.Setenv("USERPROFILE", tmp)
 
 	dir, err := ensureUploadsDir()
@@ -310,6 +321,7 @@ func TestHandleGetUpload(t *testing.T) {
 func TestHandleGetUpload_HTMLAttachmentForcesDownload(t *testing.T) {
 	tmp := t.TempDir()
 	t.Setenv("HOME", tmp)
+	t.Setenv("OCTO_DATA_ROOT", tmp)
 	t.Setenv("USERPROFILE", tmp)
 
 	dir, err := ensureUploadsDir()
@@ -358,6 +370,7 @@ func TestHandleGetUpload_HTMLAttachmentForcesDownload(t *testing.T) {
 func TestHandleWSUserMessage_ImageOnly(t *testing.T) {
 	tmp := t.TempDir()
 	t.Setenv("HOME", tmp)
+	t.Setenv("OCTO_DATA_ROOT", tmp)
 	t.Setenv("USERPROFILE", tmp)
 
 	srv := mustServer(t, Config{Addr: "127.0.0.1:0", Tools: false})
@@ -477,6 +490,7 @@ drain:
 func TestHandleWSUserMessage_ImageOnly_NonVision(t *testing.T) {
 	tmp := t.TempDir()
 	t.Setenv("HOME", tmp)
+	t.Setenv("OCTO_DATA_ROOT", tmp)
 	t.Setenv("USERPROFILE", tmp)
 
 	srv := mustServer(t, Config{Addr: "127.0.0.1:0", Tools: false})
@@ -561,7 +575,7 @@ drain:
 				continue
 			}
 			if strings.Contains(m.Content, "[Attached file:") &&
-				strings.Contains(filepath.ToSlash(m.Content), ".octo/uploads") {
+				strings.Contains(filepath.ToSlash(m.Content), "/uploads/") {
 				return true
 			}
 		}

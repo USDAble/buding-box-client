@@ -12,6 +12,8 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+
+	"github.com/open-octo/octo-agent/internal/datapath"
 )
 
 // base is the built-in foundation prompt: octo's identity plus the
@@ -58,15 +60,17 @@ const ProjectContextFile = ".octorules"
 const maxIncludeDepth = 5
 
 // userRulesPath returns the absolute path of the per-user global conventions
-// file (~/.octo/octorules.md) — the cross-project counterpart of the per-repo
+// file (data/octorules.md) — the cross-project counterpart of the per-repo
 // ProjectContextFile. It's a var so tests can point it at a temp file. Returns
-// "" when the home directory can't be resolved.
+// "" when the data root can't be resolved.
+// OCTO-FORK: the portable product keeps identity files next to the executable,
+// not in the host home — see dev-docs-usdable/需求/2260906/技术方案/P1-便携数据根.md.
 var userRulesPath = func() string {
-	home, err := os.UserHomeDir()
-	if err != nil || home == "" {
+	p, err := datapath.Join("octorules.md")
+	if err != nil {
 		return ""
 	}
-	return filepath.Join(home, ".octo", "octorules.md")
+	return p
 }
 
 // Compose assembles the session system prompt from up to ten layers (six
@@ -202,23 +206,22 @@ func IdentityPath(dir, lower string) string {
 }
 
 // soulPath and userProfilePath return the per-user identity files
-// (~/.octo/soul.md, ~/.octo/user.md), or "" when the home dir can't be
-// resolved. They're vars so tests can point them at temp files, mirroring
-// userRulesPath.
+// (data/soul.md, data/user.md), or "" when the data root can't be resolved.
+// They're vars so tests can point them at temp files, mirroring userRulesPath.
 var soulPath = func() string {
-	home, err := os.UserHomeDir()
-	if err != nil || home == "" {
+	root, err := datapath.Root()
+	if err != nil {
 		return ""
 	}
-	return IdentityPath(filepath.Join(home, ".octo"), "soul.md")
+	return IdentityPath(root, "soul.md")
 }
 
 var userProfilePath = func() string {
-	home, err := os.UserHomeDir()
-	if err != nil || home == "" {
+	root, err := datapath.Root()
+	if err != nil {
 		return ""
 	}
-	return IdentityPath(filepath.Join(home, ".octo"), "user.md")
+	return IdentityPath(root, "user.md")
 }
 
 // readSoul returns the trimmed, include-expanded contents of ~/.octo/soul.md

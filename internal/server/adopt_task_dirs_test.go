@@ -71,7 +71,7 @@ func TestAdoptTaskWorkingDirs_LeavesTheWorkspaceAlone(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	workspace := filepath.Join(home, "Octo")
+	workspace := filepath.Join(home, "workspace")
 	if err := os.MkdirAll(workspace, 0o755); err != nil {
 		t.Fatal(err)
 	}
@@ -86,18 +86,18 @@ func TestAdoptTaskWorkingDirs_LeavesTheWorkspaceAlone(t *testing.T) {
 	}
 }
 
-// ~/Octo is excluded whether or not it is the configured workspace. A machine
-// whose workspace_dir was changed later — or whose sessions came from a backup —
-// still has ~/Octo in everything written before the change, and comparing only
-// against the live setting would sweep exactly those into a project. This is the
-// case a dry run against real data caught.
+// data/workspace is excluded whether or not it is the configured workspace. A
+// machine whose workspace_dir was changed later — or whose sessions came from a
+// backup — still has data/workspace in everything written before the change,
+// and comparing only against the live setting would sweep exactly those into a
+// project. This is the case a dry run against real data caught.
 func TestAdoptTaskWorkingDirs_ExcludesTheBuiltinDefaultUnconditionally(t *testing.T) {
 	setTestHome(t)
 	home, err := os.UserHomeDir()
 	if err != nil {
 		t.Fatal(err)
 	}
-	builtin := filepath.Join(home, "Octo")
+	builtin := filepath.Join(home, "workspace")
 	if err := os.MkdirAll(builtin, 0o755); err != nil {
 		t.Fatal(err)
 	}
@@ -112,7 +112,7 @@ func TestAdoptTaskWorkingDirs_ExcludesTheBuiltinDefaultUnconditionally(t *testin
 	srv.adoptTaskWorkingDirs()
 
 	if p := projectFor(t, inBuiltin.ID); p != nil {
-		t.Errorf("~/Octo was adopted into project %q despite no longer being the configured workspace", p.Name)
+		t.Errorf("data/workspace was adopted into project %q despite no longer being the configured workspace", p.Name)
 	}
 	// …while a directory that really was chosen is still adopted.
 	if p := projectFor(t, inChosen.ID); p == nil {

@@ -322,8 +322,9 @@ func pngDataURL() string {
 // the bug where such an answer arrived as the bare placeholder and the image
 // bytes were silently dropped.
 func TestRouteChannelEvent_ImageAnswersPendingAsk(t *testing.T) {
-	tmp := t.TempDir() // uploads land in ~/.octo/uploads — isolate HOME
+	tmp := t.TempDir() // uploads land in data/uploads — isolate HOME
 	t.Setenv("HOME", tmp)
+	t.Setenv("OCTO_DATA_ROOT", tmp)
 	t.Setenv("USERPROFILE", tmp)
 	srv := chanServer(t)
 	ad := &fullFakeAdapter{}
@@ -348,7 +349,7 @@ func TestRouteChannelEvent_ImageAnswersPendingAsk(t *testing.T) {
 	if !strings.Contains(got, "[图片]") {
 		t.Errorf("answer lost the message text: %q", got)
 	}
-	if !strings.Contains(got, "[Attached file:") || !strings.Contains(filepath.ToSlash(got), ".octo/uploads") {
+	if !strings.Contains(got, "[Attached file:") || !strings.Contains(filepath.ToSlash(got), "/uploads/") {
 		t.Fatalf("answer missing the persisted-upload note: %q", got)
 	}
 	path := strings.TrimSuffix(strings.Split(got, "[Attached file: ")[1], "]")
@@ -369,6 +370,7 @@ func TestRouteChannelEvent_ImageAnswersPendingAsk(t *testing.T) {
 func TestRouteChannelEvent_EmptyTextImageAnswersPendingAsk(t *testing.T) {
 	tmp := t.TempDir()
 	t.Setenv("HOME", tmp)
+	t.Setenv("OCTO_DATA_ROOT", tmp)
 	t.Setenv("USERPROFILE", tmp)
 	srv := chanServer(t)
 	ad := &fullFakeAdapter{}
@@ -390,7 +392,7 @@ func TestRouteChannelEvent_EmptyTextImageAnswersPendingAsk(t *testing.T) {
 	case <-time.After(time.Second):
 		t.Fatal("pending ask did not receive the empty-text image answer")
 	}
-	if !strings.Contains(got, "[Attached file:") || !strings.Contains(filepath.ToSlash(got), ".octo/uploads") {
+	if !strings.Contains(got, "[Attached file:") || !strings.Contains(filepath.ToSlash(got), "/uploads/") {
 		t.Fatalf("answer missing the persisted-upload note: %q", got)
 	}
 	path := strings.TrimSuffix(strings.Split(got, "[Attached file: ")[1], "]")
@@ -406,6 +408,7 @@ func TestRouteChannelEvent_EmptyTextImageAnswersPendingAsk(t *testing.T) {
 func TestRouteChannelEvent_ImageSteerCarriesAttachment(t *testing.T) {
 	tmp := t.TempDir()
 	t.Setenv("HOME", tmp)
+	t.Setenv("OCTO_DATA_ROOT", tmp)
 	t.Setenv("USERPROFILE", tmp)
 	sender := &blockingSender{started: make(chan struct{}, 8), release: make(chan struct{})}
 	srv := mustServer(t, Config{Addr: "127.0.0.1:0", Tools: false})
@@ -430,7 +433,7 @@ func TestRouteChannelEvent_ImageSteerCarriesAttachment(t *testing.T) {
 	_, inputs := sender.snapshot()
 	found := false
 	for _, in := range inputs {
-		if strings.Contains(in, "[Attached file:") && strings.Contains(filepath.ToSlash(in), ".octo/uploads") {
+		if strings.Contains(in, "[Attached file:") && strings.Contains(filepath.ToSlash(in), "/uploads/") {
 			found = true
 		}
 	}
@@ -535,6 +538,7 @@ func TestRouteChannelEvent_MidTurnMessageSteers(t *testing.T) {
 func TestHandleChannelMessage_PersistsTurn(t *testing.T) {
 	tmp := t.TempDir() // isolated HOME: deterministic store IDs cross-pollinate otherwise
 	t.Setenv("HOME", tmp)
+	t.Setenv("OCTO_DATA_ROOT", tmp)
 	t.Setenv("USERPROFILE", tmp)
 	srv := chanServer(t)
 	ad := &fullFakeAdapter{}
@@ -662,6 +666,7 @@ func TestHandleChannelMessage_RefreshesAutoRecallBeforeRegisteringHooks(t *testi
 func TestHandleChannelMessage_WiresArchiveDir(t *testing.T) {
 	tmp := t.TempDir() // isolated HOME: deterministic store IDs cross-pollinate otherwise
 	t.Setenv("HOME", tmp)
+	t.Setenv("OCTO_DATA_ROOT", tmp)
 	t.Setenv("USERPROFILE", tmp)
 	srv := chanServer(t)
 	ad := &fullFakeAdapter{}
@@ -687,6 +692,7 @@ func TestHandleChannelMessage_WiresArchiveDir(t *testing.T) {
 func TestHandleChannelMessage_RejectsTurnWhenBoundToOtherEntry(t *testing.T) {
 	tmp := t.TempDir()
 	t.Setenv("HOME", tmp)
+	t.Setenv("OCTO_DATA_ROOT", tmp)
 	t.Setenv("USERPROFILE", tmp)
 
 	srv := chanServer(t)
@@ -747,6 +753,7 @@ func TestHandleChannelMessage_RejectsTurnWhenBoundToOtherEntry(t *testing.T) {
 func TestHandleChannelMessage_RecoversWhenSessionFileDeletedExternally(t *testing.T) {
 	tmp := t.TempDir()
 	t.Setenv("HOME", tmp)
+	t.Setenv("OCTO_DATA_ROOT", tmp)
 	t.Setenv("USERPROFILE", tmp)
 
 	srv := chanServer(t)
@@ -796,6 +803,7 @@ func TestHandleChannelMessage_RecoversWhenSessionFileDeletedExternally(t *testin
 func TestHandleChannelMessage_AdvertisesWorkflowToTopLevelTurn(t *testing.T) {
 	tmp := t.TempDir()
 	t.Setenv("HOME", tmp)
+	t.Setenv("OCTO_DATA_ROOT", tmp)
 	t.Setenv("USERPROFILE", tmp)
 
 	rec := &recordingSender{}

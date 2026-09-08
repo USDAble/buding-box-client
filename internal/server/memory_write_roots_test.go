@@ -52,7 +52,7 @@ func TestMemoryWriteRoots_CoversOtherProjectsDirs(t *testing.T) {
 	// The widening must stop at the memories tree, resist a sibling that merely
 	// shares the prefix as a string, resist traversal out of the tree, and stay
 	// under the deny tier for secret-shaped paths.
-	octo := filepath.Join(home, ".octo")
+	octo := home
 	for _, tc := range []struct {
 		path string
 		want permission.Decision

@@ -211,6 +211,7 @@ func (f *fakeAuthServer) close() { f.srv.Close() }
 func TestOAuth_EndToEnd_AuthCodeFlow(t *testing.T) {
 	tmp := t.TempDir()
 	t.Setenv("HOME", tmp)
+	t.Setenv("OCTO_DATA_ROOT", tmp)
 	t.Setenv("USERPROFILE", tmp)
 
 	fs := newFakeAuthServer(t)
@@ -247,6 +248,7 @@ func TestOAuth_EndToEnd_AuthCodeFlow(t *testing.T) {
 func TestOAuth_TokenCacheReused(t *testing.T) {
 	tmp := t.TempDir()
 	t.Setenv("HOME", tmp)
+	t.Setenv("OCTO_DATA_ROOT", tmp)
 	t.Setenv("USERPROFILE", tmp)
 	fs := newFakeAuthServer(t)
 	defer fs.close()
@@ -272,6 +274,7 @@ func TestOAuth_TokenCacheReused(t *testing.T) {
 func TestOAuth_RefreshOnExpiry(t *testing.T) {
 	tmp := t.TempDir()
 	t.Setenv("HOME", tmp)
+	t.Setenv("OCTO_DATA_ROOT", tmp)
 	t.Setenv("USERPROFILE", tmp)
 	fs := newFakeAuthServer(t)
 	defer fs.close()
@@ -307,6 +310,7 @@ func TestOAuth_RefreshOnExpiry(t *testing.T) {
 func TestOAuth_SendsResourceAndScope(t *testing.T) {
 	tmp := t.TempDir()
 	t.Setenv("HOME", tmp)
+	t.Setenv("OCTO_DATA_ROOT", tmp)
 	t.Setenv("USERPROFILE", tmp)
 	fs := newFakeAuthServer(t)
 	defer fs.close()
@@ -363,6 +367,7 @@ func TestOAuth_SendsResourceAndScope(t *testing.T) {
 func TestOAuth_PKCE_ChallengeMatchesVerifier(t *testing.T) {
 	tmp := t.TempDir()
 	t.Setenv("HOME", tmp)
+	t.Setenv("OCTO_DATA_ROOT", tmp)
 	t.Setenv("USERPROFILE", tmp)
 	fs := newFakeAuthServer(t)
 	defer fs.close()
@@ -402,6 +407,7 @@ func TestOAuth_PKCE_ChallengeMatchesVerifier(t *testing.T) {
 func TestOAuth_RedirectURIMismatch_ForcesReregistration(t *testing.T) {
 	tmp := t.TempDir()
 	t.Setenv("HOME", tmp)
+	t.Setenv("OCTO_DATA_ROOT", tmp)
 	t.Setenv("USERPROFILE", tmp)
 	fs := newFakeAuthServer(t)
 	defer fs.close()
@@ -443,6 +449,7 @@ func TestOAuth_RedirectURIMismatch_ForcesReregistration(t *testing.T) {
 func TestOAuth_StaleCacheWithoutResource_ForcesFreshAuth(t *testing.T) {
 	tmp := t.TempDir()
 	t.Setenv("HOME", tmp)
+	t.Setenv("OCTO_DATA_ROOT", tmp)
 	t.Setenv("USERPROFILE", tmp)
 	fs := newFakeAuthServer(t)
 	defer fs.close()
@@ -488,6 +495,7 @@ func TestOAuth_StaleCacheWithoutResource_ForcesFreshAuth(t *testing.T) {
 func TestOAuth_MissingResourceInMetadata_FallsBackToConfiguredURL(t *testing.T) {
 	tmp := t.TempDir()
 	t.Setenv("HOME", tmp)
+	t.Setenv("OCTO_DATA_ROOT", tmp)
 	t.Setenv("USERPROFILE", tmp)
 
 	var mu sync.Mutex
@@ -569,6 +577,7 @@ func TestOAuth_MissingResourceInMetadata_FallsBackToConfiguredURL(t *testing.T) 
 func TestOAuth_EmptyRedirectURI_FailsFast(t *testing.T) {
 	tmp := t.TempDir()
 	t.Setenv("HOME", tmp)
+	t.Setenv("OCTO_DATA_ROOT", tmp)
 	t.Setenv("USERPROFILE", tmp)
 	fs := newFakeAuthServer(t)
 	defer fs.close()
@@ -597,6 +606,7 @@ func TestOAuth_EmptyRedirectURI_FailsFast(t *testing.T) {
 func TestOAuth_NilPrompt_FailsFast(t *testing.T) {
 	tmp := t.TempDir()
 	t.Setenv("HOME", tmp)
+	t.Setenv("OCTO_DATA_ROOT", tmp)
 	t.Setenv("USERPROFILE", tmp)
 	fs := newFakeAuthServer(t)
 	defer fs.close()
@@ -624,6 +634,7 @@ func TestOAuth_NilPrompt_FailsFast(t *testing.T) {
 func TestOAuth_InvalidateForces_FreshAuth(t *testing.T) {
 	tmp := t.TempDir()
 	t.Setenv("HOME", tmp)
+	t.Setenv("OCTO_DATA_ROOT", tmp)
 	t.Setenv("USERPROFILE", tmp)
 	fs := newFakeAuthServer(t)
 	defer fs.close()
@@ -647,6 +658,7 @@ func TestOAuth_InvalidateForces_FreshAuth(t *testing.T) {
 func TestHTTPTransport_OAuthRetryOn401(t *testing.T) {
 	tmp := t.TempDir()
 	t.Setenv("HOME", tmp)
+	t.Setenv("OCTO_DATA_ROOT", tmp)
 	t.Setenv("USERPROFILE", tmp)
 	fs := newFakeAuthServer(t)
 	defer fs.close()
@@ -727,6 +739,7 @@ func TestBuildASMetadataURL_RFC8414(t *testing.T) {
 func TestOAuth_NoRegistrationEndpointFails(t *testing.T) {
 	tmp := t.TempDir()
 	t.Setenv("HOME", tmp)
+	t.Setenv("OCTO_DATA_ROOT", tmp)
 	t.Setenv("USERPROFILE", tmp)
 	// Server WITHOUT registration_endpoint — must error out before
 	// touching the authorization flow, since we have no client_id.

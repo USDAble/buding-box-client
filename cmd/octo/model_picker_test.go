@@ -2,8 +2,6 @@ package main
 
 import (
 	"io"
-	"os"
-	"path/filepath"
 	"strings"
 	"testing"
 
@@ -20,10 +18,7 @@ func writeModelsConfig(t *testing.T, cfg config.Config) {
 	tmp := t.TempDir()
 	t.Setenv("HOME", tmp)
 	t.Setenv("USERPROFILE", tmp)
-	dir := filepath.Join(tmp, ".octo")
-	if err := os.MkdirAll(dir, 0o700); err != nil {
-		t.Fatalf("mkdir .octo: %v", err)
-	}
+	t.Setenv("OCTO_DATA_ROOT", tmp)
 	if err := cfg.Save(); err != nil {
 		t.Fatalf("save config: %v", err)
 	}

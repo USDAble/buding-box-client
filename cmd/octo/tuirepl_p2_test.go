@@ -60,6 +60,7 @@ func TestRenderInputBox_FlatStyle(t *testing.T) {
 func TestAbbreviateHome(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
+	t.Setenv("OCTO_DATA_ROOT", home)
 	t.Setenv("USERPROFILE", home)
 
 	if got := abbreviateHome(home); got != "~" {

@@ -73,6 +73,7 @@ func TestCompletionCandidates_DefaultChatMode(t *testing.T) {
 func TestCompletionCandidates_DefaultChatMode_SessionIDs(t *testing.T) {
 	tmp := t.TempDir()
 	t.Setenv("HOME", tmp)
+	t.Setenv("OCTO_DATA_ROOT", tmp)
 	t.Setenv("USERPROFILE", tmp)
 	// Completion is scoped like -c itself, so the seeded session has to belong
 	// to the directory the shell is completing in.
@@ -112,6 +113,7 @@ func TestCompletionCandidates_PermissionModeAfterFlag(t *testing.T) {
 func TestCompletionCandidates_SessionIDsAfterDashC(t *testing.T) {
 	tmp := t.TempDir()
 	t.Setenv("HOME", tmp)
+	t.Setenv("OCTO_DATA_ROOT", tmp)
 	t.Setenv("USERPROFILE", tmp)
 	// Seed two sessions in the completing directory so the candidate list is
 	// meaningful — one elsewhere to confirm the scoping holds here too.

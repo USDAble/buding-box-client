@@ -17,13 +17,15 @@ func TestMain(m *testing.M) {
 	// os.Exit below skips deferred functions, so restoration runs inline
 	// after m.Run() returns rather than via defer.
 	tmp, err := os.MkdirTemp("", "octo-workflow-home-test")
-	var origHome, origProfile string
-	var hadHome, hadProfile bool
+	var origHome, origProfile, origDataRoot string
+	var hadHome, hadProfile, hadDataRoot bool
 	if err == nil {
 		origHome, hadHome = os.LookupEnv("HOME")
 		origProfile, hadProfile = os.LookupEnv("USERPROFILE")
+		origDataRoot, hadDataRoot = os.LookupEnv("OCTO_DATA_ROOT")
 		_ = os.Setenv("HOME", tmp)
 		_ = os.Setenv("USERPROFILE", tmp)
+		_ = os.Setenv("OCTO_DATA_ROOT", tmp)
 	}
 
 	code := m.Run()
@@ -38,6 +40,11 @@ func TestMain(m *testing.M) {
 			_ = os.Setenv("USERPROFILE", origProfile)
 		} else {
 			_ = os.Unsetenv("USERPROFILE")
+		}
+		if hadDataRoot {
+			_ = os.Setenv("OCTO_DATA_ROOT", origDataRoot)
+		} else {
+			_ = os.Unsetenv("OCTO_DATA_ROOT")
 		}
 		_ = os.RemoveAll(tmp)
 	}

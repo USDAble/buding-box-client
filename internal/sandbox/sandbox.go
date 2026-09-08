@@ -14,6 +14,8 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+
+	"github.com/open-octo/octo-agent/internal/datapath"
 )
 
 // ErrUnsupported is returned by Command when sandboxing was requested but the
@@ -57,14 +59,14 @@ func DefaultPolicy(cwd string) Policy {
 	for _, p := range systemReadRoots() {
 		add(p)
 	}
-	// ~/.octo/bin holds octo-managed helper binaries (bundled uv on
+	// data/bin holds octo-managed helper binaries (bundled uv on
 	// installer-based installs, the extracted ripgrep fallback) that skill
 	// scripts invoke via PATH — see internal/tools/sandbox.go's PATH
-	// injection. Read+execute only, not a write root, and distinct from the
-	// rest of $HOME (which stays unreadable here to protect secrets like
-	// ~/.ssh, ~/.aws).
-	if home, err := os.UserHomeDir(); err == nil && home != "" {
-		add(filepath.Join(home, ".octo", "bin"))
+	// injection. Read+execute only, not a write root.
+	// OCTO-FORK: the portable product keeps bin next to the executable, not in
+	// the host home — see dev-docs-usdable/需求/2260906/技术方案/P1-便携数据根.md.
+	if bin, err := datapath.Join("bin"); err == nil && bin != "" {
+		add(bin)
 	}
 
 	write := []string{}

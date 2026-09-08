@@ -12,7 +12,7 @@ import (
 
 func seedLightApp(t *testing.T, home, slug, name, desc string) {
 	t.Helper()
-	dir := filepath.Join(home, ".octo", "light-apps", slug)
+	dir := filepath.Join(home, "light-apps", slug)
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		t.Fatal(err)
 	}
@@ -30,6 +30,7 @@ func seedLightApp(t *testing.T, home, slug, name, desc string) {
 func TestListLightApps_EmptyDir(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
+	t.Setenv("OCTO_DATA_ROOT", home)
 	t.Setenv("USERPROFILE", home)
 	srv := mustServer(t, Config{Addr: "127.0.0.1:0", Tools: false})
 
@@ -47,7 +48,7 @@ func TestListLightApps_EmptyDir(t *testing.T) {
 	if len(out.Apps) != 0 {
 		t.Errorf("expected 0 apps, got %d", len(out.Apps))
 	}
-	if want := filepath.Join(home, ".octo", "light-apps"); out.Dir != want {
+	if want := filepath.Join(home, "light-apps"); out.Dir != want {
 		t.Errorf("expected dir %q, got %q", want, out.Dir)
 	}
 }
@@ -56,6 +57,7 @@ func TestListLightApps_EmptyDir(t *testing.T) {
 func TestListLightApps_WithApps(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
+	t.Setenv("OCTO_DATA_ROOT", home)
 	t.Setenv("USERPROFILE", home)
 	seedLightApp(t, home, "csv-tool", "CSV Tool", "Reconcile CSVs")
 	srv := mustServer(t, Config{Addr: "127.0.0.1:0", Tools: false})
@@ -77,7 +79,7 @@ func TestListLightApps_WithApps(t *testing.T) {
 	if out.Apps[0].Name != "CSV Tool" || out.Apps[0].Slug != "csv-tool" {
 		t.Errorf("unexpected app: %+v", out.Apps[0])
 	}
-	if want := filepath.Join(home, ".octo", "light-apps"); out.Dir != want {
+	if want := filepath.Join(home, "light-apps"); out.Dir != want {
 		t.Errorf("expected dir %q, got %q", want, out.Dir)
 	}
 	if cc := w.Header().Get("Cache-Control"); !strings.Contains(cc, "no-store") {
@@ -89,6 +91,7 @@ func TestListLightApps_WithApps(t *testing.T) {
 func TestGetLightApp_Success(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
+	t.Setenv("OCTO_DATA_ROOT", home)
 	t.Setenv("USERPROFILE", home)
 	seedLightApp(t, home, "csv-tool", "CSV Tool", "Reconcile CSVs")
 	srv := mustServer(t, Config{Addr: "127.0.0.1:0", Tools: false})
@@ -129,6 +132,7 @@ func TestGetLightApp_Success(t *testing.T) {
 func TestGetLightApp_PathTraversal(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
+	t.Setenv("OCTO_DATA_ROOT", home)
 	t.Setenv("USERPROFILE", home)
 	srv := mustServer(t, Config{Addr: "127.0.0.1:0", Tools: false})
 
@@ -145,11 +149,12 @@ func TestGetLightApp_PathTraversal(t *testing.T) {
 func TestListLightApps_UpdatedAtTracksHTML(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
+	t.Setenv("OCTO_DATA_ROOT", home)
 	t.Setenv("USERPROFILE", home)
 	seedLightApp(t, home, "clock", "Clock", "")
 	srv := mustServer(t, Config{Addr: "127.0.0.1:0", Tools: false})
 
-	appDir := filepath.Join(home, ".octo", "light-apps", "clock")
+	appDir := filepath.Join(home, "light-apps", "clock")
 	if raw, err := os.ReadFile(filepath.Join(appDir, "manifest.json")); err != nil {
 		t.Fatal(err)
 	} else if strings.Contains(string(raw), "updated_at") {
@@ -194,6 +199,7 @@ func TestListLightApps_UpdatedAtTracksHTML(t *testing.T) {
 func TestDeleteLightApp_Success(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
+	t.Setenv("OCTO_DATA_ROOT", home)
 	t.Setenv("USERPROFILE", home)
 	seedLightApp(t, home, "csv-tool", "CSV Tool", "Reconcile CSVs")
 	srv := mustServer(t, Config{Addr: "127.0.0.1:0", Tools: false})

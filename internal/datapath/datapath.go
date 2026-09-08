@@ -97,7 +97,7 @@ func ProgramDir() (string, error) {
 }
 
 // Sub returns a path under the data root and ensures it exists, the
-// replacement for filepath.Join(home, ".octo", parts...) plus MkdirAll.
+// replacement for filepath.Join(home, `.octo`, parts...) plus MkdirAll.
 func Sub(parts ...string) (string, error) {
 	root, err := Root()
 	if err != nil {

@@ -21,8 +21,9 @@ func TestReloadChannel_StartAndStop(t *testing.T) {
 
 	tmp := t.TempDir()
 	t.Setenv("HOME", tmp)
+	t.Setenv("OCTO_DATA_ROOT", tmp)
 	t.Setenv("USERPROFILE", tmp)
-	cfgDir := filepath.Join(tmp, ".octo")
+	cfgDir := tmp
 	if err := os.MkdirAll(cfgDir, 0700); err != nil {
 		t.Fatal(err)
 	}
@@ -65,8 +66,9 @@ func TestReloadChannel_ConcurrentKnownChats(t *testing.T) {
 
 	tmp := t.TempDir()
 	t.Setenv("HOME", tmp)
+	t.Setenv("OCTO_DATA_ROOT", tmp)
 	t.Setenv("USERPROFILE", tmp)
-	cfgDir := filepath.Join(tmp, ".octo")
+	cfgDir := tmp
 	if err := os.MkdirAll(cfgDir, 0700); err != nil {
 		t.Fatal(err)
 	}
@@ -114,8 +116,9 @@ func TestHandleReloadChannel_BodyLess(t *testing.T) {
 
 	tmp := t.TempDir()
 	t.Setenv("HOME", tmp)
+	t.Setenv("OCTO_DATA_ROOT", tmp)
 	t.Setenv("USERPROFILE", tmp)
-	cfgDir := filepath.Join(tmp, ".octo")
+	cfgDir := tmp
 	if err := os.MkdirAll(cfgDir, 0700); err != nil {
 		t.Fatal(err)
 	}

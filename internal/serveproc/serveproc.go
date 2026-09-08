@@ -1,7 +1,7 @@
 // Package serveproc holds the pid-file + process primitives that coordinate a
 // single octo backend on a machine. Both the `octo serve -d` daemon (cmd/octo)
 // and the desktop hub (cmd/octo-desktop) use it so they agree on one contract:
-// the pid recorded in ~/.octo/serve.pid owns the port, and whoever finds a live
+// the pid recorded in data/serve.pid owns the port, and whoever finds a live
 // pid there defers to it (or takes over). Keeping this in internal/ lets the
 // nested desktop module share it without duplicating the platform-specific
 // process checks.
@@ -12,47 +12,38 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+
+	"github.com/open-octo/octo-agent/internal/datapath"
 )
 
-// octoDir returns ~/.octo, creating it if needed.
-func octoDir() (string, error) {
-	home, err := os.UserHomeDir()
-	if err != nil {
-		return "", err
-	}
-	dir := filepath.Join(home, ".octo")
-	if err := os.MkdirAll(dir, 0o755); err != nil {
-		return "", err
-	}
-	return dir, nil
-}
-
-// PidPath returns the path of the backend pid file (~/.octo/serve.pid),
-// creating ~/.octo if needed.
+// PidPath returns the path of the backend pid file (data/serve.pid), creating
+// the data root if needed.
+// OCTO-FORK: the portable product keeps the pid next to the executable, not in
+// the host home — see dev-docs-usdable/需求/2260906/技术方案/P1-便携数据根.md.
 func PidPath() (string, error) {
-	dir, err := octoDir()
+	root, err := datapath.Root()
 	if err != nil {
 		return "", err
 	}
-	return filepath.Join(dir, "serve.pid"), nil
+	return filepath.Join(root, "serve.pid"), nil
 }
 
-// LogPath returns the path of the daemon log file (~/.octo/serve.log),
-// creating ~/.octo if needed.
+// LogPath returns the path of the daemon log file (data/logs/serve.log),
+// creating the logs directory if needed.
 func LogPath() (string, error) {
-	dir, err := octoDir()
+	dir, err := datapath.Sub("logs")
 	if err != nil {
 		return "", err
 	}
 	return filepath.Join(dir, "serve.log"), nil
 }
 
-// CrashLogPath returns the path of the crash log (~/.octo/crash.log), creating
-// ~/.octo if needed. Kept separate from serve.log: this file holds only the
-// output of a process dying, so it stays short enough to paste into a bug
-// report without hunting through normal operational logging.
+// CrashLogPath returns the path of the crash log (data/logs/crash.log),
+// creating the logs directory if needed. Kept separate from serve.log: this
+// file holds only the output of a process dying, so it stays short enough to
+// paste into a bug report without hunting through normal operational logging.
 func CrashLogPath() (string, error) {
-	dir, err := octoDir()
+	dir, err := datapath.Sub("logs")
 	if err != nil {
 		return "", err
 	}

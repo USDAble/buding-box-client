@@ -80,7 +80,7 @@ func TestRunDoctor_MissingKeyIsProblem(t *testing.T) {
 
 func TestRunDoctor_UnparseableConfig(t *testing.T) {
 	home := doctorHome(t)
-	dir := filepath.Join(home, ".octo")
+	dir := home
 	if err := os.MkdirAll(dir, 0o700); err != nil {
 		t.Fatal(err)
 	}
@@ -133,7 +133,7 @@ func TestRunConfigFix_RestoresBrokenConfig(t *testing.T) {
 		t.Fatal(err)
 	}
 	// Corrupt it.
-	path := filepath.Join(home, ".octo", "config.yml")
+	path := filepath.Join(home, "config.yml")
 	if err := os.WriteFile(path, []byte("models: [oops\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
@@ -201,7 +201,7 @@ func TestRunConfigFix_HealthyIsNoOp(t *testing.T) {
 
 func TestRunConfigFix_FixesAndReportsUnfixable(t *testing.T) {
 	home := doctorHome(t)
-	dir := filepath.Join(home, ".octo")
+	dir := home
 	if err := os.MkdirAll(dir, 0o700); err != nil {
 		t.Fatal(err)
 	}
@@ -241,7 +241,7 @@ func TestRunConfigFix_FixesAndReportsUnfixable(t *testing.T) {
 
 func TestRunConfigFix_ReportsUnfixable(t *testing.T) {
 	home := doctorHome(t)
-	dir := filepath.Join(home, ".octo")
+	dir := home
 	if err := os.MkdirAll(dir, 0o700); err != nil {
 		t.Fatal(err)
 	}

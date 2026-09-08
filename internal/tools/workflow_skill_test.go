@@ -92,7 +92,7 @@ func (f *captureSpawner) Continue(_ context.Context, _, _ string) (SpawnResult, 
 // skills.Discover.
 func writeSkillMD(t *testing.T, home, name, desc, body string) {
 	t.Helper()
-	dir := filepath.Join(home, ".octo", "skills", name)
+	dir := filepath.Join(home, "skills", name)
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		t.Fatal(err)
 	}
@@ -116,6 +116,7 @@ func TestDispatchWorkflowSkill_Routing(t *testing.T) {
 
 	home := t.TempDir()
 	t.Setenv("HOME", home)
+	t.Setenv("OCTO_DATA_ROOT", home)
 	t.Setenv("USERPROFILE", home)
 	writeSkillMD(t, home, "wf_c_proc", "process a table", "do the thing")
 	prev := activeSkills
@@ -181,6 +182,7 @@ func TestDispatchWorkflowSkill_MD(t *testing.T) {
 	t.Setenv("OCTO_BROWSER_SKILLS_DIR", t.TempDir()) // no browser recordings
 	home := t.TempDir()
 	t.Setenv("HOME", home)
+	t.Setenv("OCTO_DATA_ROOT", home)
 	t.Setenv("USERPROFILE", home)
 	writeSkillMD(t, home, "wf_c_only", "merge excels", "MERGE THE FILES")
 	prev := activeSkills

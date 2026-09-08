@@ -12,9 +12,9 @@
 //	OCTO_HOOK_POST_TURN  = /path/to/post-script  (optional)
 //	OCTO_HOOK_TIMEOUT    = 5s                    (optional, default below)
 //
-// A future PR may add ~/.octo/hooks.yml for layered config, but env vars
-// cover the v1 "advanced user wiring Hindsight" use case without YAML
-// parsing surface area.
+// hooks.yml layered config (data/hooks.yml user-level, .octo-hooks.yml
+// project-level) supersedes the env-var-only v1 surface, but env vars remain
+// the zero-config path for the advanced "wire Hindsight" use case.
 //
 // Hook protocol (stdin → script → stdout):
 //

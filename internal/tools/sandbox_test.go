@@ -42,8 +42,9 @@ func TestShellCommand_PlatformShell(t *testing.T) {
 func TestWithBundledBinPath_AppendsAfterExistingSystemPath(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
+	t.Setenv("OCTO_DATA_ROOT", home)
 	t.Setenv("USERPROFILE", home)
-	binDir := filepath.Join(home, ".octo", "bin")
+	binDir := filepath.Join(home, "bin")
 	if err := os.MkdirAll(binDir, 0o755); err != nil {
 		t.Fatalf("mkdir bin dir: %v", err)
 	}
@@ -72,6 +73,7 @@ func TestWithBundledBinPath_AppendsAfterExistingSystemPath(t *testing.T) {
 func TestWithBundledBinPath_NoOpWhenBundledDirMissing(t *testing.T) {
 	home := t.TempDir() // deliberately no .octo/bin under it
 	t.Setenv("HOME", home)
+	t.Setenv("OCTO_DATA_ROOT", home)
 	t.Setenv("USERPROFILE", home)
 
 	in := []string{"PATH=/usr/bin", "OTHER=1"}
@@ -110,9 +112,10 @@ func TestShellCommand_WindowsUTF8EncodingPrefix(t *testing.T) {
 func TestShellCommand_ResolvesBundledTool(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
+	t.Setenv("OCTO_DATA_ROOT", home)
 	t.Setenv("USERPROFILE", home)
 
-	binDir := filepath.Join(home, ".octo", "bin")
+	binDir := filepath.Join(home, "bin")
 	if err := os.MkdirAll(binDir, 0o755); err != nil {
 		t.Fatalf("mkdir bin dir: %v", err)
 	}

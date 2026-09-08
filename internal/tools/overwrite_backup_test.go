@@ -14,6 +14,7 @@ func setHome(t *testing.T) {
 	t.Helper()
 	home := t.TempDir()
 	t.Setenv("HOME", home)
+	t.Setenv("OCTO_DATA_ROOT", home)
 	t.Setenv("USERPROFILE", home)
 }
 
@@ -136,10 +137,10 @@ func TestOverwriteBackup_CreateIsNoOp(t *testing.T) {
 func TestOverwriteBackup_ToggleOff(t *testing.T) {
 	setHome(t)
 	home, _ := os.UserHomeDir()
-	if err := os.MkdirAll(filepath.Join(home, ".octo"), 0o755); err != nil {
+	if err := os.MkdirAll(home, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(home, ".octo", "config.yml"),
+	if err := os.WriteFile(filepath.Join(home, "config.yml"),
 		[]byte("trash:\n  overwrite_backup: false\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}

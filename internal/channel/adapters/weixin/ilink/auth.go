@@ -8,12 +8,20 @@ import (
 	"os"
 	"path/filepath"
 	"time"
+
+	"github.com/open-octo/octo-agent/internal/datapath"
 )
 
-// DefaultCredPath returns ~/.octo/weixin-credentials.json
+// DefaultCredPath returns data/weixin-credentials.json, or "" when the data
+// root can't be resolved.
+// OCTO-FORK: the portable product keeps WeChat credentials next to the
+// executable, not in the host home — see dev-docs-usdable/需求/2260906/技术方案/P1-便携数据根.md.
 func DefaultCredPath() string {
-	home, _ := os.UserHomeDir()
-	return filepath.Join(home, ".octo", "weixin-credentials.json")
+	p, err := datapath.Join("weixin-credentials.json")
+	if err != nil {
+		return ""
+	}
+	return p
 }
 
 // LoadCredentials loads stored credentials from disk.

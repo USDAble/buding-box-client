@@ -282,6 +282,7 @@ func TestDeleteWorkflow_UnknownName(t *testing.T) {
 func TestDeleteWorkflow_RemovesUserFilePermanently(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
+	t.Setenv("OCTO_DATA_ROOT", home)
 	t.Setenv("USERPROFILE", home)
 
 	user := t.TempDir()

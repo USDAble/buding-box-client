@@ -50,6 +50,7 @@ func TestRun_PositionalMessage_RoutesToChat(t *testing.T) {
 	t.Setenv("OPENAI_API_KEY", "")
 	tmp := t.TempDir()
 	t.Setenv("HOME", tmp)
+	t.Setenv("OCTO_DATA_ROOT", tmp)
 	t.Setenv("USERPROFILE", tmp)
 	var stdout, stderr bytes.Buffer
 	code := run([]string{"summarise the README"}, strings.NewReader(""), &stdout, &stderr)
@@ -66,6 +67,7 @@ func TestRun_TopLevelFlags_RouteToChat(t *testing.T) {
 	// deterministic, so a bad --permission-mode proves the routing.
 	tmp := t.TempDir()
 	t.Setenv("HOME", tmp)
+	t.Setenv("OCTO_DATA_ROOT", tmp)
 	t.Setenv("USERPROFILE", tmp)
 	var stdout, stderr bytes.Buffer
 	code := run([]string{"--permission-mode", "bogus", "hi"}, strings.NewReader(""), &stdout, &stderr)
@@ -84,6 +86,7 @@ func TestRun_Sessions_Empty(t *testing.T) {
 	// scoped one and has to point at the flag that shows the rest.
 	tmp := t.TempDir()
 	t.Setenv("HOME", tmp)
+	t.Setenv("OCTO_DATA_ROOT", tmp)
 	t.Setenv("USERPROFILE", tmp)
 	var stdout, stderr bytes.Buffer
 	code := run([]string{"sessions"}, strings.NewReader(""), &stdout, &stderr)
@@ -141,6 +144,7 @@ func TestRun_BareContinue_NonTTY_Errors(t *testing.T) {
 	// pointer at `octo sessions` instead of hanging on a list nobody sees.
 	tmp := t.TempDir()
 	t.Setenv("HOME", tmp)
+	t.Setenv("OCTO_DATA_ROOT", tmp)
 	t.Setenv("USERPROFILE", tmp)
 	var stdout, stderr bytes.Buffer
 	code := run([]string{"-c"}, strings.NewReader(""), &stdout, &stderr)

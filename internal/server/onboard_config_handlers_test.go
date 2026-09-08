@@ -16,6 +16,7 @@ func setTestHome(t *testing.T) string {
 	t.Helper()
 	tmp := t.TempDir()
 	t.Setenv("HOME", tmp)
+	t.Setenv("OCTO_DATA_ROOT", tmp)
 	t.Setenv("USERPROFILE", tmp)
 	return tmp
 }
@@ -186,7 +187,7 @@ func TestDetectOnboardPhase_ExistingIdentitySkipsNudge(t *testing.T) {
 				},
 				Default: "ep-a::claude-sonnet-4-6",
 			})
-			octo := filepath.Join(home, ".octo")
+			octo := home
 			if err := os.MkdirAll(octo, 0o700); err != nil {
 				t.Fatal(err)
 			}
@@ -292,8 +293,8 @@ func TestCreateSession_EntryIDBindsSession(t *testing.T) {
 }
 
 // Regression guard: with no workspace dir configured, a newly created
-// session's WorkingDir defaults to ~/Octo — the global default every user
-// gets unless they explicitly override it.
+// session's WorkingDir defaults to data/workspace — the global default every
+// user gets unless they explicitly override it.
 func TestCreateSession_NoWorkspaceDir_DefaultsToOcto(t *testing.T) {
 	home := setTestHome(t)
 	seedModels(t, config.Config{
@@ -318,9 +319,9 @@ func TestCreateSession_NoWorkspaceDir_DefaultsToOcto(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	wantDir := filepath.Join(home, "Octo", "tasks", sess.ID)
+	wantDir := filepath.Join(home, "workspace", "tasks", sess.ID)
 	if sess.WorkingDir != wantDir {
-		t.Errorf("WorkingDir = %q, want the task workspace %q under the default ~/Octo", sess.WorkingDir, wantDir)
+		t.Errorf("WorkingDir = %q, want the task workspace %q under the default data/workspace", sess.WorkingDir, wantDir)
 	}
 }
 
@@ -636,7 +637,7 @@ func TestGetConfig_WorkspaceDir(t *testing.T) {
 
 // GET /api/config always reports the resolved effective default too, so the
 // Settings UI can show it instead of a bare, easily-misread "auto" — even
-// when the raw config value is empty and resolves to ~/Octo.
+// when the raw config value is empty and resolves to data/workspace.
 func TestGetConfig_WorkspaceDirDefault_ResolvesToOcto(t *testing.T) {
 	home := setTestHome(t)
 	seedModels(t, config.Config{
@@ -646,7 +647,7 @@ func TestGetConfig_WorkspaceDirDefault_ResolvesToOcto(t *testing.T) {
 	srv := mustServer(t, Config{Addr: "127.0.0.1:0"})
 
 	resp := getConfigResponse(t, srv)
-	wantDefault := filepath.Join(home, "Octo")
+	wantDefault := filepath.Join(home, "workspace")
 	if resp.WorkspaceDirDefault != wantDefault {
 		t.Errorf("workspace_dir_default = %q, want %q", resp.WorkspaceDirDefault, wantDefault)
 	}

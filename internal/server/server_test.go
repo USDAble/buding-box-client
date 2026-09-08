@@ -34,6 +34,7 @@ func serveLoopback(h http.Handler, w http.ResponseWriter, req *http.Request) {
 func TestHandleHealth(t *testing.T) {
 	tmp := t.TempDir()
 	t.Setenv("HOME", tmp)
+	t.Setenv("OCTO_DATA_ROOT", tmp)
 	t.Setenv("USERPROFILE", tmp)
 
 	srv := mustServer(t, Config{Addr: "127.0.0.1:0", Tools: false})
@@ -57,6 +58,7 @@ func TestHandleHealth(t *testing.T) {
 func TestHandleListSessions(t *testing.T) {
 	tmp := t.TempDir()
 	t.Setenv("HOME", tmp)
+	t.Setenv("OCTO_DATA_ROOT", tmp)
 	t.Setenv("USERPROFILE", tmp)
 
 	srv := mustServer(t, Config{Addr: "127.0.0.1:0", Tools: false})
@@ -80,6 +82,7 @@ func TestHandleListSessions(t *testing.T) {
 func TestHandleGetSession_NotFound(t *testing.T) {
 	tmp := t.TempDir()
 	t.Setenv("HOME", tmp)
+	t.Setenv("OCTO_DATA_ROOT", tmp)
 	t.Setenv("USERPROFILE", tmp)
 
 	srv := mustServer(t, Config{Addr: "127.0.0.1:0", Tools: false})
@@ -96,6 +99,7 @@ func TestHandleGetSession_NotFound(t *testing.T) {
 func TestHandleDeleteSession(t *testing.T) {
 	tmp := t.TempDir()
 	t.Setenv("HOME", tmp)
+	t.Setenv("OCTO_DATA_ROOT", tmp)
 	t.Setenv("USERPROFILE", tmp)
 
 	sess := agent.NewSession("stub-model", "")
@@ -151,6 +155,7 @@ func TestHandleDeleteSession(t *testing.T) {
 func TestHandleBranchSession(t *testing.T) {
 	tmp := t.TempDir()
 	t.Setenv("HOME", tmp)
+	t.Setenv("OCTO_DATA_ROOT", tmp)
 	t.Setenv("USERPROFILE", tmp)
 
 	sess := agent.NewSession("stub-model", "sys")
@@ -335,6 +340,7 @@ func TestLastBranchableIndex(t *testing.T) {
 func TestHandleEditMessage(t *testing.T) {
 	tmp := t.TempDir()
 	t.Setenv("HOME", tmp)
+	t.Setenv("OCTO_DATA_ROOT", tmp)
 	t.Setenv("USERPROFILE", tmp)
 
 	sess := agent.NewSession("stub-model", "sys")
@@ -430,6 +436,7 @@ func TestHandleEditMessage(t *testing.T) {
 func TestHandleDeleteSession_InterruptsActiveTurn(t *testing.T) {
 	tmp := t.TempDir()
 	t.Setenv("HOME", tmp)
+	t.Setenv("OCTO_DATA_ROOT", tmp)
 	t.Setenv("USERPROFILE", tmp)
 
 	sess := agent.NewSession("stub-model", "")
@@ -468,6 +475,7 @@ func TestHandleDeleteSession_InterruptsActiveTurn(t *testing.T) {
 func TestHandleDeleteSessions_Batch(t *testing.T) {
 	tmp := t.TempDir()
 	t.Setenv("HOME", tmp)
+	t.Setenv("OCTO_DATA_ROOT", tmp)
 	t.Setenv("USERPROFILE", tmp)
 
 	var ids []string
@@ -542,6 +550,7 @@ broadcastDrain:
 func TestHandleDeleteSessions_EmptyIDs(t *testing.T) {
 	tmp := t.TempDir()
 	t.Setenv("HOME", tmp)
+	t.Setenv("OCTO_DATA_ROOT", tmp)
 	t.Setenv("USERPROFILE", tmp)
 
 	srv := mustServer(t, Config{Addr: "127.0.0.1:0", Tools: false})
@@ -559,6 +568,7 @@ func TestHandleDeleteSessions_EmptyIDs(t *testing.T) {
 func TestHandleCreateChat_MissingMessage(t *testing.T) {
 	tmp := t.TempDir()
 	t.Setenv("HOME", tmp)
+	t.Setenv("OCTO_DATA_ROOT", tmp)
 	t.Setenv("USERPROFILE", tmp)
 
 	srv := mustServer(t, Config{Addr: "127.0.0.1:0", Tools: false})
@@ -577,6 +587,7 @@ func TestHandleCreateChat_MissingMessage(t *testing.T) {
 func TestHandleTurn_MissingSession(t *testing.T) {
 	tmp := t.TempDir()
 	t.Setenv("HOME", tmp)
+	t.Setenv("OCTO_DATA_ROOT", tmp)
 	t.Setenv("USERPROFILE", tmp)
 
 	srv := mustServer(t, Config{Addr: "127.0.0.1:0", Tools: false})
@@ -595,6 +606,7 @@ func TestHandleTurn_MissingSession(t *testing.T) {
 func TestStaticHandler_IndexFallback(t *testing.T) {
 	tmp := t.TempDir()
 	t.Setenv("HOME", tmp)
+	t.Setenv("OCTO_DATA_ROOT", tmp)
 	t.Setenv("USERPROFILE", tmp)
 
 	srv := mustServer(t, Config{Addr: "127.0.0.1:0", Tools: false})
@@ -621,6 +633,7 @@ func TestStaticHandler_IndexFallback(t *testing.T) {
 func TestStaticHandler_APIFallback(t *testing.T) {
 	tmp := t.TempDir()
 	t.Setenv("HOME", tmp)
+	t.Setenv("OCTO_DATA_ROOT", tmp)
 	t.Setenv("USERPROFILE", tmp)
 
 	srv := mustServer(t, Config{Addr: "127.0.0.1:0", Tools: false})
@@ -638,6 +651,7 @@ func TestStaticHandler_APIFallback(t *testing.T) {
 func TestCORS(t *testing.T) {
 	tmp := t.TempDir()
 	t.Setenv("HOME", tmp)
+	t.Setenv("OCTO_DATA_ROOT", tmp)
 	t.Setenv("USERPROFILE", tmp)
 
 	srv := mustServer(t, Config{Addr: "127.0.0.1:0", Tools: false, CORSOrigins: []string{"http://localhost:3000"}})
@@ -658,6 +672,7 @@ func TestCORS(t *testing.T) {
 func TestCORS_DisallowedOrigin(t *testing.T) {
 	tmp := t.TempDir()
 	t.Setenv("HOME", tmp)
+	t.Setenv("OCTO_DATA_ROOT", tmp)
 	t.Setenv("USERPROFILE", tmp)
 
 	srv := mustServer(t, Config{Addr: "127.0.0.1:0", Tools: false, CORSOrigins: []string{"http://localhost:3000"}})
@@ -678,6 +693,7 @@ func TestCORS_DisallowedOrigin(t *testing.T) {
 func TestCORS_VSCodeWebview(t *testing.T) {
 	tmp := t.TempDir()
 	t.Setenv("HOME", tmp)
+	t.Setenv("OCTO_DATA_ROOT", tmp)
 	t.Setenv("USERPROFILE", tmp)
 
 	srv := mustServer(t, Config{Addr: "127.0.0.1:0", Tools: false})
@@ -701,6 +717,7 @@ func TestCORS_VSCodeWebview(t *testing.T) {
 func TestCORS_ObsidianDesktop(t *testing.T) {
 	tmp := t.TempDir()
 	t.Setenv("HOME", tmp)
+	t.Setenv("OCTO_DATA_ROOT", tmp)
 	t.Setenv("USERPROFILE", tmp)
 
 	srv := mustServer(t, Config{Addr: "127.0.0.1:0", Tools: false})
@@ -723,6 +740,7 @@ func TestCORS_ObsidianDesktop(t *testing.T) {
 func TestCORS_ObsidianLookalikeRejected(t *testing.T) {
 	tmp := t.TempDir()
 	t.Setenv("HOME", tmp)
+	t.Setenv("OCTO_DATA_ROOT", tmp)
 	t.Setenv("USERPROFILE", tmp)
 
 	srv := mustServer(t, Config{Addr: "127.0.0.1:0", Tools: false})
@@ -742,6 +760,7 @@ func TestCORS_ObsidianLookalikeRejected(t *testing.T) {
 func TestCORS_VSCodeWebviewLookalikeRejected(t *testing.T) {
 	tmp := t.TempDir()
 	t.Setenv("HOME", tmp)
+	t.Setenv("OCTO_DATA_ROOT", tmp)
 	t.Setenv("USERPROFILE", tmp)
 
 	srv := mustServer(t, Config{Addr: "127.0.0.1:0", Tools: false})
@@ -759,6 +778,7 @@ func TestCORS_VSCodeWebviewLookalikeRejected(t *testing.T) {
 func TestCORS_WildcardDoesNotReflectOrigin(t *testing.T) {
 	tmp := t.TempDir()
 	t.Setenv("HOME", tmp)
+	t.Setenv("OCTO_DATA_ROOT", tmp)
 	t.Setenv("USERPROFILE", tmp)
 
 	srv := mustServer(t, Config{Addr: "127.0.0.1:0", Tools: false, CORSOrigins: []string{"*"}})
@@ -939,6 +959,7 @@ func (s *recordingSender) StreamMessagesWithTools(_ context.Context, _, _ string
 func TestEnsureSender_LazyInitDoesNotDeadlock(t *testing.T) {
 	tmp := t.TempDir()
 	t.Setenv("HOME", tmp)
+	t.Setenv("OCTO_DATA_ROOT", tmp)
 	t.Setenv("USERPROFILE", tmp)
 	t.Setenv("OPENAI_API_KEY", "")
 
@@ -953,7 +974,7 @@ func TestEnsureSender_LazyInitDoesNotDeadlock(t *testing.T) {
 	}
 
 	// Simulate onboard saving a keyed model, the way the setup form does.
-	cfgPath := filepath.Join(tmp, ".octo", "config.yml")
+	cfgPath := filepath.Join(tmp, "config.yml")
 	if err := os.MkdirAll(filepath.Dir(cfgPath), 0o755); err != nil {
 		t.Fatal(err)
 	}
@@ -1003,6 +1024,7 @@ func TestEnsureSender_LazyInitDoesNotDeadlock(t *testing.T) {
 func TestEnsureSender_GoalsEnabledVisibleAtomicallyWithSender(t *testing.T) {
 	tmp := t.TempDir()
 	t.Setenv("HOME", tmp)
+	t.Setenv("OCTO_DATA_ROOT", tmp)
 	t.Setenv("USERPROFILE", tmp)
 	t.Setenv("OPENAI_API_KEY", "")
 
@@ -1011,7 +1033,7 @@ func TestEnsureSender_GoalsEnabledVisibleAtomicallyWithSender(t *testing.T) {
 		t.Fatalf("New: %v", err)
 	}
 
-	cfgPath := filepath.Join(tmp, ".octo", "config.yml")
+	cfgPath := filepath.Join(tmp, "config.yml")
 	if err := os.MkdirAll(filepath.Dir(cfgPath), 0o755); err != nil {
 		t.Fatal(err)
 	}
@@ -1069,6 +1091,7 @@ func TestEnsureSender_GoalsEnabledVisibleAtomicallyWithSender(t *testing.T) {
 func TestHandleOnboardStatus(t *testing.T) {
 	tmp := t.TempDir()
 	t.Setenv("HOME", tmp)
+	t.Setenv("OCTO_DATA_ROOT", tmp)
 	t.Setenv("USERPROFILE", tmp)
 
 	srv := mustServer(t, Config{Addr: "127.0.0.1:0", Tools: false})
@@ -1095,6 +1118,7 @@ func TestHandleOnboardStatus(t *testing.T) {
 func TestHandleListProviders(t *testing.T) {
 	tmp := t.TempDir()
 	t.Setenv("HOME", tmp)
+	t.Setenv("OCTO_DATA_ROOT", tmp)
 	t.Setenv("USERPROFILE", tmp)
 
 	srv := mustServer(t, Config{Addr: "127.0.0.1:0", Tools: false})
@@ -1117,6 +1141,7 @@ func TestHandleListProviders(t *testing.T) {
 func TestHandleGetConfig(t *testing.T) {
 	tmp := t.TempDir()
 	t.Setenv("HOME", tmp)
+	t.Setenv("OCTO_DATA_ROOT", tmp)
 	t.Setenv("USERPROFILE", tmp)
 
 	srv := mustServer(t, Config{Addr: "127.0.0.1:0", Tools: false})
@@ -1138,6 +1163,7 @@ func TestHandleGetConfig(t *testing.T) {
 func TestHandleTestConfig(t *testing.T) {
 	tmp := t.TempDir()
 	t.Setenv("HOME", tmp)
+	t.Setenv("OCTO_DATA_ROOT", tmp)
 	t.Setenv("USERPROFILE", tmp)
 
 	srv := mustServer(t, Config{Addr: "127.0.0.1:0", Tools: false})
@@ -1200,10 +1226,11 @@ func TestHandleTestConfig_ReusesStoredKey(t *testing.T) {
 func TestHandleToggleSkill(t *testing.T) {
 	tmp := t.TempDir()
 	t.Setenv("HOME", tmp)
+	t.Setenv("OCTO_DATA_ROOT", tmp)
 	t.Setenv("USERPROFILE", tmp)
 
 	// Create a real skill so the toggle has something to act on.
-	skillDir := filepath.Join(tmp, ".octo", "skills", "test-skill")
+	skillDir := filepath.Join(tmp, "skills", "test-skill")
 	if err := os.MkdirAll(skillDir, 0o755); err != nil {
 		t.Fatal(err)
 	}
@@ -1263,6 +1290,7 @@ func TestHandleToggleSkill(t *testing.T) {
 func TestHandleToggleSkill_NotFound(t *testing.T) {
 	tmp := t.TempDir()
 	t.Setenv("HOME", tmp)
+	t.Setenv("OCTO_DATA_ROOT", tmp)
 	t.Setenv("USERPROFILE", tmp)
 
 	srv := mustServer(t, Config{Addr: "127.0.0.1:0", Tools: false})
@@ -1281,6 +1309,7 @@ func TestHandleToggleSkill_NotFound(t *testing.T) {
 func TestHandleListSkills_RescansDisk(t *testing.T) {
 	tmp := t.TempDir()
 	t.Setenv("HOME", tmp)
+	t.Setenv("OCTO_DATA_ROOT", tmp)
 	t.Setenv("USERPROFILE", tmp)
 
 	srv := mustServer(t, Config{Addr: "127.0.0.1:0", Tools: false})
@@ -1310,7 +1339,7 @@ func TestHandleListSkills_RescansDisk(t *testing.T) {
 	}
 
 	// A skill dropped on disk AFTER server start must show up without restart.
-	skillDir := filepath.Join(tmp, ".octo", "skills", "ghost")
+	skillDir := filepath.Join(tmp, "skills", "ghost")
 	if err := os.MkdirAll(skillDir, 0o755); err != nil {
 		t.Fatal(err)
 	}
@@ -1365,6 +1394,7 @@ func TestHandleBenchmark_Success(t *testing.T) {
 func TestHandleGetMemory_NotFound(t *testing.T) {
 	tmp := t.TempDir()
 	t.Setenv("HOME", tmp)
+	t.Setenv("OCTO_DATA_ROOT", tmp)
 	t.Setenv("USERPROFILE", tmp)
 
 	srv := mustServer(t, Config{Addr: "127.0.0.1:0", Tools: false})
@@ -1379,6 +1409,7 @@ func TestHandleGetMemory_NotFound(t *testing.T) {
 func TestHandleGetMemories_DedupesProjectAndHomeDir(t *testing.T) {
 	tmp := t.TempDir()
 	t.Setenv("HOME", tmp)
+	t.Setenv("OCTO_DATA_ROOT", tmp)
 	t.Setenv("USERPROFILE", tmp)
 
 	srv := mustServer(t, Config{Addr: "127.0.0.1:0", Tools: false})
@@ -1423,6 +1454,7 @@ func TestHandleGetMemories_DedupesProjectAndHomeDir(t *testing.T) {
 func TestHandleVersionUpgrade_AcceptedAndConflict(t *testing.T) {
 	tmp := t.TempDir()
 	t.Setenv("HOME", tmp)
+	t.Setenv("OCTO_DATA_ROOT", tmp)
 	t.Setenv("USERPROFILE", tmp)
 
 	srv := mustServer(t, Config{Addr: "127.0.0.1:0", Tools: false})
@@ -1470,6 +1502,7 @@ func TestHandleVersionUpgrade_AcceptedAndConflict(t *testing.T) {
 func TestHandleVersion_NoUpdateCheck(t *testing.T) {
 	tmp := t.TempDir()
 	t.Setenv("HOME", tmp)
+	t.Setenv("OCTO_DATA_ROOT", tmp)
 	t.Setenv("USERPROFILE", tmp)
 
 	srv := mustServer(t, Config{Addr: "127.0.0.1:0", Tools: false})
@@ -1502,6 +1535,7 @@ func TestHandleVersion_NoUpdateCheck(t *testing.T) {
 func TestHandleVersion_CacheHeaders(t *testing.T) {
 	tmp := t.TempDir()
 	t.Setenv("HOME", tmp)
+	t.Setenv("OCTO_DATA_ROOT", tmp)
 	t.Setenv("USERPROFILE", tmp)
 
 	srv := mustServer(t, Config{Addr: "127.0.0.1:0", Tools: false})
@@ -1523,6 +1557,7 @@ func TestHandleVersion_CacheHeaders(t *testing.T) {
 func TestHandleUpdateSessionReasoningEffort(t *testing.T) {
 	tmp := t.TempDir()
 	t.Setenv("HOME", tmp)
+	t.Setenv("OCTO_DATA_ROOT", tmp)
 	t.Setenv("USERPROFILE", tmp)
 
 	sess := agent.NewSession("stub-model", "")
@@ -1593,6 +1628,7 @@ func TestEntryForSession(t *testing.T) {
 func TestHandleUpdateSessionPermissionMode(t *testing.T) {
 	tmp := t.TempDir()
 	t.Setenv("HOME", tmp)
+	t.Setenv("OCTO_DATA_ROOT", tmp)
 	t.Setenv("USERPROFILE", tmp)
 
 	sess := agent.NewSession("stub-model", "")
@@ -1665,6 +1701,7 @@ func TestHandleUpdateSessionPermissionMode(t *testing.T) {
 func TestHandleUpdateSessionWorkingDir_RefusedForATask(t *testing.T) {
 	tmp := t.TempDir()
 	t.Setenv("HOME", tmp)
+	t.Setenv("OCTO_DATA_ROOT", tmp)
 	t.Setenv("USERPROFILE", tmp)
 
 	sess := agent.NewSession("stub-model", "")
@@ -1705,6 +1742,7 @@ func TestHandleUpdateSessionWorkingDir_RefusedForATask(t *testing.T) {
 func TestHandleUpdateSessionWorkingDir_RefusedForAProjectMember(t *testing.T) {
 	tmp := t.TempDir()
 	t.Setenv("HOME", tmp)
+	t.Setenv("OCTO_DATA_ROOT", tmp)
 	t.Setenv("USERPROFILE", tmp)
 
 	sess := agent.NewSession("stub-model", "")
@@ -1775,6 +1813,7 @@ func TestHandleUpdateSessionAgentProfile_ZeroTurns(t *testing.T) {
 func TestHandleUpdateSessionAgentProfile_RejectsAfterFirstTurn(t *testing.T) {
 	tmp := t.TempDir()
 	t.Setenv("HOME", tmp)
+	t.Setenv("OCTO_DATA_ROOT", tmp)
 	t.Setenv("USERPROFILE", tmp)
 
 	sess := agent.NewSession("stub-model", "")
@@ -1799,6 +1838,7 @@ func TestHandleUpdateSessionAgentProfile_RejectsAfterFirstTurn(t *testing.T) {
 func TestHandleUpdateSessionAgentProfile_UnknownAgentRejected(t *testing.T) {
 	tmp := t.TempDir()
 	t.Setenv("HOME", tmp)
+	t.Setenv("OCTO_DATA_ROOT", tmp)
 	t.Setenv("USERPROFILE", tmp)
 
 	sess := agent.NewSession("stub-model", "")
@@ -1822,6 +1862,7 @@ func TestHandleUpdateSessionAgentProfile_UnknownAgentRejected(t *testing.T) {
 func TestHandleUpdateSessionModel_RawStringIsPerSession(t *testing.T) {
 	tmp := t.TempDir()
 	t.Setenv("HOME", tmp)
+	t.Setenv("OCTO_DATA_ROOT", tmp)
 	t.Setenv("USERPROFILE", tmp)
 
 	sess := agent.NewSession("stub-model", "")
@@ -1871,6 +1912,7 @@ func TestHandleUpdateSessionModel_RawStringIsPerSession(t *testing.T) {
 func TestHandleUpdateSessionModel_EntryNameBindsSession(t *testing.T) {
 	tmp := t.TempDir()
 	t.Setenv("HOME", tmp)
+	t.Setenv("OCTO_DATA_ROOT", tmp)
 	t.Setenv("USERPROFILE", tmp)
 
 	seed := config.Config{
@@ -1944,6 +1986,7 @@ func TestHandleUpdateSessionModel_EntryNameBindsSession(t *testing.T) {
 func TestHandleGetSessionMessages_IncludesToolCalls(t *testing.T) {
 	tmp := t.TempDir()
 	t.Setenv("HOME", tmp)
+	t.Setenv("OCTO_DATA_ROOT", tmp)
 	t.Setenv("USERPROFILE", tmp)
 
 	sess := agent.NewSession("stub-model", "")
@@ -1996,6 +2039,7 @@ func TestHandleGetSessionMessages_IncludesToolCalls(t *testing.T) {
 func TestHandleGetSessionMessages_StripsSystemReminders(t *testing.T) {
 	tmp := t.TempDir()
 	t.Setenv("HOME", tmp)
+	t.Setenv("OCTO_DATA_ROOT", tmp)
 	t.Setenv("USERPROFILE", tmp)
 
 	sess := agent.NewSession("stub-model", "")
@@ -2052,6 +2096,7 @@ func TestHandleGetSessionMessages_StripsSystemReminders(t *testing.T) {
 func TestHandleGetSessionMessages_MultiToolUse(t *testing.T) {
 	tmp := t.TempDir()
 	t.Setenv("HOME", tmp)
+	t.Setenv("OCTO_DATA_ROOT", tmp)
 	t.Setenv("USERPROFILE", tmp)
 
 	// res1 carries a structured UI payload; res2 doesn't. The replay must
@@ -2144,6 +2189,7 @@ func TestHandleGetSessionMessages_MultiToolUse(t *testing.T) {
 func TestHandleGetSessionMessages_ThinkingBeforeTools(t *testing.T) {
 	tmp := t.TempDir()
 	t.Setenv("HOME", tmp)
+	t.Setenv("OCTO_DATA_ROOT", tmp)
 	t.Setenv("USERPROFILE", tmp)
 
 	sess := agent.NewSession("stub-model", "")
@@ -2332,6 +2378,7 @@ func (s *ctxCancelSender) SendMessages(ctx context.Context, _, _ string, _ []age
 func TestRunTurn_InterruptPersistsKeptInput(t *testing.T) {
 	tmp := t.TempDir()
 	t.Setenv("HOME", tmp)
+	t.Setenv("OCTO_DATA_ROOT", tmp)
 	t.Setenv("USERPROFILE", tmp)
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -2372,6 +2419,7 @@ func TestRunTurn_InterruptPersistsKeptInput(t *testing.T) {
 func TestDoAgentTurn_SeedsThinkingProgress(t *testing.T) {
 	tmp := t.TempDir()
 	t.Setenv("HOME", tmp)
+	t.Setenv("OCTO_DATA_ROOT", tmp)
 	t.Setenv("USERPROFILE", tmp)
 
 	srv := mustServer(t, Config{Addr: "127.0.0.1:0", Tools: false})
@@ -2455,6 +2503,7 @@ drain:
 func TestDoAgentTurn_LiveAndHistoryCreatedAtMatch(t *testing.T) {
 	tmp := t.TempDir()
 	t.Setenv("HOME", tmp)
+	t.Setenv("OCTO_DATA_ROOT", tmp)
 	t.Setenv("USERPROFILE", tmp)
 
 	srv := mustServer(t, Config{Addr: "127.0.0.1:0", Tools: false})
@@ -2541,6 +2590,7 @@ drainDedup:
 func TestWSStreamWriter_ReseedsThinkingAfterTool(t *testing.T) {
 	tmp := t.TempDir()
 	t.Setenv("HOME", tmp)
+	t.Setenv("OCTO_DATA_ROOT", tmp)
 	t.Setenv("USERPROFILE", tmp)
 
 	srv := mustServer(t, Config{Addr: "127.0.0.1:0"})
@@ -2630,6 +2680,7 @@ func TestWSStreamWriter_ReseedsThinkingAfterTool(t *testing.T) {
 func TestWSStreamWriter_TurnError_DistinctType(t *testing.T) {
 	tmp := t.TempDir()
 	t.Setenv("HOME", tmp)
+	t.Setenv("OCTO_DATA_ROOT", tmp)
 	t.Setenv("USERPROFILE", tmp)
 
 	srv := mustServer(t, Config{Addr: "127.0.0.1:0"})
@@ -2671,6 +2722,7 @@ func TestWSStreamWriter_TurnError_DistinctType(t *testing.T) {
 func TestWSStreamWriter_BroadcastsContextUsageMidTurn(t *testing.T) {
 	tmp := t.TempDir()
 	t.Setenv("HOME", tmp)
+	t.Setenv("OCTO_DATA_ROOT", tmp)
 	t.Setenv("USERPROFILE", tmp)
 
 	srv := mustServer(t, Config{Addr: "127.0.0.1:0"})
@@ -2764,6 +2816,7 @@ func TestWSStreamWriter_BroadcastsContextUsageMidTurn(t *testing.T) {
 func TestHandleUpdateSession_Rename(t *testing.T) {
 	tmp := t.TempDir()
 	t.Setenv("HOME", tmp)
+	t.Setenv("OCTO_DATA_ROOT", tmp)
 	t.Setenv("USERPROFILE", tmp)
 
 	sess := agent.NewSession("stub-model", "")

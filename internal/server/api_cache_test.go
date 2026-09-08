@@ -18,6 +18,7 @@ import (
 func TestAPIRoutesSendNoStore(t *testing.T) {
 	tmp := t.TempDir()
 	t.Setenv("HOME", tmp)
+	t.Setenv("OCTO_DATA_ROOT", tmp)
 	t.Setenv("USERPROFILE", tmp)
 
 	srv := mustServer(t, Config{Addr: "127.0.0.1:0", Tools: false})
@@ -46,9 +47,10 @@ func TestAPIRoutesSendNoStore(t *testing.T) {
 func TestGetUploadOverridesNoStore(t *testing.T) {
 	tmp := t.TempDir()
 	t.Setenv("HOME", tmp)
+	t.Setenv("OCTO_DATA_ROOT", tmp)
 	t.Setenv("USERPROFILE", tmp)
 
-	dir := filepath.Join(tmp, ".octo", "uploads")
+	dir := filepath.Join(tmp, "uploads")
 	if err := os.MkdirAll(dir, 0o700); err != nil {
 		t.Fatal(err)
 	}

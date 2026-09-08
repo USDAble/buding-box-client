@@ -2,12 +2,11 @@ package main
 
 import (
 	"context"
-	"os"
-	"path/filepath"
 
 	"github.com/open-octo/octo-agent/internal/agent"
 	"github.com/open-octo/octo-agent/internal/app"
 	"github.com/open-octo/octo-agent/internal/audit"
+	"github.com/open-octo/octo-agent/internal/datapath"
 	"github.com/open-octo/octo-agent/internal/permission"
 )
 
@@ -35,15 +34,16 @@ func permissionAskFrom(ask userPrompter) app.PermissionAsk {
 	}
 }
 
-// permissionConfigPath returns ~/.octo/permissions.yml. An empty string is
-// returned (and the engine falls back to embedded defaults) when the home
-// directory can't be resolved.
+// permissionConfigPath returns data/permissions.yml. An empty string is
+// returned (and the engine falls back to embedded defaults) when the data
+// root can't be resolved.
+// OCTO-FORK: permissions live under data/ — see P1-便携数据根.md.
 func permissionConfigPath() string {
-	home, err := os.UserHomeDir()
+	p, err := datapath.Join("permissions.yml")
 	if err != nil {
 		return ""
 	}
-	return filepath.Join(home, ".octo", "permissions.yml")
+	return p
 }
 
 // resolvePermissionMode maps the --permission-mode flag string onto a

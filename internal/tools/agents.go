@@ -7,6 +7,8 @@ import (
 	"sync"
 
 	"gopkg.in/yaml.v3"
+
+	"github.com/open-octo/octo-agent/internal/datapath"
 )
 
 // agentFrontmatter is the subset of an agent definition file's YAML frontmatter
@@ -20,14 +22,16 @@ type agentFrontmatter struct {
 	Model           string   `yaml:"model"`
 }
 
-// userAgentsRoot returns ~/.octo/agents, or "" when the home dir can't be
+// userAgentsRoot returns data/agents, or "" when the data root can't be
 // resolved. It's a var so tests can point discovery at a temp directory.
+// OCTO-FORK: the portable product keeps agents next to the executable, not in
+// the host home — see dev-docs-usdable/需求/2260906/技术方案/P1-便携数据根.md.
 var userAgentsRoot = func() string {
-	home, err := os.UserHomeDir()
-	if err != nil || home == "" {
+	p, err := datapath.Join("agents")
+	if err != nil {
 		return ""
 	}
-	return filepath.Join(home, ".octo", "agents")
+	return p
 }
 
 // discoveredAgents holds the last scanned user-defined agents.

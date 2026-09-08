@@ -12,6 +12,7 @@ import (
 func TestDirForProjectID_StableAndReadable(t *testing.T) {
 	tmp := t.TempDir()
 	t.Setenv("HOME", tmp)
+	t.Setenv("OCTO_DATA_ROOT", tmp)
 	t.Setenv("USERPROFILE", tmp)
 
 	dir, err := DirForProjectID("g-abc12345", "订单重构")
@@ -44,6 +45,7 @@ func TestDirForProjectID_StableAndReadable(t *testing.T) {
 func TestDirForProjectID_UnusableBase(t *testing.T) {
 	tmp := t.TempDir()
 	t.Setenv("HOME", tmp)
+	t.Setenv("OCTO_DATA_ROOT", tmp)
 	t.Setenv("USERPROFILE", tmp)
 
 	dir, err := DirForProjectID("g-abc12345", "———")

@@ -16,6 +16,7 @@ import (
 func TestPR4b_Review_VerifyEntryByModelHandlesCompositeID(t *testing.T) {
 	tmp := t.TempDir()
 	t.Setenv("HOME", tmp)
+	t.Setenv("OCTO_DATA_ROOT", tmp)
 	t.Setenv("USERPROFILE", tmp)
 
 	seed := config.Config{

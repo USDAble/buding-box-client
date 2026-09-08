@@ -225,8 +225,10 @@ func (s *scriptedSender) StreamMessagesWithTools(_ context.Context, _, _ string,
 // finishes in one request. Three sender calls prove it: parent → child → parent.
 func TestServerRunsSubAgentSynchronously(t *testing.T) {
 	// Isolate HOME so the permission engine uses the embedded defaults (which
-	// allow sub_agent), not a developer's ~/.octo/permissions.yml.
-	t.Setenv("HOME", t.TempDir())
+	// allow sub_agent), not a developer's data/permissions.yml.
+	tmp := t.TempDir()
+	t.Setenv("HOME", tmp)
+	t.Setenv("OCTO_DATA_ROOT", tmp)
 
 	sender := &scriptedSender{replies: []agent.Reply{
 		// 1. Parent asks to spawn a sub-agent.

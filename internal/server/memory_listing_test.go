@@ -17,6 +17,7 @@ import (
 func TestHandleGetMemories_ListsPerProjectSlugDirs(t *testing.T) {
 	tmp := t.TempDir()
 	t.Setenv("HOME", tmp)
+	t.Setenv("OCTO_DATA_ROOT", tmp)
 	t.Setenv("USERPROFILE", tmp)
 
 	srv := mustServer(t, Config{Addr: "127.0.0.1:0", Tools: false})
@@ -67,6 +68,7 @@ func TestHandleGetMemories_ListsPerProjectSlugDirs(t *testing.T) {
 func TestHandleGetMemory_SlugSourceAndTraversal(t *testing.T) {
 	tmp := t.TempDir()
 	t.Setenv("HOME", tmp)
+	t.Setenv("OCTO_DATA_ROOT", tmp)
 	t.Setenv("USERPROFILE", tmp)
 
 	srv := mustServer(t, Config{Addr: "127.0.0.1:0", Tools: false})
@@ -125,6 +127,7 @@ func TestHandleGetMemory_SlugSourceAndTraversal(t *testing.T) {
 func TestHandleDeleteMemory_RemovesFilePermanently(t *testing.T) {
 	tmp := t.TempDir()
 	t.Setenv("HOME", tmp)
+	t.Setenv("OCTO_DATA_ROOT", tmp)
 	t.Setenv("USERPROFILE", tmp)
 
 	srv := mustServer(t, Config{Addr: "127.0.0.1:0", Tools: false})
@@ -151,7 +154,7 @@ func TestHandleDeleteMemory_RemovesFilePermanently(t *testing.T) {
 	if _, err := os.Stat(path); !os.IsNotExist(err) {
 		t.Errorf("memory file still on disk after delete: err = %v", err)
 	}
-	if entries, err := os.ReadDir(filepath.Join(tmp, ".octo", "trash")); err == nil && len(entries) > 0 {
+	if entries, err := os.ReadDir(filepath.Join(tmp, "trash")); err == nil && len(entries) > 0 {
 		t.Errorf("deleted memory was staged in the trash: %d entr(ies)", len(entries))
 	}
 }
@@ -162,6 +165,7 @@ func TestHandleDeleteMemory_RemovesFilePermanently(t *testing.T) {
 func TestResolveMemoryPath_RejectsNonLocalFilename(t *testing.T) {
 	tmp := t.TempDir()
 	t.Setenv("HOME", tmp)
+	t.Setenv("OCTO_DATA_ROOT", tmp)
 	t.Setenv("USERPROFILE", tmp)
 
 	srv := mustServer(t, Config{Addr: "127.0.0.1:0", Tools: false})
@@ -182,6 +186,7 @@ func TestResolveMemoryPath_RejectsNonLocalFilename(t *testing.T) {
 func TestHandleDeleteMemory_RejectsTraversalFilename(t *testing.T) {
 	tmp := t.TempDir()
 	t.Setenv("HOME", tmp)
+	t.Setenv("OCTO_DATA_ROOT", tmp)
 	t.Setenv("USERPROFILE", tmp)
 
 	srv := mustServer(t, Config{Addr: "127.0.0.1:0", Tools: false})

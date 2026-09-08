@@ -22,6 +22,7 @@ import (
 func TestDoAgentTurn_BroadcastsRunningActivityPair(t *testing.T) {
 	tmp := t.TempDir()
 	t.Setenv("HOME", tmp)
+	t.Setenv("OCTO_DATA_ROOT", tmp)
 	t.Setenv("USERPROFILE", tmp)
 
 	srv := mustServer(t, Config{Addr: "127.0.0.1:0", Tools: false})
@@ -116,6 +117,7 @@ func TestRunTask_BroadcastsRunningActivityPair(t *testing.T) {
 func TestDoAgentTurn_WritesPrecedeComplete(t *testing.T) {
 	tmp := t.TempDir()
 	t.Setenv("HOME", tmp)
+	t.Setenv("OCTO_DATA_ROOT", tmp)
 	t.Setenv("USERPROFILE", tmp)
 
 	srv := mustServer(t, Config{Addr: "127.0.0.1:0", Tools: false})

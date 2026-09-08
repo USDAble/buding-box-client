@@ -980,8 +980,9 @@ func writeGlobalPermissionMode(t *testing.T, mode string) {
 	t.Helper()
 	home := t.TempDir()
 	t.Setenv("HOME", home)
+	t.Setenv("OCTO_DATA_ROOT", home)
 	t.Setenv("USERPROFILE", home) // Windows
-	dir := filepath.Join(home, ".octo")
+	dir := home
 	if err := os.MkdirAll(dir, 0o700); err != nil {
 		t.Fatal(err)
 	}
@@ -1024,7 +1025,7 @@ func TestResolveUnattendedDefaultMode_ExplicitConfigHonored(t *testing.T) {
 // test is a tautology there and earns its keep on the Windows CI runner.
 func TestPathRules_NativeSeparators(t *testing.T) {
 	cwd := t.TempDir()
-	memRoot := filepath.Join(t.TempDir(), ".octo", "memories")
+	memRoot := filepath.Join(t.TempDir(), "memories")
 
 	cfg := filepath.Join(t.TempDir(), "permissions.yml")
 	if err := os.WriteFile(cfg, []byte("write_file:\n  - allow: { path: [\"$CWD/**\"] }\n"), 0o600); err != nil {

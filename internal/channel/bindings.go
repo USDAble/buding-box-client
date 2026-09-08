@@ -5,6 +5,8 @@ import (
 	"os"
 	"path/filepath"
 	"sync"
+
+	"github.com/open-octo/octo-agent/internal/datapath"
 )
 
 // bindingStore is the persistent chat→session redirection table behind /bind.
@@ -28,14 +30,12 @@ func newBindingStore() *bindingStore {
 	return b
 }
 
-// bindingsPath resolves ~/.octo/im-bindings.json. Resolved per call (not
-// cached) so a test that overrides HOME stays isolated, mirroring sessionsDir.
+// bindingsPath resolves data/im-bindings.json. Resolved per call (not cached)
+// so a test that overrides HOME stays isolated, mirroring sessionsDir.
+// OCTO-FORK: the portable product keeps IM bindings next to the executable,
+// not in the host home — see dev-docs-usdable/需求/2260906/技术方案/P1-便携数据根.md.
 func bindingsPath() (string, error) {
-	home, err := os.UserHomeDir()
-	if err != nil {
-		return "", err
-	}
-	return filepath.Join(home, ".octo", "im-bindings.json"), nil
+	return datapath.Join("im-bindings.json")
 }
 
 func (b *bindingStore) load() {

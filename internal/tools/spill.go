@@ -8,6 +8,8 @@ import (
 	"sync/atomic"
 	"time"
 	"unicode/utf8"
+
+	"github.com/open-octo/octo-agent/internal/datapath"
 )
 
 // TerminalSpillBytes is the size past which terminal output is written to a
@@ -163,17 +165,11 @@ func writeSpillFile(id, body string) (string, error) {
 	return path, nil
 }
 
-// spillDir returns (creating if needed) ~/.octo/tmp.
+// spillDir returns (creating if needed) data/tmp.
+// OCTO-FORK: the portable product keeps spills next to the executable, not in
+// the host home — see dev-docs-usdable/需求/2260906/技术方案/P1-便携数据根.md.
 func spillDir() (string, error) {
-	home, err := os.UserHomeDir()
-	if err != nil {
-		return "", err
-	}
-	dir := filepath.Join(home, ".octo", "tmp")
-	if err := os.MkdirAll(dir, 0o755); err != nil {
-		return "", err
-	}
-	return dir, nil
+	return datapath.Sub("tmp")
 }
 
 // sanitizeSpillID keeps the filename safe: an id is normally "bg_7", but guard

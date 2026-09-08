@@ -73,6 +73,7 @@ func getArtifact(t *testing.T, srv *Server, sessionID, path string) *httptest.Re
 func TestHandleGetArtifact(t *testing.T) {
 	tmp := t.TempDir()
 	t.Setenv("HOME", tmp)
+	t.Setenv("OCTO_DATA_ROOT", tmp)
 	t.Setenv("USERPROFILE", tmp)
 
 	artDir := t.TempDir()
@@ -157,6 +158,7 @@ func TestHandleGetArtifact(t *testing.T) {
 func TestHandleGetArtifact_SizeCap(t *testing.T) {
 	tmp := t.TempDir()
 	t.Setenv("HOME", tmp)
+	t.Setenv("OCTO_DATA_ROOT", tmp)
 	t.Setenv("USERPROFILE", tmp)
 
 	artDir := t.TempDir()
@@ -180,6 +182,7 @@ func TestHandleGetArtifact_SizeCap(t *testing.T) {
 func TestHandleGetArtifact_RelativeInputPath(t *testing.T) {
 	tmp := t.TempDir()
 	t.Setenv("HOME", tmp)
+	t.Setenv("OCTO_DATA_ROOT", tmp)
 	t.Setenv("USERPROFILE", tmp)
 
 	artDir := t.TempDir()
@@ -245,6 +248,7 @@ func TestHandleGetArtifact_RelativeInputPath(t *testing.T) {
 func TestHandleGetArtifact_ShowArtifactCountsAsWrite(t *testing.T) {
 	tmp := t.TempDir()
 	t.Setenv("HOME", tmp)
+	t.Setenv("OCTO_DATA_ROOT", tmp)
 	t.Setenv("USERPROFILE", tmp)
 
 	// Simulates a script-built file surfaced via the show_artifact tool: no
@@ -282,6 +286,7 @@ func TestHandleGetArtifact_ShowArtifactCountsAsWrite(t *testing.T) {
 func TestHandleGetArtifact_EditCountsAsWrite(t *testing.T) {
 	tmp := t.TempDir()
 	t.Setenv("HOME", tmp)
+	t.Setenv("OCTO_DATA_ROOT", tmp)
 	t.Setenv("USERPROFILE", tmp)
 
 	artDir := t.TempDir()
@@ -318,6 +323,7 @@ func TestHandleGetArtifact_EditCountsAsWrite(t *testing.T) {
 func TestHandleGetArtifact_WorktreeOutsideServerCWD(t *testing.T) {
 	tmp := t.TempDir()
 	t.Setenv("HOME", tmp)
+	t.Setenv("OCTO_DATA_ROOT", tmp)
 	t.Setenv("USERPROFILE", tmp)
 
 	// Simulate a session that ran in a worktree outside the server's cwd.
@@ -347,6 +353,7 @@ func TestHandleGetArtifact_WorktreeOutsideServerCWD(t *testing.T) {
 func TestHandleGetArtifact_DeniedWriteIsNotServed(t *testing.T) {
 	tmp := t.TempDir()
 	t.Setenv("HOME", tmp)
+	t.Setenv("OCTO_DATA_ROOT", tmp)
 	t.Setenv("USERPROFILE", tmp)
 
 	// The realistic shape: the file already exists, the agent proposes
@@ -401,6 +408,7 @@ func TestHandleGetArtifact_DeniedWriteIsNotServed(t *testing.T) {
 func TestHandleGetArtifact_ForgedSuccessIsRejected(t *testing.T) {
 	tmp := t.TempDir()
 	t.Setenv("HOME", tmp)
+	t.Setenv("OCTO_DATA_ROOT", tmp)
 	t.Setenv("USERPROFILE", tmp)
 
 	artDir := t.TempDir()
@@ -466,6 +474,7 @@ func TestHandleGetArtifact_ForgedSuccessIsRejected(t *testing.T) {
 func TestHandleGetArtifact_ServesAWriteStillInFlight(t *testing.T) {
 	tmp := t.TempDir()
 	t.Setenv("HOME", tmp)
+	t.Setenv("OCTO_DATA_ROOT", tmp)
 	t.Setenv("USERPROFILE", tmp)
 
 	artDir := t.TempDir()

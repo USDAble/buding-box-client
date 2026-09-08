@@ -86,6 +86,7 @@ func newCrashReminderServer(t *testing.T, sender *msgRecordingSender) *Server {
 func TestDoAgentTurn_CrashRecoveryReminder(t *testing.T) {
 	tmp := t.TempDir()
 	t.Setenv("HOME", tmp)
+	t.Setenv("OCTO_DATA_ROOT", tmp)
 	t.Setenv("USERPROFILE", tmp)
 
 	sender := &msgRecordingSender{}
@@ -139,6 +140,7 @@ func TestDoAgentTurn_CrashRecoveryReminder(t *testing.T) {
 func TestDoAgentTurn_NoReminderAfterCleanTurn(t *testing.T) {
 	tmp := t.TempDir()
 	t.Setenv("HOME", tmp)
+	t.Setenv("OCTO_DATA_ROOT", tmp)
 	t.Setenv("USERPROFILE", tmp)
 
 	sender := &msgRecordingSender{}

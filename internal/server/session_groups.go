@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/open-octo/octo-agent/internal/agent"
+	"github.com/open-octo/octo-agent/internal/datapath"
 	"github.com/open-octo/octo-agent/internal/memory"
 )
 
@@ -131,17 +132,15 @@ var notifyGroupsChanged func()
 // a plain Unlock. See registryLock for why reads stay out of the file lock.
 var groupMu = &registryLock{}
 
-// sessionGroupsPath returns ~/.octo/session-groups.json, creating ~/.octo.
+// sessionGroupsPath returns data/session-groups.json, creating the data root.
+// OCTO-FORK: the portable product keeps session groups next to the executable,
+// not in the host home — see dev-docs-usdable/需求/2260906/技术方案/P1-便携数据根.md.
 func sessionGroupsPath() (string, error) {
-	home, err := os.UserHomeDir()
+	root, err := datapath.Root()
 	if err != nil {
-		return "", fmt.Errorf("session groups: home dir: %w", err)
+		return "", fmt.Errorf("session groups: %w", err)
 	}
-	dir := filepath.Join(home, ".octo")
-	if err := os.MkdirAll(dir, 0o700); err != nil {
-		return "", fmt.Errorf("session groups: mkdir %s: %w", dir, err)
-	}
-	return filepath.Join(dir, "session-groups.json"), nil
+	return filepath.Join(root, "session-groups.json"), nil
 }
 
 // loadRegistryFile reads and parses the whole registry file. A missing file is

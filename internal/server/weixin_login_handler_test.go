@@ -43,8 +43,9 @@ func stubILink(t *testing.T) *httptest.Server {
 func TestWeixinWebLogin_FullFlow(t *testing.T) {
 	tmp := t.TempDir()
 	t.Setenv("HOME", tmp)
+	t.Setenv("OCTO_DATA_ROOT", tmp)
 	t.Setenv("USERPROFILE", tmp)
-	if err := os.MkdirAll(filepath.Join(tmp, ".octo"), 0700); err != nil {
+	if err := os.MkdirAll(tmp, 0700); err != nil {
 		t.Fatal(err)
 	}
 
@@ -88,7 +89,7 @@ func TestWeixinWebLogin_FullFlow(t *testing.T) {
 	}
 
 	// Credentials persisted where the adapter will look for them.
-	if _, err := os.Stat(filepath.Join(tmp, ".octo", "weixin-credentials.json")); err != nil {
+	if _, err := os.Stat(filepath.Join(tmp, "weixin-credentials.json")); err != nil {
 		t.Fatalf("credentials not saved: %v", err)
 	}
 

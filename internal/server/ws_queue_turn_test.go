@@ -120,6 +120,7 @@ func TestRequeueFront_PreservesOrderAndFlags(t *testing.T) {
 func TestMidTurnQueue_RunsAsSeparateTurns(t *testing.T) {
 	tmp := t.TempDir()
 	t.Setenv("HOME", tmp)
+	t.Setenv("OCTO_DATA_ROOT", tmp)
 	t.Setenv("USERPROFILE", tmp)
 
 	srv := mustServer(t, Config{Addr: "127.0.0.1:0", Tools: false})
@@ -208,6 +209,7 @@ func indexOf(hay []string, needle string) int {
 func TestTurnTeardown_UndrainedSteerRunsBeforeQueued(t *testing.T) {
 	tmp := t.TempDir()
 	t.Setenv("HOME", tmp)
+	t.Setenv("OCTO_DATA_ROOT", tmp)
 	t.Setenv("USERPROFILE", tmp)
 
 	srv := mustServer(t, Config{Addr: "127.0.0.1:0", Tools: false})
@@ -298,6 +300,7 @@ func TestQueuedMessage_RetractableWhileWaiting(t *testing.T) {
 func TestKickIdleSteerTurn_RunsQueuedAsSeparateTurns(t *testing.T) {
 	tmp := t.TempDir()
 	t.Setenv("HOME", tmp)
+	t.Setenv("OCTO_DATA_ROOT", tmp)
 	t.Setenv("USERPROFILE", tmp)
 
 	srv := mustServer(t, Config{Addr: "127.0.0.1:0", Tools: false})
@@ -366,6 +369,7 @@ func TestKickIdleSteerTurn_RunsQueuedAsSeparateTurns(t *testing.T) {
 func TestUserMessage_QueueWireContract(t *testing.T) {
 	tmp := t.TempDir()
 	t.Setenv("HOME", tmp)
+	t.Setenv("OCTO_DATA_ROOT", tmp)
 	t.Setenv("USERPROFILE", tmp)
 
 	srv := mustServer(t, Config{Addr: "127.0.0.1:0", Tools: false})

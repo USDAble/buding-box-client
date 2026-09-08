@@ -11,11 +11,12 @@ import (
 func TestRunHooksList_ShowsUserConfig(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
+	t.Setenv("OCTO_DATA_ROOT", home)
 	t.Setenv("USERPROFILE", home)
 	t.Setenv("OCTO_HOOK_PRE_TURN", "")
 	t.Setenv("OCTO_HOOK_POST_TURN", "")
 
-	dir := filepath.Join(home, ".octo")
+	dir := home
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		t.Fatal(err)
 	}

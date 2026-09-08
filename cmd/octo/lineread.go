@@ -13,6 +13,7 @@ import (
 
 	"github.com/chzyer/readline"
 	"github.com/mattn/go-isatty"
+	"github.com/open-octo/octo-agent/internal/datapath"
 )
 
 // syncWriter wraps an io.Writer with a mutex so concurrent writes are safe.
@@ -167,15 +168,17 @@ func stdinIsTTY(r io.Reader) bool {
 // defaultHistoryFile resolves the path used for persistent REPL history.
 // OCTO_HISTORY_FILE wins so users (and tests) can redirect it. Empty
 // return disables history persistence.
+// OCTO-FORK: history lives under data/ next to the executable — see
+// dev-docs-usdable/需求/2260906/技术方案/P1-便携数据根.md.
 func defaultHistoryFile() string {
 	if env := os.Getenv("OCTO_HISTORY_FILE"); env != "" {
 		return env
 	}
-	home, err := os.UserHomeDir()
+	p, err := datapath.Join("history")
 	if err != nil {
 		return ""
 	}
-	return filepath.Join(home, ".octo", "history")
+	return p
 }
 
 // readPromptLine reads one user-facing input line, expanding `\` line

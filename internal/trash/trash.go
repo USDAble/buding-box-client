@@ -20,6 +20,8 @@ import (
 	"path/filepath"
 	"strings"
 	"time"
+
+	"github.com/open-octo/octo-agent/internal/datapath"
 )
 
 // ErrRestoreConflict is returned by Restore under ConflictAbort when a file
@@ -99,10 +101,15 @@ func firstOpts(opts []Options) Options {
 	return Options{}
 }
 
-// Dir returns the trash root directory.
+// Dir returns the trash root directory (data/trash).
+// OCTO-FORK: the portable product keeps the trash next to the executable, not
+// in the host home — see dev-docs-usdable/需求/2260906/技术方案/P1-便携数据根.md.
 func Dir() string {
-	home, _ := os.UserHomeDir()
-	return filepath.Join(home, ".octo", "trash")
+	p, err := datapath.Join("trash")
+	if err != nil {
+		return ""
+	}
+	return p
 }
 
 // ProjectDir returns the per-project trash subdirectory for projectDir.

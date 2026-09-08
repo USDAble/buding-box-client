@@ -17,11 +17,12 @@ import (
 func TestHandleGetProfileSoul_LegacyUppercase(t *testing.T) {
 	tmp := t.TempDir()
 	t.Setenv("HOME", tmp)
+	t.Setenv("OCTO_DATA_ROOT", tmp)
 	t.Setenv("USERPROFILE", tmp)
-	if err := os.MkdirAll(filepath.Join(tmp, ".octo"), 0o700); err != nil {
+	if err := os.MkdirAll(tmp, 0o700); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(tmp, ".octo", "SOUL.md"), []byte("legacy soul"), 0o600); err != nil {
+	if err := os.WriteFile(filepath.Join(tmp, "SOUL.md"), []byte("legacy soul"), 0o600); err != nil {
 		t.Fatal(err)
 	}
 
@@ -45,11 +46,12 @@ func TestHandleGetProfileSoul_LegacyUppercase(t *testing.T) {
 func TestHandleGetProfileUser_CanonicalLowercase(t *testing.T) {
 	tmp := t.TempDir()
 	t.Setenv("HOME", tmp)
+	t.Setenv("OCTO_DATA_ROOT", tmp)
 	t.Setenv("USERPROFILE", tmp)
-	if err := os.MkdirAll(filepath.Join(tmp, ".octo"), 0o700); err != nil {
+	if err := os.MkdirAll(tmp, 0o700); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(tmp, ".octo", "user.md"), []byte("me"), 0o600); err != nil {
+	if err := os.WriteFile(filepath.Join(tmp, "user.md"), []byte("me"), 0o600); err != nil {
 		t.Fatal(err)
 	}
 
@@ -79,6 +81,7 @@ func TestHandleGetProfileUser_CanonicalLowercase(t *testing.T) {
 func TestHandleGetProfileSoul_Missing(t *testing.T) {
 	tmp := t.TempDir()
 	t.Setenv("HOME", tmp)
+	t.Setenv("OCTO_DATA_ROOT", tmp)
 	t.Setenv("USERPROFILE", tmp)
 
 	srv := mustServer(t, Config{Addr: "127.0.0.1:0", Tools: false})
@@ -102,6 +105,7 @@ func TestHandleGetProfileSoul_Missing(t *testing.T) {
 func TestHandleGetProfileUser_Missing(t *testing.T) {
 	tmp := t.TempDir()
 	t.Setenv("HOME", tmp)
+	t.Setenv("OCTO_DATA_ROOT", tmp)
 	t.Setenv("USERPROFILE", tmp)
 
 	srv := mustServer(t, Config{Addr: "127.0.0.1:0", Tools: false})
@@ -124,12 +128,12 @@ func TestHandleGetProfileUser_Missing(t *testing.T) {
 // TestHandleGetProfileSoul_IOError: a genuine read error — as opposed to
 // "no soul.md yet" — must still surface as a 500, not be swallowed into the
 // same empty-content response as the missing-file case. A regular file
-// sitting where ~/.octo should be a directory trips ENOTDIR, which
-// os.IsNotExist does not recognize (#1237), giving a portable way to force
-// a non-not-exist error without relying on platform-specific chmod semantics.
-// Windows is the exception: it reports this case as ERROR_PATH_NOT_FOUND,
-// which os.IsNotExist treats as a plain missing file, so the handler cannot
-// (and needn't) distinguish it there.
+// sitting where the data root should be a directory makes datapath.Root's
+// MkdirAll fail with ENOTDIR, which os.IsNotExist does not recognize (#1237),
+// giving a portable way to force a non-not-exist error without relying on
+// platform-specific chmod semantics. Windows is the exception: it reports this
+// case as ERROR_PATH_NOT_FOUND, which os.IsNotExist treats as a plain missing
+// file, so the handler cannot (and needn't) distinguish it there.
 func TestHandleGetProfileSoul_IOError(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("ENOTDIR maps to path-not-found on Windows, indistinguishable from a missing file")
@@ -137,9 +141,11 @@ func TestHandleGetProfileSoul_IOError(t *testing.T) {
 	tmp := t.TempDir()
 	t.Setenv("HOME", tmp)
 	t.Setenv("USERPROFILE", tmp)
-	if err := os.WriteFile(filepath.Join(tmp, ".octo"), []byte("x"), 0o644); err != nil {
+	dataRoot := filepath.Join(tmp, "data")
+	if err := os.WriteFile(dataRoot, []byte("x"), 0o644); err != nil {
 		t.Fatal(err)
 	}
+	t.Setenv("OCTO_DATA_ROOT", dataRoot)
 
 	srv := mustServer(t, Config{Addr: "127.0.0.1:0", Tools: false})
 	req := httptest.NewRequest(http.MethodGet, "/api/profile/soul", nil)

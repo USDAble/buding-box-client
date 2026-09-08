@@ -40,6 +40,7 @@ func TestRestoreTrash_ConflictAbortThenBackup(t *testing.T) {
 	// leak entries between trash tests.
 	home := t.TempDir()
 	t.Setenv("HOME", home)
+	t.Setenv("OCTO_DATA_ROOT", home)
 	t.Setenv("USERPROFILE", home)
 	srv := mustServer(t, Config{Addr: "127.0.0.1:0", Tools: false})
 	id, orig := stageConflict(t)
@@ -74,6 +75,7 @@ func TestRestoreTrash_ConflictAbortThenBackup(t *testing.T) {
 func TestRestoreTrash_SpecialCharFilename(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
+	t.Setenv("OCTO_DATA_ROOT", home)
 	t.Setenv("USERPROFILE", home)
 	srv := mustServer(t, Config{Addr: "127.0.0.1:0", Tools: false})
 	project := t.TempDir()

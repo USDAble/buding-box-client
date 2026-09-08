@@ -33,7 +33,7 @@ func withIsolatedPath(t *testing.T) string {
 
 func TestDetectToolchain_PresentAndMissing(t *testing.T) {
 	dir := withIsolatedPath(t)
-	withFakeHome(t) // isolate ~/.octo/bin bundled fallback from the host
+	withFakeHome(t) // isolate data/bin bundled fallback from the host
 	fakeExe(t, dir, "git")
 	fakeExe(t, dir, "node")
 	fakeExe(t, dir, "python3") // satisfies the "python" probe via its variant
@@ -87,7 +87,7 @@ func withFakeHome(t *testing.T) string {
 }
 
 // TestDetectToolchain_BundledFallback confirms uv resolves via octo's
-// bundled ~/.octo/bin even when it's not on the real PATH — the
+// bundled data/bin even when it's not on the real PATH — the
 // scenario the Windows/macOS installers create by staging it there instead
 // of polluting the system PATH.
 func TestDetectToolchain_BundledFallback(t *testing.T) {
@@ -107,17 +107,17 @@ func TestDetectToolchain_BundledFallback(t *testing.T) {
 		delete(wantPresent, p)
 	}
 	if len(wantPresent) != 0 {
-		t.Errorf("bundled ~/.octo/bin tool not detected as present: %v", wantPresent)
+		t.Errorf("bundled data/bin tool not detected as present: %v", wantPresent)
 	}
 	for _, m := range missing {
 		if m == "uv" {
-			t.Errorf("%q reported missing despite being in the bundled ~/.octo/bin fallback", m)
+			t.Errorf("%q reported missing despite being in the bundled data/bin fallback", m)
 		}
 	}
 }
 
 // TestDetectToolchain_NoBundledDirIsGracefulMiss confirms that when
-// ~/.octo/bin simply doesn't exist (go install / build-from-source / Linux
+// data/bin simply doesn't exist (go install / build-from-source / Linux
 // without an installer), uv is reported missing with no error — the
 // non-installer install path must not regress.
 func TestDetectToolchain_NoBundledDirIsGracefulMiss(t *testing.T) {

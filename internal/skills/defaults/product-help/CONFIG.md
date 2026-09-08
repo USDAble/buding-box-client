@@ -68,7 +68,7 @@ What to tell a user asking about this:
   one that matters: a single conversation is already serial, yet one turn can easily issue a dozen
   requests a minute through tool-call rounds.
 - **There is no UI for these** — no settings page, no `octo config` prompt. Hand-edit
-  `~/.octo/config.yml`. Editing an endpoint in the Web UI (rename, key, headers) leaves them alone.
+  `<data root>/config.yml`. Editing an endpoint in the Web UI (rename, key, headers) leaves them alone.
 - **When an edit takes effect:** a new CLI run picks it up immediately; a running `octo serve`
   caches its senders, so restart it (`octo serve stop`, then relaunch) after editing the file.
 - **They're per endpoint, not per key or per model.** Two endpoints pointing at the same base URL

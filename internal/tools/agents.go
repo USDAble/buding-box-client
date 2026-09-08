@@ -40,7 +40,7 @@ var (
 	discoveredAgents   map[string]agentPreset
 )
 
-// discoverAgents scans ~/.octo/agents/*.md and populates the package-level
+// discoverAgents scans data/agents/*.md and populates the package-level
 // discoveredAgents cache. It is safe to call concurrently; callers that need
 // the freshest set call it before lookupAgentPreset.
 func discoverAgents() {

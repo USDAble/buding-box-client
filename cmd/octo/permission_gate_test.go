@@ -22,7 +22,7 @@ func newGate(t *testing.T, mode permission.Mode, stdin string) (agent.Permission
 	}
 	var out bytes.Buffer
 	view := newPlainView(newScannerLineReader(strings.NewReader(stdin), &out), &out, &out, verbosityNormal, false)
-	// No-op audit logger: test checks must not land in the real ~/.octo/audit.log.
+	// No-op audit logger: test checks must not land in the real data/audit.log.
 	return newCLIGate(eng, view, audit.NewAt("")), &out
 }
 

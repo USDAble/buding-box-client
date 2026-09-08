@@ -84,7 +84,7 @@ func TestServeRejectsPositionalArgsAlone(t *testing.T) {
 }
 
 // isolatePidFile points the daemon pid-file lookup at a temp dir so the
-// subcommand tests below never see (or touch) a real ~/.octo/serve.pid.
+// subcommand tests below never see (or touch) a real data/serve.pid.
 func isolatePidFile(t *testing.T) {
 	t.Helper()
 	tmp := t.TempDir()

@@ -8,8 +8,8 @@ import (
 	"testing"
 )
 
-// curatedTestServer returns a server with an isolated ~/.octo/agents dir and
-// one hand-placed curated (SourceDefault) expert in ~/.octo/agents-default —
+// curatedTestServer returns a server with an isolated data/agents dir and
+// one hand-placed curated (SourceDefault) expert in data/agents-default —
 // mustServer never calls agentprofile.MaterializeDefaults, so the curated
 // content is planted directly rather than relying on the embedded set.
 func curatedTestServer(t *testing.T) *Server {

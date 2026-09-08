@@ -6,7 +6,7 @@ import (
 	"testing"
 )
 
-// stageSession writes a session transcript under ~/.octo/sessions and moves it
+// stageSession writes a session transcript under data/sessions and moves it
 // into the trash, returning its original path.
 func stageSession(t *testing.T, name, jsonl string) string {
 	t.Helper()

@@ -19,7 +19,7 @@ import (
 )
 
 // Session is a named conversation that persists to disk as a JSONL transcript
-// (one record per line) under ~/.octo/sessions/<id>.jsonl. The first line is a
+// (one record per line) under data/sessions/<id>.jsonl. The first line is a
 // meta record; each subsequent line is one message. This lets a turn be saved
 // by APPENDING only its new messages rather than rewriting the whole file —
 // the per-turn cost is O(new messages), not O(total history).
@@ -120,7 +120,7 @@ type Session struct {
 	ContentUpdatedAt time.Time `json:"content_updated_at,omitempty"`
 	Messages         []Message `json:"messages"`
 
-	// Dir overrides the default ~/.octo/sessions location. Empty means use the
+	// Dir overrides the default data/sessions location. Empty means use the
 	// default. Not serialized — it's a runtime override.
 	Dir string `json:"-"`
 
@@ -1357,7 +1357,7 @@ func AttachmentPaths(s string) []string {
 	return paths
 }
 
-// LoadSession reads ~/.octo/sessions/<id>.jsonl. id may be a bare session id,
+// LoadSession reads data/sessions/<id>.jsonl. id may be a bare session id,
 // an id with a .jsonl/.json suffix, or an absolute path to a transcript file.
 func LoadSession(id string) (*Session, error) {
 	path, err := resolveSessionPath(id)
@@ -1548,7 +1548,7 @@ func imageMIMEFromPath(path string) string {
 }
 
 // resolveSessionPath maps an id (bare or with a .jsonl/.json suffix) to the
-// transcript file path under ~/.octo/sessions. The id reaches here straight
+// transcript file path under data/sessions. The id reaches here straight
 // from HTTP/WS requests, so it must be a plain filename stem: absolute paths,
 // path separators, and "." / ".." components are all rejected so a
 // caller-supplied id can never escape the sessions directory.
@@ -1585,7 +1585,7 @@ func SessionMTime(id string) (time.Time, error) {
 }
 
 // ListSessions returns up to n most-recently-modified sessions from
-// ~/.octo/sessions/, newest first (by file mtime).
+// data/sessions/, newest first (by file mtime).
 func ListSessions(n int) ([]*Session, error) {
 	dir, err := sessionsDir()
 	if err != nil {

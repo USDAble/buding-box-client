@@ -111,7 +111,7 @@ func TestHandleGetMemory_SlugSourceAndTraversal(t *testing.T) {
 	}
 
 	// Base("../..") == ".." — resolveMemoryPath must reject it outright, or
-	// the join would land on the root's PARENT (~/.octo) and read files there.
+	// the join would land on the root's PARENT (the data root) and read files there.
 	for _, evil := range []string{"..%2F..", "..", "."} {
 		if w := get(evil); w.Code != http.StatusNotFound {
 			t.Fatalf("traversal source %q: status = %d, want 404", evil, w.Code)

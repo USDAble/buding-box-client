@@ -1,6 +1,6 @@
 // Package audit writes an append-only log of security-relevant tool
 // decisions. It is intentionally minimal: one JSON line per event, flushed
-// to ~/.octo/audit.log. Failures are logged to the application logger but
+// to data/audit.log. Failures are logged to the application logger but
 // never block the tool call being audited.
 package audit
 
@@ -47,7 +47,7 @@ type Logger struct {
 }
 
 // New builds a Logger that writes to the default audit log path
-// (~/.octo/audit.log). A nil Logger is never returned; the logger always
+// (data/audit.log). A nil Logger is never returned; the logger always
 // degrades to a no-op on failure rather than breaking callers.
 func New() *Logger {
 	return NewAt(defaultPath())

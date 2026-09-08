@@ -45,7 +45,7 @@ func stampLightApp(m *lightAppManifest, htmlPath string) {
 	}
 }
 
-// handleListLightApps lists all Light Apps by scanning ~/.octo/light-apps/ for
+// handleListLightApps lists all Light Apps by scanning data/light-apps/ for
 // subdirectories containing a valid manifest.json. The response also carries
 // the directory itself.
 func (s *Server) handleListLightApps(w http.ResponseWriter, r *http.Request) {

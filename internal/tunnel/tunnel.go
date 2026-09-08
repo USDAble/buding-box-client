@@ -102,7 +102,7 @@ type Config struct {
 	AccessKey string
 	// Identity supplies the host's Noise static keypair (and, if TunnelID is
 	// unset, the tunnel id). Load it with LoadOrCreateIdentity to persist it in
-	// ~/.octo. When nil, New generates a throwaway identity — the PoC/test path.
+	// the data root. When nil, New generates a throwaway identity — the PoC/test path.
 	Identity *Identity
 	// Logf overrides the logger. nil uses log.Printf.
 	Logf func(string, ...any)

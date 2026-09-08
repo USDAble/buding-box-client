@@ -50,7 +50,7 @@ func runServe(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 	noChannel := fs.Bool("no-channel", false, "Disable IM channel (DingTalk, Feishu)")
 	noMemory := fs.Bool("no-memory", false, "Disable cross-session memory injection")
 	noSupervisor := fs.Bool("no-supervisor", false, "Run the server directly, without the self-restart supervisor (exit code 42 still signals a restart request to an external supervisor)")
-	daemon := fs.Bool("d", false, "Run as a background daemon (writes pid to ~/.octo/serve.pid, logs to ~/.octo/serve.log)")
+	daemon := fs.Bool("d", false, "Run as a background daemon (writes pid to data/serve.pid, logs to data/serve.log)")
 	fs.BoolVar(daemon, "daemon", false, "Run as a background daemon")
 	stop := fs.Bool("stop", false, "Stop the background daemon")
 	status := fs.Bool("status", false, "Show daemon status")

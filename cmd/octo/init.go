@@ -56,7 +56,7 @@ func runInit(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 	cfg, err := config.Load()
 	if err != nil {
 		fmt.Fprintf(stderr, "octo init: %v\n", err)
-		fmt.Fprintln(stderr, "Run `octo config` to rewrite ~/.octo/config.yml.")
+		fmt.Fprintln(stderr, "Run `octo config` to rewrite data/config.yml.")
 		return 1
 	}
 	provName, resolvedModel, entry, ok := resolveProviderModel(*providerName, *model, cfg)

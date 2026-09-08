@@ -11,7 +11,7 @@ import (
 // tests here pass an explicit Options.JournalDir, but a few exercise Run's
 // default-journal-dir fallback deliberately; without this redirect, those
 // (and any future test that forgets to set JournalDir) would leave .jsonl
-// files in the real ~/.octo/workflow-journals forever, since nothing prunes
+// files in the real data/workflow-journals forever, since nothing prunes
 // it mid-session.
 func TestMain(m *testing.M) {
 	// os.Exit below skips deferred functions, so restoration runs inline

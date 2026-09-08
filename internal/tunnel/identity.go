@@ -33,7 +33,7 @@ func (i *Identity) PublicKeyBase64() string {
 	return base64.StdEncoding.EncodeToString(i.static.Public)
 }
 
-// identityFile is the on-disk form of an Identity (~/.octo/tunnel.json).
+// identityFile is the on-disk form of an Identity (data/tunnel.json).
 type identityFile struct {
 	TunnelID   string `json:"tunnel_id"`
 	PrivateKey string `json:"private_key"` // base64
@@ -91,7 +91,7 @@ func createIdentity(path string) (*Identity, error) {
 	if err != nil {
 		return nil, err
 	}
-	// Don't rely on ~/.octo already existing: on a fresh machine the access key
+	// Don't rely on the data root already existing: on a fresh machine the access key
 	// can come from OCTO_ACCESS_KEY, so server startup may not have created it.
 	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
 		return nil, fmt.Errorf("tunnel: create state dir: %w", err)

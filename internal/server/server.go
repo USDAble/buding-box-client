@@ -75,7 +75,7 @@ type Config struct {
 	CORSOrigins []string
 
 	// NoChannel disables IM channel (DingTalk, Feishu, etc.) startup.
-	// When false (default), channels are started from ~/.octo/channels.yml
+	// When false (default), channels are started from data/channels.yml
 	// alongside the HTTP server.
 	NoChannel bool
 
@@ -95,7 +95,7 @@ type Config struct {
 
 	// WorkspaceDir overrides the default working directory new web sessions
 	// are created with (see config.Config.WorkspaceDir / tools.ResolveWorkspaceDir).
-	// Empty (default) falls back to ~/.octo/config.yml's workspace_dir, which
+	// Empty (default) falls back to data/config.yml's workspace_dir, which
 	// itself resolves to ~/Octo when unset. No `octo serve` flag sets this;
 	// it exists mainly so tests can inject a literal path without touching
 	// the real config file.
@@ -450,8 +450,8 @@ func New(cfg Config) (*Server, error) {
 		}
 	}
 
-	// Materialize the binary's default skills/workflows to ~/.octo/skills-default
-	// and ~/.octo/workflows-default so Discover() below finds them. The CLI's
+	// Materialize the binary's default skills/workflows to data/skills-default
+	// and data/workflows-default so Discover() below finds them. The CLI's
 	// run() does the same before runChat/runServe, but server.New() is also
 	// called directly by the desktop app (which never goes through run()) — so
 	// the init has to live here too. A no-op/cheap-pass once current (stamp
@@ -472,7 +472,7 @@ func New(cfg Config) (*Server, error) {
 
 	// Resolve the default workspace dir new web sessions get. cfg.WorkspaceDir
 	// (no `octo serve` flag sets it today) takes precedence so tests can inject
-	// a literal path without touching ~/.octo/config.yml; production falls back
+	// a literal path without touching data/config.yml; production falls back
 	// to the file config's workspace_dir, which resolves to ~/Octo when unset.
 	// A resolve error (e.g. no home dir) degrades to "" — no override, session
 	// keeps using the server's launch directory — rather than failing startup.
@@ -1424,7 +1424,7 @@ func (s *Server) buildAgent(sess *agent.Session) *agent.Agent {
 	}
 	// Workflow save-nudge — memory-independent, wired for every session.
 	tools.NewWorkflowNudger().RegisterHooks(hookEngine)
-	// Validate ~/.octo/config.yml right after the agent edits it.
+	// Validate data/config.yml right after the agent edits it.
 	tools.NewConfigGuard().RegisterHooks(hookEngine)
 	// Auto-store into the external memory backend (if configured) — a no-op
 	// when none is set.
@@ -1846,7 +1846,7 @@ func (s *Server) curCwdEnv() (string, string) {
 // returning "" would be worse: an empty cwd is inherited by exec, so tools
 // would silently run in the launch directory anyway, with nothing saying so.
 // Reaching it needs an unresolvable workspace, which (with workspace_dir unset)
-// means os.UserHomeDir failed — and then ~/.octo is unusable too, so there was
+// means os.UserHomeDir failed — and then the data root is unusable too, so there was
 // no session to resolve a directory for in the first place.
 //
 // Every surface that reports or uses a session's directory goes through here.
@@ -1978,7 +1978,7 @@ func (s *Server) sessionMemDir(proj *sessionGroup) string {
 }
 
 // memoryWriteRoots returns the write-allowlist roots handed to the permission
-// engine: the whole ~/.octo/memories tree rather than just this session's two
+// engine: the whole data/memories tree rather than just this session's two
 // directories. A durable fact about ANOTHER repo belongs in that repo's memory
 // dir (see memory.RenderInjection's cross-project guidance) — the common case
 // being a session with no project of its own asked to work on one — and
@@ -3394,7 +3394,7 @@ func (s *Server) handleChannelMessage(ctx context.Context, ad channel.Adapter, e
 
 // attachInboundFiles bridges an inbound event's attachments into the agent
 // turn, mirroring the web composer's parseUserFiles. Images (delivered as data
-// URLs by the adapters) are decoded and persisted under ~/.octo/uploads. If the
+// URLs by the adapters) are decoded and persisted under data/uploads. If the
 // active model accepts vision they are queued as vision blocks; otherwise they
 // are surfaced as path notes so the model can read_file them and the turn keeps
 // running. Documents (delivered as a local Path) become "[Attached file: <path>]"
@@ -3593,7 +3593,7 @@ func (s *Server) runChannelTurns(ctx context.Context, sess *channel.Session, ad 
 	}
 	// Workflow save-nudge — memory-independent, wired for every IM session.
 	tools.NewWorkflowNudger().RegisterHooks(imEngine)
-	// Validate ~/.octo/config.yml right after the agent edits it.
+	// Validate data/config.yml right after the agent edits it.
 	tools.NewConfigGuard().RegisterHooks(imEngine)
 	// Auto-store into the external memory backend (if configured) — a no-op
 	// when none is set.

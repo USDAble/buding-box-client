@@ -46,7 +46,7 @@ means the quota is being exceeded steadily, not by a blip.
 Free-tier endpoints are the usual case: they cap requests per minute and simultaneous requests, and
 octo's own fan-out (sub-agents, workflow steps, background title generation, the vision helper) adds
 up fast on top of a turn's tool-call rounds. Cap octo's side to match the provider's published
-quota by hand-editing the endpoint in `~/.octo/config.yml`:
+quota by hand-editing the endpoint in `<data root>/config.yml`:
 
 ```yaml
 endpoints:

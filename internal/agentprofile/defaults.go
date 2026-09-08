@@ -38,7 +38,7 @@ var defaultAgentsRoot = func() string {
 }
 
 // DefaultRoot is the on-disk location of the materialized curated experts
-// (~/.octo/agents-default).
+// (data/agents-default).
 func DefaultRoot() string { return defaultAgentsRoot() }
 
 // MaterializeDefaults writes the embedded curated experts to the default root
@@ -66,7 +66,7 @@ func materializeDefaults(root, version string, force bool) error {
 	}
 
 	// The default root is exclusively octo-managed (users override in
-	// ~/.octo/agents), so a wholesale wipe-and-rewrite is safe and keeps the
+	// data/agents), so a wholesale wipe-and-rewrite is safe and keeps the
 	// set in lockstep with the binary — retired personas removed, renames and
 	// content edits handled.
 	if err := os.RemoveAll(root); err != nil {

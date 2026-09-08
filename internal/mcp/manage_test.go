@@ -78,7 +78,7 @@ func TestLoadManaged_NoFiles(t *testing.T) {
 func TestUpsertUserServer_CreatesAndPreserves(t *testing.T) {
 	home := setupManageHome(t)
 
-	// First write creates ~/.octo/mcp.json from nothing.
+	// First write creates data/mcp.json from nothing.
 	if err := UpsertUserServer("alpha", ServerEntry{Command: "echo"}); err != nil {
 		t.Fatalf("UpsertUserServer: %v", err)
 	}

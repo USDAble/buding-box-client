@@ -23,7 +23,7 @@ var defaultWorkflowsRoot = func() string {
 }
 
 // DefaultWorkflowsRoot is the on-disk location of the materialized default
-// workflows (~/.octo/workflows-default), exported for `octo workflows path`.
+// workflows (data/workflows-default), exported for `octo workflows path`.
 func DefaultWorkflowsRoot() string { return defaultWorkflowsRoot() }
 
 // defaultWorkflowStampFile records which binary version last materialized the
@@ -32,7 +32,7 @@ func DefaultWorkflowsRoot() string { return defaultWorkflowsRoot() }
 const defaultWorkflowStampFile = ".octo-version"
 
 // MaterializeDefaultWorkflows writes the embedded default workflows to
-// ~/.octo/workflows-default when the on-disk version stamp doesn't match
+// data/workflows-default when the on-disk version stamp doesn't match
 // version, so they're discoverable, listable and overridable on disk like any
 // saved workflow, instead of only living inside the binary. It's a fast no-op
 // once the install is current (a single stamp read). Best-effort: the caller
@@ -59,7 +59,7 @@ func materializeDefaultWorkflows(root, version string, force bool) error {
 	}
 
 	// The default root is exclusively octo-managed (users override in
-	// ~/.octo/workflows), so a wholesale wipe-and-rewrite is safe and keeps the
+	// data/workflows), so a wholesale wipe-and-rewrite is safe and keeps the
 	// set in lockstep with the binary — stale workflows removed, renames handled.
 	if err := os.RemoveAll(root); err != nil {
 		return err

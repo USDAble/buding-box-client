@@ -3,7 +3,7 @@
 // from BurntSushi/ripgrep and places it in binaries/rg; go:embed bakes it
 // into the octo binary when the "embedrg" build tag is set. At runtime, if
 // the system does not have rg on PATH, the embedded binary is extracted to
-// ~/.octo/bin/rg and used instead.
+// data/bin/rg and used instead.
 package rgembed
 
 import (
@@ -30,7 +30,7 @@ var version = "unknown"
 
 // Path returns the absolute path to a working rg binary.
 // If rg is on PATH it returns "rg" directly; otherwise it extracts the
-// embedded binary to ~/.octo/bin/rg-<version> and returns that path.
+// embedded binary to data/bin/rg-<version> and returns that path.
 func Path() (string, error) {
 	if _, err := exec.LookPath("rg"); err == nil {
 		return "rg", nil

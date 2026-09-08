@@ -96,7 +96,7 @@ func rewriteInputHistory(path string, entries []string) {
 }
 
 // appendInputHistoryLine persists one submitted/queued line to path. Errors
-// are non-fatal — a read-only or missing ~/.octo just means the session's
+// are non-fatal — a read-only or missing data root just means the session's
 // history doesn't survive restart, same tolerance as the plain REPL's
 // readline history file.
 func appendInputHistoryLine(path, line string) {

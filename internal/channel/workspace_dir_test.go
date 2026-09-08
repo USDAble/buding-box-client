@@ -96,7 +96,7 @@ func TestCmdNew_RecordsTheWorkspace(t *testing.T) {
 	}
 }
 
-// writeWorkspaceConfig points ~/.octo/config.yml at dir.
+// writeWorkspaceConfig points data/config.yml at dir.
 func writeWorkspaceConfig(t *testing.T, dir string) {
 	t.Helper()
 	home, err := os.UserHomeDir()
@@ -105,7 +105,7 @@ func writeWorkspaceConfig(t *testing.T, dir string) {
 	}
 	octo := home
 	if err := os.MkdirAll(octo, 0o700); err != nil {
-		t.Fatalf("mkdir ~/.octo: %v", err)
+		t.Fatalf("mkdir the data root: %v", err)
 	}
 	body := "workspace_dir: " + dir + "\n"
 	if err := os.WriteFile(filepath.Join(octo, "config.yml"), []byte(body), 0o600); err != nil {

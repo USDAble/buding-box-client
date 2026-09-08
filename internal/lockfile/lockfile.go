@@ -1,8 +1,8 @@
 // Package lockfile provides an advisory cross-process lock for the files under
-// ~/.octo that more than one octo process can write — the config and the
+// the data root that more than one octo process can write — the config and the
 // session-groups registry.
 //
-// octo has several entry points against one ~/.octo — a TUI process, `octo
+// octo has several entry points against one data root — a TUI process, `octo
 // serve`, the desktop shell, one-off subcommands — and the ones that write a
 // shared file all do it as read-modify-write on the whole file. The atomic
 // temp-file + rename those writers use keeps a file from ever being observed

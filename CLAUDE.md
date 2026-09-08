@@ -4,7 +4,9 @@ Guidance for Claude Code working in this repository. The octo-agent equivalent i
 
 ## Project
 
-`octo-agent` — a Go 1.22+ AI agent CLI distributed as a single binary. Module path: `github.com/open-octo/octo-agent`. Ships as CLI + embedded Web UI + IM bridges via `octo serve`. Per-feature design notes live under `dev-docs/`.
+`octo-agent` — a Go 1.25+ AI agent CLI distributed as a single binary (`go.mod` declares `go 1.25.0`). Module path: `github.com/open-octo/octo-agent`. Ships as CLI + embedded Web UI + IM bridges via `octo serve`. Per-feature design notes live under `dev-docs/`.
+
+**This repository is a downstream fork.** It ships the 布丁盒子 / Pudding Box portable desktop product on top of upstream octo-agent. Fork-specific rules are in `dev-docs-usdable/开发规范.md` and `dev-docs-usdable/上游合并策略.md`; the current requirement batch is `dev-docs-usdable/需求/2260906/`. The three hard rules below (§Fork rules) override the general conventions when they conflict.
 
 ## Commands
 
@@ -51,7 +53,19 @@ Five-layer stack with one-directional dependencies:
 
 - **New provider** — implement `provider.Provider` (required) and optionally `provider.StreamingProvider`, `provider.ToolProvider`, `provider.ToolStreamingProvider`. Put it under `internal/provider/<name>/`. Each protocol's wire-format quirks are isolated inside the package; the agent layer must not learn about them.
 - **New tool** — implement `agent.ToolExecutor` and `Definition() agent.ToolDefinition` returning the JSON Schema the LLM sees. Place it under `internal/tools/<name>.go`. Register it in `tools.DefaultRegistry` and add it to `tools.DefaultTools()` if it belongs in the default set.
-- **New skill** — `~/.octo/skills/<name>/SKILL.md` with the same frontmatter format Claude Code uses. The skill loader composes existing tools — adding a skill should not require new tool code.
+- **New skill** — `<data root>/skills/<name>/SKILL.md` with the same frontmatter format Claude Code uses. The skill loader composes existing tools — adding a skill should not require new tool code.
+
+## Fork rules (override the conventions below when they conflict)
+
+Full text in `dev-docs-usdable/开发规范.md`. These three are enforced by CI:
+
+1. **Never resolve a data path yourself.** No `os.UserHomeDir()`, no `".octo"` literal. Every product path goes through `internal/datapath` (`Root`, `Sub`, `Join`). The data root is `<exe dir>/data`, overridable only by `$OCTO_DATA_ROOT` for tests, dev, and CLI installed to a read-only directory. `~/.octo` no longer exists anywhere in this fork — **including the CLI** — which is what lets `datapath-guard` reject the `".octo"` literal with zero exceptions. A genuine host-home access (expanding a user-typed `~/`, locating the real Chrome profile, sandbox rules) goes in `scripts/homedir-allowlist.txt` with a written reason.
+
+2. **Never hardcode a brand string.** All product names interpolate `{brand}` / `{brandShort}` from `branding/brand.json`; `brand-guard` enforces it. Two exceptions must be annotated or the guard misreads them: the literal "Octo" in the port-conflict message (that names the *upstream* product, not ours), and the ASCII identifiers `BUDING-DEMO-0001` / `buding-*` model ids (fixed data keys — they do **not** follow the English brand name).
+
+3. **Mark every change to an upstream file** with `// OCTO-FORK: <why> — see <design doc>`. `grep -rn "OCTO-FORK" .` is this fork's complete diff-from-upstream inventory. Prefer making an upstream feature unreachable over deleting it — deletions produce delete-vs-modify conflicts that git cannot auto-resolve.
+
+Upstream merges: `merge`, never `rebase`; see `dev-docs-usdable/上游合并策略.md`.
 
 ## Conventions
 
@@ -62,7 +76,7 @@ From `.octorules`:
 - **No live network in `go test`.** All HTTP tests use `httptest.NewServer`. Integration tests against real APIs are run by hand with a real key, not in CI.
 - **Comments in English.** Prefer self-documenting names; only comment the **why**, not the **what**.
 - **gofmt is the formatter.** `gofmt -l .` must be empty before push.
-- **Branch off latest main.** Never commit directly on `main`. Squash-and-merge is the default.
+- **Branch off latest `buding`** before editing. Feature PRs target `buding` (the product integration branch); `main` is the upstream-tracking branch. Never commit on either directly. One feature = one PR = one squash commit.
 - **No new third-party dependencies** without justification in the PR description.
 - **One concept per PR.** Mass mechanical changes (rename, move) can ride together but should be a single self-contained change set.
 - **Commit messages and PR descriptions in English.**
@@ -75,7 +89,18 @@ From `.octorules`:
 - **OpenAI tool calls in streaming.** Function arguments arrive as JSON **fragments** across multiple chunks. The aggregator must concatenate by `tool_calls[i].index` before parsing.
 - **`finish_reason: "tool_calls"` (OpenAI) vs `stop_reason: "tool_use"` (Anthropic).** The OpenAI adapter normalises `tool_calls` → `tool_use` on the agent-facing surface; the agent loop only ever sees `"tool_use"`.
 
+## Where documentation lives
+
+| Content | Location |
+|---|---|
+| Upstream architecture decisions, verified-fact dumps | `dev-docs/` — one Markdown file per topic |
+| This fork's requirements, plans, per-PR design docs | `dev-docs-usdable/需求/<batch>/`（current: `2260906/`） |
+| This fork's engineering norms and upstream-merge policy | `dev-docs-usdable/开发规范.md`, `dev-docs-usdable/上游合并策略.md` |
+
+**Do not put downstream documents in `dev-docs/`** — it is an upstream directory, and anything added there conflicts on every merge.
+
 ## When in doubt
 
 - Verify external claims (API endpoints, third-party SDK existence, dates) before committing them.
 - If `go test ./...` fails because of an environment issue (missing key, blocked network), say so explicitly rather than commenting out the test.
+- If a design doc and the requirement text disagree, stop and reconcile them rather than picking one — a stale clause resurfaces at acceptance. Record the decision in `dev-docs-usdable/需求/<batch>/开发计划.md` §4.1 and edit the requirement.

@@ -29,6 +29,7 @@ import (
 	"time"
 
 	"github.com/mattn/go-isatty"
+	"github.com/open-octo/octo-agent/internal/brand"
 	"github.com/open-octo/octo-agent/internal/crashlog"
 	"github.com/open-octo/octo-agent/internal/logfile"
 	"github.com/open-octo/octo-agent/internal/serveenv"
@@ -206,12 +207,23 @@ func main() {
 		services = append(services, application.NewService(notifier))
 	}
 
+	// The product name reaches the native shell from branding/brand.json rather
+	// than a literal here, so renaming the product is a configuration edit. The
+	// Wails Name/Description are OS-rendered metadata (macOS menu bar app name,
+	// Windows taskbar) and thus class-B fixed values — the English full name,
+	// not the UI-localized one, exactly like CFBundleName in Info.plist. The
+	// tagline is the one-line product description, a closer fit for this field
+	// than the paragraph-long Description. The single-instance UniqueID is class
+	// C and comes from identifiers; it is a runtime lock name, so changing it is
+	// what lets this product run beside an installed Octo rather than being
+	// brought to its window.
+	cfg := brand.Load()
 	app := application.New(application.Options{
-		Name:        "Octo",
-		Description: "Octo Agent",
+		Name:        cfg.Name(brand.DefaultLocale),
+		Description: cfg.Tagline(brand.DefaultLocale),
 		Services:    services,
 		SingleInstance: &application.SingleInstanceOptions{
-			UniqueID: "dev.octo-agent.desktop",
+			UniqueID: cfg.Identifier(brand.IdentifierSingleInstanceID),
 			OnSecondInstanceLaunch: func(application.SecondInstanceData) {
 				bridge.showWindow()
 			},

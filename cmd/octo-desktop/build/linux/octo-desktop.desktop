@@ -1,7 +1,7 @@
 [Desktop Entry]
 Type=Application
-Name=Octo
-Comment=Octo Agent desktop
+Name=Pudding Box
+Comment=Pudding Box desktop
 Exec=octo-desktop
 Icon=octo-desktop
 Categories=Development;Utility;

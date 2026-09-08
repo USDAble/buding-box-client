@@ -15,10 +15,12 @@
 package datapath
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
+	"sync/atomic"
 )
 
 // dataRootEnv overrides the data root for tests, development, and a CLI
@@ -49,6 +51,31 @@ func resolveExeDir() (string, error) {
 	return filepath.Clean(dir), nil
 }
 
+// ErrFrozen is returned by the directory-creating entry points (Root, Sub)
+// while the data root is frozen. The desktop shell's watchdog freezes writes
+// when the data/ directory vanishes (a U盘 pulled out) so a write refuses
+// rather than silently recreating an empty data/ next to the executable. See
+// dev-docs-usdable/需求/2260906/技术方案/P2-启动与生命周期.md §3.4.
+var ErrFrozen = errors.New("datapath: data root is frozen (unavailable)")
+
+// frozen is the process-wide write gate. The desktop watchdog flips it via
+// Freeze/Thaw; the directory-creating entry points (Root, Sub) check it before
+// touching the filesystem. Read-only lookups (Join) are deliberately exempt —
+// a frozen product may still read a directory that never actually went away.
+var frozen atomic.Bool
+
+// Freeze blocks Root/Sub from creating directories. Called by the desktop
+// watchdog when the data root disappears; the product must not attempt a write
+// that could land on the host or recreate an empty data/.
+func Freeze() { frozen.Store(true) }
+
+// Thaw clears the freeze gate, restoring writes. Called when the same path
+// returns and the process still owns it.
+func Thaw() { frozen.Store(false) }
+
+// Frozen reports whether the data root is currently frozen.
+func Frozen() bool { return frozen.Load() }
+
 // resolveRoot returns the data root path without creating or probing it.
 // Join uses this so reading a path has no write side effects.
 func resolveRoot() (string, error) {
@@ -70,6 +97,9 @@ func resolveRoot() (string, error) {
 // Resolution order: $OCTO_DATA_ROOT if set, otherwise <program dir>/data.
 // An unusable root is an error — never a fallback to a host directory.
 func Root() (string, error) {
+	if frozen.Load() {
+		return "", ErrFrozen
+	}
 	root, err := resolveRoot()
 	if err != nil {
 		return "", err

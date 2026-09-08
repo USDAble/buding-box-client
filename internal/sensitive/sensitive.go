@@ -1,4 +1,8 @@
 // Package sensitive implements the product's single compliance-word matcher.
+//
+// OCTO-FORK: P7 敏感词引擎 — 纯新增包，上游无同名路径（零合并冲突）。
+// 唯一的敏感词实现（输入检测 / 输出过滤 / 昵称校验三处共用），Web 侧不
+// 做第二套匹配。见 dev-docs-usdable/需求/2260906/技术方案/P7-敏感词引擎.md。
 package sensitive
 
 import (

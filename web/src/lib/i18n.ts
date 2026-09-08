@@ -223,6 +223,10 @@ export const en: Record<string, string> = {
   "auth.placeholder": "Access key",
   "auth.submit": "Connect",
   "auth.denied": "Access denied. Refresh the page and enter a valid access key to continue.",
+  // Portable data-root freeze (FrozenOverlay)
+  "frozen.title": "Data storage unavailable",
+  "frozen.desc": "{brand} can't reach its data folder — it may be on a USB drive that was unplugged. Reconnect it to continue. If it can't be restored, quit and reopen {brand} from its new location.",
+  "frozen.quit": "Quit",
   "perm.title": "Permission needed",
   "perm.awaiting": "Awaiting approval",
   "perm.deny": "Deny",
@@ -1175,6 +1179,10 @@ export const zh: Record<string, string> = {
   "auth.placeholder": "访问密钥",
   "auth.submit": "连接",
   "auth.denied": "访问被拒绝。请刷新页面并输入有效的访问密钥以继续。",
+  // 便携数据根冻结 (FrozenOverlay)
+  "frozen.title": "数据存储不可用",
+  "frozen.desc": "{brand}无法访问数据目录——它可能位于已拔出的 U 盘上。重新接入后即可继续；若无法恢复，请退出后从新路径重新打开{brand}。",
+  "frozen.quit": "退出",
   "perm.title": "需要权限",
   "perm.awaiting": "等待审批",
   "perm.deny": "拒绝",

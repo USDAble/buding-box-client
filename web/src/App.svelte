@@ -1,6 +1,6 @@
 <script lang="ts">
   import { onMount } from 'svelte'
-  import { view, sessions, sessionGroups, pinnedSessions, collapsedSessions, activeSessionId, onboardPhase, openAgentSession, chatShowReasoning, globalPermissionMode, globalReasoningEffort, nativeShell, mobileShell, panelContent, panelExpanded, cmdkOpen, settingsModalOpen, createNewSession, clearPendingSessionOpts, isDesktopShell, readLastRoute, writeLastRoute } from './lib/stores'
+  import { view, sessions, sessionGroups, pinnedSessions, collapsedSessions, activeSessionId, onboardPhase, openAgentSession, chatShowReasoning, globalPermissionMode, globalReasoningEffort, nativeShell, mobileShell, panelContent, panelExpanded, cmdkOpen, settingsModalOpen, createNewSession, clearPendingSessionOpts, isDesktopShell, readLastRoute, writeLastRoute, frozen } from './lib/stores'
   import MobileApp from './mobile/MobileApp.svelte'
   import { ws, wsState } from './lib/ws'
   import { notificationsEnabled } from './lib/notifications'
@@ -17,6 +17,7 @@
   import { CENTER_MIN } from './lib/sidebarWidth'
   import AuthGate from './components/overlays/AuthGate.svelte'
   import FirstRunSetup from './components/overlays/FirstRunSetup.svelte'
+  import FrozenOverlay from './components/overlays/FrozenOverlay.svelte'
   import Header from './components/layout/Header.svelte'
   import Sidebar from './components/layout/Sidebar.svelte'
   import AgentsView from './views/AgentsView.svelte'
@@ -218,6 +219,14 @@
 
   function bootMain() {
     ws.connect()
+
+    // Portable data-root freeze: the desktop shell's watchdog broadcasts
+    // datastore:lost when the data/ directory vanishes (a U盘 pulled out) and
+    // datastore:restored when the SAME path returns. frozen drives the
+    // full-screen FrozenOverlay and disables all input; only a restore — or
+    // the overlay's Quit — clears it.
+    ws.on('datastore:lost', () => { frozen.set(true) })
+    ws.on('datastore:restored', () => { frozen.set(false) })
 
     // Restore the persisted UI language from server config so a refresh
     // keeps the user's locale choice. Also seed globalPermissionMode and
@@ -595,6 +604,7 @@
 <ArtifactModal />
 <FeedbackModal />
 <Toast />
+<FrozenOverlay />
 
 <style>
 /* height 100% (via the html/body/#app chain), NOT 100vh: viewport units are

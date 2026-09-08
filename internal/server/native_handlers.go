@@ -37,6 +37,10 @@ type NativeBridge interface {
 	// the app and navigates to the given session. Best-effort like Notify.
 	NotifySession(title, body, sessionID string)
 
+	// AutostartAvailable reports whether launch-at-login can be offered. The
+	// portable desktop product returns false so the settings panel hides the
+	// toggle (需求 §5.1.2-9).
+	AutostartAvailable() bool
 	// AutostartEnabled reports whether the app is registered to launch at login.
 	AutostartEnabled() (bool, error)
 	// SetAutostart registers (enable) or unregisters the app from launch-at-login.
@@ -54,6 +58,12 @@ type NativeBridge interface {
 	// hides the window instead of destroying it; otherwise the app's ShouldQuit
 	// hook decides whether the process terminates.
 	Close()
+
+	// Quit terminates the process outright — the FrozenOverlay's "Quit" button
+	// when the portable data root is gone and recovery is impossible (需求
+	// §5.1.2-10). Unlike Close (which hides to the tray while the hub keeps
+	// running) it is unconditional: the user has already chosen to leave.
+	Quit()
 
 	// WindowState reports whether the window is currently maximised. Used by the
 	// frontend to keep its maximise icon in sync with reality (covers Aero Snap,
@@ -241,7 +251,9 @@ func (s *Server) handleNativeAutostartGet(w http.ResponseWriter, r *http.Request
 		writeError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"enabled": enabled})
+	// available=false when the product can't offer launch-at-login (portable
+	// build) — the settings panel hides the toggle on that.
+	writeJSON(w, http.StatusOK, map[string]any{"enabled": enabled, "available": s.cfg.Native.AutostartAvailable()})
 }
 
 // PUT /api/native/autostart — set launch-at-login (desktop only).
@@ -336,6 +348,23 @@ func (s *Server) handleNativeClose(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	s.cfg.Native.Close()
+	writeJSON(w, http.StatusOK, map[string]any{"ok": true})
+}
+
+// POST /api/native/quit — terminate the process. The FrozenOverlay's "Quit"
+// button calls this when the portable data root is gone and recovery is
+// impossible; unlike window/close it never hides to the tray. Desktop only,
+// loopback-gated.
+func (s *Server) handleNativeQuit(w http.ResponseWriter, r *http.Request) {
+	if !isLocalRequest(r) {
+		writeError(w, http.StatusForbidden, "available only from the local machine")
+		return
+	}
+	if s.cfg.Native == nil {
+		writeError(w, http.StatusNotFound, "native bridge not available")
+		return
+	}
+	s.cfg.Native.Quit()
 	writeJSON(w, http.StatusOK, map[string]any{"ok": true})
 }
 

@@ -11,6 +11,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/open-octo/octo-agent/internal/serveproc"
 	"github.com/open-octo/octo-agent/internal/server"
 	"github.com/wailsapp/wails/v3/pkg/application"
 	"github.com/wailsapp/wails/v3/pkg/events"
@@ -123,6 +124,10 @@ type nativeBridge struct {
 	// tray is the system-tray handle, stored so an update check can refresh the
 	// menu immediately rather than waiting for refreshTrayLoop's next tick.
 	tray atomic.Pointer[application.SystemTray]
+	// watchdog watches the portable data root and freezes the product when the
+	// directory vanishes (a U盘 pulled out). Set once in startHub after the
+	// server is up; read by main's post-Run cleanup to Stop it.
+	watchdog atomic.Pointer[Watchdog]
 
 	settingsMu sync.Mutex
 	settings   desktopSettings
@@ -421,6 +426,13 @@ func (b *nativeBridge) refreshTray() {
 		t.SetMenu(buildTrayMenu(b.app, b))
 	}
 }
+
+// AutostartAvailable reports whether launch-at-login can be offered at all.
+// The portable product always answers no: a USB-stick app must not register
+// itself to launch at login, so the settings panel hides the toggle entirely.
+// OCTO-FORK: disabled for the portable product — 需求 §5.1.2-9 — see
+// dev-docs-usdable/需求/2260906/技术方案/P2-启动与生命周期.md §3.5.
+func (b *nativeBridge) AutostartAvailable() bool { return false }
 
 // AutostartEnabled reports whether the app is registered to launch at login.
 func (b *nativeBridge) AutostartEnabled() (bool, error) {
@@ -901,6 +913,14 @@ func (b *nativeBridge) showError(title, message string) {
 	dlg.Show()
 }
 
+// showAlreadyRunning tells the user this copy is already running when a launch
+// from a *different* portable directory arrives (需求 §5.1.2-5). A modal
+// dialog rather than a toast: it must be seen before the user assumes a second
+// copy opened or pulls the other drive.
+func (b *nativeBridge) showAlreadyRunning() {
+	b.showError(L().errTitle, L().alreadyRunningMsg)
+}
+
 // OpenExternal opens url with the OS default handler — the release download
 // page, reached from the web badge's "Download update" action (via
 // /api/native/open-external), the tray "Check for updates…" flow, and chat
@@ -973,7 +993,33 @@ func (b *nativeBridge) requestQuit() {
 			return
 		}
 	}
+	// Flush the portable ownership markers before quitting so a relaunch from
+	// this same directory doesn't see a stale instance.json/serve.pid and
+	// misread "same directory already running" (P2 §3.6).
+	b.flushAll()
 	// A real quit: let ShouldQuit (Windows/Linux) allow app termination.
 	b.allowQuit.Store(true)
 	b.app.Quit()
+}
+
+// Quit terminates the process outright from the frontend — the FrozenOverlay's
+// "Quit" button when the portable data root is gone and recovery is impossible
+// (需求 §5.1.2-10). Unlike requestQuit (the tray action) it skips the
+// channels-running confirmation: with the data root gone there is nothing left
+// to save, and the user has already chosen to leave.
+// OCTO-FORK: added for the portable data-root freeze — see
+// dev-docs-usdable/需求/2260906/技术方案/P2-启动与生命周期.md §3.4.
+func (b *nativeBridge) Quit() {
+	b.flushAll()
+	b.allowQuit.Store(true)
+	b.app.Quit()
+}
+
+// flushAll persists the portable product's ownership markers before a quit:
+// remove instance.json and release serve.pid. Session state is saved by the
+// server's own Shutdown (which main's post-Run teardown calls), and the
+// product-state.json write lands with P3.
+func (b *nativeBridge) flushAll() {
+	removeInstanceJSON()
+	serveproc.ReleaseOwned(os.Getpid())
 }

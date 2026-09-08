@@ -75,6 +75,13 @@ export const toasts = writable<ToastEntry[]>([])
 export const running = writable(false)
 export const wsDown = writable(false)
 
+// Frozen by the portable data-root watchdog: the data/ directory has vanished
+// (a U盘 pulled out, a folder renamed). While true the app shows a full-screen
+// FrozenOverlay and disables all input; the watchdog clears it via
+// datastore:restored only when the SAME path returns. Fed by App.svelte's
+// ws.on('datastore:lost' / 'datastore:restored') handlers.
+export const frozen = writable(false)
+
 // True when the page runs inside the desktop-shell webview. The shell tags its
 // window URL with this marker (cmd/octo-desktop/bridge.go shellURL); an
 // external browser on the same hub lacks it and stays plain web. Fixed for the

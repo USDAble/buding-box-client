@@ -109,6 +109,14 @@ func (p verifiedOnly) Check(ctx context.Context, req updater.CheckRequest) (*upd
 // upgrade. Linux ships as an AppImage, which runs from a read-only squashfs
 // mount the updater would try to write through — notify-and-open stays.
 func canInplaceUpdate() bool {
+	// OCTO-FORK: the portable product turns off in-place self-update — this
+	// binary IS the portable product, there is no installed app to swap, and
+	// 需求 §5.1.2-13 requires no automatic update. Upstream's per-platform
+	// logic is kept below but unreachable so an upstream merge stays clean.
+	// See dev-docs-usdable/需求/2260906/技术方案/P2-启动与生命周期.md §3.5.
+	if forkedDisableInplaceUpdate {
+		return false
+	}
 	if upgrade.Eligible() != nil {
 		return false
 	}
@@ -120,6 +128,11 @@ func canInplaceUpdate() bool {
 	}
 	return false
 }
+
+// forkedDisableInplaceUpdate is the compile-time switch that disables the
+// in-place updater for the portable product. Kept as a named constant so the
+// upstream logic above/below is preserved verbatim and only the gate changes.
+const forkedDisableInplaceUpdate = true
 
 // updaterWindowCSS patches the hover state of the built-in updater window's
 // primary buttons ("Install Update", "Restart & Apply", "Try Again").

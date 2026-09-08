@@ -224,3 +224,14 @@ func (s *Server) broadcastGlobal(event any) {
 	}
 	s.wsHub.broadcast("", event)
 }
+
+// BroadcastEvent is the exported form of broadcastGlobal, for the desktop
+// shell: the portable data-root watchdog (cmd/octo-desktop) pushes
+// datastore:lost / datastore:restored to the frontend over WS, the only
+// channel an octo-served page has to the Go process.
+// OCTO-FORK: exported so the portable product can freeze/unfreeze the UI when
+// the data root is pulled — see
+// dev-docs-usdable/需求/2260906/技术方案/P2-启动与生命周期.md §3.4.
+func (s *Server) BroadcastEvent(event any) {
+	s.broadcastGlobal(event)
+}

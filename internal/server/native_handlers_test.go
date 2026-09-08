@@ -23,9 +23,11 @@ type fakeNative struct {
 	gotSessionID       string
 	notifySessionCalls int
 	autostart          bool
+	autostartAvailable bool
 	toggleMaxCalls     int
 	minimiseCalls      int
 	closeCalls         int
+	quitCalls          int
 	maximised          bool
 	gotOpenURL         string
 	openCalls          int
@@ -61,11 +63,13 @@ func (f *fakeNative) NotifySession(title, body, sessionID string) {
 	f.gotTitle, f.gotBody = title, body
 	f.gotSessionID = sessionID
 }
+func (f *fakeNative) AutostartAvailable() bool        { return f.autostartAvailable }
 func (f *fakeNative) AutostartEnabled() (bool, error) { return f.autostart, nil }
 func (f *fakeNative) SetAutostart(enable bool) error  { f.autostart = enable; return nil }
 func (f *fakeNative) ToggleMaximise()                 { f.toggleMaxCalls++ }
 func (f *fakeNative) Minimise()                       { f.minimiseCalls++ }
 func (f *fakeNative) Close()                          { f.closeCalls++ }
+func (f *fakeNative) Quit()                           { f.quitCalls++ }
 func (f *fakeNative) WindowState() bool               { return f.maximised }
 func (f *fakeNative) OpenExternal(url string) error {
 	f.openCalls++
@@ -101,6 +105,7 @@ func (f *fakeNative) SelfUpdate() error {
 func TestNativePickFolderNotRegisteredWithoutBridge(t *testing.T) {
 	tmp := t.TempDir()
 	t.Setenv("HOME", tmp)
+	t.Setenv("OCTO_DATA_ROOT", tmp)
 	t.Setenv("USERPROFILE", tmp)
 
 	srv := mustServer(t, Config{Addr: "127.0.0.1:0"})
@@ -115,6 +120,7 @@ func TestNativePickFolderNotRegisteredWithoutBridge(t *testing.T) {
 func TestNativePickFolderDelegatesToBridge(t *testing.T) {
 	tmp := t.TempDir()
 	t.Setenv("HOME", tmp)
+	t.Setenv("OCTO_DATA_ROOT", tmp)
 	t.Setenv("USERPROFILE", tmp)
 
 	fake := &fakeNative{retPath: "/picked/dir"}
@@ -144,6 +150,7 @@ func TestNativePickFolderDelegatesToBridge(t *testing.T) {
 func TestNativePickFolderRejectsNonLoopback(t *testing.T) {
 	tmp := t.TempDir()
 	t.Setenv("HOME", tmp)
+	t.Setenv("OCTO_DATA_ROOT", tmp)
 	t.Setenv("USERPROFILE", tmp)
 
 	srv := mustServer(t, Config{Addr: "127.0.0.1:0", Native: &fakeNative{retPath: "/x"}})
@@ -163,6 +170,7 @@ func TestNativePickFolderRejectsNonLoopback(t *testing.T) {
 func TestNativeNotifyDelegatesToBridge(t *testing.T) {
 	tmp := t.TempDir()
 	t.Setenv("HOME", tmp)
+	t.Setenv("OCTO_DATA_ROOT", tmp)
 	t.Setenv("USERPROFILE", tmp)
 
 	fake := &fakeNative{}
@@ -182,6 +190,7 @@ func TestNativeNotifyDelegatesToBridge(t *testing.T) {
 func TestNativeNotifyRoutesToNotifySessionWhenSessionIDPresent(t *testing.T) {
 	tmp := t.TempDir()
 	t.Setenv("HOME", tmp)
+	t.Setenv("OCTO_DATA_ROOT", tmp)
 	t.Setenv("USERPROFILE", tmp)
 
 	fake := &fakeNative{}
@@ -205,6 +214,7 @@ func TestNativeNotifyRoutesToNotifySessionWhenSessionIDPresent(t *testing.T) {
 func TestNativeNotifyNotRegisteredWithoutBridge(t *testing.T) {
 	tmp := t.TempDir()
 	t.Setenv("HOME", tmp)
+	t.Setenv("OCTO_DATA_ROOT", tmp)
 	t.Setenv("USERPROFILE", tmp)
 
 	srv := mustServer(t, Config{Addr: "127.0.0.1:0"})
@@ -219,6 +229,7 @@ func TestNativeNotifyNotRegisteredWithoutBridge(t *testing.T) {
 func TestNativeAutostartRoundTrip(t *testing.T) {
 	tmp := t.TempDir()
 	t.Setenv("HOME", tmp)
+	t.Setenv("OCTO_DATA_ROOT", tmp)
 	t.Setenv("USERPROFILE", tmp)
 
 	fake := &fakeNative{}
@@ -255,6 +266,7 @@ func TestNativeAutostartRoundTrip(t *testing.T) {
 func TestNativeToggleMaximise(t *testing.T) {
 	tmp := t.TempDir()
 	t.Setenv("HOME", tmp)
+	t.Setenv("OCTO_DATA_ROOT", tmp)
 	t.Setenv("USERPROFILE", tmp)
 
 	fake := &fakeNative{}
@@ -270,9 +282,29 @@ func TestNativeToggleMaximise(t *testing.T) {
 	}
 }
 
+func TestNativeQuitDelegatesToBridge(t *testing.T) {
+	tmp := t.TempDir()
+	t.Setenv("HOME", tmp)
+	t.Setenv("OCTO_DATA_ROOT", tmp)
+	t.Setenv("USERPROFILE", tmp)
+
+	fake := &fakeNative{}
+	srv := mustServer(t, Config{Addr: "127.0.0.1:0", Native: fake})
+	req := httptest.NewRequest(http.MethodPost, "/api/native/quit", nil)
+	w := httptest.NewRecorder()
+	serveLoopback(srv.mux, w, req)
+	if w.Code != http.StatusOK {
+		t.Fatalf("got %d, want 200 (%s)", w.Code, w.Body.String())
+	}
+	if fake.quitCalls != 1 {
+		t.Errorf("Quit calls = %d, want 1", fake.quitCalls)
+	}
+}
+
 func TestNativeHeartbeatDelegatesToBridge(t *testing.T) {
 	tmp := t.TempDir()
 	t.Setenv("HOME", tmp)
+	t.Setenv("OCTO_DATA_ROOT", tmp)
 	t.Setenv("USERPROFILE", tmp)
 
 	fake := &fakeNative{}
@@ -319,6 +351,7 @@ func TestNativeHeartbeatDelegatesToBridge(t *testing.T) {
 func TestNativeWindowState(t *testing.T) {
 	tmp := t.TempDir()
 	t.Setenv("HOME", tmp)
+	t.Setenv("OCTO_DATA_ROOT", tmp)
 	t.Setenv("USERPROFILE", tmp)
 
 	fake := &fakeNative{maximised: true}
@@ -354,6 +387,7 @@ func TestNativeWindowState(t *testing.T) {
 func TestNativeWindowStateRejectsNonLoopback(t *testing.T) {
 	tmp := t.TempDir()
 	t.Setenv("HOME", tmp)
+	t.Setenv("OCTO_DATA_ROOT", tmp)
 	t.Setenv("USERPROFILE", tmp)
 
 	srv := mustServer(t, Config{Addr: "127.0.0.1:0", Native: &fakeNative{maximised: true}})
@@ -371,6 +405,7 @@ func TestNativeWindowStateRejectsNonLoopback(t *testing.T) {
 func TestVersionNativeFlag(t *testing.T) {
 	tmp := t.TempDir()
 	t.Setenv("HOME", tmp)
+	t.Setenv("OCTO_DATA_ROOT", tmp)
 	t.Setenv("USERPROFILE", tmp)
 
 	get := func(srv *Server) bool {
@@ -396,6 +431,7 @@ func TestVersionNativeFlag(t *testing.T) {
 func TestNativeOpenExternalDelegatesToBridge(t *testing.T) {
 	tmp := t.TempDir()
 	t.Setenv("HOME", tmp)
+	t.Setenv("OCTO_DATA_ROOT", tmp)
 	t.Setenv("USERPROFILE", tmp)
 
 	fake := &fakeNative{}
@@ -416,6 +452,7 @@ func TestNativeOpenExternalDelegatesToBridge(t *testing.T) {
 func TestNativeOpenExternalAllowsMailtoAndTel(t *testing.T) {
 	tmp := t.TempDir()
 	t.Setenv("HOME", tmp)
+	t.Setenv("OCTO_DATA_ROOT", tmp)
 	t.Setenv("USERPROFILE", tmp)
 
 	for _, link := range []string{"mailto:someone@example.com", "tel:+15551234567"} {
@@ -437,6 +474,7 @@ func TestNativeOpenExternalAllowsMailtoAndTel(t *testing.T) {
 func TestNativeOpenExternalRejectsDisallowedScheme(t *testing.T) {
 	tmp := t.TempDir()
 	t.Setenv("HOME", tmp)
+	t.Setenv("OCTO_DATA_ROOT", tmp)
 	t.Setenv("USERPROFILE", tmp)
 
 	for _, link := range []string{"file:///etc/passwd", "javascript:alert(1)", "custom-app://open"} {
@@ -457,6 +495,7 @@ func TestNativeOpenExternalRejectsDisallowedScheme(t *testing.T) {
 func TestNativeOpenExternalRejectsNonLoopback(t *testing.T) {
 	tmp := t.TempDir()
 	t.Setenv("HOME", tmp)
+	t.Setenv("OCTO_DATA_ROOT", tmp)
 	t.Setenv("USERPROFILE", tmp)
 
 	srv := mustServer(t, Config{Addr: "127.0.0.1:0", Native: &fakeNative{}})
@@ -474,6 +513,7 @@ func TestNativeOpenExternalRejectsNonLoopback(t *testing.T) {
 func TestNativeOpenExternalNotRegisteredWithoutBridge(t *testing.T) {
 	tmp := t.TempDir()
 	t.Setenv("HOME", tmp)
+	t.Setenv("OCTO_DATA_ROOT", tmp)
 	t.Setenv("USERPROFILE", tmp)
 
 	srv := mustServer(t, Config{Addr: "127.0.0.1:0"})
@@ -488,6 +528,7 @@ func TestNativeOpenExternalNotRegisteredWithoutBridge(t *testing.T) {
 func TestNativeSelfUpdateDelegatesToBridge(t *testing.T) {
 	tmp := t.TempDir()
 	t.Setenv("HOME", tmp)
+	t.Setenv("OCTO_DATA_ROOT", tmp)
 	t.Setenv("USERPROFILE", tmp)
 
 	fake := &fakeNative{canSelfUpdate: true}
@@ -507,6 +548,7 @@ func TestNativeSelfUpdateDelegatesToBridge(t *testing.T) {
 func TestNativeSelfUpdateReportsBridgeRefusal(t *testing.T) {
 	tmp := t.TempDir()
 	t.Setenv("HOME", tmp)
+	t.Setenv("OCTO_DATA_ROOT", tmp)
 	t.Setenv("USERPROFILE", tmp)
 
 	fake := &fakeNative{selfUpdateErr: errors.New("this build updates through its installer")}
@@ -523,6 +565,7 @@ func TestNativeSelfUpdateReportsBridgeRefusal(t *testing.T) {
 func TestNativeSelfUpdateRejectsNonLoopback(t *testing.T) {
 	tmp := t.TempDir()
 	t.Setenv("HOME", tmp)
+	t.Setenv("OCTO_DATA_ROOT", tmp)
 	t.Setenv("USERPROFILE", tmp)
 
 	fake := &fakeNative{canSelfUpdate: true}
@@ -544,6 +587,7 @@ func TestNativeSelfUpdateRejectsNonLoopback(t *testing.T) {
 func TestNativeSaveFileDelegatesToBridge(t *testing.T) {
 	tmp := t.TempDir()
 	t.Setenv("HOME", tmp)
+	t.Setenv("OCTO_DATA_ROOT", tmp)
 	t.Setenv("USERPROFILE", tmp)
 
 	fake := &fakeNative{retPath: "/Users/x/Downloads/notes.md"}
@@ -575,6 +619,7 @@ func TestNativeSaveFileDelegatesToBridge(t *testing.T) {
 func TestNativeSaveFileReportsCancel(t *testing.T) {
 	tmp := t.TempDir()
 	t.Setenv("HOME", tmp)
+	t.Setenv("OCTO_DATA_ROOT", tmp)
 	t.Setenv("USERPROFILE", tmp)
 
 	fake := &fakeNative{retCancel: true}
@@ -605,6 +650,7 @@ func TestNativeSaveFileReportsCancel(t *testing.T) {
 func TestNativeSaveFileDecodesBase64(t *testing.T) {
 	tmp := t.TempDir()
 	t.Setenv("HOME", tmp)
+	t.Setenv("OCTO_DATA_ROOT", tmp)
 	t.Setenv("USERPROFILE", tmp)
 
 	original := []byte{0x50, 0x4B, 0x03, 0x04, 0x00, 0x01, 0x02, 0x03, 0xFF, 0xFE}
@@ -633,6 +679,7 @@ func TestNativeSaveFileDecodesBase64(t *testing.T) {
 func TestNativeSaveFileRejectsInvalidBase64(t *testing.T) {
 	tmp := t.TempDir()
 	t.Setenv("HOME", tmp)
+	t.Setenv("OCTO_DATA_ROOT", tmp)
 	t.Setenv("USERPROFILE", tmp)
 
 	fake := &fakeNative{}
@@ -653,6 +700,7 @@ func TestNativeSaveFileRejectsInvalidBase64(t *testing.T) {
 func TestNativePrintDelegatesToBridge(t *testing.T) {
 	tmp := t.TempDir()
 	t.Setenv("HOME", tmp)
+	t.Setenv("OCTO_DATA_ROOT", tmp)
 	t.Setenv("USERPROFILE", tmp)
 
 	fake := &fakeNative{}
@@ -672,6 +720,7 @@ func TestNativePrintDelegatesToBridge(t *testing.T) {
 func TestNativePrintReportsBridgeError(t *testing.T) {
 	tmp := t.TempDir()
 	t.Setenv("HOME", tmp)
+	t.Setenv("OCTO_DATA_ROOT", tmp)
 	t.Setenv("USERPROFILE", tmp)
 
 	fake := &fakeNative{printErr: errors.New("no window")}
@@ -690,6 +739,7 @@ func TestNativePrintReportsBridgeError(t *testing.T) {
 func TestNativePrintRejectsNonLoopback(t *testing.T) {
 	tmp := t.TempDir()
 	t.Setenv("HOME", tmp)
+	t.Setenv("OCTO_DATA_ROOT", tmp)
 	t.Setenv("USERPROFILE", tmp)
 
 	fake := &fakeNative{}
@@ -714,6 +764,7 @@ func TestNativePrintRejectsNonLoopback(t *testing.T) {
 func TestNativePrintNotRegisteredWithoutBridge(t *testing.T) {
 	tmp := t.TempDir()
 	t.Setenv("HOME", tmp)
+	t.Setenv("OCTO_DATA_ROOT", tmp)
 	t.Setenv("USERPROFILE", tmp)
 
 	srv := mustServer(t, Config{Addr: "127.0.0.1:0"})
@@ -728,6 +779,7 @@ func TestNativePrintNotRegisteredWithoutBridge(t *testing.T) {
 func TestNativeSaveFileNotRegisteredWithoutBridge(t *testing.T) {
 	tmp := t.TempDir()
 	t.Setenv("HOME", tmp)
+	t.Setenv("OCTO_DATA_ROOT", tmp)
 	t.Setenv("USERPROFILE", tmp)
 
 	srv := mustServer(t, Config{Addr: "127.0.0.1:0"})
@@ -743,6 +795,7 @@ func TestNativeSaveFileNotRegisteredWithoutBridge(t *testing.T) {
 func TestNativeOpenFolderDelegatesToBridge(t *testing.T) {
 	tmp := t.TempDir()
 	t.Setenv("HOME", tmp)
+	t.Setenv("OCTO_DATA_ROOT", tmp)
 	t.Setenv("USERPROFILE", tmp)
 
 	proj := filepath.Join(tmp, "project")
@@ -807,6 +860,7 @@ func TestNativeOpenFolderDelegatesToBridge(t *testing.T) {
 func TestNativeOpenFolderRefusesWhatItCannotResolve(t *testing.T) {
 	tmp := t.TempDir()
 	t.Setenv("HOME", tmp)
+	t.Setenv("OCTO_DATA_ROOT", tmp)
 	t.Setenv("USERPROFILE", tmp)
 
 	gone := filepath.Join(tmp, "deleted-project")
@@ -870,6 +924,7 @@ func TestNativeOpenFolderRefusesWhatItCannotResolve(t *testing.T) {
 func TestNativeOpenFolderSourceDir(t *testing.T) {
 	tmp := t.TempDir()
 	t.Setenv("HOME", tmp)
+	t.Setenv("OCTO_DATA_ROOT", tmp)
 	t.Setenv("USERPROFILE", tmp)
 
 	repoA := filepath.Join(tmp, "repo-a")

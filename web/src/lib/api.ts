@@ -360,6 +360,13 @@ export async function nativeClose(): Promise<void> {
   await request<{ ok: boolean }>('/api/native/window/close', { method: 'POST' })
 }
 
+// Desktop shell only: terminate the process outright. The FrozenOverlay's
+// "Quit" button calls this when the portable data root is gone and recovery is
+// impossible — unlike nativeClose it never hides to the tray. Best-effort.
+export async function nativeQuit(): Promise<void> {
+  await request<{ ok: boolean }>('/api/native/quit', { method: 'POST' })
+}
+
 // Desktop shell only: query whether the window is currently maximised. Lets the
 // frontend keep its maximise icon in sync after Aero Snap, keyboard shortcuts,
 // etc. Returns false if the native bridge is unavailable (e.g. web, pre-window).

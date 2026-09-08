@@ -13,6 +13,7 @@ func adoptTestHome(t *testing.T) {
 	t.Helper()
 	tmp := t.TempDir()
 	t.Setenv("HOME", tmp)
+	t.Setenv("OCTO_DATA_ROOT", tmp)
 	t.Setenv("USERPROFILE", tmp)
 }
 
@@ -39,13 +40,13 @@ func TestDecideProjectForCwd_AmbiguousHeadlessStaysTask(t *testing.T) {
 	adoptTestHome(t)
 	src := t.TempDir()
 	home, _ := os.UserHomeDir()
-	if err := os.MkdirAll(filepath.Join(home, ".octo"), 0o700); err != nil {
+	if err := os.MkdirAll(home, 0o700); err != nil {
 		t.Fatal(err)
 	}
 	registry := `{"groups":[` +
 		`{"id":"g-aaa","name":"A","session_ids":[],"working_dir":"` + filepath.ToSlash(t.TempDir()) + `","source_dirs":["` + filepath.ToSlash(src) + `"]},` +
 		`{"id":"g-bbb","name":"B","session_ids":[],"working_dir":"` + filepath.ToSlash(t.TempDir()) + `","source_dirs":["` + filepath.ToSlash(src) + `"]}]}`
-	if err := os.WriteFile(filepath.Join(home, ".octo", "session-groups.json"), []byte(registry), 0o600); err != nil {
+	if err := os.WriteFile(filepath.Join(home, "session-groups.json"), []byte(registry), 0o600); err != nil {
 		t.Fatal(err)
 	}
 

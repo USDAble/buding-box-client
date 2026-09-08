@@ -19,6 +19,7 @@ func writeFile(t *testing.T, path, content string) {
 func TestLoadConfig_MissingFilesIsZero(t *testing.T) {
 	tmp := t.TempDir()
 	t.Setenv("HOME", tmp)
+	t.Setenv("OCTO_DATA_ROOT", tmp)
 	t.Setenv("USERPROFILE", tmp)
 	cfg, err := LoadConfig()
 	if err != nil {
@@ -32,8 +33,9 @@ func TestLoadConfig_MissingFilesIsZero(t *testing.T) {
 func TestLoadConfig_UserGlobalOnly(t *testing.T) {
 	tmp := t.TempDir()
 	t.Setenv("HOME", tmp)
+	t.Setenv("OCTO_DATA_ROOT", tmp)
 	t.Setenv("USERPROFILE", tmp)
-	writeFile(t, filepath.Join(tmp, ".octo", "mcp.json"), `{
+	writeFile(t, filepath.Join(tmp, "mcp.json"), `{
         "mcpServers": {
           "fs": {"command": "npx", "args": ["-y", "server-filesystem"]}
         }
@@ -53,8 +55,9 @@ func TestLoadConfig_UserGlobalOnly(t *testing.T) {
 func TestLoadConfig_DisabledIsSkipped(t *testing.T) {
 	tmp := t.TempDir()
 	t.Setenv("HOME", tmp)
+	t.Setenv("OCTO_DATA_ROOT", tmp)
 	t.Setenv("USERPROFILE", tmp)
-	writeFile(t, filepath.Join(tmp, ".octo", "mcp.json"), `{
+	writeFile(t, filepath.Join(tmp, "mcp.json"), `{
         "mcpServers": {
           "off": {"command": "x", "disabled": true},
           "on":  {"command": "y"}
@@ -75,8 +78,9 @@ func TestLoadConfig_DisabledIsSkipped(t *testing.T) {
 func TestLoadConfig_ValidationRejectsBothTransports(t *testing.T) {
 	tmp := t.TempDir()
 	t.Setenv("HOME", tmp)
+	t.Setenv("OCTO_DATA_ROOT", tmp)
 	t.Setenv("USERPROFILE", tmp)
-	writeFile(t, filepath.Join(tmp, ".octo", "mcp.json"), `{
+	writeFile(t, filepath.Join(tmp, "mcp.json"), `{
         "mcpServers": {
           "bad": {"command": "x", "url": "https://example.com/mcp"}
         }
@@ -89,8 +93,9 @@ func TestLoadConfig_ValidationRejectsBothTransports(t *testing.T) {
 func TestLoadConfig_ValidationRejectsNeither(t *testing.T) {
 	tmp := t.TempDir()
 	t.Setenv("HOME", tmp)
+	t.Setenv("OCTO_DATA_ROOT", tmp)
 	t.Setenv("USERPROFILE", tmp)
-	writeFile(t, filepath.Join(tmp, ".octo", "mcp.json"), `{
+	writeFile(t, filepath.Join(tmp, "mcp.json"), `{
         "mcpServers": {
           "bad": {"env": {"X": "y"}}
         }
@@ -103,8 +108,9 @@ func TestLoadConfig_ValidationRejectsNeither(t *testing.T) {
 func TestLoadConfig_RejectsBadURLScheme(t *testing.T) {
 	tmp := t.TempDir()
 	t.Setenv("HOME", tmp)
+	t.Setenv("OCTO_DATA_ROOT", tmp)
 	t.Setenv("USERPROFILE", tmp)
-	writeFile(t, filepath.Join(tmp, ".octo", "mcp.json"), `{
+	writeFile(t, filepath.Join(tmp, "mcp.json"), `{
         "mcpServers": {
           "bad": {"url": "file:///etc/passwd"}
         }

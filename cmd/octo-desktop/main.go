@@ -7,7 +7,7 @@
 // browser can't reach — OS folder dialog, tray, launch-at-login, notifications —
 // wired in through server.NativeBridge.
 //
-// Only one backend owns the port at a time: the app joins the ~/.octo/serve.pid
+// Only one backend owns the port at a time: the app joins the data-root serve.pid
 // protocol (internal/serveproc) that `octo serve -d` uses, offering to take over
 // a running daemon rather than fighting for the port.
 //
@@ -31,6 +31,7 @@ import (
 	"github.com/mattn/go-isatty"
 	"github.com/open-octo/octo-agent/internal/brand"
 	"github.com/open-octo/octo-agent/internal/crashlog"
+	"github.com/open-octo/octo-agent/internal/datapath"
 	"github.com/open-octo/octo-agent/internal/logfile"
 	"github.com/open-octo/octo-agent/internal/serveenv"
 	"github.com/open-octo/octo-agent/internal/serveproc"
@@ -103,17 +104,19 @@ func homeIfRootLaunch(wd, home string) string {
 	return ""
 }
 
-// ensureWorkingDir moves the process out of a root/unknown launch directory
-// into the user's home. The server's launch dir still seeds skill discovery
-// and the project-memory root (server.go), so a Finder-launched app left at
-// "/" would otherwise run those from the filesystem root — the reported bug.
-// Best effort: a chdir failure leaves the inherited dir in place.
+// ensureWorkingDir pins the process cwd to the program directory, so a
+// Finder/desktop launch from "/" (or another filesystem root) can't seed skill
+// discovery and project-memory from the filesystem root. Unlike upstream —
+// which chdir'd into the user's home — the portable product pins to the
+// program directory (data root parent), matching the CLI.
+// OCTO-FORK: cwd is pinned to the program dir, not the host home — see
+// dev-docs-usdable/需求/2260906/技术方案/P1-便携数据根.md §3.3.
 func ensureWorkingDir() {
-	wd, _ := os.Getwd()
-	home, _ := os.UserHomeDir()
-	if dir := homeIfRootLaunch(wd, home); dir != "" {
-		_ = os.Chdir(dir)
+	dir, err := datapath.ProgramDir()
+	if err != nil {
+		return
 	}
+	_ = os.Chdir(dir)
 }
 
 // ensureValidTempDir unsets $TMPDIR when it doesn't point at a usable
@@ -140,7 +143,7 @@ func main() {
 	// the updater helper below) can use it.
 	ensureValidTempDir()
 
-	// Point stderr at ~/.octo/crash.log before anything that can die runs. This
+	// Point stderr at the data-root crash.log before anything that can die runs. This
 	// process has no usable stderr of its own (Windows: built with -H windowsgui,
 	// so no console; macOS: launched from Finder), and the runtime writes panic
 	// traces straight to the descriptor — below the slog/log redirection
@@ -169,7 +172,7 @@ func main() {
 	// shell's before server.New below, mirroring the `octo serve` binary.
 	shellpath.SyncToLoginShell()
 
-	// Load ~/.octo/serve.env for variables a GUI launch can't inherit from a
+	// Load the data-root serve.env for variables a GUI launch can't inherit from a
 	// login shell (e.g. TAVILY_API_KEY, provider keys). Best-effort — missing
 	// file is a no-op, explicit env always wins. Mirrors the `octo serve` CLI
 	// path so both backends resolve the same set of environment variables.
@@ -182,7 +185,7 @@ func main() {
 
 	settings := loadDesktopSettings()
 
-	// Seed ~/.octo/bin/uv from the app's bundled copy on first run so skills
+	// Seed the data-root bin/uv from the app's bundled copy on first run so skills
 	// that need Python work even for a standalone download (no installer).
 	ensureBundledUv()
 
@@ -373,7 +376,7 @@ func main() {
 	}
 }
 
-// setupCrashLog redirects the process's stderr to ~/.octo/crash.log so a panic
+// setupCrashLog redirects the process's stderr to the data-root crash.log so a panic
 // that kills the app leaves a trace behind. Best-effort: if it fails there is
 // nowhere to report that failure to (that being the whole problem), so the app
 // starts anyway.
@@ -395,7 +398,7 @@ func setupCrashLog() {
 }
 
 // setupHubLog routes slog and the stdlib logger to a self-rotating
-// ~/.octo/serve.log and returns a close func (nil if setup failed, leaving the
+// data/logs/serve.log and returns a close func (nil if setup failed, leaving the
 // default stderr in place). The stdlib logger is redirected too so the channel
 // adapters' error/retry lines — still on `log` — land in the same file.
 func setupHubLog() func() {
@@ -464,7 +467,7 @@ func startHub(app *application.App, bridge *nativeBridge, settings desktopSettin
 	}
 
 	// Only now, having taken over any prior daemon and bound the port, are we the
-	// sole backend — so it's safe to open the shared ~/.octo/serve.log. A prior
+	// sole backend — so it's safe to open the shared data/logs/serve.log. A prior
 	// `octo serve -d` that was stopped above has since exited (listenHub only
 	// succeeds once the port is free), releasing the fd it held on the file;
 	// opening/rotating earlier (e.g. in main, before the takeover) could rotate a

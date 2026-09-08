@@ -11,13 +11,14 @@ import (
 func TestSoulMissing(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
+	t.Setenv("OCTO_DATA_ROOT", home)
 	// os.UserHomeDir() reads %USERPROFILE% on Windows, not $HOME.
 	t.Setenv("USERPROFILE", home)
 
 	if !soulMissing() {
 		t.Fatal("expected soulMissing=true when no soul.md exists")
 	}
-	octo := filepath.Join(home, ".octo")
+	octo := home
 	if err := os.MkdirAll(octo, 0o755); err != nil {
 		t.Fatal(err)
 	}
@@ -32,6 +33,7 @@ func TestSoulMissing(t *testing.T) {
 func TestOnboardAttempted(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
+	t.Setenv("OCTO_DATA_ROOT", home)
 	// os.UserHomeDir() reads %USERPROFILE% on Windows, not $HOME.
 	t.Setenv("USERPROFILE", home)
 
@@ -54,6 +56,7 @@ func TestOnboardAttempted(t *testing.T) {
 func TestShouldAutoOnboard_MarksWhenLaunching(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
+	t.Setenv("OCTO_DATA_ROOT", home)
 	t.Setenv("USERPROFILE", home)
 
 	// Fresh install: no sessions, no soul.md/user.md, marker absent → onboard.
@@ -77,8 +80,9 @@ func TestShouldAutoOnboard_SkipsWhenIdentityExists(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			home := t.TempDir()
 			t.Setenv("HOME", home)
+			t.Setenv("OCTO_DATA_ROOT", home)
 			t.Setenv("USERPROFILE", home)
-			octo := filepath.Join(home, ".octo")
+			octo := home
 			if err := os.MkdirAll(octo, 0o755); err != nil {
 				t.Fatal(err)
 			}

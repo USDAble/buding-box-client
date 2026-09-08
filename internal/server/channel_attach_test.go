@@ -48,11 +48,12 @@ func TestAttachInboundFiles_DocumentNote(t *testing.T) {
 }
 
 func TestAttachInboundFiles_Image(t *testing.T) {
-	// Redirect ~/.octo/uploads into a temp home so the test doesn't touch the
+	// Redirect data/uploads into a temp home so the test doesn't touch the
 	// real home dir (saveImageAttachment persists the decoded bytes there).
 	// Both vars: os.UserHomeDir reads HOME on unix, USERPROFILE on Windows.
 	tmpHome := t.TempDir()
 	t.Setenv("HOME", tmpHome)
+	t.Setenv("OCTO_DATA_ROOT", tmpHome)
 	t.Setenv("USERPROFILE", tmpHome)
 
 	s := &Server{}
@@ -67,8 +68,8 @@ func TestAttachInboundFiles_Image(t *testing.T) {
 	if got := s.attachInboundFiles(sess, ev); got != "what is this" {
 		t.Errorf("content = %q, want %q", got, "what is this")
 	}
-	// A copy of the image should have been persisted under ~/.octo/uploads.
-	dir := filepath.Join(tmpHome, ".octo", "uploads")
+	// A copy of the image should have been persisted under data/uploads.
+	dir := filepath.Join(tmpHome, "uploads")
 	entries, err := os.ReadDir(dir)
 	if err != nil {
 		t.Fatalf("uploads dir not created: %v", err)
@@ -84,6 +85,7 @@ func TestAttachInboundFiles_Image(t *testing.T) {
 func TestAttachInboundFiles_Image_NonVision(t *testing.T) {
 	tmpHome := t.TempDir()
 	t.Setenv("HOME", tmpHome)
+	t.Setenv("OCTO_DATA_ROOT", tmpHome)
 	t.Setenv("USERPROFILE", tmpHome)
 
 	s := &Server{}
@@ -98,11 +100,11 @@ func TestAttachInboundFiles_Image_NonVision(t *testing.T) {
 	if !strings.Contains(got, "what is this") {
 		t.Errorf("content lost the caption: %q", got)
 	}
-	if !strings.Contains(got, "[Attached file:") || !strings.Contains(filepath.ToSlash(got), ".octo/uploads") {
+	if !strings.Contains(got, "[Attached file:") || !strings.Contains(filepath.ToSlash(got), "/uploads/") {
 		t.Errorf("content should carry a persisted upload path note for non-vision model, got %q", got)
 	}
 	// The image should still be persisted so the model can read it.
-	dir := filepath.Join(tmpHome, ".octo", "uploads")
+	dir := filepath.Join(tmpHome, "uploads")
 	entries, err := os.ReadDir(dir)
 	if err != nil {
 		t.Fatalf("uploads dir not created: %v", err)
@@ -118,11 +120,12 @@ func TestAttachInboundFiles_Image_NonVision(t *testing.T) {
 func TestAttachInboundFiles_Image_TextOnlyWithVisionHelper(t *testing.T) {
 	tmpHome := t.TempDir()
 	t.Setenv("HOME", tmpHome)
+	t.Setenv("OCTO_DATA_ROOT", tmpHome)
 	t.Setenv("USERPROFILE", tmpHome)
 
 	// Config resolvable from the fake home: a text-only primary and a vision
 	// helper on the same endpoint.
-	octoDir := filepath.Join(tmpHome, ".octo")
+	octoDir := tmpHome
 	if err := os.MkdirAll(octoDir, 0o700); err != nil {
 		t.Fatal(err)
 	}

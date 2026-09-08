@@ -13,6 +13,7 @@ func tempHome(t *testing.T) string {
 	t.Helper()
 	tmp := t.TempDir()
 	t.Setenv("HOME", tmp)
+	t.Setenv("OCTO_DATA_ROOT", tmp)
 	t.Setenv("USERPROFILE", tmp)
 	return tmp
 }
@@ -29,7 +30,7 @@ func TestFingerprint_StableAndContentSensitive(t *testing.T) {
 
 func TestTrustStore_RoundTrip(t *testing.T) {
 	tempHome(t)
-	path := "/some/repo/.octo/hooks.yml"
+	path := "/some/repo/.octo-hooks.yml"
 	fp := Fingerprint([]byte("x"))
 
 	if IsTrusted(path, fp) {
@@ -49,11 +50,7 @@ func TestTrustStore_RoundTrip(t *testing.T) {
 
 func writeProjectHooks(t *testing.T, cwd, body string) {
 	t.Helper()
-	dir := filepath.Join(cwd, ".octo")
-	if err := os.MkdirAll(dir, 0o755); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(filepath.Join(dir, "hooks.yml"), []byte(body), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(cwd, ".octo-hooks.yml"), []byte(body), 0o644); err != nil {
 		t.Fatal(err)
 	}
 }
@@ -76,7 +73,7 @@ func TestEngineFromEnvAndFiles_ProjectLoadGatedByFlag(t *testing.T) {
 }
 
 func TestProjectConfigPath(t *testing.T) {
-	if got := ProjectConfigPath("/repo"); got != filepath.Join("/repo", ".octo", "hooks.yml") {
+	if got := ProjectConfigPath("/repo"); got != filepath.Join("/repo", ".octo-hooks.yml") {
 		t.Errorf("ProjectConfigPath = %q", got)
 	}
 	if ProjectConfigPath("") != "" {

@@ -22,6 +22,7 @@ import (
 	"github.com/open-octo/octo-agent/internal/app"
 	"github.com/open-octo/octo-agent/internal/channel"
 	"github.com/open-octo/octo-agent/internal/config"
+	"github.com/open-octo/octo-agent/internal/datapath"
 	"github.com/open-octo/octo-agent/internal/hooks"
 	"github.com/open-octo/octo-agent/internal/mcp"
 	"github.com/open-octo/octo-agent/internal/memory"
@@ -41,13 +42,14 @@ const (
 )
 
 // soulMissing reports whether the user has no identity profile yet
-// (~/.octo/soul.md) — the signal that onboarding hasn't run.
+// (data/soul.md) — the signal that onboarding hasn't run.
+// OCTO-FORK: identity lives under data/ — see P1-便携数据根.md.
 func soulMissing() bool {
-	home, err := os.UserHomeDir()
-	if err != nil || home == "" {
+	root, err := datapath.Root()
+	if err != nil || root == "" {
 		return false
 	}
-	_, statErr := os.Stat(prompt.IdentityPath(filepath.Join(home, ".octo"), "soul.md"))
+	_, statErr := os.Stat(prompt.IdentityPath(root, "soul.md"))
 	return os.IsNotExist(statErr)
 }
 
@@ -56,11 +58,10 @@ func soulMissing() bool {
 // identity at all. Onboarding nudges only in that case; if either file exists
 // the user has some identity set up.
 func identityMissing() bool {
-	home, err := os.UserHomeDir()
-	if err != nil || home == "" {
+	dir, err := datapath.Root()
+	if err != nil || dir == "" {
 		return false
 	}
-	dir := filepath.Join(home, ".octo")
 	for _, name := range []string{"soul.md", "user.md"} {
 		if _, err := os.Stat(prompt.IdentityPath(dir, name)); err == nil {
 			return false
@@ -165,7 +166,7 @@ func projectRunDir(cwd, resumeID string, lookup func(string) string) string {
 	return dir
 }
 
-// resolveProjectHooksTrust decides whether the project-level <cwd>/.octo/hooks.yml
+// resolveProjectHooksTrust decides whether the project-level <cwd>/.octo-hooks.yml
 // should be loaded, implementing trust-on-first-use. It returns false (skip)
 // when there is no project file. For an untrusted or changed file it prompts
 // once (when interactive, i.e. stdin is a TTY — works for both the TUI and a
@@ -282,17 +283,14 @@ func resolveMaxTokensEscalate(flagVal int, provName string) int {
 	return escalateMaxTokensAnthropic
 }
 
-// openMCPLogFile opens ~/.octo/logs/mcp.log (append) to receive stdio MCP
+// openMCPLogFile opens data/logs/mcp.log (append) to receive stdio MCP
 // servers' child stderr while the TUI owns the screen, so their diagnostics are
 // recoverable rather than corrupting the frame. Returns nil on any failure; the
 // caller then discards child stderr — never the terminal.
+// OCTO-FORK: logs live under data/ — see P1-便携数据根.md.
 func openMCPLogFile() *os.File {
-	home, err := os.UserHomeDir()
-	if err != nil || home == "" {
-		return nil
-	}
-	dir := filepath.Join(home, ".octo", "logs")
-	if err := os.MkdirAll(dir, 0o755); err != nil {
+	dir, err := datapath.Sub("logs")
+	if err != nil {
 		return nil
 	}
 	f, err := os.OpenFile(filepath.Join(dir, "mcp.log"), os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o644)
@@ -1552,13 +1550,14 @@ func newCacheKey() string {
 	return "octo-" + hex.EncodeToString(b[:])
 }
 
-// agentUserDir is the user-level profile directory (~/.octo/agents).
+// agentUserDir is the user-level profile directory (data/agents).
+// OCTO-FORK: agents live under data/ — see P1-便携数据根.md.
 func agentUserDir() string {
-	home, err := os.UserHomeDir()
-	if err != nil || home == "" {
+	dir, err := datapath.Join("agents")
+	if err != nil {
 		return ""
 	}
-	return filepath.Join(home, ".octo", "agents")
+	return dir
 }
 
 // profileIDs returns the IDs of all non-builtin profiles in the store.

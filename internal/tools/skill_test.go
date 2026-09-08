@@ -17,8 +17,9 @@ func setSkillsFor(t *testing.T, name, content string) {
 	t.Helper()
 	home := t.TempDir()
 	t.Setenv("HOME", home)
+	t.Setenv("OCTO_DATA_ROOT", home)
 	t.Setenv("USERPROFILE", home)
-	dir := filepath.Join(home, ".octo", "skills", name)
+	dir := filepath.Join(home, "skills", name)
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		t.Fatal(err)
 	}
@@ -41,7 +42,7 @@ func TestSkillTool_Execute(t *testing.T) {
 	if !strings.Contains(out.Text, "Step 1: be nice.") {
 		t.Errorf("body missing from result: %q", out.Text)
 	}
-	if !strings.Contains(out.Text, "bundled files live in") || !strings.Contains(out.Text, filepath.Join(".octo", "skills", "greet")) {
+	if !strings.Contains(out.Text, "bundled files live in") || !strings.Contains(out.Text, filepath.Join(os.Getenv("OCTO_DATA_ROOT"), "skills", "greet")) {
 		t.Errorf("expected a skill-directory header; got: %q", out.Text)
 	}
 }

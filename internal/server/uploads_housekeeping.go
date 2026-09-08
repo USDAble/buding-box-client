@@ -1,11 +1,8 @@
 package server
 
 import (
-	"fmt"
-	"os"
-	"path/filepath"
-
 	"github.com/open-octo/octo-agent/internal/config"
+	"github.com/open-octo/octo-agent/internal/datapath"
 	"github.com/open-octo/octo-agent/internal/uploads"
 )
 
@@ -16,7 +13,7 @@ import (
 var channelTempAdapters = []string{"telegram", "dingtalk", "feishu", "discord", "wecom", "weixin"}
 
 // StartUploadsHousekeeping ages out old attachment files in the background
-// (#2004): ~/.octo/uploads (web uploads + IM inline images) and each IM
+// (#2004): data/uploads (web uploads + IM inline images) and each IM
 // channel adapter's namespaced temp directory (IM document/file attachments).
 // Best-effort and safe to call unconditionally at server startup — both
 // `octo serve` (cmd/octo, gated behind its own go-test housekeepingDisabled
@@ -43,14 +40,12 @@ func StartUploadsHousekeeping() {
 	}()
 }
 
-// uploadsDirPath returns ~/.octo/uploads without creating it. Unlike
+// uploadsDirPath returns data/uploads without creating it. Unlike
 // ensureUploadsDir (used by callers about to write a file there), the startup
 // sweep has no reason to spin the directory into existence for an install
 // that has never received an upload.
+// OCTO-FORK: the portable product keeps uploads next to the executable, not in
+// the host home — see dev-docs-usdable/需求/2260906/技术方案/P1-便携数据根.md.
 func uploadsDirPath() (string, error) {
-	home, err := os.UserHomeDir()
-	if err != nil {
-		return "", fmt.Errorf("uploads: home dir: %w", err)
-	}
-	return filepath.Join(home, ".octo", uploadsDirName), nil
+	return datapath.Join(uploadsDirName)
 }

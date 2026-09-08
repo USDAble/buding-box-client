@@ -57,12 +57,13 @@ func mcpTestHome(t *testing.T, mcpJSON string) string {
 	t.Helper()
 	tmp := t.TempDir()
 	t.Setenv("HOME", tmp)
+	t.Setenv("OCTO_DATA_ROOT", tmp)
 	t.Setenv("USERPROFILE", tmp)
 	if mcpJSON != "" {
-		if err := os.MkdirAll(filepath.Join(tmp, ".octo"), 0o700); err != nil {
+		if err := os.MkdirAll(tmp, 0o700); err != nil {
 			t.Fatal(err)
 		}
-		if err := os.WriteFile(filepath.Join(tmp, ".octo", "mcp.json"), []byte(mcpJSON), 0o600); err != nil {
+		if err := os.WriteFile(filepath.Join(tmp, "mcp.json"), []byte(mcpJSON), 0o600); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -439,7 +440,7 @@ func TestToolSearchSettings(t *testing.T) {
 	}
 
 	// Written to ~/.octo/config.yml.
-	raw, err := os.ReadFile(filepath.Join(home, ".octo", "config.yml"))
+	raw, err := os.ReadFile(filepath.Join(home, "config.yml"))
 	if err != nil {
 		t.Fatalf("config.yml not written: %v", err)
 	}

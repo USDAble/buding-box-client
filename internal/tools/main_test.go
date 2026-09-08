@@ -41,6 +41,7 @@ func TestMain(m *testing.M) {
 	homeTmp, _ := os.MkdirTemp(realHome, ".octo-tools-test-home")
 	if homeTmp != "" {
 		os.Setenv("HOME", homeTmp)
+		os.Setenv("OCTO_DATA_ROOT", homeTmp)
 		os.Setenv("USERPROFILE", homeTmp)
 	}
 	defaultsTmp, _ := os.MkdirTemp("", "octo-workflows-default-empty")

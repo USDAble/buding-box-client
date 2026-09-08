@@ -42,14 +42,14 @@ func runHooksList(out io.Writer) int {
 		printed = true
 	}
 
-	// User-level ~/.octo/hooks.yml.
+	// User-level data/hooks.yml.
 	if p := hooks.UserConfigPath(); p != "" {
 		if printFileHooks(out, p, "User ("+p+"):", "") {
 			printed = true
 		}
 	}
 
-	// Project-level <cwd>/.octo/hooks.yml, annotated with trust status.
+	// Project-level <cwd>/.octo-hooks.yml, annotated with trust status.
 	if cwd, err := os.Getwd(); err == nil {
 		if p := hooks.ProjectConfigPath(cwd); p != "" {
 			if b, rerr := os.ReadFile(p); rerr == nil {

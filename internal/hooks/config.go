@@ -3,16 +3,17 @@ package hooks
 import (
 	"fmt"
 	"os"
-	"path/filepath"
 	"time"
 
 	"gopkg.in/yaml.v3"
+
+	"github.com/open-octo/octo-agent/internal/datapath"
 )
 
 // FileConfig is the on-disk hooks.yml schema. It maps each event to a list of
 // hooks, so an event can fan out to several commands (unlike the env shim's one
-// command per event). The user-level file lives at ~/.octo/hooks.yml; a
-// project-level <cwd>/.octo/hooks.yml layers on top (later phase).
+// command per event). The user-level file lives at data/hooks.yml; a
+// project-level <cwd>/.octo-hooks.yml layers on top.
 //
 //	hooks:
 //	  UserPromptSubmit:
@@ -38,14 +39,16 @@ type HookSpec struct {
 	Async   bool   `yaml:"async,omitempty"`
 }
 
-// UserConfigPath returns ~/.octo/hooks.yml, or "" when the home dir is
+// UserConfigPath returns data/hooks.yml, or "" when the data root is
 // unavailable.
+// OCTO-FORK: the portable product keeps hooks config next to the executable,
+// not in the host home — see dev-docs-usdable/需求/2260906/技术方案/P1-便携数据根.md.
 func UserConfigPath() string {
-	home, err := os.UserHomeDir()
-	if err != nil || home == "" {
+	p, err := datapath.Join("hooks.yml")
+	if err != nil {
 		return ""
 	}
-	return filepath.Join(home, ".octo", "hooks.yml")
+	return p
 }
 
 // LoadFileConfig reads and parses a hooks.yml. A missing file returns an error
@@ -102,15 +105,15 @@ func parseTimeout(s string) time.Duration {
 }
 
 // EngineFromEnvAndFiles builds the production engine: the OCTO_HOOK_* env shim,
-// the user-level ~/.octo/hooks.yml, and — when loadProject is true — the
-// project-level <cwd>/.octo/hooks.yml, layered in that order (append semantics,
+// the user-level data/hooks.yml, and — when loadProject is true — the
+// project-level <cwd>/.octo-hooks.yml, layered in that order (append semantics,
 // so project hooks run after user hooks). The caller decides loadProject: the
 // CLI resolves trust-on-first-use (prompting for an untrusted project file); a
 // server auto-trusts its operator-chosen cwd. A missing file is fine; a
 // malformed file or bad entry surfaces via Notify and is otherwise ignored, so
 // one broken hook never blocks the session.
 //
-// sourceDirs are a project's mounted folders, whose .octo/hooks.yml files load
+// sourceDirs are a project's mounted folders, whose .octo-hooks.yml files load
 // after the cwd's, in mount order — deterministic, never map-ordered. No trust
 // flag per folder: mounting a folder into a project is itself the trust grant,
 // made by the person who added it.

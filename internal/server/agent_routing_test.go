@@ -19,7 +19,7 @@ import (
 // writeAgentProfile drops a user-level profile into the test HOME.
 func writeAgentProfile(t *testing.T, id, content string) {
 	t.Helper()
-	dir := filepath.Join(os.Getenv("HOME"), ".octo", "agents")
+	dir := filepath.Join(os.Getenv("OCTO_DATA_ROOT"), "agents")
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		t.Fatal(err)
 	}
@@ -32,16 +32,17 @@ func routingHome(t *testing.T) {
 	t.Helper()
 	tmp := t.TempDir()
 	t.Setenv("HOME", tmp)
+	t.Setenv("OCTO_DATA_ROOT", tmp)
 	t.Setenv("USERPROFILE", tmp)
 }
 
-// agentStoreDir returns the test HOME's profile dir.
+// agentStoreDir returns the test data root's profile dir.
 func agentStoreDir() string {
-	home, _ := os.UserHomeDir()
-	if home == "" {
+	root := os.Getenv("OCTO_DATA_ROOT")
+	if root == "" {
 		return ""
 	}
-	return filepath.Join(home, ".octo", "agents")
+	return filepath.Join(root, "agents")
 }
 
 // routeAndWait resolves the profile for ev, runs handleChannelMessage to
@@ -176,7 +177,7 @@ channel_bindings:
   - {platform: fake, chat_id: c2}
 ---
 `)
-	dir := filepath.Join(os.Getenv("HOME"), ".octo", "agents")
+	dir := filepath.Join(os.Getenv("OCTO_DATA_ROOT"), "agents")
 	store := agentprofile.New(dir)
 	srv := mustServer(t, Config{Addr: "127.0.0.1:0", Tools: false})
 	srv.system = "SERVER BASE SYSTEM"
@@ -217,7 +218,7 @@ channel_bindings:
 // agent — whose base system prompt is used (not the deleted profile's).
 func TestRunChannelTurns_DeletedProfileFallsBackToDefault(t *testing.T) {
 	routingHome(t)
-	dir := filepath.Join(os.Getenv("HOME"), ".octo", "agents")
+	dir := filepath.Join(os.Getenv("OCTO_DATA_ROOT"), "agents")
 	writeAgentProfile(t, "temp", `---
 description: temp
 channel_bindings:

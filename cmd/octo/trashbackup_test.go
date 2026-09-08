@@ -14,6 +14,7 @@ import (
 func TestRunTrashBackup(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
+	t.Setenv("OCTO_DATA_ROOT", home)
 	t.Setenv("USERPROFILE", home)
 
 	project := t.TempDir()
@@ -31,7 +32,7 @@ func TestRunTrashBackup(t *testing.T) {
 		t.Errorf("backup must NOT delete the original: %v", err)
 	}
 	// The trash project dir should hold a .meta.json for the backed-up file.
-	trashProj := filepath.Join(home, ".octo", "trash")
+	trashProj := filepath.Join(home, "trash")
 	var found bool
 	_ = filepath.Walk(trashProj, func(p string, _ os.FileInfo, _ error) error {
 		if strings.HasSuffix(p, ".meta.json") {
@@ -52,6 +53,7 @@ func TestRunTrashBackup(t *testing.T) {
 func TestRunTrashBackup_RecordsRmProvenance(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
+	t.Setenv("OCTO_DATA_ROOT", home)
 	t.Setenv("USERPROFILE", home)
 
 	project := t.TempDir()
@@ -93,6 +95,7 @@ func TestRunTrashBackup_RecordsRmProvenance(t *testing.T) {
 func TestRunTrashBackup_ProjectFallsBackToCWD(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
+	t.Setenv("OCTO_DATA_ROOT", home)
 	t.Setenv("USERPROFILE", home)
 	t.Setenv("OCTO_TRASH_PROJECT", "")
 

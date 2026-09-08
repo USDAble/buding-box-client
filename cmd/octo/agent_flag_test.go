@@ -14,6 +14,7 @@ import (
 func TestRunChat_UnknownAgentErrors(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
+	t.Setenv("OCTO_DATA_ROOT", home)
 	t.Setenv("USERPROFILE", home)
 
 	var stdout, stderr bytes.Buffer
@@ -31,10 +32,11 @@ func TestRunChat_UnknownAgentErrors(t *testing.T) {
 func TestRunChat_AgentFlagListsAvailableOnError(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
+	t.Setenv("OCTO_DATA_ROOT", home)
 	t.Setenv("USERPROFILE", home)
 
 	// Create a profile so we can verify it appears in the error listing.
-	dir := filepath.Join(home, ".octo", "agents")
+	dir := filepath.Join(home, "agents")
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		t.Fatal(err)
 	}
@@ -70,9 +72,10 @@ func TestRunChat_AgentFlagListsAvailableOnError(t *testing.T) {
 func TestRunChat_AgentFlagResolvesByID(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
+	t.Setenv("OCTO_DATA_ROOT", home)
 	t.Setenv("USERPROFILE", home)
 
-	dir := filepath.Join(home, ".octo", "agents")
+	dir := filepath.Join(home, "agents")
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		t.Fatal(err)
 	}

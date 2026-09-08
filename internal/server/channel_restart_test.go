@@ -100,8 +100,9 @@ func writeChannelsYML(t *testing.T, yml string) {
 	t.Helper()
 	tmp := t.TempDir()
 	t.Setenv("HOME", tmp)
+	t.Setenv("OCTO_DATA_ROOT", tmp)
 	t.Setenv("USERPROFILE", tmp)
-	cfgDir := filepath.Join(tmp, ".octo")
+	cfgDir := tmp
 	if err := os.MkdirAll(cfgDir, 0700); err != nil {
 		t.Fatal(err)
 	}

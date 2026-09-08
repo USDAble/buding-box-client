@@ -36,7 +36,7 @@ func TestSessionMemDir_ScopedToProject(t *testing.T) {
 		t.Errorf("sessionMemDir must create the directory; stat: %v", err)
 	}
 	home, _ := os.UserHomeDir()
-	if !strings.HasPrefix(got, filepath.Join(home, ".octo", "memories")+string(filepath.Separator)) {
+	if !strings.HasPrefix(got, filepath.Join(home, "memories")+string(filepath.Separator)) {
 		t.Errorf("dir %q not under ~/.octo/memories", got)
 	}
 

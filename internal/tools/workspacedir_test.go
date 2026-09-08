@@ -5,7 +5,7 @@ import (
 	"testing"
 )
 
-// Unset config resolves to the global default, ~/Octo.
+// Unset config resolves to the global default, data/workspace.
 func TestResolveWorkspaceDir_Empty(t *testing.T) {
 	home := setTestHomeDir(t)
 
@@ -13,7 +13,7 @@ func TestResolveWorkspaceDir_Empty(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ResolveWorkspaceDir(\"\") error = %v, want nil", err)
 	}
-	want := filepath.Join(home, "Octo")
+	want := filepath.Join(home, "workspace")
 	if got != want {
 		t.Fatalf("ResolveWorkspaceDir(\"\") = %q, want %q", got, want)
 	}
@@ -51,6 +51,7 @@ func setTestHomeDir(t *testing.T) string {
 	t.Helper()
 	tmp := t.TempDir()
 	t.Setenv("HOME", tmp)
+	t.Setenv("OCTO_DATA_ROOT", tmp)
 	t.Setenv("USERPROFILE", tmp)
 	return tmp
 }
@@ -62,7 +63,7 @@ func setTestHomeDir(t *testing.T) string {
 // directory "auto" under the server's process cwd.
 func TestResolveWorkspaceDir_LegacyAutoResolvesToDefault(t *testing.T) {
 	home := setTestHomeDir(t)
-	want := filepath.Join(home, "Octo")
+	want := filepath.Join(home, "workspace")
 
 	for _, raw := range []string{"auto", "Auto", " auto "} {
 		got, err := ResolveWorkspaceDir(raw)

@@ -351,6 +351,7 @@ func TestDisableRemovesEntryAndStopsRuns(t *testing.T) {
 func TestDeleteRemovesEntryAndStopsRuns(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
+	t.Setenv("OCTO_DATA_ROOT", home)
 	t.Setenv("USERPROFILE", home)
 
 	s, r := newTestScheduler(t)
@@ -374,7 +375,7 @@ func TestDeleteRemovesEntryAndStopsRuns(t *testing.T) {
 	if _, err := os.Stat(filepath.Join(s.dir, "t1.json")); !os.IsNotExist(err) {
 		t.Errorf("task file still on disk after delete: err = %v", err)
 	}
-	if entries, err := os.ReadDir(filepath.Join(home, ".octo", "trash")); err == nil && len(entries) > 0 {
+	if entries, err := os.ReadDir(filepath.Join(home, "trash")); err == nil && len(entries) > 0 {
 		t.Errorf("deleted task was staged in the trash: %d entr(ies)", len(entries))
 	}
 }

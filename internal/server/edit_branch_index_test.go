@@ -35,6 +35,7 @@ func (erroringSender) StreamMessages(_ context.Context, _, _ string, _ []agent.M
 func TestDoAgentTurn_ErrorRollback_BroadcastsHistoryReload(t *testing.T) {
 	tmp := t.TempDir()
 	t.Setenv("HOME", tmp)
+	t.Setenv("OCTO_DATA_ROOT", tmp)
 	t.Setenv("USERPROFILE", tmp)
 
 	srv := mustServer(t, Config{Addr: "127.0.0.1:0", Tools: false})
@@ -114,6 +115,7 @@ func (s *interruptingSender) StreamMessages(ctx context.Context, _, _ string, _ 
 func TestDoAgentTurn_Interrupt_KeepsUserMessage_NoReload(t *testing.T) {
 	tmp := t.TempDir()
 	t.Setenv("HOME", tmp)
+	t.Setenv("OCTO_DATA_ROOT", tmp)
 	t.Setenv("USERPROFILE", tmp)
 
 	srv := mustServer(t, Config{Addr: "127.0.0.1:0", Tools: false})
@@ -203,6 +205,7 @@ func (s *failSecondRoundSender) StreamMessagesWithTools(_ context.Context, _, _ 
 func TestDoAgentTurn_MidTurnError_NoHistoryReload(t *testing.T) {
 	tmp := t.TempDir()
 	t.Setenv("HOME", tmp)
+	t.Setenv("OCTO_DATA_ROOT", tmp)
 	t.Setenv("USERPROFILE", tmp)
 
 	srv := mustServer(t, Config{Addr: "127.0.0.1:0", Tools: true})
@@ -375,6 +378,7 @@ func (s *blockUntilCanceledSender) StreamMessages(ctx context.Context, _, _ stri
 func TestHandleEditMessage_MidStream_InterruptsAndReruns(t *testing.T) {
 	tmp := t.TempDir()
 	t.Setenv("HOME", tmp)
+	t.Setenv("OCTO_DATA_ROOT", tmp)
 	t.Setenv("USERPROFILE", tmp)
 
 	srv := mustServer(t, Config{Addr: "127.0.0.1:0", Tools: false})

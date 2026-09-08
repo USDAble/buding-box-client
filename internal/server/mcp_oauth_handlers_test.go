@@ -195,7 +195,7 @@ func TestMCPOAuth_WebAuthCodeFlow_EndToEnd(t *testing.T) {
 	}
 
 	// The token must be cached for future non-interactive connects.
-	if _, err := os.Stat(filepath.Join(home, ".octo", "mcp-tokens", "secure.json")); err != nil {
+	if _, err := os.Stat(filepath.Join(home, "mcp-tokens", "secure.json")); err != nil {
 		t.Fatalf("token cache not written: %v", err)
 	}
 

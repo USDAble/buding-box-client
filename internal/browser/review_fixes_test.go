@@ -99,6 +99,7 @@ func TestNormalizeUploadFiles(t *testing.T) {
 	// must be set for the tilde expansion below to resolve into home rather
 	// than the CI runner's real profile dir.
 	t.Setenv("HOME", home)
+	t.Setenv("OCTO_DATA_ROOT", home)
 	t.Setenv("USERPROFILE", home)
 	if err := os.WriteFile(filepath.Join(home, "doc.md"), []byte("x"), 0o644); err != nil {
 		t.Fatal(err)

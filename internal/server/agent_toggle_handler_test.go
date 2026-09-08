@@ -16,9 +16,10 @@ func curatedTestServer(t *testing.T) *Server {
 	t.Helper()
 	tmp := t.TempDir()
 	t.Setenv("HOME", tmp)
+	t.Setenv("OCTO_DATA_ROOT", tmp)
 	t.Setenv("USERPROFILE", tmp)
-	_ = os.MkdirAll(filepath.Join(tmp, ".octo", "agents"), 0o755)
-	defaultDir := filepath.Join(tmp, ".octo", "agents-default")
+	_ = os.MkdirAll(filepath.Join(tmp, "agents"), 0o755)
+	defaultDir := filepath.Join(tmp, "agents-default")
 	if err := os.MkdirAll(defaultDir, 0o755); err != nil {
 		t.Fatal(err)
 	}

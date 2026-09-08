@@ -17,6 +17,7 @@ import (
 	"github.com/open-octo/octo-agent/internal/agent"
 	"github.com/open-octo/octo-agent/internal/agentprofile"
 	"github.com/open-octo/octo-agent/internal/config"
+	"github.com/open-octo/octo-agent/internal/datapath"
 	"github.com/open-octo/octo-agent/internal/executil"
 	"github.com/open-octo/octo-agent/internal/permission"
 	"github.com/open-octo/octo-agent/internal/tools"
@@ -1161,12 +1162,16 @@ func (s *Server) runTurn(ctx context.Context, sess *agent.Session, userInput str
 	return reply.Content, nil
 }
 
+// permissionConfigPath returns data/permissions.yml, or "" when the data root
+// can't be resolved.
+// OCTO-FORK: the portable product keeps permissions next to the executable,
+// not in the host home — see dev-docs-usdable/需求/2260906/技术方案/P1-便携数据根.md.
 func permissionConfigPath() string {
-	home, err := os.UserHomeDir()
+	p, err := datapath.Join("permissions.yml")
 	if err != nil {
 		return ""
 	}
-	return filepath.Join(home, ".octo", "permissions.yml")
+	return p
 }
 
 // resolvePermissionMode reads the persisted config and returns the configured

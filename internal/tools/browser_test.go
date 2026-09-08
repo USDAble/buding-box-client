@@ -333,18 +333,19 @@ func TestResolveReplayParams_MissingReturnsError(t *testing.T) {
 func TestBrowserRecordingsDir_MigratesLegacyDir(t *testing.T) {
 	tmp := t.TempDir()
 	t.Setenv("HOME", tmp)
+	t.Setenv("OCTO_DATA_ROOT", tmp)
 	t.Setenv("USERPROFILE", tmp) // Windows
 	t.Setenv("OCTO_BROWSER_RECORDINGS_DIR", "")
 	t.Setenv("OCTO_BROWSER_SKILLS_DIR", "")
 
-	old := filepath.Join(tmp, ".octo", "browser-skills")
+	old := filepath.Join(tmp, "browser-skills")
 	if err := os.MkdirAll(old, 0o755); err != nil {
 		t.Fatal(err)
 	}
 	if err := os.WriteFile(filepath.Join(old, "demo.yaml"), []byte("name: demo\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	want := filepath.Join(tmp, ".octo", "browser-recordings")
+	want := filepath.Join(tmp, "browser-recordings")
 	if got := BrowserRecordingsDir(); got != want {
 		t.Fatalf("dir = %q, want migrated %q", got, want)
 	}
@@ -586,6 +587,7 @@ func TestBrowserPage_NoLaunchFallback(t *testing.T) {
 	// Deterministic across runners, and it never touches the user's real profile.
 	home := t.TempDir()
 	t.Setenv("HOME", home)
+	t.Setenv("OCTO_DATA_ROOT", home)
 	t.Setenv("USERPROFILE", home) // windows
 
 	ResetBrowserSession()

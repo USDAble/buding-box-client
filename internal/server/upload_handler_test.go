@@ -33,6 +33,7 @@ func multipartUpload(t *testing.T, filename string, data []byte) (*bytes.Buffer,
 func TestHandleUpload_AcceptsFile(t *testing.T) {
 	tmp := t.TempDir()
 	t.Setenv("HOME", tmp)
+	t.Setenv("OCTO_DATA_ROOT", tmp)
 	t.Setenv("USERPROFILE", tmp)
 
 	srv := mustServer(t, Config{Addr: "127.0.0.1:0"})
@@ -70,6 +71,7 @@ func TestHandleUpload_AcceptsFile(t *testing.T) {
 func TestHandleUpload_RejectsOversized(t *testing.T) {
 	tmp := t.TempDir()
 	t.Setenv("HOME", tmp)
+	t.Setenv("OCTO_DATA_ROOT", tmp)
 	t.Setenv("USERPROFILE", tmp)
 
 	srv := mustServer(t, Config{Addr: "127.0.0.1:0"})
@@ -100,6 +102,7 @@ func TestHandleUpload_RejectsOversized(t *testing.T) {
 func TestHandleUpload_AcceptsFileBeyondMemoryBuffer(t *testing.T) {
 	tmp := t.TempDir()
 	t.Setenv("HOME", tmp)
+	t.Setenv("OCTO_DATA_ROOT", tmp)
 	t.Setenv("USERPROFILE", tmp)
 
 	srv := mustServer(t, Config{Addr: "127.0.0.1:0"})

@@ -52,10 +52,10 @@ func fakeMCPHTTPServer(t *testing.T) *httptest.Server {
 
 func writeUserMCPConfig(t *testing.T, home, content string) {
 	t.Helper()
-	if err := os.MkdirAll(filepath.Join(home, ".octo"), 0o700); err != nil {
+	if err := os.MkdirAll(home, 0o700); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(home, ".octo", "mcp.json"), []byte(content), 0o600); err != nil {
+	if err := os.WriteFile(filepath.Join(home, "mcp.json"), []byte(content), 0o600); err != nil {
 		t.Fatal(err)
 	}
 }
@@ -63,6 +63,7 @@ func writeUserMCPConfig(t *testing.T, home, content string) {
 func TestSwapMCP_InstallsThenClears(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
+	t.Setenv("OCTO_DATA_ROOT", home)
 	t.Setenv("USERPROFILE", home)
 	defer ShutdownMCP()
 
@@ -108,6 +109,7 @@ func TestSwapMCP_InstallsThenClears(t *testing.T) {
 func TestSwapMCP_ConfigErrorKeepsOldRegistry(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
+	t.Setenv("OCTO_DATA_ROOT", home)
 	t.Setenv("USERPROFILE", home)
 	defer ShutdownMCP()
 

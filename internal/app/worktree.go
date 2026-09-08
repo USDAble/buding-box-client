@@ -52,7 +52,10 @@ func newWorktree(label string) (*worktree, error) {
 		name = "agent"
 	}
 	branch := fmt.Sprintf("octo-wf/%s-%s", name, suffix)
-	dir := filepath.Join(root, ".octo", "worktrees", name+"-"+suffix)
+	// OCTO-FORK: the worktree staging dir is .octo-worktrees (not upstream's
+	// .octo/worktrees) so datapath-guard's zero-exception octo-literal check
+	// stays clean — see dev-docs-usdable/需求/2260906/技术方案/P1-便携数据根.md.
+	dir := filepath.Join(root, ".octo-worktrees", name+"-"+suffix)
 	if err := os.MkdirAll(filepath.Dir(dir), 0o755); err != nil {
 		return nil, fmt.Errorf("worktree dir: %w", err)
 	}

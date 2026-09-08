@@ -62,6 +62,7 @@ func TestReload_PicksUpLateSkill(t *testing.T) {
 func TestDelete_RemovesDirectoryPermanently(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
+	t.Setenv("OCTO_DATA_ROOT", home)
 	t.Setenv("USERPROFILE", home)
 
 	useDefaultRoot(t, t.TempDir())
@@ -82,7 +83,7 @@ func TestDelete_RemovesDirectoryPermanently(t *testing.T) {
 	if _, err := os.Stat(filepath.Join(userRoot, "scratch")); !os.IsNotExist(err) {
 		t.Errorf("skill directory still on disk after delete: err = %v", err)
 	}
-	if entries, err := os.ReadDir(filepath.Join(home, ".octo", "trash")); err == nil && len(entries) > 0 {
+	if entries, err := os.ReadDir(filepath.Join(home, "trash")); err == nil && len(entries) > 0 {
 		t.Errorf("deleted skill was staged in the trash: %d entr(ies)", len(entries))
 	}
 }

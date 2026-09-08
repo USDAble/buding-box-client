@@ -7,15 +7,19 @@ import (
 	"path/filepath"
 	"strings"
 	"time"
+
+	"github.com/open-octo/octo-agent/internal/datapath"
 )
 
 // lightAppsDir returns the absolute path to the user's Light Apps directory.
+// OCTO-FORK: the portable product keeps light apps next to the executable, not
+// in the host home — see dev-docs-usdable/需求/2260906/技术方案/P1-便携数据根.md.
 func lightAppsDir() string {
-	home, err := os.UserHomeDir()
-	if err != nil || home == "" {
-		return filepath.Join(".", ".octo", "light-apps")
+	p, err := datapath.Sub("light-apps")
+	if err != nil {
+		return ""
 	}
-	return filepath.Join(home, ".octo", "light-apps")
+	return p
 }
 
 // lightAppManifest mirrors the frontmatter of a Light App's manifest.json.

@@ -955,6 +955,37 @@ export const en: Record<string, string> = {
   "m.model_fail": "Failed to switch model",
   "m.perm_fail": "Failed to set permission mode",
   "m.create_fail": "Failed to create session",
+
+  // ── product gate / login form (P4) ─────────────────────────────────────────
+  // Fork-added keys, kept in one block at the end of each dictionary so upstream
+  // merges collide at the tail rather than mid-file (P4-拦截页.md §7).
+  "product.phone_label": "Phone number",
+  "product.phone_placeholder": "Enter phone number",
+  "product.code_label": "Verification code",
+  "product.code_placeholder": "6-digit code",
+  "product.send_code": "Send code",
+  "product.resend_in": "Resend in {s}s",
+  "product.nickname_label": "Nickname",
+  "product.nickname_placeholder": "2–16 characters",
+  "product.activation_label": "Activation code",
+  "product.activation_placeholder": "Enter the activation code",
+  "product.activation_hint": "Enter the activation code provided with the program directory",
+  "product.submit_activate": "Activate and log in",
+  "product.submit_login": "Log in",
+  "product.submitting": "Logging in…",
+  "product.err_phone": "Enter a valid phone number",
+  "product.err_code": "Enter the 6-digit code",
+  "product.err_nickname": "Nickname format is invalid",
+  "product.err_nickname_sensitive": "Nickname contains sensitive content",
+  "product.err_activation": "Enter the activation code",
+  "product.err_code_not_sent": "Get a verification code first",
+  "product.err_code_invalid": "Verification code is incorrect or expired",
+  "product.err_activation_invalid": "Incorrect activation code",
+  "product.err_phone_mismatch": "This program directory is bound to {masked}",
+  "product.code_sent": "Verification code sent",
+  "product.send_failed": "Failed to send, please try again",
+  "product.submit_failed": "Login failed, please try again",
+  "product.legal_close": "Close",
 };
 
 export const zh: Record<string, string> = {
@@ -1907,6 +1938,36 @@ export const zh: Record<string, string> = {
   "m.model_fail": "切换模型失败",
   "m.perm_fail": "设置权限模式失败",
   "m.create_fail": "创建会话失败",
+
+  // ── 产品门 / 登录表单（P4）────────────────────────────────────────────────
+  // Fork 新增键，集中在每份字典末尾，让上游合并冲突只发生在尾部（P4-拦截页.md §7）。
+  "product.phone_label": "手机号",
+  "product.phone_placeholder": "请输入手机号",
+  "product.code_label": "验证码",
+  "product.code_placeholder": "6 位验证码",
+  "product.send_code": "发送验证码",
+  "product.resend_in": "{s}s 后重发",
+  "product.nickname_label": "昵称",
+  "product.nickname_placeholder": "2-16 个字符",
+  "product.activation_label": "激活码",
+  "product.activation_placeholder": "请输入激活码",
+  "product.activation_hint": "请输入随程序目录提供的激活码",
+  "product.submit_activate": "激活并登录",
+  "product.submit_login": "登录",
+  "product.submitting": "登录中…",
+  "product.err_phone": "请输入正确的手机号",
+  "product.err_code": "请输入 6 位验证码",
+  "product.err_nickname": "昵称格式不正确",
+  "product.err_nickname_sensitive": "昵称包含敏感内容",
+  "product.err_activation": "请输入激活码",
+  "product.err_code_not_sent": "请先获取验证码",
+  "product.err_code_invalid": "验证码不正确或已过期",
+  "product.err_activation_invalid": "激活码不正确",
+  "product.err_phone_mismatch": "此程序目录已绑定 {masked}",
+  "product.code_sent": "验证码已发送",
+  "product.send_failed": "发送失败，请重试",
+  "product.submit_failed": "登录失败，请重试",
+  "product.legal_close": "关闭",
 };
 
 const dictionaries: Record<string, Record<string, string>> = { en, zh };

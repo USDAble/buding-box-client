@@ -403,6 +403,13 @@ type Server struct {
 	// dev-docs-usdable/需求/2260906/技术方案/P3-登录态与产品门.md.
 	productGate *productgate.Gate
 
+	// loginCodes holds the in-memory verification-code sessions for the fake
+	// login flow, keyed by normalized phone. Memory-only — a process restart
+	// clears it, which is acceptable for fake data (需求 §5.3.5). OCTO-FORK:
+	// P4 login — see dev-docs-usdable/需求/2260906/技术方案/P4-拦截页.md.
+	loginCodesMu sync.Mutex
+	loginCodes   map[string]*loginCodeSession
+
 	// apiRoutes records every pattern registered through api(), so the
 	// route-coverage test can assert each one rejects keyless non-loopback
 	// requests.
@@ -577,6 +584,7 @@ func New(cfg Config) (*Server, error) {
 		s.productState = st
 		s.productGate = productgate.New(cfg.WindowToken, st)
 	}
+	s.loginCodes = make(map[string]*loginCodeSession)
 
 	// Register the WebSocket-backed asker so ask_user_question appears in the
 	// tool catalog and can be dispatched through the browser.
@@ -947,12 +955,15 @@ func (s *Server) registerRoutes() {
 	s.apiProduct("GET /api/workflows", s.handleListWorkflows)
 	s.mux.HandleFunc("GET /api/health", s.handleHealth)
 	s.mux.HandleFunc("GET /api/version", s.handleVersion)
-	// Product state & gate. state/locale are exempt from the product gate
-	// (the frontend routes on state before login; the language can switch
-	// before login — 需求 §5.3); logout is gated (only meaningful once
-	// logged in). login/send-code/activate arrive in P4.
+	// Product state & gate. state/locale/send-code/login are exempt from the
+	// product gate — state routes the frontend before login, the language can
+	// switch before login (需求 §5.3), and send-code/login ARE the login flow;
+	// logout is gated (only meaningful once logged in). OCTO-FORK: P3/P4 — see
+	// dev-docs-usdable/需求/2260906/技术方案/P3-登录态与产品门.md and P4-拦截页.md.
 	s.api("GET /api/product/state", s.handleProductState)
 	s.api("PUT /api/product/locale", s.handleProductLocale)
+	s.api("POST /api/product/send-code", s.handleProductSendCode)
+	s.api("POST /api/product/login", s.handleProductLogin)
 	s.apiProduct("POST /api/product/logout", s.handleProductLogout)
 	s.apiProduct("GET /api/channels", s.handleListChannels)
 	s.apiProduct("GET /api/channels/available", s.handleAvailableChannels)

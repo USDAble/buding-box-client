@@ -8,6 +8,10 @@ import {
   windowTokenQuery,
   refreshProductState,
   logout,
+  sendCode,
+  login,
+  setProductLocale,
+  ProductError,
   WINDOW_TOKEN_HEADER,
 } from "./product";
 
@@ -130,5 +134,82 @@ describe("logout", () => {
       method: "POST",
       headers: {},
     });
+  });
+});
+
+describe("sendCode", () => {
+  it("resolves cooldown seconds on success", async () => {
+    sessionStorage.setItem("octo_window_token", "tok");
+    const fetchMock = fetchReturning(200, { cooldownSec: 60 });
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(sendCode("13800001234")).resolves.toBe(60);
+    expect(fetchMock).toHaveBeenCalledWith(
+      "/api/product/send-code",
+      expect.objectContaining({ method: "POST" }),
+    );
+  });
+
+  it("throws retryAfterSec on a too-soon resend", async () => {
+    vi.stubGlobal("fetch", fetchReturning(429, { retryAfterSec: 42 }));
+
+    const err = await sendCode("13800001234").catch((e) => e);
+    expect(err).toBeInstanceOf(ProductError);
+    expect(err.retryAfterSec).toBe(42);
+  });
+
+  it("throws invalid_phone in fieldErrors", async () => {
+    vi.stubGlobal("fetch", fetchReturning(400, { field: "phone", code: "invalid_phone" }));
+
+    const err = await sendCode("123").catch((e) => e);
+    expect(err.fieldErrors.phone).toBe("invalid_phone");
+  });
+});
+
+describe("login", () => {
+  const stateDTO = {
+    schemaVersion: 1, loggedIn: true, activated: true,
+    credits: { balance: 1, monthUsed: 0, monthKey: "" }, plan: { name: "" },
+    prefs: { locale: "", inputSensitiveCheck: false, defaultChatMode: "" },
+  };
+
+  it("stores the state and flips to ready on success", async () => {
+    sessionStorage.setItem("octo_window_token", "tok");
+    vi.stubGlobal("fetch", fetchReturning(200, { state: stateDTO }));
+
+    await login({ phone: "13800001234", code: "123456", nickname: "用户1234", activationCode: "BUDING-DEMO-0001" });
+
+    expect(get(productPhase)).toBe("ready");
+    expect(get(productState)?.loggedIn).toBe(true);
+  });
+
+  it("throws fieldErrors from round-one format errors", async () => {
+    vi.stubGlobal("fetch", fetchReturning(400, { fieldErrors: { phone: "invalid_phone", nickname: "nickname_format" } }));
+
+    const err = await login({ phone: "1", code: "1", nickname: "a" }).catch((e) => e);
+    expect(err.fieldErrors).toEqual({ phone: "invalid_phone", nickname: "nickname_format" });
+  });
+
+  it("throws the business code and masked phone from round two", async () => {
+    vi.stubGlobal("fetch", fetchReturning(400, { code: "phone_mismatch", phoneMasked: "138****1234" }));
+
+    const err = await login({ phone: "13900009999", code: "123456", nickname: "用户1234" }).catch((e) => e);
+    expect(err.code).toBe("phone_mismatch");
+    expect(err.phoneMasked).toBe("138****1234");
+  });
+});
+
+describe("setProductLocale", () => {
+  it("PUTs the locale", async () => {
+    sessionStorage.setItem("octo_window_token", "tok");
+    const fetchMock = fetchReturning(200, { ok: true });
+    vi.stubGlobal("fetch", fetchMock);
+
+    await setProductLocale("zh");
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      "/api/product/locale",
+      expect.objectContaining({ method: "PUT", body: JSON.stringify({ locale: "zh" }) }),
+    );
   });
 });

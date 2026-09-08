@@ -28,7 +28,7 @@ func withWindowToken(r *http.Request, tok string) *http.Request {
 func login(t *testing.T, srv *Server) {
 	t.Helper()
 	if err := srv.productState.Mutate(func(st *productstate.State) error {
-		st.Account = &productstate.Account{Phone: "13800001234", PhoneMasked: "138****1234", Nickname: "用户1234"}
+		st.Account = &productstate.Account{Phone: "13800001234", PhoneMasked: "138****1234", Nickname: "用户1234", Token: "local-tok"}
 		return nil
 	}); err != nil {
 		t.Fatalf("login Mutate = %v", err)
@@ -149,9 +149,10 @@ func TestProductLocaleExemptAndPersists(t *testing.T) {
 	}
 }
 
-// TestProductLogoutGatedAndClearsAccount: logout is gated (only a logged-in
-// window reaches it) and clears the account while keeping activation/credits.
-func TestProductLogoutGatedAndClearsAccount(t *testing.T) {
+// TestProductLogoutGatedAndClearsToken: logout is gated (only a logged-in
+// window reaches it) and clears the login token while keeping the binding
+// (phone/nickname) and activation/credits.
+func TestProductLogoutGatedAndClearsToken(t *testing.T) {
 	productTestEnv(t)
 	srv := mustServer(t, Config{Addr: "127.0.0.1:0", Tools: false, WindowToken: "tok"})
 
@@ -163,9 +164,9 @@ func TestProductLogoutGatedAndClearsAccount(t *testing.T) {
 		t.Fatalf("unlogged logout status = %d, want 403", w.Code)
 	}
 
-	// Log in with an activation + credits, then log out.
+	// Log in with a token + activation + credits, then log out.
 	if err := srv.productState.Mutate(func(st *productstate.State) error {
-		st.Account = &productstate.Account{Phone: "13800001234"}
+		st.Account = &productstate.Account{Phone: "13800001234", PhoneMasked: "138****1234", Nickname: "用户1234", Token: "local-tok"}
 		st.Activation = &productstate.Activation{Activated: true}
 		st.Credits = productstate.Credits{Balance: 1280, MonthUsed: 1}
 		return nil
@@ -181,8 +182,11 @@ func TestProductLogoutGatedAndClearsAccount(t *testing.T) {
 	}
 
 	snap := srv.productState.Snapshot()
-	if snap.Account != nil {
-		t.Fatal("logout must clear the account")
+	if snap.LoggedIn() {
+		t.Fatal("logout must clear the login token")
+	}
+	if snap.Account == nil || snap.Account.Phone != "13800001234" || snap.Account.Nickname != "用户1234" {
+		t.Fatalf("logout must keep the binding: %+v", snap.Account)
 	}
 	if !snap.Activated() {
 		t.Fatal("logout must keep activation")

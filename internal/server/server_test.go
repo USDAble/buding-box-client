@@ -874,6 +874,7 @@ func mustServer(t *testing.T, cfg Config) *Server {
 		srv.productState = st
 		srv.productGate = productgate.New(cfg.WindowToken, st)
 	}
+	srv.loginCodes = make(map[string]*loginCodeSession)
 	srv.registerRoutes()
 	// Same chain as New: host routing outside, CORS inside, so tests that
 	// exercise either hit the right layer.

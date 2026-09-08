@@ -18,7 +18,7 @@ func newStore(t *testing.T, loggedIn bool) *productstate.Store {
 	}
 	if loggedIn {
 		if err := s.Mutate(func(st *productstate.State) error {
-			st.Account = &productstate.Account{Phone: "13800001234"}
+			st.Account = &productstate.Account{Phone: "13800001234", Token: "local-tok"}
 			return nil
 		}); err != nil {
 			t.Fatalf("Mutate = %v", err)

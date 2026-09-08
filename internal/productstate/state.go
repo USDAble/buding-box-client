@@ -161,11 +161,20 @@ func (s *Store) Mutate(fn func(*State) error) error {
 	return nil
 }
 
-// LoggedIn reports whether an account is present.
+// LoggedIn reports whether an account is present with a live token.
 func (s *Store) LoggedIn() bool {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
-	return s.state.Account != nil
+	return s.state.LoggedIn()
+}
+
+// LoggedIn reports whether a login token is live. A logged-out account keeps
+// its binding (phone/nickname) so the second-login form can prefill and
+// compare against them (需求 §5.3.4), so an account's presence alone is not
+// "logged in" — the token is what distinguishes it (需求 §5.3.5: logout clears
+// the token, not the binding).
+func (s State) LoggedIn() bool {
+	return s.Account != nil && s.Account.Token != ""
 }
 
 // Activated reports whether the product has been activated.
@@ -204,7 +213,7 @@ type PublicAcct struct {
 func (s State) Public() PublicState {
 	p := PublicState{
 		SchemaVersion: s.SchemaVersion,
-		LoggedIn:      s.Account != nil,
+		LoggedIn:      s.LoggedIn(),
 		Activated:     s.Activation != nil && s.Activation.Activated,
 		Credits:       s.Credits,
 		Plan:          s.Plan,

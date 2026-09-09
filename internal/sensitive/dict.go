@@ -107,3 +107,84 @@ func (e *Engine) useBuiltinLocked(unreadable bool) {
 	e.loaded = true
 	e.unreadable = unreadable
 }
+
+// BuiltinWords returns a copy of the read-only built-in dictionary. It is the
+// "floor" of the effective dictionary (需求 §5.5): the file only ever adds to
+// it, so the dict-management UI (P13) can clear the user list without losing
+// the baseline. Callers must not mutate the returned slice.
+func BuiltinWords() []string {
+	return append([]string(nil), builtinWords...)
+}
+
+// UserWords reads the user dictionary file and returns its entries in file
+// order, with comment and blank lines stripped. A missing file is an empty
+// dictionary, not an error — the built-in words still apply because the file
+// is additive. A present-but-invalid file is an error: silently dropping the
+// user's words would read as data loss.
+func UserWords(path string) ([]string, error) {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return []string{}, nil
+		}
+		return nil, err
+	}
+	words, err := parseUserWords(data)
+	if err != nil {
+		return nil, err
+	}
+	if words == nil {
+		words = []string{}
+	}
+	return words, nil
+}
+
+// NormalizeWord returns the normalized dictionary form of word and whether it
+// is usable (non-empty after normalization). The dict-management UI (P13) uses
+// it to reject empty/pure-symbol words and to compare candidate words against
+// the built-in and existing user words in the same normalized space the
+// matcher uses, so "发 票" and "发票" are the same entry.
+func NormalizeWord(word string) (string, bool) {
+	norm := normalizeText(word).value
+	return norm, norm != ""
+}
+
+// MergeUserWords merges incoming entries into existing for the import flow.
+// Entries are keyed by normalized form, so "发 票" and "发票" collapse to one
+// word. Entries that normalize to empty are skipped, as are duplicates of the
+// built-in dictionary, an existing word, or an earlier incoming word. It
+// returns the merged list (existing order first, then newly added) plus the
+// added / skipped counts the import preview renders.
+func MergeUserWords(existing, incoming []string) (merged []string, added, skipped int) {
+	seen := make(map[string]struct{}, len(builtinWords)+len(existing)+len(incoming))
+	for _, w := range builtinWords {
+		seen[normalizeText(w).value] = struct{}{}
+	}
+	merged = make([]string, 0, len(existing)+len(incoming))
+	for _, w := range existing {
+		norm := normalizeText(w).value
+		if norm == "" {
+			continue
+		}
+		if _, dup := seen[norm]; dup {
+			continue
+		}
+		seen[norm] = struct{}{}
+		merged = append(merged, w)
+	}
+	for _, w := range incoming {
+		norm := normalizeText(w).value
+		if norm == "" {
+			skipped++
+			continue
+		}
+		if _, dup := seen[norm]; dup {
+			skipped++
+			continue
+		}
+		seen[norm] = struct{}{}
+		merged = append(merged, w)
+		added++
+	}
+	return merged, added, skipped
+}

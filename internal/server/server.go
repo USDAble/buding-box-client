@@ -992,6 +992,13 @@ func (s *Server) registerRoutes() {
 	// dev-docs-usdable/需求/2260906/技术方案/P5-个人中心.md.
 	s.apiProduct("PUT /api/product/nickname", s.handleProductNickname)
 	s.apiProduct("PUT /api/product/prefs", s.handleProductPrefs)
+	// P13 sensitive-word dictionary management: the UI is just an editor for
+	// data/sensitive-words.txt (the file is the single source of truth), so
+	// all three routes sit behind the product gate. OCTO-FORK: P13 — see
+	// dev-docs-usdable/需求/2260906/技术方案/P13-词库管理界面.md.
+	s.apiProduct("GET /api/product/sensitive/dict", s.handleSensitiveDictGet)
+	s.apiProduct("PUT /api/product/sensitive/dict", s.handleSensitiveDictPut)
+	s.apiProduct("POST /api/product/sensitive/dict/import", s.handleSensitiveDictImport)
 	s.apiProduct("POST /api/product/sensitive/check", s.handleProductSensitiveCheck)
 	s.apiProduct("GET /api/product/chat-modes", s.handleGetChatModes)
 	s.apiProduct("GET /api/channels", s.handleListChannels)

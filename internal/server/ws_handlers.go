@@ -1483,6 +1483,7 @@ func (s *Server) doAgentTurn(sess *agent.Session, content string, blocks []agent
 
 	runCtx, cancel := context.WithCancel(context.WithValue(context.Background(), ctxKeySessionID{}, sess.ID))
 	runCtx = tools.WithSessionID(runCtx, sess.ID)
+	runCtx = s.withSessionPrivacy(runCtx, sess) // OCTO-FORK: P10 隐私模式与 PII 处理.
 	// Stamp the per-session Waker so schedule_wakeup (the in-session loop) can pace
 	// this and later turns — including the wakeup-injected turns kicked via
 	// kickIdleSteerTurn, which also flow through here.
@@ -1616,6 +1617,7 @@ func (s *Server) doAgentTurn(sess *agent.Session, content string, blocks []agent
 				defer s.releaseTitleGeneration(sid)
 				ctx, cancel := context.WithTimeout(context.Background(), agent.TitleGenerationTimeout)
 				defer cancel()
+				ctx = s.withSessionPrivacy(ctx, sess) // OCTO-FORK: P10 隐私模式.
 				t, terr := a.GenerateTitleOrSnippet(ctx, titleMsgs)
 				if terr != nil {
 					slog.Warn("session title generation failed, falling back to message snippet", "session_id", sid, "err", terr)
@@ -1859,6 +1861,7 @@ func (s *Server) doAgentTurn(sess *agent.Session, content string, blocks []agent
 			defer s.recoverBg("suggestion generation")
 			ctx, cancel := context.WithTimeout(context.Background(), throwawayGenerationTimeout)
 			defer cancel()
+			ctx = s.withSessionPrivacy(ctx, sess) // OCTO-FORK: P10 隐私模式.
 			text, serr := a.Suggest(ctx, toolDefs)
 			if serr != nil {
 				s.wsHub.broadcast(sess.ID, map[string]any{

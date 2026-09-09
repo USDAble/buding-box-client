@@ -1187,6 +1187,7 @@ func (s *Server) runTurn(ctx context.Context, sess *agent.Session, userInput str
 
 	ctx = context.WithValue(ctx, ctxKeySessionID{}, sess.ID)
 	ctx = tools.WithSessionID(ctx, sess.ID) // tools-layer per-session state (replay secrets)
+	ctx = s.withSessionPrivacy(ctx, sess)   // OCTO-FORK: P10 隐私模式与 PII 处理.
 	a := s.buildAgent(sess)
 
 	if !s.cfg.Tools {

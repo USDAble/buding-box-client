@@ -117,8 +117,9 @@ func TestIdentifiersAreAsciiWithoutSpaces(t *testing.T) {
 		"identifiers.current": cfg.Identifiers.Current,
 		"identifiers.future":  cfg.Identifiers.Future,
 		"visual.logo":         cfg.Visual.Logo,
-		// visual.colors is absent until the brand colour is agreed; a nil map
-		// here simply contributes nothing rather than failing.
+		// visual.colors.primary is the brand blue #437EB1, sampled from the
+		// logo gradient (2026-09-09); nil-safe here so a future palette key
+		// missing from this embedded copy contributes nothing rather than failing.
 		"visual.colors": cfg.Visual.Colors,
 	}
 	for group, links := range cfg.Links {

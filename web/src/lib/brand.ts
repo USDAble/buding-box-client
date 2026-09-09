@@ -50,7 +50,7 @@ export interface BrandConfig {
   links: Record<string, Record<string, string>>
   visual: {
     logo: Record<string, string>
-    // Absent until the brand colour is agreed alongside the artwork.
+    // Primary brand colour #437EB1 — sampled from logo-mark.png (2026-09-09).
     colors?: Record<string, string>
   }
 }
@@ -154,7 +154,11 @@ export function brandLink(group: string, key: string): string {
   return brand.links[group]?.[key] ?? ''
 }
 
-/** A brand asset path relative to branding/. */
+/**
+ * A brand asset path served from the consumer's static root (web/public,
+ * docs/public, …). Generated from branding/source/logo-mark.png by
+ * cmd/generate-brand-assets — keep those copies in sync via make brand.
+ */
 export function brandAsset(key: string): string {
   return brand.visual.logo[key] ?? ''
 }

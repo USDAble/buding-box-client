@@ -959,7 +959,8 @@
           </span>
           {:else}
           <!-- Empty chat_mode is a legacy session and follows the account
-               default, matching the server. OCTO-FORK: P10 隐私模式. -->
+               default, matching the server. OCTO-FORK: P10 隐私模式与 PII 处理 — see
+               dev-docs-usdable/需求/2260906/技术方案/P10-隐私模式与PII.md. -->
           <PrivacyMark mode={(s as any).chat_mode || $productState?.prefs.defaultChatMode || 'default'} />
           <span class="session-title">{(s as any).name || (s as any).title || s.id}</span>
           <!-- Metadata gives way to the row's actions on hover (CSS, not state:

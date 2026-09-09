@@ -1062,7 +1062,8 @@ export const en: Record<string, string> = {
   "mode.smart": "Smart",
   "mode.default": "Default",
   "mode.no_models": "No models available in this mode",
-  // OCTO-FORK: P10 隐私模式与 PII 处理.
+  // OCTO-FORK: P10 隐私模式与 PII 处理 — see
+  // dev-docs-usdable/需求/2260906/技术方案/P10-隐私模式与PII.md.
   "privacy.mode_label": "Privacy mode",
   "privacy.notice": "Privacy mode: personal information such as phone numbers is processed before sending.",
   "privacy.notice_detail": "Only content subsequently sent to the model is processed; the chat still shows your original text. This release demonstrates 11-digit phone numbers.",
@@ -2130,7 +2131,8 @@ export const zh: Record<string, string> = {
   "mode.smart": "智能",
   "mode.default": "默认",
   "mode.no_models": "该模式下暂无可用模型",
-  // OCTO-FORK: P10 隐私模式与 PII 处理.
+  // OCTO-FORK: P10 隐私模式与 PII 处理 — see
+  // dev-docs-usdable/需求/2260906/技术方案/P10-隐私模式与PII.md.
   "privacy.mode_label": "隐私模式",
   "privacy.notice": "隐私模式：发送前会处理手机号等个人信息。",
   "privacy.notice_detail": "只处理随后发给模型的内容；你在对话框里看到的仍是原文。本期演示 11 位手机号。",

@@ -481,7 +481,8 @@ func New(cfg Config) (*Server, error) {
 	engine := newSensitiveEngine()
 	// P10 keeps PII masking outside P8's reply filter: request copies are
 	// masked first, while model replies still flow through the existing filter.
-	// OCTO-FORK: P10 隐私模式与 PII 处理.
+	// OCTO-FORK: P10 隐私模式与 PII 处理 — see
+	// dev-docs-usdable/需求/2260906/技术方案/P10-隐私模式与PII.md.
 	sender = app.WrapPII(app.WrapSensitive(sender, engine))
 	productstate.Sensitive = func(v string) bool { return engine.Filter(v).Matched() }
 
@@ -1631,7 +1632,9 @@ func newSensitiveEngine() *sensitive.Engine {
 
 // wrapProductSender applies the product's provider-bound decorators to every
 // freshly built sender. PII is the outer wrapper so it can mask request copies
-// while P8 continues to filter replies. OCTO-FORK: P10 隐私模式与 PII 处理.
+// while P8 continues to filter replies.
+// OCTO-FORK: P10 隐私模式与 PII 处理 — see
+// dev-docs-usdable/需求/2260906/技术方案/P10-隐私模式与PII.md.
 func (s *Server) wrapProductSender(sender agent.Sender) agent.Sender {
 	return app.WrapPII(app.WrapSensitive(sender, s.sensitiveEngine))
 }
@@ -3649,7 +3652,9 @@ func (s *Server) runChannelIdleTurn(ctx context.Context, sess *channel.Session, 
 // user (see channel.NewUIController).
 func (s *Server) runChannelTurns(ctx context.Context, sess *channel.Session, ad channel.Adapter, ev channel.InboundEvent, content string, stopTyping func()) {
 	// Sender instances are shared, so privacy is stamped on this turn's
-	// context instead of retained by the sender. OCTO-FORK: P10 隐私模式.
+	// context instead of retained by the sender.
+	// OCTO-FORK: P10 隐私模式与 PII 处理 — see
+	// dev-docs-usdable/需求/2260906/技术方案/P10-隐私模式与PII.md.
 	ctx = s.withSessionPrivacy(ctx, sess.Store)
 
 	// Refresh the external memory backend from config — IM turns never go
@@ -3919,7 +3924,9 @@ func (s *Server) runChannelTurns(ctx context.Context, sess *channel.Session, ad 
 				defer s.releaseTitleGeneration(sid)
 				ctx, cancel := context.WithTimeout(context.Background(), agent.TitleGenerationTimeout)
 				defer cancel()
-				ctx = s.withSessionPrivacy(ctx, sess.Store) // OCTO-FORK: P10 隐私模式.
+				// OCTO-FORK: P10 隐私模式与 PII 处理 — see
+				// dev-docs-usdable/需求/2260906/技术方案/P10-隐私模式与PII.md.
+				ctx = s.withSessionPrivacy(ctx, sess.Store)
 				t, terr := sess.Agent.GenerateTitleOrSnippet(ctx, titleMsgs)
 				if terr != nil {
 					slog.Warn("channel session title generation failed, falling back to message snippet", "session_id", sid, "err", terr)

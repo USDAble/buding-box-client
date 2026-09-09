@@ -11,11 +11,13 @@
   import { SIDEBAR_MIN, SIDEBAR_MAX, CENTER_MIN, readSidebarWidth, saveSidebarWidth } from '../../lib/sidebarWidth'
   import { ago, clockTick } from '../../lib/relTime'
   import { isUnread, sessionSeenAt, sessionTouchedAt } from '../../lib/unread'
+  import { productState } from '../../lib/product'
   import { ws } from '../../lib/ws'
   import OctoLogo from './OctoLogo.svelte'
   import AccountCorner from './AccountCorner.svelte'
   import AccountPanel from './AccountPanel.svelte'
   import ProjectModal from '../overlays/ProjectModal.svelte'
+  import PrivacyMark from '../ui/PrivacyMark.svelte'
   import type { SessionGroup } from '../../lib/types'
 
   // Mac's traffic lights float over the window's top-left corner, which is this
@@ -956,6 +958,10 @@
             <iconify-icon icon="ant-design:close-outlined" width="13"></iconify-icon>
           </span>
           {:else}
+          <!-- Empty chat_mode is a legacy session and follows the account
+               default, matching the server. OCTO-FORK: P10 隐私模式与 PII 处理 — see
+               dev-docs-usdable/需求/2260906/技术方案/P10-隐私模式与PII.md. -->
+          <PrivacyMark mode={(s as any).chat_mode || $productState?.prefs.defaultChatMode || 'default'} />
           <span class="session-title">{(s as any).name || (s as any).title || s.id}</span>
           <!-- Metadata gives way to the row's actions on hover (CSS, not state:
                the actions are the same width every time, so swapping them in

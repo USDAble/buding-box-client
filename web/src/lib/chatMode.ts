@@ -8,6 +8,13 @@ import { chatMode, chatModel, sessions } from './stores'
 
 export type ChatMode = 'privacy' | 'smart' | 'default'
 
+// Shared by P10's composer/sidebar affordances so every surface follows the
+// same exact mode check. OCTO-FORK: P10 隐私模式与 PII 处理 — see
+// dev-docs-usdable/需求/2260906/技术方案/P10-隐私模式与PII.md.
+export function isPrivacyMode(mode: string | null | undefined): boolean {
+  return mode === 'privacy'
+}
+
 // The loaded mode list (chat-modes.json grouping, resolved against config.yml).
 export const chatModes = writable<ChatModeDTO[]>([])
 // True when the last load served the built-in default because the user's

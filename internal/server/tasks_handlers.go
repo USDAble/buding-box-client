@@ -328,6 +328,9 @@ func (s *Server) RunTask(ctx context.Context, task scheduler.Task) (sessionID st
 	// web UI offers the stop button.
 	runCtx, cancel := context.WithCancel(context.WithValue(context.Background(), ctxKeySessionID{}, sessionID))
 	runCtx = tools.WithSessionID(runCtx, sessionID)
+	// OCTO-FORK: P10 隐私模式与 PII 处理 — see
+	// dev-docs-usdable/需求/2260906/技术方案/P10-隐私模式与PII.md.
+	runCtx = s.withSessionPrivacy(runCtx, sess)
 	s.registerInterrupt(sessionID, cancel)
 	// Global running-state pair: cron fires session_created before this turn
 	// body runs, which makes every tab refresh its session list and seed

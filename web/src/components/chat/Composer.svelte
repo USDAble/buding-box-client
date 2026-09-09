@@ -21,6 +21,8 @@
   import ComposerNotices, { type Notice } from './ComposerNotices.svelte'
   import SensitiveToggle from './SensitiveToggle.svelte'
   import ModeMenu from './ModeMenu.svelte'
+  import PrivacyBar from './PrivacyBar.svelte'
+  import PrivacyMark from '../ui/PrivacyMark.svelte'
   import { productState } from '../../lib/product'
   import { checkSensitive } from '../../lib/sensitive'
   import { loadChatModes, setSessionMode } from '../../lib/chatMode'
@@ -647,10 +649,13 @@
     || ($pendingModel ? $pendingModel.split('::').pop() : '')
     || defaultModelName || '—',
   )
-  // The current mode for the chip/ModeMenu: the session's own attribute, else
-  // the account default, else the "default" group. OCTO-FORK: P9.
+  // The current mode for the chip/ModeMenu: the session's own attribute, then
+  // a blank-view pending choice, then the account default.
+  // OCTO-FORK: P10 隐私模式与 PII 处理 — see
+  // dev-docs-usdable/需求/2260906/技术方案/P10-隐私模式与PII.md.
   let currentMode = $derived(
-    $chatMode[sid] || currentSession?.chat_mode || $productState?.prefs.defaultChatMode || 'default',
+    $chatMode[sid] || currentSession?.chat_mode || (!sid ? $pendingChatMode : '')
+    || $productState?.prefs.defaultChatMode || 'default',
   )
   // The model id to highlight in ModeMenu (composite id when known).
   let currentModelId = $derived(
@@ -1340,6 +1345,7 @@
     {#if noticesAbove.length > 0}
       <ComposerNotices notices={noticesAbove} />
     {/if}
+    <PrivacyBar mode={currentMode} />
     <div
       class="input-card"
       class:drag-over={dragOver}
@@ -1490,6 +1496,7 @@
         <div class="picker">
           <button class="meta-chip" onclick={(e) => { e.stopPropagation(); const open = modelMenu; closeMenus(); modelMenu = !open; if (!open) void loadChatModes() }}>
             <iconify-icon icon="ant-design:robot-outlined" width="13"></iconify-icon>
+            <PrivacyMark mode={currentMode} label />
             <span class="mono">{modelName}</span>
             <iconify-icon icon="lucide:chevron-down" width="12"></iconify-icon>
           </button>

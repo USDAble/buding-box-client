@@ -479,7 +479,11 @@ func New(cfg Config) (*Server, error) {
 	// startup. OCTO-FORK: P8 敏感词接入 — see
 	// dev-docs-usdable/需求/2260906/技术方案/P8-敏感词接入.md.
 	engine := newSensitiveEngine()
-	sender = app.WrapSensitive(sender, engine)
+	// P10 keeps PII masking outside P8's reply filter: request copies are
+	// masked first, while model replies still flow through the existing filter.
+	// OCTO-FORK: P10 隐私模式与 PII 处理 — see
+	// dev-docs-usdable/需求/2260906/技术方案/P10-隐私模式与PII.md.
+	sender = app.WrapPII(app.WrapSensitive(sender, engine))
 	productstate.Sensitive = func(v string) bool { return engine.Filter(v).Matched() }
 
 	// Surface async-hook (spill queue) errors through the server log.
@@ -544,6 +548,17 @@ func New(cfg Config) (*Server, error) {
 			slog.Warn("could not persist access key; a new one will be generated next start", "err", err)
 		}
 	}
+
+	// OCTO-FORK: P11 假模型通道 — seed the demo buding endpoint so a fresh
+	// install (no data/config.yml) gets the four fake models. This MUST run
+	// after resolveAccessKey above: fileCfg is loaded from disk before the
+	// seed, and its Save (a fresh access key) would otherwise overwrite the
+	// just-seeded buding endpoint with the stale pre-seed config. The sender
+	// is intentionally not re-resolved here — the lazy ensureSender re-reads
+	// config on the first turn and picks up the seeded local channel, so a
+	// keyless fresh install still enters its (P9-suppressed) onboarding state
+	// until then. See P11 技术方案 §3.2.
+	ensureLocalEndpoint()
 
 	// Resolve the shared memory tier. The launch directory deliberately plays
 	// no part: project memory is scoped by the session-group registry, per
@@ -1613,6 +1628,43 @@ func writeInvalidJSONBody(w http.ResponseWriter, err error) {
 // the result to app.NewSender — internal/app is the single place that builds the
 // vendor client, so the server no longer imports internal/provider.
 
+// localEndpointID is the config endpoint id seeded for the P11 demo channel.
+// It is an ASCII data key (需求 §5.6.3「id 固定」) — not the English brand name.
+const localEndpointID = "buding"
+
+// ensureLocalEndpoint seeds the demo buding endpoint (provider: local) into
+// the config when it is absent, so the four P11 fake models are reachable out
+// of the box for demos and offline use. It is a no-op when buding already
+// exists or the config cannot be read/saved — the same degrade-to-default
+// policy the sensitive dictionary and chat-modes.json use. A seeded endpoint
+// has an empty api_key by design: 需求 §5.1.2-3 forbids the key-setup wizard,
+// and the local channel needs no key (app.VendorKeyOptional("local") == true).
+// OCTO-FORK: P11 假模型通道 — see P11 技术方案 §3.2.
+func ensureLocalEndpoint() {
+	cfg, err := config.Load()
+	if err != nil {
+		return
+	}
+	for _, ep := range cfg.Endpoints {
+		if ep.ID == localEndpointID {
+			return
+		}
+	}
+	cfg.Endpoints = append(cfg.Endpoints, config.Endpoint{
+		ID:       localEndpointID,
+		Provider: app.ProviderLocal,
+		Models: []config.EndpointModel{
+			{Model: "buding-local-general"},
+			{Model: "buding-local-fast"},
+			{Model: "buding-cloud-plus"},
+			{Model: "buding-cloud-pro"},
+		},
+	})
+	if err := cfg.Save(); err != nil {
+		slog.Warn("could not seed local demo endpoint", "err", err)
+	}
+}
+
 // newSensitiveEngine builds the P7 engine over the product dictionary file.
 // data/sensitive-words.txt holds user-extensible words; an unresolvable data
 // root or missing file degrades to the built-in list (sensitive.New(path) falls
@@ -1626,12 +1678,13 @@ func newSensitiveEngine() *sensitive.Engine {
 	return sensitive.New(p)
 }
 
-// wrapSensitive decorates a freshly built sender with the output filter so the
-// model's visible text is masked before it reaches the agent loop. nil engine
-// (unresolvable data root) or nil sender pass through unchanged — app.
-// WrapSensitive handles both.
-func (s *Server) wrapSensitive(sender agent.Sender) agent.Sender {
-	return app.WrapSensitive(sender, s.sensitiveEngine)
+// wrapProductSender applies the product's provider-bound decorators to every
+// freshly built sender. PII is the outer wrapper so it can mask request copies
+// while P8 continues to filter replies.
+// OCTO-FORK: P10 隐私模式与 PII 处理 — see
+// dev-docs-usdable/需求/2260906/技术方案/P10-隐私模式与PII.md.
+func (s *Server) wrapProductSender(sender agent.Sender) agent.Sender {
+	return app.WrapPII(app.WrapSensitive(sender, s.sensitiveEngine))
 }
 
 func resolveProviderAndModel(flagProvider, flagModel string) (agent.Sender, string, string, error) {
@@ -1819,7 +1872,7 @@ func (s *Server) cachedSenderForEntry(ref string, entry config.ModelEntry) (agen
 	if s.senderCache == nil {
 		s.senderCache = make(map[string]agent.Sender)
 	}
-	s.senderCache[key] = s.wrapSensitive(sender)
+	s.senderCache[key] = s.wrapProductSender(sender)
 	return s.senderCache[key], nil
 }
 
@@ -2190,7 +2243,7 @@ func (s *Server) ensureSender() error {
 		s.senderMu.Unlock()
 		return fmt.Errorf("server not configured: complete setup via the Web UI")
 	}
-	s.sender = s.wrapSensitive(sender)
+	s.sender = s.wrapProductSender(sender)
 	s.model = model
 	s.provider = provName
 	enableTools := s.cfg.Tools
@@ -2246,7 +2299,7 @@ func (s *Server) reloadDefaultSender() error {
 	}
 	s.model = model
 	if sender != nil {
-		s.sender = s.wrapSensitive(sender)
+		s.sender = s.wrapProductSender(sender)
 		s.provider = provName
 	}
 	return nil
@@ -3646,6 +3699,12 @@ func (s *Server) runChannelIdleTurn(ctx context.Context, sess *channel.Session, 
 // typing-keepalive ticker the first time this chain's reply text reaches the
 // user (see channel.NewUIController).
 func (s *Server) runChannelTurns(ctx context.Context, sess *channel.Session, ad channel.Adapter, ev channel.InboundEvent, content string, stopTyping func()) {
+	// Sender instances are shared, so privacy is stamped on this turn's
+	// context instead of retained by the sender.
+	// OCTO-FORK: P10 隐私模式与 PII 处理 — see
+	// dev-docs-usdable/需求/2260906/技术方案/P10-隐私模式与PII.md.
+	ctx = s.withSessionPrivacy(ctx, sess.Store)
+
 	// Refresh the external memory backend from config — IM turns never go
 	// through prepareToolTurn (only WS/REST/cron do), so this is the only
 	// place that keeps it live for IM at all, not just on-time. Must run
@@ -3913,6 +3972,9 @@ func (s *Server) runChannelTurns(ctx context.Context, sess *channel.Session, ad 
 				defer s.releaseTitleGeneration(sid)
 				ctx, cancel := context.WithTimeout(context.Background(), agent.TitleGenerationTimeout)
 				defer cancel()
+				// OCTO-FORK: P10 隐私模式与 PII 处理 — see
+				// dev-docs-usdable/需求/2260906/技术方案/P10-隐私模式与PII.md.
+				ctx = s.withSessionPrivacy(ctx, sess.Store)
 				t, terr := sess.Agent.GenerateTitleOrSnippet(ctx, titleMsgs)
 				if terr != nil {
 					slog.Warn("channel session title generation failed, falling back to message snippet", "session_id", sid, "err", terr)

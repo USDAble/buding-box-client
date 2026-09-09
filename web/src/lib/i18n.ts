@@ -1031,6 +1031,22 @@ export const en: Record<string, string> = {
   "product.panel.help.drive_loss": "Losing the USB drive is treated as account compromise",
   "product.panel.help.smartscreen": "If SmartScreen warns, choose “Run anyway”",
   "product.panel.help.docs_note": "More product help lives in the docs bundled with the program directory",
+  // OCTO-FORK: P13 sensitive-word dictionary management — see
+  // dev-docs-usdable/需求/2260906/技术方案/P13-词库管理界面.md.
+  "product.dict.builtin": "Built-in words",
+  "product.dict.user": "My words",
+  "product.dict.count": "{n} items",
+  "product.dict.empty": "No custom words yet",
+  "product.dict.add_placeholder": "Add a word",
+  "product.dict.import": "Import file",
+  "product.dict.export": "Export file",
+  "product.dict.instant_effect": "Changes take effect immediately",
+  "product.dict.invalid_word": "This word is invalid",
+  "product.dict.duplicate_word": "This word is already in the dictionary",
+  "product.dict.saved": "Dictionary updated",
+  "product.dict.exported": "Exported",
+  "product.dict.import_preview": "Will add {added} and skip {skipped} that already exist",
+  "product.dict.import_confirm": "Import words",
   // OCTO-FORK: P6 hidden entries + credits — see
   // dev-docs-usdable/需求/2260906/技术方案/P6-入口隐藏与积分.md.
   "feature.not_available": "This entry isn't available in this version",
@@ -1040,6 +1056,16 @@ export const en: Record<string, string> = {
   "sensitive.toggle": "Sensitive-word check",
   "sensitive.toggle_off_confirm": "Once off, your input is sent as-is. Model replies will still be filtered.",
   "sensitive.hit_notice": "Contains sensitive content. Sensitive words have been replaced — review and send again.",
+  // OCTO-FORK: P9 模式与模型选择器 — see
+  // dev-docs-usdable/需求/2260906/技术方案/P9-模式与模型.md §5.
+  "mode.privacy": "Privacy",
+  "mode.smart": "Smart",
+  "mode.default": "Default",
+  "mode.no_models": "No models available in this mode",
+  "model.buding-local-general": "Local General",
+  "model.buding-local-fast": "Local Fast",
+  "model.buding-cloud-plus": "Cloud Plus",
+  "model.buding-cloud-pro": "Cloud Pro",
 };
 
 export const zh: Record<string, string> = {
@@ -2067,6 +2093,22 @@ export const zh: Record<string, string> = {
   "product.panel.help.drive_loss": "丢失 U 盘视同账号泄露",
   "product.panel.help.smartscreen": "若出现 SmartScreen 提示，请选择「仍要运行」",
   "product.panel.help.docs_note": "更多产品帮助见随程序目录提供的说明文档",
+  // OCTO-FORK: P13 敏感词库管理 — see
+  // dev-docs-usdable/需求/2260906/技术方案/P13-词库管理界面.md.
+  "product.dict.builtin": "内置词",
+  "product.dict.user": "我的词库",
+  "product.dict.count": "{n} 条",
+  "product.dict.empty": "暂无自定义词",
+  "product.dict.add_placeholder": "输入新词",
+  "product.dict.import": "导入文件",
+  "product.dict.export": "导出文件",
+  "product.dict.instant_effect": "改动立即生效",
+  "product.dict.invalid_word": "该词无效",
+  "product.dict.duplicate_word": "该词已在词库中",
+  "product.dict.saved": "词库已更新",
+  "product.dict.exported": "已导出",
+  "product.dict.import_preview": "将新增 {added} 条，跳过 {skipped} 条已存在",
+  "product.dict.import_confirm": "导入词库",
   // OCTO-FORK: P6 入口隐藏与积分 — see
   // dev-docs-usdable/需求/2260906/技术方案/P6-入口隐藏与积分.md.
   "feature.not_available": "本期不提供此入口",
@@ -2076,6 +2118,16 @@ export const zh: Record<string, string> = {
   "sensitive.toggle": "敏感词检测",
   "sensitive.toggle_off_confirm": "关闭后，输入将按原文发送。模型回复仍会过滤。",
   "sensitive.hit_notice": "包含敏感内容，已替换敏感词，确认后可再次发送。",
+  // OCTO-FORK: P9 模式与模型选择器 — see
+  // dev-docs-usdable/需求/2260906/技术方案/P9-模式与模型.md §5.
+  "mode.privacy": "隐私",
+  "mode.smart": "智能",
+  "mode.default": "默认",
+  "mode.no_models": "该模式下暂无可用模型",
+  "model.buding-local-general": "本地通用",
+  "model.buding-local-fast": "本地极速",
+  "model.buding-cloud-plus": "云端智能",
+  "model.buding-cloud-pro": "云端旗舰",
 };
 
 const dictionaries: Record<string, Record<string, string>> = { en, zh };

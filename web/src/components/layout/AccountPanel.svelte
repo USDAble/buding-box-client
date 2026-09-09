@@ -10,6 +10,7 @@
   import CreditsPage from './account/CreditsPage.svelte'
   import LicensePage from './account/LicensePage.svelte'
   import SettingsPage from './account/SettingsPage.svelte'
+  import SensitiveDictPage from './account/SensitiveDictPage.svelte'
   import HelpPage from './account/HelpPage.svelte'
   import AboutPage from './account/AboutPage.svelte'
 
@@ -128,6 +129,7 @@
       case 'credits': return tr('product.panel.credits')
       case 'license': return tr('product.panel.license')
       case 'settings': return tr('nav.settings')
+      case 'sensitive': return tr('product.panel.sensitive_library')
       case 'help': return tr('product.panel.help')
       case 'about': return tr('product.panel.about')
       default: return ''
@@ -194,10 +196,10 @@
           <iconify-icon icon="lucide:chevron-right" width="13" style="color:var(--text-quaternary)"></iconify-icon>
         </button>
 
-        <div class="nav-row disabled" role="button" tabindex="-1" title={$t('product.panel.soon')} onclick={onSoon}>
+        <button class="nav-row" onclick={() => go('sensitive')}>
           <span class="lbl">{$t('product.panel.sensitive_library')}</span>
-          <span class="detail">{ $t('product.panel.soon') }</span>
-        </div>
+          <iconify-icon icon="lucide:chevron-right" width="13" style="color:var(--text-quaternary)"></iconify-icon>
+        </button>
 
         <button class="nav-row" onclick={() => go('help')}>
           <span class="lbl">{$t('product.panel.help')}</span>
@@ -238,6 +240,8 @@
           <LicensePage />
         {:else if page === 'settings'}
           <SettingsPage />
+        {:else if page === 'sensitive'}
+          <SensitiveDictPage />
         {:else if page === 'help'}
           <HelpPage />
         {:else}

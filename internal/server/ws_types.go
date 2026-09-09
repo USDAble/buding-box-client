@@ -181,6 +181,7 @@ type wsEventSessionUpdate struct {
 	WorkingDir      string  `json:"working_dir,omitempty"`
 	PermissionMode  string  `json:"permission_mode,omitempty"`
 	ReasoningEffort string  `json:"reasoning_effort,omitempty"`
+	ChatMode        string  `json:"chat_mode,omitempty"` // OCTO-FORK: P9 per-session mode group
 }
 
 type wsEventTodoUpdate struct {

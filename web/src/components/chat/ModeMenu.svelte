@@ -4,6 +4,7 @@
   import { chatModes, modeDisplayName, modelDisplayName } from '../../lib/chatMode'
   import { settingsModalOpen } from '../../lib/stores'
   import type { ChatModeModel } from '../../lib/api'
+  import PrivacyMark from '../ui/PrivacyMark.svelte'
 
   let {
     currentModelId = '',
@@ -49,7 +50,12 @@
   {:else}
     {#each $chatModes as mode (mode.id)}
       <button class="mode-header" onclick={() => toggleGroup(mode.id)}>
-        <span class="mode-name">{modeDisplayName(mode.id)}</span>
+        <span class="mode-name">
+          <!-- Only the active privacy group gets P10's shield; inactive
+               groups retain P9's original presentation. OCTO-FORK: P10. -->
+          <PrivacyMark mode={mode.id === currentMode ? mode.id : ''} />
+          <span>{modeDisplayName(mode.id)}</span>
+        </span>
         <iconify-icon
           icon={openGroups.includes(mode.id) ? 'lucide:chevron-down' : 'lucide:chevron-right'}
           width="12"
@@ -91,7 +97,7 @@
     gap: 6px; padding: 6px 10px 4px; border: none; background: transparent;
     cursor: pointer; font-family: inherit; text-align: left;
   }
-  .mode-name { font-size: 11px; font-weight: 600; color: var(--text-secondary); }
+  .mode-name { display: inline-flex; align-items: center; gap: 5px; font-size: 11px; font-weight: 600; color: var(--text-secondary); }
   .menu-item {
     width: 100%; display: flex; flex-direction: column; gap: 1px; align-items: flex-start;
     padding: 7px 10px 7px 20px; border: none; background: transparent; border-radius: 6px;

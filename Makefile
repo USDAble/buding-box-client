@@ -64,7 +64,8 @@ RG_EMBED_BIN := $(RG_EMBED_DIR)/rg
         eval-build eval-list eval \
         rg-embed rg-embed-clean \
         bundle-tools-windows bundle-tools-macos \
-        web-build web-dev dev build-full desktop desktop-app desktop-appimage
+        web-build web-dev dev build-full desktop desktop-app desktop-appimage \
+        brand-assets brand-assets-check
 
 all: test
 
@@ -169,13 +170,31 @@ clean:
 # Edit branding/brand.json, run `make brand`, commit both. `make brand-check` is
 # what CI's brand-guard job runs; the scripts have zero npm dependencies, so it
 # needs only a Node binary.
+#
+# `brand` also renders the raster master (branding/source/logo-mark.png — the
+# single coloured PNG the designer delivers) into every shipped bitmap via
+# cmd/generate-brand-assets — see 品牌升级方案 §5.2 / §5.8. The tray silhouette
+# is derived from the master's alpha when no dedicated logo-mono.png exists.
+# The tool still validates any .svg source (rejecting embedded <image>/base64
+# or live <text>), so a fake-vector regression fails loudly rather than ship a
+# degraded icon.
 brand:
 	node scripts/sync-branding.mjs
+	go run ./cmd/generate-brand-assets
 
 brand-check:
 	node scripts/brand-schema.mjs
 	node scripts/sync-branding.mjs --check
 	node --test scripts/brand-schema.test.mjs scripts/sync-branding.test.mjs
+
+# Asset-only steps, separated so the text checks (brand-check) stay independent
+# of the design deliverable. Runs after every designer master lands in
+# branding/source/logo-mark.png; CI guards drift via brand-assets-check.
+brand-assets:
+	go run ./cmd/generate-brand-assets
+
+brand-assets-check:
+	go run ./cmd/generate-brand-assets --check
 
 # ── portable data root guard ──────────────────────────────────────────────────
 # Rejects any reintroduction of the pre-fork ~/.octo data root: a ".octo"

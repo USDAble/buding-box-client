@@ -79,6 +79,22 @@ func newWindowToken() string {
 	return hex.EncodeToString(b)
 }
 
+// desktopWebviewURL returns the URL the Wails window loads. It defaults to the
+// in-process hub (hubAddr), whose server serves the embedded webdist. OCTO-FORK:
+// OCTO_DESKTOP_DEV_URL overrides it for a shell + Vite hot-reload dev loop —
+// the window loads the Vite dev server (http://localhost:5173), whose /api and
+// /ws proxy back to this process's in-process hub on 8088 (see `make
+// desktop-dev`). The shell marker and window token still ride shellURL's query
+// string, and the product gate keys on the token, not the origin, so nativeShell
+// and the gate keep working unchanged. See
+// dev-docs-usdable/需求/2260906/技术方案/P12-便携打包.md.
+func desktopWebviewURL() string {
+	if dev := strings.TrimSpace(os.Getenv("OCTO_DESKTOP_DEV_URL")); dev != "" {
+		return dev
+	}
+	return "http://" + hubAddr
+}
+
 // isBundled reports whether we're running inside a .app. The Wails
 // notifications service needs a bundle identifier and hard-fails startup
 // without one, so it's registered only when bundled — a bare `make desktop`
@@ -237,7 +253,7 @@ func main() {
 	// it runs before the bridge takes its copy of settings below.
 	ensureBundledOcto(&settings)
 
-	bridge := &nativeBridge{settings: settings, url: "http://" + hubAddr, windowToken: newWindowToken()}
+	bridge := &nativeBridge{settings: settings, url: desktopWebviewURL(), windowToken: newWindowToken()}
 	// On Windows/Linux a window close would otherwise quit the app; start with
 	// quit allowed only when the user opted out of keep-running-in-background.
 	bridge.allowQuit.Store(!settings.KeepRunningInBackground)

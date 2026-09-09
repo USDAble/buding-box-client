@@ -12,6 +12,9 @@ Guidance for Claude Code working in this repository. The octo-agent equivalent i
 
 ```bash
 make build                                                  # ./octo (or set VERSION=0.x.y for releases)
+make desktop-portable                                       # Windows 便携目录 dist/PuddingBox/ + zip（主交付物；任意主机交叉编译）
+make desktop-portable-all                                   # 一次出 macOS .app + Windows 便携目录（仅 macOS 主机）
+make portable-check                                         # 打包管线 Node 单测
 make test                                                   # go test -race ./...
 make vet                                                    # go vet ./...
 make fmt-check                                              # gofmt -l . must print nothing

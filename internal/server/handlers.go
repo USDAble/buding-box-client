@@ -60,6 +60,7 @@ type sessionItem struct {
 	TurnCount           int       `json:"turn_count"`
 	WorkingDir          string    `json:"working_dir,omitempty"`
 	PermissionMode      string    `json:"permission_mode,omitempty"`
+	ChatMode            string    `json:"chat_mode,omitempty"`
 	ReasoningEffort     string    `json:"reasoning_effort,omitempty"`
 	ShowReasoning       *bool     `json:"show_reasoning,omitempty"`
 	ContextUsage        int       `json:"context_usage,omitempty"`
@@ -94,6 +95,10 @@ type sessionCreateRequest struct {
 	// seeding, so the session runs in the project directory with no leftover
 	// own dir to strand later.
 	GroupID string `json:"group_id,omitempty"`
+	// ChatMode overrides the account's "new session default mode" for this one
+	// session (P9 §5.6 规则 5/6: the selector's landing-page pick). Empty means
+	// "inherit the default" — see defaultChatMode. OCTO-FORK: P9.
+	ChatMode string `json:"chat_mode,omitempty"`
 }
 
 // toSessionItem builds a frontend-friendly session descriptor.
@@ -145,6 +150,7 @@ func (srv *Server) toSessionItem(s *agent.Session, source, agentProfile string) 
 		TurnCount:           s.TurnCount(),
 		WorkingDir:          srv.sessionCwd(s),
 		PermissionMode:      pm,
+		ChatMode:            s.ChatMode,
 		ReasoningEffort:     re,
 		ShowReasoning:       sr,
 		ContextUsage:        ctxUsage,
@@ -350,6 +356,7 @@ func (s *Server) handleCreateChat(w http.ResponseWriter, r *http.Request) {
 	}
 	sess := agent.NewSession(model, s.system)
 	s.applyDefaultWorkspaceDir(sess)
+	_ = sess.SetChatMode(s.defaultChatMode())
 	_ = sess.SetPermissionMode(string(resolvePermissionMode()))
 	sess.Bind(agent.EntryWeb, false)
 	if req.Name != "" {
@@ -583,6 +590,14 @@ func (s *Server) handleCreateSession(w http.ResponseWriter, r *http.Request) {
 	sess.Source = source
 	sess.ModelConfig = modelConfig
 	sess.AgentID = agentProfile
+	// P9: a create-time chat_mode (the selector's landing-page pick) wins over
+	// the account default; otherwise the session inherits defaultChatMode.
+	// OCTO-FORK: P9 模式与模型选择器.
+	if req.ChatMode != "" {
+		_ = sess.SetChatMode(req.ChatMode)
+	} else {
+		_ = sess.SetChatMode(s.defaultChatMode())
+	}
 	_ = sess.SetPermissionMode(string(resolvePermissionMode()))
 	sess.Bind(agent.EntryWeb, false)
 	if req.Name != "" {

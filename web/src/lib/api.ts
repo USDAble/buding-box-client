@@ -125,6 +125,9 @@ export interface CreateSessionOpts {
   // For a project, the server skips seeding a default working dir so the
   // session runs purely in the project's directory.
   group_id?: string
+  // P9: the mode group this one session belongs to (the selector's
+  // landing-page pick). Omitted → the server applies the account default.
+  chat_mode?: string
 }
 
 export async function createSession(opts: CreateSessionOpts): Promise<Session> {
@@ -307,6 +310,36 @@ export async function updateSessionPermissionMode(id: string, mode: string): Pro
   await request<unknown>(`/api/sessions/${id}/permission_mode`, {
     method: 'PATCH',
     ...json({ permission_mode: mode }),
+  })
+}
+
+// ── P9 chat modes (mode→model selector) ────────────────────────────────────
+// OCTO-FORK: P9 模式与模型选择器 — see
+// dev-docs-usdable/需求/2260906/技术方案/P9-模式与模型.md §4.
+export interface ChatModeModel {
+  id: string
+  /** Composite "<endpoint>::<model>" id; empty when the model is listed in
+   *  chat-modes.json but not present in config.yml (not selectable yet). */
+  compositeId?: string
+}
+export interface ChatModeDTO {
+  id: 'privacy' | 'smart' | 'default' | string
+  models: ChatModeModel[]
+  defaultModel: string
+}
+export interface ChatModesResponse {
+  modes: ChatModeDTO[]
+  /** True when chat-modes.json was unreadable and the built-in default is
+   *  being served (需求 §9: hint once). */
+  fallback: boolean
+}
+export async function getChatModes(): Promise<ChatModesResponse> {
+  return request<ChatModesResponse>('/api/product/chat-modes')
+}
+export async function setSessionChatMode(id: string, mode: string): Promise<{ ok: boolean; chat_mode: string }> {
+  return request<{ ok: boolean; chat_mode: string }>(`/api/sessions/${id}/chat-mode`, {
+    method: 'PUT',
+    ...json({ mode }),
   })
 }
 

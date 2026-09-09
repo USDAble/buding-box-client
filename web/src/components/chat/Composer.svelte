@@ -3,9 +3,9 @@
   import { onDestroy, onMount, untrack, tick } from 'svelte'
   import {
     running, activeSessionId, chatStreaming, sessions, sessionGroups,
-    chatContextUsage, chatWorkingDir, chatPermMode, chatReasoningEffort, chatShowReasoning, showToast, chatGoal, chatModel,
+    chatContextUsage, chatWorkingDir, chatPermMode, chatReasoningEffort, chatShowReasoning, showToast, chatGoal, chatModel, chatMode,
     globalPermissionMode, globalReasoningEffort, nativeShell, localAccess, activeAgent, pendingModel, view, settingsModalOpen,
-    pendingAgent, pendingWorkingDir, pendingGroupId, pendingReasoningEffort, pendingPermissionMode, pendingShowReasoning,
+    pendingAgent, pendingWorkingDir, pendingGroupId, pendingReasoningEffort, pendingPermissionMode, pendingShowReasoning, pendingChatMode,
     normalizeDir, dirLeaf, projectsClaimingDir,
   } from '../../lib/stores'
   import { ws } from '../../lib/ws'
@@ -20,8 +20,10 @@
   import { getMcpServer } from '../../lib/api'
   import ComposerNotices, { type Notice } from './ComposerNotices.svelte'
   import SensitiveToggle from './SensitiveToggle.svelte'
+  import ModeMenu from './ModeMenu.svelte'
   import { productState } from '../../lib/product'
   import { checkSensitive } from '../../lib/sensitive'
+  import { loadChatModes, setSessionMode } from '../../lib/chatMode'
 
   let { onSend }: { onSend?: (text: string, files?: any[], queued?: boolean) => void } = $props()
 
@@ -645,10 +647,19 @@
     || ($pendingModel ? $pendingModel.split('::').pop() : '')
     || defaultModelName || '—',
   )
+  // The current mode for the chip/ModeMenu: the session's own attribute, else
+  // the account default, else the "default" group. OCTO-FORK: P9.
+  let currentMode = $derived(
+    $chatMode[sid] || currentSession?.chat_mode || $productState?.prefs.defaultChatMode || 'default',
+  )
+  // The model id to highlight in ModeMenu (composite id when known).
+  let currentModelId = $derived(
+    currentSession?.model_id || (currentSession?.model ?? '') || $pendingModel || '',
+  )
   // A pending pick belongs to the blank new-chat view only. Once a session is
   // active (auto-created — which consumed it — or picked/created any other
   // way), drop any leftover so it can't leak into a later blank view.
-  $effect(() => { if (sid) { pendingModel.set(''); pendingReasoningEffort.set('') } })
+  $effect(() => { if (sid) { pendingModel.set(''); pendingReasoningEffort.set(''); pendingChatMode.set('') } })
   // "" (off) is a legitimate resolved value, not "no data yet" — only fall
   // back to a default (?? only skips null/undefined, not "") when neither
   // source has reported anything at all. On the landing page (no sid) that
@@ -748,15 +759,11 @@
   }
 
   // ── model + reasoning pickers ──────────────────────────────────────────────
-  // PR5/PR6: the flat ModelEntry list is gone — read the two-level endpoint
-  // view and flatten it into model rows the picker can show. Each row carries
-  // the composite id "<endpoint>::<model>" so pickModel can pass it to
-  // updateSessionModel, which resolves it via cfg.EntryByModel (composite-id
-  // aware since PR2).
-  let models = $state<{ id: string; model: string; endpoint: string }[]>([])
-  // Composite id of the configured default entry (EndpointsResponse.default),
-  // refreshed together with the model list.
-  let defaultModelId = $state('')
+  // P9: the flat endpoint-flattened model list is gone — the selector now reads
+  // the mode→model grouping (chat-modes.json) through the chatMode module and
+  // renders it via <ModeMenu />. The chip still shows the model name; the
+  // configured default's display name is fetched once on mount so the blank
+  // new-chat view names the model it will actually run on. OCTO-FORK: P9.
   let modelMenu = $state(false)
   let reasonMenu = $state(false)
   // The landing page's project picker: search + list + create + open-folder.
@@ -769,34 +776,6 @@
   let projectModalGroup = $state<SessionGroup | null>(null)
   let agentMenu = $state(false)
   let permMenu = $state(false)
-
-  // The model menu groups rows under their endpoint, like the design mock.
-  let modelGroups = $derived.by(() => {
-    const out: { endpoint: string; items: { id: string; model: string }[] }[] = []
-    for (const m of models) {
-      let g = out.find(x => x.endpoint === m.endpoint)
-      if (!g) { g = { endpoint: m.endpoint, items: [] }; out.push(g) }
-      g.items.push({ id: m.id, model: m.model })
-    }
-    return out
-  })
-
-  // Composite id of the row the menu should highlight as current. Rows are
-  // unique by composite id but NOT by model name (two endpoints may expose
-  // the same model, #2141), so matching by name alone lights up both — prefer
-  // the composite id whenever one is known: the session's own binding
-  // (model_id), the pending pick for a yet-to-be-created session, or the
-  // configured default for an unbound session. Empty means identity unknown
-  // (legacy bare-model binding) and the menu falls back to name matching.
-  let activeModelId = $derived.by(() => {
-    const bound = currentSession?.model_id ?? ''
-    if (bound.includes('::')) return bound
-    if (bound) return ''
-    if (!sid) return $pendingModel || defaultModelId
-    // Unbound session: it runs on the default entry — trust that only while
-    // the default still points at the model the session displays.
-    return defaultModelId.split('::').pop() === modelName ? defaultModelId : ''
-  })
 
   // ── agent assignment ───────────────────────────────────────────────────────
   // agent_profile can be (re)assigned right up until the session's first turn
@@ -857,38 +836,25 @@
   const reasoningLevels = ['off', 'low', 'medium', 'high', 'xhigh', 'max']
   const showReasoningIcon = $derived(showReasoning ? 'ant-design:eye-outlined' : 'ant-design:eye-invisible-outlined')
 
-  // Loaded at mount AND re-fetched every time the model menu opens: the list
-  // otherwise freezes at page load, so an endpoint/model configured in
-  // Settings never appeared (and rows for since-edited endpoints kept stale
-  // composite ids that no longer resolve) until a full reload (#2066).
-  // The sequence guard drops out-of-order responses — reopening the menu
-  // quickly fires overlapping fetches, and a slow first response must not
-  // overwrite a newer one.
+  // Loaded at mount to name the configured default model on the blank
+  // new-chat view (the model the auto-created session will run on). The
+  // sequence guard drops out-of-order responses. OCTO-FORK: P9 — the mode
+  // list itself is fetched separately by loadChatModes on menu open.
   let modelsFetchSeq = 0
   async function refreshModels() {
     const seq = ++modelsFetchSeq
     try {
       const ep = await api.getEndpoints()
       if (seq !== modelsFetchSeq) return
-      const flat: { id: string; model: string; endpoint: string }[] = []
-      for (const e of ep.endpoints) {
-        for (const m of e.models) {
-          flat.push({ id: `${e.id}::${m.model}`, model: m.model, endpoint: e.id })
-        }
-      }
-      models = flat
-      // Default is echoed verbatim from config — a hand-written file may
-      // carry a bare model name, which no menu row's composite id can ever
-      // equal. Treat that as identity-unknown so name matching still applies.
-      defaultModelId = ep.default?.includes('::') ? ep.default : ''
-      // Display name, unlike defaultModelId: a bare-model default is unusable
-      // as an identity but still names the model the chip should show.
+      // Display name only — a bare-model default is unusable as an identity
+      // but still names the model the chip should show.
       defaultModelName = ep.default?.split('::').pop() ?? ''
-    } catch { /* keep the previous list */ }
+    } catch { /* keep the previous name */ }
   }
 
   onMount(async () => {
     await refreshModels()
+    void loadChatModes()
     try { skills = await api.listSkills() } catch { /* leave empty */ }
     try { agents = await api.listAgents() } catch { /* leave empty */ }
     try { workflows = await api.listWorkflows() } catch { /* leave empty */ }
@@ -900,25 +866,23 @@
     } catch { /* leave empty */ }
   })
 
-  async function pickModel(m: { id: string; model: string; endpoint: string }) {
+  // pickModeModel is the ModeMenu callback: it sets the session's mode AND
+  // binds it to the picked model (需求 §5.6 规则 4 — the mode is a session
+  // attribute; the selected value is still a concrete model). On the landing
+  // page (no session) both picks are parked for ensureActiveSession to apply.
+  async function pickModeModel(mode: string, m: { id: string; compositeId?: string }) {
     modelMenu = false
+    const modelId = m.compositeId ?? m.id
     if (!sid) {
-      // No session yet: remember the pick for the session about to be
-      // auto-created (ensureActiveSession in ChatView), mirroring pickAgent.
-      // Silently returning here made the menu look broken (#2066).
-      pendingModel.set(m.id)
+      pendingChatMode.set(mode)
+      pendingModel.set(modelId)
       queueMicrotask(() => textareaEl?.focus())
       return
     }
     try {
-      // m.id is the composite id "<endpoint>::<model>" — the backend's
-      // handleUpdateSessionModel resolves it via cfg.EntryByModel (composite-
-      // id aware since PR2), binding the session to that endpoint's sender.
-      const res = await api.updateSessionModel(sid, m.id)
-      sessions.update(list => list.map((s: any) => s.id === sid ? { ...s, model: res.model, model_id: res.model_id } : s))
-      chatModel.update(mx => ({ ...mx, [sid]: res.model }))
+      await setSessionMode(sid, mode as any, modelId)
     } catch (e: any) {
-      showToast(e.message ?? 'Failed to switch model', 'error')
+      showToast(e.message ?? 'Failed to switch mode', 'error')
     }
   }
 
@@ -1524,30 +1488,18 @@
           <iconify-icon icon="ant-design:paper-clip-outlined" width="13"></iconify-icon>
         </button>
         <div class="picker">
-          <button class="meta-chip" onclick={(e) => { e.stopPropagation(); const open = modelMenu; closeMenus(); modelMenu = !open; if (!open) void refreshModels() }}>
+          <button class="meta-chip" onclick={(e) => { e.stopPropagation(); const open = modelMenu; closeMenus(); modelMenu = !open; if (!open) void loadChatModes() }}>
             <iconify-icon icon="ant-design:robot-outlined" width="13"></iconify-icon>
             <span class="mono">{modelName}</span>
             <iconify-icon icon="lucide:chevron-down" width="12"></iconify-icon>
           </button>
           {#if modelMenu}
-            <div class="menu" onclick={(e) => e.stopPropagation()}>
-              {#if models.length === 0}
-                <div class="menu-empty">{$t('chat.no_models')}</div>
-              {:else}
-                {#each modelGroups as g (g.endpoint)}
-                  <div class="menu-label mono">{g.endpoint}</div>
-                  {#each g.items as m (m.id)}
-                    <button class="menu-item" class:active={activeModelId ? m.id === activeModelId : m.model === modelName} onclick={() => pickModel({ id: m.id, model: m.model, endpoint: g.endpoint })}>
-                      <span class="mi-name mono">{m.model}</span>
-                    </button>
-                  {/each}
-                {/each}
-                <div class="menu-divider"></div>
-                <button class="menu-item manage" onclick={() => { modelMenu = false; settingsModalOpen.set(true) }}>
-                  <span class="mi-name">{$t('composer.manage_models')}</span>
-                </button>
-              {/if}
-            </div>
+            <ModeMenu
+              currentModelId={currentModelId}
+              currentMode={currentMode}
+              onPick={pickModeModel}
+              onClose={() => { modelMenu = false }}
+            />
           {/if}
         </div>
         <div class="picker">

@@ -49,3 +49,4 @@ __pycache__/
 .octo/implement-state.json
 doc/
 custom/
+data/

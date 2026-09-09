@@ -24,6 +24,11 @@ func (s *Server) handleProductState(w http.ResponseWriter, r *http.Request) {
 	if pub.Prefs.Locale == "" {
 		pub.Prefs.Locale = productstate.SystemLocale()
 	}
+	// P9: the desktop shell never shows the first-run API-key wizard, even when
+	// the model list is empty or in dev/debug. The window token is only minted
+	// by the desktop build, so its presence is the discriminator (octo serve
+	// leaves it empty and keeps the upstream wizard). OCTO-FORK: P9 模式与模型.
+	pub.SuppressOnboarding = s.cfg.WindowToken != ""
 	writeJSON(w, http.StatusOK, pub)
 }
 

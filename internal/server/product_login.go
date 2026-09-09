@@ -167,6 +167,11 @@ func (s *Server) handleProductLogin(w http.ResponseWriter, r *http.Request) {
 			// The only plan this phase sells is the seeded trial; the account
 			// panel maps the machine code "trial" to the display name (P5 §4.2).
 			st.Plan = productstate.Plan{Name: "trial"}
+			// Input sensitive-word check is ON by default (需求 §5.5.1, P3
+			// schema default "inputSensitiveCheck": true). P8 owns filling the
+			// P3-declared field; a later logout must not reset a user's choice,
+			// so this runs only on first activation. OCTO-FORK: P8 敏感词接入.
+			st.Prefs.InputSensitiveCheck = true
 		}
 		st.Account = &productstate.Account{
 			Phone:       phone,

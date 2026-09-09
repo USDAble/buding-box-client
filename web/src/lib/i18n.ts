@@ -1051,6 +1051,21 @@ export const en: Record<string, string> = {
   // dev-docs-usdable/需求/2260906/技术方案/P6-入口隐藏与积分.md.
   "feature.not_available": "This entry isn't available in this version",
   "credits.insufficient": "Insufficient points",
+  // OCTO-FORK: P8 敏感词接入 — see
+  // dev-docs-usdable/需求/2260906/技术方案/P8-敏感词接入.md.
+  "sensitive.toggle": "Sensitive-word check",
+  "sensitive.toggle_off_confirm": "Once off, your input is sent as-is. Model replies will still be filtered.",
+  "sensitive.hit_notice": "Contains sensitive content. Sensitive words have been replaced — review and send again.",
+  // OCTO-FORK: P9 模式与模型选择器 — see
+  // dev-docs-usdable/需求/2260906/技术方案/P9-模式与模型.md §5.
+  "mode.privacy": "Privacy",
+  "mode.smart": "Smart",
+  "mode.default": "Default",
+  "mode.no_models": "No models available in this mode",
+  "model.buding-local-general": "Local General",
+  "model.buding-local-fast": "Local Fast",
+  "model.buding-cloud-plus": "Cloud Plus",
+  "model.buding-cloud-pro": "Cloud Pro",
 };
 
 export const zh: Record<string, string> = {
@@ -2098,6 +2113,21 @@ export const zh: Record<string, string> = {
   // dev-docs-usdable/需求/2260906/技术方案/P6-入口隐藏与积分.md.
   "feature.not_available": "本期不提供此入口",
   "credits.insufficient": "积分不足",
+  // OCTO-FORK: P8 敏感词接入 — see
+  // dev-docs-usdable/需求/2260906/技术方案/P8-敏感词接入.md.
+  "sensitive.toggle": "敏感词检测",
+  "sensitive.toggle_off_confirm": "关闭后，输入将按原文发送。模型回复仍会过滤。",
+  "sensitive.hit_notice": "包含敏感内容，已替换敏感词，确认后可再次发送。",
+  // OCTO-FORK: P9 模式与模型选择器 — see
+  // dev-docs-usdable/需求/2260906/技术方案/P9-模式与模型.md §5.
+  "mode.privacy": "隐私",
+  "mode.smart": "智能",
+  "mode.default": "默认",
+  "mode.no_models": "该模式下暂无可用模型",
+  "model.buding-local-general": "本地通用",
+  "model.buding-local-fast": "本地极速",
+  "model.buding-cloud-plus": "云端智能",
+  "model.buding-cloud-pro": "云端旗舰",
 };
 
 const dictionaries: Record<string, Record<string, string>> = { en, zh };

@@ -28,6 +28,7 @@ export interface Session {
   turn_count: number
   working_dir: string
   permission_mode: 'interactive' | 'auto' | 'strict' | string
+  chat_mode: 'privacy' | 'smart' | 'default' | string
   reasoning_effort: 'low' | 'medium' | 'high' | string
   show_reasoning?: boolean
   context_usage: number
@@ -295,6 +296,7 @@ export interface WsEventSessionUpdate {
   permission_mode: 'interactive' | 'auto' | 'strict'
   reasoning_effort: 'off' | 'low' | 'medium' | 'high' | 'xhigh' | 'max' | string
   show_reasoning: boolean
+  chat_mode: 'privacy' | 'smart' | 'default' | string
 }
 
 export interface WsEventTodoUpdate {

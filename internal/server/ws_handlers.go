@@ -546,6 +546,19 @@ func (s *Server) handleWSUserMessage(conn *wsConn, msg *wsMsgUserMessage) {
 	mu := s.sessionTurnLock(sid)
 	mu.Lock()
 
+	// P8: server-side input gate before the credit deduction. A hit broadcasts
+	// the masked text back so the frontend can substitute the input box, and
+	// returns WITHOUT charging a credit (P8 §3.6). OCTO-FORK: P8 敏感词接入.
+	if masked, hit := s.checkInputSensitive(content); hit {
+		mu.Unlock()
+		s.wsHub.broadcast(sid, map[string]any{
+			"type":       "input_sensitive",
+			"session_id": sid,
+			"text":       masked,
+		})
+		return
+	}
+
 	// P6: record the credit for a message that reached the turn pipeline. The
 	// deduction runs once here, before either the steer-enqueue or the
 	// direct-turn branch, so both count. Broadcast the fresh credits globally
@@ -2326,7 +2339,7 @@ func (w *wsStreamWriter) handleEvent(ev agent.AgentEvent) {
 				"type":       "assistant_message",
 				"session_id": w.sessionID,
 				"content":    ev.Reply.Content,
-				"thinking":   extractThinking(ev.Reply),
+				"thinking":   w.server.filterThinking(extractThinking(ev.Reply)),
 			})
 		}
 		// Live state is NOT cleared here: this event fires inside RunStream,

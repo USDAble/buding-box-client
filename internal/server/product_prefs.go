@@ -24,8 +24,9 @@ import (
 // into a state the pickers can't represent.
 func (s *Server) handleProductPrefs(w http.ResponseWriter, r *http.Request) {
 	var req struct {
-		Locale          *string `json:"locale"`
-		DefaultChatMode *string `json:"defaultChatMode"`
+		Locale              *string `json:"locale"`
+		DefaultChatMode     *string `json:"defaultChatMode"`
+		InputSensitiveCheck *bool   `json:"inputSensitiveCheck"`
 	}
 	if err := readBodyJSON(r, &req); err != nil {
 		writeInvalidJSONBody(w, err)
@@ -47,6 +48,9 @@ func (s *Server) handleProductPrefs(w http.ResponseWriter, r *http.Request) {
 		}
 		if req.DefaultChatMode != nil {
 			st.Prefs.DefaultChatMode = *req.DefaultChatMode
+		}
+		if req.InputSensitiveCheck != nil {
+			st.Prefs.InputSensitiveCheck = *req.InputSensitiveCheck
 		}
 		return nil
 	}); err != nil {

@@ -60,6 +60,7 @@ type sessionItem struct {
 	TurnCount           int       `json:"turn_count"`
 	WorkingDir          string    `json:"working_dir,omitempty"`
 	PermissionMode      string    `json:"permission_mode,omitempty"`
+	ChatMode            string    `json:"chat_mode,omitempty"`
 	ReasoningEffort     string    `json:"reasoning_effort,omitempty"`
 	ShowReasoning       *bool     `json:"show_reasoning,omitempty"`
 	ContextUsage        int       `json:"context_usage,omitempty"`
@@ -94,6 +95,10 @@ type sessionCreateRequest struct {
 	// seeding, so the session runs in the project directory with no leftover
 	// own dir to strand later.
 	GroupID string `json:"group_id,omitempty"`
+	// ChatMode overrides the account's "new session default mode" for this one
+	// session (P9 §5.6 规则 5/6: the selector's landing-page pick). Empty means
+	// "inherit the default" — see defaultChatMode. OCTO-FORK: P9.
+	ChatMode string `json:"chat_mode,omitempty"`
 }
 
 // toSessionItem builds a frontend-friendly session descriptor.
@@ -145,6 +150,7 @@ func (srv *Server) toSessionItem(s *agent.Session, source, agentProfile string) 
 		TurnCount:           s.TurnCount(),
 		WorkingDir:          srv.sessionCwd(s),
 		PermissionMode:      pm,
+		ChatMode:            s.ChatMode,
 		ReasoningEffort:     re,
 		ShowReasoning:       sr,
 		ContextUsage:        ctxUsage,
@@ -350,6 +356,7 @@ func (s *Server) handleCreateChat(w http.ResponseWriter, r *http.Request) {
 	}
 	sess := agent.NewSession(model, s.system)
 	s.applyDefaultWorkspaceDir(sess)
+	_ = sess.SetChatMode(s.defaultChatMode())
 	_ = sess.SetPermissionMode(string(resolvePermissionMode()))
 	sess.Bind(agent.EntryWeb, false)
 	if req.Name != "" {
@@ -362,6 +369,14 @@ func (s *Server) handleCreateChat(w http.ResponseWriter, r *http.Request) {
 		mu.Unlock()
 		s.releaseSessionBinding(sess.ID, agent.EntryWeb)
 	}()
+
+	// P8: server-side input gate — runs before the credit deduction so a
+	// blocked message is never charged (P8 §3.6). The frontend does the same
+	// check for responsiveness; this one can't be bypassed. OCTO-FORK: P8 敏感词接入.
+	if masked, hit := s.checkInputSensitive(req.Message); hit {
+		writeJSON(w, http.StatusBadRequest, map[string]any{"code": "input_sensitive", "text": masked})
+		return
+	}
 
 	// P6: deduct one credit for the outgoing message ("成功交给模型" = 送入
 	// agent 循环), then hand the fresh balance back in the response so API
@@ -448,6 +463,13 @@ func (s *Server) handleTurn(w http.ResponseWriter, r *http.Request) {
 	sess, err = agent.LoadSession(id)
 	if err != nil {
 		writeError(w, http.StatusNotFound, err.Error())
+		return
+	}
+
+	// P8: server-side input gate before the credit deduction (see
+	// handleCreateChat). OCTO-FORK: P8 敏感词接入.
+	if masked, hit := s.checkInputSensitive(req.Message); hit {
+		writeJSON(w, http.StatusBadRequest, map[string]any{"code": "input_sensitive", "text": masked})
 		return
 	}
 
@@ -568,6 +590,14 @@ func (s *Server) handleCreateSession(w http.ResponseWriter, r *http.Request) {
 	sess.Source = source
 	sess.ModelConfig = modelConfig
 	sess.AgentID = agentProfile
+	// P9: a create-time chat_mode (the selector's landing-page pick) wins over
+	// the account default; otherwise the session inherits defaultChatMode.
+	// OCTO-FORK: P9 模式与模型选择器.
+	if req.ChatMode != "" {
+		_ = sess.SetChatMode(req.ChatMode)
+	} else {
+		_ = sess.SetChatMode(s.defaultChatMode())
+	}
 	_ = sess.SetPermissionMode(string(resolvePermissionMode()))
 	sess.Bind(agent.EntryWeb, false)
 	if req.Name != "" {
@@ -726,6 +756,9 @@ func (s *Server) handleGetSessionMessages(w http.ResponseWriter, r *http.Request
 					}
 				}
 			}
+			// The stored block is the provider round-trip copy (verbatim); mask
+			// only the display copy here, matching the live assistant_message.
+			thinking = s.filterThinking(thinking)
 			if hasToolUse {
 				// Intermediate (tool) round — replay in block order so it mirrors
 				// the live stream's think → act sequence: the reasoning (and any

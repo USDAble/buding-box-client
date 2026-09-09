@@ -517,13 +517,6 @@ func New(cfg Config) (*Server, error) {
 	skillsManifest := tools.SkillsManifest(skillReg)
 	tools.SetSkills(skillReg)
 
-	// OCTO-FORK: P11 假模型通道 — seed the demo buding endpoint so a fresh
-	// install (no data/config.yml) gets the four fake models. This runs AFTER
-	// resolveProviderAndModel so the seed never changes the sender that was
-	// just resolved; the lazy ensureSender re-reads config on the first turn
-	// and picks the seeded local channel up then. See P11 技术方案 §3.2.
-	ensureLocalEndpoint()
-
 	// Resolve the default workspace dir new web sessions get. cfg.WorkspaceDir
 	// (no `octo serve` flag sets it today) takes precedence so tests can inject
 	// a literal path without touching data/config.yml; production falls back
@@ -551,6 +544,17 @@ func New(cfg Config) (*Server, error) {
 			slog.Warn("could not persist access key; a new one will be generated next start", "err", err)
 		}
 	}
+
+	// OCTO-FORK: P11 假模型通道 — seed the demo buding endpoint so a fresh
+	// install (no data/config.yml) gets the four fake models. This MUST run
+	// after resolveAccessKey above: fileCfg is loaded from disk before the
+	// seed, and its Save (a fresh access key) would otherwise overwrite the
+	// just-seeded buding endpoint with the stale pre-seed config. The sender
+	// is intentionally not re-resolved here — the lazy ensureSender re-reads
+	// config on the first turn and picks up the seeded local channel, so a
+	// keyless fresh install still enters its (P9-suppressed) onboarding state
+	// until then. See P11 技术方案 §3.2.
+	ensureLocalEndpoint()
 
 	// Resolve the shared memory tier. The launch directory deliberately plays
 	// no part: project memory is scoped by the session-group registry, per

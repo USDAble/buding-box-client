@@ -97,6 +97,51 @@ func TestEnsureLocalEndpointIdempotentAndAdditive(t *testing.T) {
 	}
 }
 
+// TestNewSeedsBudingSurvivesAccessKeySave is the regression guard for the
+// read-modify-write race that shipped P11 broken: New() loaded fileCfg from
+// disk, seeded buding, then resolveAccessKey saved the STALE fileCfg over the
+// seed, wiping the endpoint. A fresh install then fell back to anthropic with
+// no key and every chat answered "server not configured". This test boots a
+// full server on a fresh data root and asserts the seed survives the access
+// key save, and that ensureSender resolves to the local channel.
+func TestNewSeedsBudingSurvivesAccessKeySave(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+	t.Setenv("OCTO_DATA_ROOT", t.TempDir())
+	t.Setenv("USERPROFILE", t.TempDir())
+	t.Setenv("OPENAI_API_KEY", "")
+	t.Setenv("ANTHROPIC_API_KEY", "")
+
+	srv, err := New(Config{Addr: "127.0.0.1:0", Tools: false, NoChannel: true, NoMemory: true})
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+
+	// The seed must survive resolveAccessKey's Save: config.yml holds the
+	// buding endpoint (and an access_key) rather than an empty endpoint list.
+	cfg, err := config.Load()
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if findEndpoint(cfg, localEndpointID) == nil {
+		t.Fatalf("buding endpoint was clobbered by the access-key save; endpoints=%+v", cfg.Endpoints)
+	}
+	if cfg.AccessKey == "" {
+		t.Error("access_key not persisted — test premise (fresh key generated) not met")
+	}
+
+	// And the lazy path resolves to the local channel, not "server not
+	// configured".
+	if err := srv.ensureSender(); err != nil {
+		t.Fatalf("ensureSender: %v", err)
+	}
+	if got := srv.getProvider(); got != "local" {
+		t.Errorf("provider after ensureSender = %q, want local", got)
+	}
+	if srv.getSender() == nil {
+		t.Error("sender still nil after ensureSender")
+	}
+}
+
 func findEndpoint(cfg config.Config, id string) *config.Endpoint {
 	for i := range cfg.Endpoints {
 		if cfg.Endpoints[i].ID == id {

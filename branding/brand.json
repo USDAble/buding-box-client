@@ -98,8 +98,11 @@
   },
   "visual": {
     "logo": {
-      "mark": "assets/logo-mark.svg",
-      "favicon": "assets/favicon.svg"
+      "mark": "assets/logo-mark.png",
+      "favicon": "favicon.ico"
+    },
+    "colors": {
+      "primary": "#437EB1"
     }
   }
 }

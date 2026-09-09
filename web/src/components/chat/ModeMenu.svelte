@@ -52,7 +52,9 @@
       <button class="mode-header" onclick={() => toggleGroup(mode.id)}>
         <span class="mode-name">
           <!-- Only the active privacy group gets P10's shield; inactive
-               groups retain P9's original presentation. OCTO-FORK: P10. -->
+               groups retain P9's original presentation.
+               OCTO-FORK: P10 隐私模式与 PII 处理 — see
+               dev-docs-usdable/需求/2260906/技术方案/P10-隐私模式与PII.md. -->
           <PrivacyMark mode={mode.id === currentMode ? mode.id : ''} />
           <span>{modeDisplayName(mode.id)}</span>
         </span>

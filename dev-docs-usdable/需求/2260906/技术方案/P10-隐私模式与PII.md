@@ -186,7 +186,7 @@ export const isPrivacy: Readable<boolean>   // sessionMode === 'privacy'
 - `internal/pii/pii.go` + `pii_test.go`
 - `internal/app/pii_sender.go` + 测试
 - `web/src/components/chat/PrivacyBar.svelte`
-- `web/src/components/layout/SessionShield.svelte`
+- `web/src/components/ui/PrivacyMark.svelte` + 测试 — 单个盾牌组件：②芯片标签、ModeMenu 当前分组头、③侧栏会话行共用（原计划的独立 `SessionShield` 未单独落地，合并为一个复用组件）
 
 **改写**
 
@@ -194,8 +194,9 @@ export const isPrivacy: Readable<boolean>   // sessionMode === 'privacy'
 - `internal/app/`（Sender 装配处）— 叠加 `WrapPII`
 - `internal/server/` chat handler — 按会话模式注入 `WithPrivacy`
 - `internal/server/session_groups.go` 或会话列表 handler — 响应加 `chatMode`
-- `web/src/components/chat/Composer.svelte` — 挂 `PrivacyBar`（走 `ComposerNotices`）；芯片加「隐私」标签
-- `web/src/components/layout/Sidebar.svelte` — 会话行挂 `SessionShield`
+- `web/src/components/chat/Composer.svelte` — 挂 `PrivacyBar`；芯片加「隐私」标签（复用 `PrivacyMark`）
+- `web/src/components/chat/ModeMenu.svelte` — 选择器当前分组头加 `PrivacyMark`
+- `web/src/components/layout/Sidebar.svelte` — 会话行挂 `PrivacyMark`
 - `web/src/lib/i18n.ts` — 细条文案（含「只提手机号」的注释）
 
 ---

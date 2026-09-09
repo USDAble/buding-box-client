@@ -10,7 +10,8 @@ import (
 
 // withSessionPrivacy resolves P9's per-session mode, including the legacy
 // empty-mode fallback, and scopes P10 masking to one provider call chain.
-// OCTO-FORK: P10 隐私模式与 PII 处理.
+// OCTO-FORK: P10 隐私模式与 PII 处理 — see
+// dev-docs-usdable/需求/2260906/技术方案/P10-隐私模式与PII.md.
 func (s *Server) withSessionPrivacy(ctx context.Context, sess *agent.Session) context.Context {
 	mode := ""
 	if sess != nil {

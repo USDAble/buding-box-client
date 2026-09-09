@@ -338,6 +338,13 @@ var Registry = []Vendor{
 // both required to build its client.
 const ProviderCustom = "custom"
 
+// ProviderLocal is the P11 demo/offline fake model channel. It is NOT a
+// registry vendor (no base URL, no key, no wire protocol): a config endpoint
+// may set provider: local so its models are served by internal/provider/local.
+// IsKnownVendor/VendorKeyOptional treat it as known and keyless so the server's
+// provider resolution accepts it without onboarding. OCTO-FORK: P11 假模型通道.
+const ProviderLocal = "local"
+
 // VendorCustomEndpoint reports whether the vendor has no fixed endpoint and
 // requires a user-supplied base URL.
 func VendorCustomEndpoint(id string) bool {
@@ -362,7 +369,11 @@ func VendorNeedsProtocol(id string) bool {
 // it (Ollama, vLLM, LM Studio) have no key at all, and a self-hosted gateway
 // that wants one answers 401 clearly enough. Named cloud vendors always need
 // a key, so a missing one keeps its setup guidance. Unknown ids return false.
+// OCTO-FORK: P11 — the local fake channel is keyless by construction.
 func VendorKeyOptional(id string) bool {
+	if id == ProviderLocal {
+		return true
+	}
 	if v := vendorByID(id); v != nil {
 		return v.CustomEndpoint
 	}
@@ -482,8 +493,12 @@ func VendorWebsiteURL(id string) string {
 	return ""
 }
 
-// IsKnownVendor reports whether id is a registered vendor ID.
+// IsKnownVendor reports whether id is a registered vendor ID (or the P11
+// local fake channel). OCTO-FORK: P11 假模型通道.
 func IsKnownVendor(id string) bool {
+	if id == ProviderLocal {
+		return true
+	}
 	return vendorByID(id) != nil
 }
 

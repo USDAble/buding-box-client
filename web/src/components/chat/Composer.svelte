@@ -650,7 +650,9 @@
     || defaultModelName || '—',
   )
   // The current mode for the chip/ModeMenu: the session's own attribute, then
-  // a blank-view pending choice, then the account default. OCTO-FORK: P10.
+  // a blank-view pending choice, then the account default.
+  // OCTO-FORK: P10 隐私模式与 PII 处理 — see
+  // dev-docs-usdable/需求/2260906/技术方案/P10-隐私模式与PII.md.
   let currentMode = $derived(
     $chatMode[sid] || currentSession?.chat_mode || (!sid ? $pendingChatMode : '')
     || $productState?.prefs.defaultChatMode || 'default',

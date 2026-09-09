@@ -51,7 +51,7 @@ func TestLocalSenderReplyHitsSensitiveFilter(t *testing.T) {
 // TestBuildClientLocalKeyless confirms buildClient accepts "local" with an
 // empty key (unlike every named cloud vendor, which would error).
 func TestBuildClientLocalKeyless(t *testing.T) {
-	p, err := buildClient(ProviderLocal, "", "", "", nil)
+	p, err := buildClient(ProviderLocal, "", "", "", nil, nil)
 	if err != nil {
 		t.Fatalf("buildClient(local): %v", err)
 	}

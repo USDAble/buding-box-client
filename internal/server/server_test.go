@@ -16,6 +16,9 @@ import (
 
 	"github.com/open-octo/octo-agent/internal/agent"
 	"github.com/open-octo/octo-agent/internal/config"
+	"github.com/open-octo/octo-agent/internal/datapath"
+	"github.com/open-octo/octo-agent/internal/productgate"
+	"github.com/open-octo/octo-agent/internal/productstate"
 	"github.com/open-octo/octo-agent/internal/skills"
 	"github.com/open-octo/octo-agent/internal/tools"
 	"github.com/open-octo/octo-agent/internal/upgrade"
@@ -859,6 +862,24 @@ func mustServer(t *testing.T, cfg Config) *Server {
 		// afterwards would be a write racing that read.
 		watchStop: make(chan struct{}),
 	}
+	// Match New: load the product state and build the product gate. cfg.
+	// WindowToken is empty for most tests, so the gate passes everything; only
+	// product-gate tests set a token and exercise the logged-in/out paths.
+	// OCTO-FORK: P3 product gate — see
+	// dev-docs-usdable/需求/2260906/技术方案/P3-登录态与产品门.md.
+	if statePath, perr := datapath.Join("product-state.json"); perr == nil {
+		// Open always returns a usable Store (over the zero State) even when the
+		// file is missing or corrupt; the error is advisory.
+		st, _ := productstate.Open(statePath)
+		srv.productState = st
+		srv.productGate = productgate.New(cfg.WindowToken, st)
+	}
+	// Match New: build the sensitive engine and wire the nickname hook so the
+	// nickname/input checks behave identically to the real server. OCTO-FORK:
+	// P8 敏感词接入.
+	srv.sensitiveEngine = newSensitiveEngine()
+	productstate.Sensitive = func(v string) bool { return srv.sensitiveEngine.Filter(v).Matched() }
+	srv.loginCodes = make(map[string]*loginCodeSession)
 	srv.registerRoutes()
 	// Same chain as New: host routing outside, CORS inside, so tests that
 	// exercise either hit the right layer.

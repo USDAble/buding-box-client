@@ -2,6 +2,7 @@ import { writable } from "svelte/store";
 import { isUnauthorized, reauth } from "./auth";
 import { showToast } from "./stores";
 import { tr } from "./i18n";
+import { windowTokenQuery } from "./product";
 import type { AskAnswerPayload, AskOutcome } from "./askStepper";
 
 export const wsState = writable<"connecting" | "connected" | "disconnected">("disconnected");
@@ -40,7 +41,11 @@ export class WsManager {
     }
     this.intentionalClose = false;
     const protocol = location.protocol === "https:" ? "wss:" : "ws:";
-    const url = `${protocol}//${location.host}/ws`;
+    // OCTO-FORK: the product gate reads the window token from the /ws query
+    // string (the browser WebSocket API can't set headers, mirroring the
+    // access-key param) — see
+    // dev-docs-usdable/需求/2260906/技术方案/P3-登录态与产品门.md.
+    const url = `${protocol}//${location.host}/ws${windowTokenQuery()}`;
     wsState.set("connecting");
     this.ws = new WebSocket(url);
 

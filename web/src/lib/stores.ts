@@ -58,6 +58,16 @@ export const cmdkOpen = writable(false)
 export const mcpModalOpen = writable(false)
 // Drives the Settings modal (replaces the old full-page 'settings' view).
 export const settingsModalOpen = writable(false)
+// P5 account panel: the left-side panel that opens from the bottom-left
+// corner. accountPanelPage tracks both the layer ('root' is the navigation
+// list itself) and the open secondary page — one store so the panel can
+// switch in place like a phone settings drill-down. Reset to 'root' every
+// time the panel opens; a reopen must not land on the last page visited.
+// OCTO-FORK: P5 — see
+// dev-docs-usdable/需求/2260906/技术方案/P5-个人中心.md §4.3.
+export type AccountPanelPage = 'root' | 'plan' | 'credits' | 'license' | 'settings' | 'help' | 'about'
+export const accountPanelOpen = writable(false)
+export const accountPanelPage = writable<AccountPanelPage>('root')
 // Optional deep link consumed by the next Settings open: which category, and
 // for 数据管理 which sub-view. Callers that just want the modal set only
 // settingsModalOpen and land on the default category. The modal clears this

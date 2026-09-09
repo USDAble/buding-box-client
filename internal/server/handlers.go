@@ -20,6 +20,7 @@ import (
 	"github.com/open-octo/octo-agent/internal/datapath"
 	"github.com/open-octo/octo-agent/internal/executil"
 	"github.com/open-octo/octo-agent/internal/permission"
+	"github.com/open-octo/octo-agent/internal/productstate"
 	"github.com/open-octo/octo-agent/internal/tools"
 )
 
@@ -32,8 +33,9 @@ type createChatRequest struct {
 }
 
 type createChatResponse struct {
-	SessionID string `json:"session_id"`
-	Reply     string `json:"reply"`
+	SessionID string               `json:"session_id"`
+	Reply     string               `json:"reply"`
+	Credits   productstate.Credits `json:"credits"`
 }
 
 type turnRequest struct {
@@ -307,6 +309,23 @@ func (s *Server) applyDefaultWorkspaceDir(sess *agent.Session) {
 	}
 }
 
+// consumeCredit deducts one credit for a successfully-sent user message and
+// returns the post-consume snapshot. It never fails the send: a frozen data
+// root (an unplugged U盘) just leaves the balance untouched, because blocking
+// a message on a deduction failure would violate 需求 §5.4.4 (0 分仍可发).
+// OCTO-FORK: P6 credits — see
+// dev-docs-usdable/需求/2260906/技术方案/P6-入口隐藏与积分.md.
+func (s *Server) consumeCredit() productstate.Credits {
+	if s.productState == nil {
+		return productstate.Credits{}
+	}
+	credits, err := s.productState.ConsumeCredit(time.Now())
+	if err != nil {
+		return s.productState.Snapshot().Credits
+	}
+	return credits
+}
+
 // ─── POST /api/chat ─────────────────────────────────────────────────────────
 
 func (s *Server) handleCreateChat(w http.ResponseWriter, r *http.Request) {
@@ -344,6 +363,20 @@ func (s *Server) handleCreateChat(w http.ResponseWriter, r *http.Request) {
 		s.releaseSessionBinding(sess.ID, agent.EntryWeb)
 	}()
 
+	// P8: server-side input gate — runs before the credit deduction so a
+	// blocked message is never charged (P8 §3.6). The frontend does the same
+	// check for responsiveness; this one can't be bypassed. OCTO-FORK: P8 敏感词接入.
+	if masked, hit := s.checkInputSensitive(req.Message); hit {
+		writeJSON(w, http.StatusBadRequest, map[string]any{"code": "input_sensitive", "text": masked})
+		return
+	}
+
+	// P6: deduct one credit for the outgoing message ("成功交给模型" = 送入
+	// agent 循环), then hand the fresh balance back in the response so API
+	// callers see it without a second GET. OCTO-FORK: P6 credits — see
+	// dev-docs-usdable/需求/2260906/技术方案/P6-入口隐藏与积分.md.
+	credits := s.consumeCredit()
+
 	reply, err := s.runTurn(r.Context(), sess, req.Message)
 	if errors.Is(err, errDraining) {
 		writeError(w, http.StatusServiceUnavailable, err.Error())
@@ -362,6 +395,7 @@ func (s *Server) handleCreateChat(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, createChatResponse{
 		SessionID: sess.ID,
 		Reply:     reply,
+		Credits:   credits,
 	})
 }
 
@@ -425,6 +459,17 @@ func (s *Server) handleTurn(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// P8: server-side input gate before the credit deduction (see
+	// handleCreateChat). OCTO-FORK: P8 敏感词接入.
+	if masked, hit := s.checkInputSensitive(req.Message); hit {
+		writeJSON(w, http.StatusBadRequest, map[string]any{"code": "input_sensitive", "text": masked})
+		return
+	}
+
+	// P6: deduct one credit for the outgoing message, and return the fresh
+	// balance in the response (see handleCreateChat). OCTO-FORK: P6 credits.
+	credits := s.consumeCredit()
+
 	reply, err := s.runTurn(r.Context(), sess, req.Message)
 	if errors.Is(err, errDraining) {
 		writeError(w, http.StatusServiceUnavailable, err.Error())
@@ -440,7 +485,7 @@ func (s *Server) handleTurn(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	writeJSON(w, http.StatusOK, map[string]string{"reply": reply})
+	writeJSON(w, http.StatusOK, map[string]any{"reply": reply, "credits": credits})
 }
 
 // ─── GET /api/sessions ──────────────────────────────────────────────────────
@@ -696,6 +741,9 @@ func (s *Server) handleGetSessionMessages(w http.ResponseWriter, r *http.Request
 					}
 				}
 			}
+			// The stored block is the provider round-trip copy (verbatim); mask
+			// only the display copy here, matching the live assistant_message.
+			thinking = s.filterThinking(thinking)
 			if hasToolUse {
 				// Intermediate (tool) round — replay in block order so it mirrors
 				// the live stream's think → act sequence: the reasoning (and any

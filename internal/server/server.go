@@ -40,8 +40,11 @@ import (
 	"github.com/open-octo/octo-agent/internal/config"
 	"github.com/open-octo/octo-agent/internal/memory"
 	"github.com/open-octo/octo-agent/internal/permission"
+	"github.com/open-octo/octo-agent/internal/productgate"
+	"github.com/open-octo/octo-agent/internal/productstate"
 	"github.com/open-octo/octo-agent/internal/prompt"
 	"github.com/open-octo/octo-agent/internal/scheduler"
+	"github.com/open-octo/octo-agent/internal/sensitive"
 	"github.com/open-octo/octo-agent/internal/skills"
 	"github.com/open-octo/octo-agent/internal/tasks"
 	"github.com/open-octo/octo-agent/internal/tools"
@@ -114,6 +117,12 @@ type Config struct {
 	// server down and leave the GUI window attached to a dead backend. Leave
 	// false under `octo serve`, where the supervisor honours ExitRestart.
 	DisableRestart bool
+
+	// WindowToken is the desktop process's in-memory product-gate token. Empty
+	// under `octo serve` (no desktop window to gate); set only by the desktop
+	// shell, which mints it at startup and injects it into the webview URL.
+	// See internal/productgate.
+	WindowToken string
 }
 
 // Server is the HTTP server skeleton. It owns the mux, the agent factory,
@@ -383,6 +392,33 @@ type Server struct {
 	// accessKey is the shared secret for Web UI / API authentication.
 	accessKey string
 
+	// productState holds the product's runtime state file (data/product-state.json):
+	// login, activation, credits, switches. Loaded once at New and read from
+	// memory thereafter. OCTO-FORK: P3 login state — see
+	// dev-docs-usdable/需求/2260906/技术方案/P3-登录态与产品门.md.
+	productState *productstate.Store
+
+	// sensitiveEngine is the P7 engine the server wraps every Sender with and
+	// drives the input/nickname checks from. Built once at New from the
+	// product's dictionary file (data/sensitive-words.txt); nil only if the
+	// data root can't be resolved, in which case filtering degrades to no-op.
+	// OCTO-FORK: P8 敏感词接入 — see
+	// dev-docs-usdable/需求/2260906/技术方案/P8-敏感词接入.md.
+	sensitiveEngine *sensitive.Engine
+
+	// productGate blocks the desktop window (and its requests) while not logged
+	// in. Nil under `octo serve` (WindowToken empty), where nothing is gated.
+	// OCTO-FORK: P3 product gate — see
+	// dev-docs-usdable/需求/2260906/技术方案/P3-登录态与产品门.md.
+	productGate *productgate.Gate
+
+	// loginCodes holds the in-memory verification-code sessions for the fake
+	// login flow, keyed by normalized phone. Memory-only — a process restart
+	// clears it, which is acceptable for fake data (需求 §5.3.5). OCTO-FORK:
+	// P4 login — see dev-docs-usdable/需求/2260906/技术方案/P4-拦截页.md.
+	loginCodesMu sync.Mutex
+	loginCodes   map[string]*loginCodeSession
+
 	// apiRoutes records every pattern registered through api(), so the
 	// route-coverage test can assert each one rejects keyless non-loopback
 	// requests.
@@ -434,6 +470,17 @@ func New(cfg Config) (*Server, error) {
 	if err != nil {
 		return nil, err
 	}
+
+	// P8: build the sensitive-word engine once and use it for (1) output
+	// filtering — by wrapping the freshly built default sender — and (2)
+	// nickname/input checks via the productstate.Sensitive hook P4 left. The
+	// dictionary is data/sensitive-words.txt so a user can extend it; a
+	// missing/unreadable file degrades to the built-in list, never fails
+	// startup. OCTO-FORK: P8 敏感词接入 — see
+	// dev-docs-usdable/需求/2260906/技术方案/P8-敏感词接入.md.
+	engine := newSensitiveEngine()
+	sender = app.WrapSensitive(sender, engine)
+	productstate.Sensitive = func(v string) bool { return engine.Filter(v).Matched() }
 
 	// Surface async-hook (spill queue) errors through the server log.
 	hooks.SetSpillNotify(func(m string) { slog.Warn("hook", "err", m) })
@@ -515,6 +562,7 @@ func New(cfg Config) (*Server, error) {
 		cfg:                 cfg,
 		mux:                 http.NewServeMux(),
 		sender:              sender,
+		sensitiveEngine:     engine,
 		model:               model,
 		provider:            provName,
 		system:              cfg.System,
@@ -543,6 +591,21 @@ func New(cfg Config) (*Server, error) {
 		wakeupStart:         make(map[string]time.Time),
 		goalLastStatus:      make(map[string]agent.GoalStatus),
 	}
+
+	// Load the product state (login/activation) and build the product gate. A
+	// corrupt state file degrades to "not logged in" with a warning — never a
+	// silent reset of an activation that may only be unreadable right now.
+	// OCTO-FORK: P3 product gate wiring — see
+	// dev-docs-usdable/需求/2260906/技术方案/P3-登录态与产品门.md.
+	if statePath, perr := datapath.Join("product-state.json"); perr == nil {
+		st, oerr := productstate.Open(statePath)
+		if oerr != nil {
+			slog.Warn("product state unreadable; treating as not logged in", "err", oerr)
+		}
+		s.productState = st
+		s.productGate = productgate.New(cfg.WindowToken, st)
+	}
+	s.loginCodes = make(map[string]*loginCodeSession)
 
 	// Register the WebSocket-backed asker so ask_user_question appears in the
 	// tool catalog and can be dispatched through the browser.
@@ -825,190 +888,229 @@ func (s *Server) api(pattern string, h http.HandlerFunc) {
 	}))
 }
 
+// apiProduct registers a route behind BOTH the machine gate (requireAuth) and
+// the product gate (the desktop window must be logged in). The exempt routes —
+// /api/health, /api/version, the product state/login/locale/legal routes, and
+// static files — are registered without this wrapper; every other product
+// capability goes through it, so a route added later (upstream or downstream)
+// is protected by default. That direction is deliberate: a new route being
+// wrongly blocked is a visible functional bug, whereas a new route silently
+// left ungated would be a silent hole. OCTO-FORK: P3 product gate — see
+// dev-docs-usdable/需求/2260906/技术方案/P3-登录态与产品门.md §7.
+func (s *Server) apiProduct(pattern string, h http.HandlerFunc) {
+	s.apiRoutes = append(s.apiRoutes, pattern)
+	s.mux.HandleFunc(pattern, s.requireAuth(func(w http.ResponseWriter, r *http.Request) {
+		if s.productGate != nil {
+			if ok, reason := s.productGate.Allow(r); !ok {
+				productgate.WriteDenied(w, reason)
+				return
+			}
+		}
+		w.Header().Set("Cache-Control", "no-store, no-cache, must-revalidate, max-age=0")
+		h(w, r)
+	}))
+}
+
 // registerRoutes wires all handlers. API and WS routes require auth.
 func (s *Server) registerRoutes() {
-	s.api("POST /api/chat", s.handleCreateChat)
-	s.api("POST /api/chat/{id}/turn", s.handleTurn)
-	s.api("GET /api/sessions", s.handleListSessions)
-	s.api("POST /api/sessions", s.handleCreateSession)
-	s.api("POST /api/sessions/delete", s.handleDeleteSessions)
-	s.api("GET /api/sessions/{id}", s.handleGetSession)
-	s.api("GET /api/sessions/{id}/messages", s.handleGetSessionMessages)
-	s.api("GET /api/sessions/{id}/agent-runs", s.handleGetSessionAgentRuns)
-	s.api("GET /api/sessions/{id}/confirmation", s.handleGetSessionConfirmation)
-	s.api("GET /api/sessions/{id}/artifacts", s.handleGetArtifact)
-	s.api("POST /api/sessions/{id}/artifacts/grant", s.handleGrantArtifactOrigin)
-	s.api("GET /api/sessions/{id}/diff", s.handleGetSessionDiff)
-	s.api("GET /api/sessions/{id}/diff/file", s.handleGetSessionFileDiff)
-	s.api("DELETE /api/sessions/{id}", s.handleDeleteSession)
-	s.api("PATCH /api/sessions/{id}", s.handleUpdateSession)
-	s.api("PATCH /api/sessions/{id}/model", s.handleUpdateSessionModel)
-	s.api("PATCH /api/sessions/{id}/reasoning_effort", s.handleUpdateSessionReasoningEffort)
-	s.api("PATCH /api/sessions/{id}/show_reasoning", s.handleUpdateSessionShowReasoning)
-	s.api("PATCH /api/sessions/{id}/permission_mode", s.handleUpdateSessionPermissionMode)
-	s.api("PATCH /api/sessions/{id}/working_dir", s.handleUpdateSessionWorkingDir)
-	s.api("PATCH /api/sessions/{id}/agent_profile", s.handleUpdateSessionAgentProfile)
-	s.api("GET /api/sessions/{id}/goal", s.handleGetSessionGoal)
-	s.api("PUT /api/sessions/{id}/goal", s.handleUpdateSessionGoal)
-	s.api("DELETE /api/sessions/{id}/goal", s.handleDeleteSessionGoal)
-	s.api("PUT /api/sessions/{id}/group", s.handleSetSessionGroup)
-	s.api("PUT /api/sessions/{id}/pin", s.handleSetSessionPin)
-	s.api("PUT /api/sessions/{id}/collapse", s.handleSetSessionCollapsed)
-	s.api("POST /api/sessions/{id}/branch", s.handleBranchSession)
-	s.api("POST /api/sessions/{id}/edit_message", s.handleEditMessage)
+	s.apiProduct("POST /api/chat", s.handleCreateChat)
+	s.apiProduct("POST /api/chat/{id}/turn", s.handleTurn)
+	s.apiProduct("GET /api/sessions", s.handleListSessions)
+	s.apiProduct("POST /api/sessions", s.handleCreateSession)
+	s.apiProduct("POST /api/sessions/delete", s.handleDeleteSessions)
+	s.apiProduct("GET /api/sessions/{id}", s.handleGetSession)
+	s.apiProduct("GET /api/sessions/{id}/messages", s.handleGetSessionMessages)
+	s.apiProduct("GET /api/sessions/{id}/agent-runs", s.handleGetSessionAgentRuns)
+	s.apiProduct("GET /api/sessions/{id}/confirmation", s.handleGetSessionConfirmation)
+	s.apiProduct("GET /api/sessions/{id}/artifacts", s.handleGetArtifact)
+	s.apiProduct("POST /api/sessions/{id}/artifacts/grant", s.handleGrantArtifactOrigin)
+	s.apiProduct("GET /api/sessions/{id}/diff", s.handleGetSessionDiff)
+	s.apiProduct("GET /api/sessions/{id}/diff/file", s.handleGetSessionFileDiff)
+	s.apiProduct("DELETE /api/sessions/{id}", s.handleDeleteSession)
+	s.apiProduct("PATCH /api/sessions/{id}", s.handleUpdateSession)
+	s.apiProduct("PATCH /api/sessions/{id}/model", s.handleUpdateSessionModel)
+	s.apiProduct("PATCH /api/sessions/{id}/reasoning_effort", s.handleUpdateSessionReasoningEffort)
+	s.apiProduct("PATCH /api/sessions/{id}/show_reasoning", s.handleUpdateSessionShowReasoning)
+	s.apiProduct("PATCH /api/sessions/{id}/permission_mode", s.handleUpdateSessionPermissionMode)
+	s.apiProduct("PATCH /api/sessions/{id}/working_dir", s.handleUpdateSessionWorkingDir)
+	s.apiProduct("PATCH /api/sessions/{id}/agent_profile", s.handleUpdateSessionAgentProfile)
+	s.apiProduct("GET /api/sessions/{id}/goal", s.handleGetSessionGoal)
+	s.apiProduct("PUT /api/sessions/{id}/goal", s.handleUpdateSessionGoal)
+	s.apiProduct("DELETE /api/sessions/{id}/goal", s.handleDeleteSessionGoal)
+	s.apiProduct("PUT /api/sessions/{id}/group", s.handleSetSessionGroup)
+	s.apiProduct("PUT /api/sessions/{id}/pin", s.handleSetSessionPin)
+	s.apiProduct("PUT /api/sessions/{id}/collapse", s.handleSetSessionCollapsed)
+	s.apiProduct("POST /api/sessions/{id}/branch", s.handleBranchSession)
+	s.apiProduct("POST /api/sessions/{id}/edit_message", s.handleEditMessage)
 	// Session groups: a Web-UI-only sidebar organisation layer (see
 	// session_groups.go). Registered unconditionally so both `octo serve` and
 	// the desktop shell expose them.
-	s.api("GET /api/session-groups", s.handleListSessionGroups)
-	s.api("POST /api/session-groups", s.handleCreateSessionGroup)
-	s.api("PUT /api/session-groups/order", s.handleReorderSessionGroups)
-	s.api("PATCH /api/session-groups/{id}", s.handleUpdateSessionGroup)
-	s.api("DELETE /api/session-groups/{id}", s.handleDeleteSessionGroup)
-	s.api("GET /api/fs/list", s.handleFsList)
-	s.api("GET /api/tunnel/pairing", s.handleTunnelPairing)
+	s.apiProduct("GET /api/session-groups", s.handleListSessionGroups)
+	s.apiProduct("POST /api/session-groups", s.handleCreateSessionGroup)
+	s.apiProduct("PUT /api/session-groups/order", s.handleReorderSessionGroups)
+	s.apiProduct("PATCH /api/session-groups/{id}", s.handleUpdateSessionGroup)
+	s.apiProduct("DELETE /api/session-groups/{id}", s.handleDeleteSessionGroup)
+	s.apiProduct("GET /api/fs/list", s.handleFsList)
+	s.apiProduct("GET /api/tunnel/pairing", s.handleTunnelPairing)
 	if s.cfg.Native != nil {
 		// Desktop build only: OS-native capabilities. Absent under `octo serve`.
-		s.api("POST /api/native/pick-folder", s.handleNativePickFolder)
-		s.api("POST /api/native/pick-file", s.handleNativePickFile)
-		s.api("POST /api/native/notify", s.handleNativeNotify)
-		s.api("GET /api/native/autostart", s.handleNativeAutostartGet)
-		s.api("PUT /api/native/autostart", s.handleNativeAutostartSet)
-		s.api("POST /api/native/window/toggle-maximise", s.handleNativeToggleMaximise)
-		s.api("POST /api/native/window/minimise", s.handleNativeMinimise)
-		s.api("POST /api/native/heartbeat", s.handleNativeHeartbeat)
-		s.api("POST /api/native/window/close", s.handleNativeClose)
-		s.api("POST /api/native/quit", s.handleNativeQuit)
-		s.api("GET /api/native/window/state", s.handleNativeWindowState)
-		s.api("POST /api/native/open-external", s.handleNativeOpenExternal)
-		s.api("POST /api/native/open-folder", s.handleNativeOpenFolder)
-		s.api("POST /api/native/self-update", s.handleNativeSelfUpdate)
-		s.api("POST /api/native/save-file", s.handleNativeSaveFile)
-		s.api("POST /api/native/print", s.handleNativePrint)
+		s.apiProduct("POST /api/native/pick-folder", s.handleNativePickFolder)
+		s.apiProduct("POST /api/native/pick-file", s.handleNativePickFile)
+		s.apiProduct("POST /api/native/notify", s.handleNativeNotify)
+		s.apiProduct("GET /api/native/autostart", s.handleNativeAutostartGet)
+		s.apiProduct("PUT /api/native/autostart", s.handleNativeAutostartSet)
+		s.apiProduct("POST /api/native/window/toggle-maximise", s.handleNativeToggleMaximise)
+		s.apiProduct("POST /api/native/window/minimise", s.handleNativeMinimise)
+		s.apiProduct("POST /api/native/heartbeat", s.handleNativeHeartbeat)
+		s.apiProduct("POST /api/native/window/close", s.handleNativeClose)
+		s.apiProduct("POST /api/native/quit", s.handleNativeQuit)
+		s.apiProduct("GET /api/native/window/state", s.handleNativeWindowState)
+		s.apiProduct("POST /api/native/open-external", s.handleNativeOpenExternal)
+		s.apiProduct("POST /api/native/open-folder", s.handleNativeOpenFolder)
+		s.apiProduct("POST /api/native/self-update", s.handleNativeSelfUpdate)
+		s.apiProduct("POST /api/native/save-file", s.handleNativeSaveFile)
+		s.apiProduct("POST /api/native/print", s.handleNativePrint)
 	}
-	s.api("GET /api/tools", s.handleListTools)
-	s.api("GET /api/skills", s.handleListSkills)
-	s.api("GET /api/workflows", s.handleListWorkflows)
+	s.apiProduct("GET /api/tools", s.handleListTools)
+	s.apiProduct("GET /api/skills", s.handleListSkills)
+	s.apiProduct("GET /api/workflows", s.handleListWorkflows)
 	s.mux.HandleFunc("GET /api/health", s.handleHealth)
 	s.mux.HandleFunc("GET /api/version", s.handleVersion)
-	s.api("GET /api/channels", s.handleListChannels)
-	s.api("GET /api/channels/available", s.handleAvailableChannels)
-	s.api("GET /api/channels/{platform}", s.handleGetChannel)
-	s.api("POST /api/channels/{platform}", s.handleSaveChannel)
-	s.api("POST /api/channels/{platform}/reload", s.handleReloadChannel)
-	s.api("DELETE /api/channels/{platform}", s.handleDeleteChannel)
-	s.api("POST /api/channels/{platform}/test", s.handleTestChannel)
-	s.api("GET /api/channels/recipients", s.handleChannelRecipients)
-	s.api("POST /api/channels/{platform}/send", s.handleChannelSendText)
-	s.api("POST /api/channels/{platform}/send-file", s.handleChannelSendFile)
-	s.api("POST /api/channels/weixin/login", s.handleWeixinLoginStart)
-	s.api("GET /api/channels/weixin/login", s.handleWeixinLoginStatus)
-	s.api("DELETE /api/channels/weixin/login", s.handleWeixinLoginCancel)
-	s.api("GET /api/tasks", s.handleListTasks)
-	s.api("POST /api/tasks", s.handleCreateTask)
-	s.api("DELETE /api/tasks/{id}", s.handleDeleteTask)
-	s.api("POST /api/tasks/{id}/run", s.handleRunTask)
-	s.api("PATCH /api/tasks/{id}", s.handlePatchTask)
-	s.api("PUT /api/tasks/{id}/transfer", s.handleTransferTask)
-	s.api("GET /api/profile/soul", s.handleGetProfileSoul)
-	s.api("GET /api/profile/user", s.handleGetProfileUser)
-	s.api("GET /api/memories", s.handleGetMemories)
-	s.api("GET /api/light-apps", s.handleListLightApps)
-	s.api("GET /api/light-apps/{slug}", s.handleGetLightApp)
-	s.api("DELETE /api/light-apps/{slug}", s.handleDeleteLightApp)
-	s.api("GET /api/trash", s.handleGetTrash)
-	s.api("POST /api/trash/empty", s.handleEmptyTrash)
-	s.api("POST /api/trash/{id}/restore", s.handleRestoreTrash)
-	s.api("DELETE /api/trash/{id}", s.handleDeleteTrash)
+	// Product state & gate. state/locale/send-code/login are exempt from the
+	// product gate — state routes the frontend before login, the language can
+	// switch before login (需求 §5.3), and send-code/login ARE the login flow;
+	// logout is gated (only meaningful once logged in). OCTO-FORK: P3/P4 — see
+	// dev-docs-usdable/需求/2260906/技术方案/P3-登录态与产品门.md and P4-拦截页.md.
+	s.api("GET /api/product/state", s.handleProductState)
+	s.api("PUT /api/product/locale", s.handleProductLocale)
+	s.api("POST /api/product/send-code", s.handleProductSendCode)
+	s.api("POST /api/product/login", s.handleProductLogin)
+	s.apiProduct("POST /api/product/logout", s.handleProductLogout)
+	// P5 account panel: nickname + prefs edits only exist once logged in, so
+	// both sit behind the product gate like logout. OCTO-FORK: P5 — see
+	// dev-docs-usdable/需求/2260906/技术方案/P5-个人中心.md.
+	s.apiProduct("PUT /api/product/nickname", s.handleProductNickname)
+	s.apiProduct("PUT /api/product/prefs", s.handleProductPrefs)
+	s.apiProduct("POST /api/product/sensitive/check", s.handleProductSensitiveCheck)
+	s.apiProduct("GET /api/channels", s.handleListChannels)
+	s.apiProduct("GET /api/channels/available", s.handleAvailableChannels)
+	s.apiProduct("GET /api/channels/{platform}", s.handleGetChannel)
+	s.apiProduct("POST /api/channels/{platform}", s.handleSaveChannel)
+	s.apiProduct("POST /api/channels/{platform}/reload", s.handleReloadChannel)
+	s.apiProduct("DELETE /api/channels/{platform}", s.handleDeleteChannel)
+	s.apiProduct("POST /api/channels/{platform}/test", s.handleTestChannel)
+	s.apiProduct("GET /api/channels/recipients", s.handleChannelRecipients)
+	s.apiProduct("POST /api/channels/{platform}/send", s.handleChannelSendText)
+	s.apiProduct("POST /api/channels/{platform}/send-file", s.handleChannelSendFile)
+	s.apiProduct("POST /api/channels/weixin/login", s.handleWeixinLoginStart)
+	s.apiProduct("GET /api/channels/weixin/login", s.handleWeixinLoginStatus)
+	s.apiProduct("DELETE /api/channels/weixin/login", s.handleWeixinLoginCancel)
+	s.apiProduct("GET /api/tasks", s.handleListTasks)
+	s.apiProduct("POST /api/tasks", s.handleCreateTask)
+	s.apiProduct("DELETE /api/tasks/{id}", s.handleDeleteTask)
+	s.apiProduct("POST /api/tasks/{id}/run", s.handleRunTask)
+	s.apiProduct("PATCH /api/tasks/{id}", s.handlePatchTask)
+	s.apiProduct("PUT /api/tasks/{id}/transfer", s.handleTransferTask)
+	s.apiProduct("GET /api/profile/soul", s.handleGetProfileSoul)
+	s.apiProduct("GET /api/profile/user", s.handleGetProfileUser)
+	s.apiProduct("GET /api/memories", s.handleGetMemories)
+	s.apiProduct("GET /api/light-apps", s.handleListLightApps)
+	s.apiProduct("GET /api/light-apps/{slug}", s.handleGetLightApp)
+	s.apiProduct("DELETE /api/light-apps/{slug}", s.handleDeleteLightApp)
+	s.apiProduct("GET /api/trash", s.handleGetTrash)
+	s.apiProduct("POST /api/trash/empty", s.handleEmptyTrash)
+	s.apiProduct("POST /api/trash/{id}/restore", s.handleRestoreTrash)
+	s.apiProduct("DELETE /api/trash/{id}", s.handleDeleteTrash)
 
 	// Onboard & config
-	s.api("GET /api/onboard/status", s.handleOnboardStatus)
-	s.api("POST /api/onboard/complete", s.handleOnboardComplete)
-	s.api("POST /api/onboard/attempt", s.handleOnboardAttempt)
-	s.api("GET /api/providers", s.handleListProviders)
-	s.api("GET /api/config", s.handleGetConfig)
-	s.api("GET /api/config/endpoints", s.handleGetEndpoints)
-	s.api("PUT /api/config/show_reasoning", s.handlePutShowReasoning)
-	s.api("PUT /api/config/coauthor", s.handlePutCoauthor)
-	s.api("PUT /api/config/language", s.handlePutLanguage)
-	s.api("PUT /api/config/workspace_dir", s.handlePutWorkspaceDir)
-	s.api("PUT /api/config/reasoning_effort", s.handlePutReasoningEffort)
-	s.api("PUT /api/config/permission_mode", s.handlePutPermissionMode)
-	s.api("POST /api/config/test", s.handleTestConfig)
+	s.apiProduct("GET /api/onboard/status", s.handleOnboardStatus)
+	s.apiProduct("POST /api/onboard/complete", s.handleOnboardComplete)
+	s.apiProduct("POST /api/onboard/attempt", s.handleOnboardAttempt)
+	s.apiProduct("GET /api/providers", s.handleListProviders)
+	s.apiProduct("GET /api/config", s.handleGetConfig)
+	s.apiProduct("GET /api/config/endpoints", s.handleGetEndpoints)
+	s.apiProduct("PUT /api/config/show_reasoning", s.handlePutShowReasoning)
+	s.apiProduct("PUT /api/config/coauthor", s.handlePutCoauthor)
+	s.apiProduct("PUT /api/config/language", s.handlePutLanguage)
+	s.apiProduct("PUT /api/config/workspace_dir", s.handlePutWorkspaceDir)
+	s.apiProduct("PUT /api/config/reasoning_effort", s.handlePutReasoningEffort)
+	s.apiProduct("PUT /api/config/permission_mode", s.handlePutPermissionMode)
+	s.apiProduct("POST /api/config/test", s.handleTestConfig)
 	// PR5: endpoint-level CRUD (design §10.2). The old /api/config/models*
 	// routes are deleted — callers must use these.
-	s.api("POST /api/config/endpoints", s.handleCreateEndpoint)
-	s.api("PATCH /api/config/endpoints/{id}", s.handleUpdateEndpoint)
-	s.api("DELETE /api/config/endpoints/{id}", s.handleDeleteEndpoint)
-	s.api("POST /api/config/endpoints/{id}/models", s.handleAddEndpointModel)
-	s.api("DELETE /api/config/endpoints/{id}/models/{model}", s.handleDeleteEndpointModel)
-	s.api("POST /api/config/endpoints/{id}/default", s.handleSetEndpointDefault)
-	s.api("POST /api/config/endpoints/{id}/lite", s.handleSetEndpointLite)
-	s.api("DELETE /api/config/endpoints/{id}/lite", s.handleUnsetEndpointLite)
-	s.api("POST /api/config/endpoints/{id}/vision_helper", s.handleSetEndpointVisionHelper)
-	s.api("DELETE /api/config/endpoints/{id}/vision_helper", s.handleUnsetEndpointVisionHelper)
+	s.apiProduct("POST /api/config/endpoints", s.handleCreateEndpoint)
+	s.apiProduct("PATCH /api/config/endpoints/{id}", s.handleUpdateEndpoint)
+	s.apiProduct("DELETE /api/config/endpoints/{id}", s.handleDeleteEndpoint)
+	s.apiProduct("POST /api/config/endpoints/{id}/models", s.handleAddEndpointModel)
+	s.apiProduct("DELETE /api/config/endpoints/{id}/models/{model}", s.handleDeleteEndpointModel)
+	s.apiProduct("POST /api/config/endpoints/{id}/default", s.handleSetEndpointDefault)
+	s.apiProduct("POST /api/config/endpoints/{id}/lite", s.handleSetEndpointLite)
+	s.apiProduct("DELETE /api/config/endpoints/{id}/lite", s.handleUnsetEndpointLite)
+	s.apiProduct("POST /api/config/endpoints/{id}/vision_helper", s.handleSetEndpointVisionHelper)
+	s.apiProduct("DELETE /api/config/endpoints/{id}/vision_helper", s.handleUnsetEndpointVisionHelper)
 
 	// Browser automation setup
-	s.api("GET /api/browser/status", s.handleBrowserStatus)
-	s.api("POST /api/browser/verify", s.handleBrowserVerify)
-	s.api("GET /api/browser/recordings", s.handleListBrowserRecordings)
-	s.api("GET /api/browser/recordings/{name}", s.handleGetBrowserRecording)
-	s.api("PUT /api/browser/recordings/{name}", s.handleSaveBrowserRecording)
-	s.api("DELETE /api/browser/recordings/{name}", s.handleDeleteBrowserRecording)
+	s.apiProduct("GET /api/browser/status", s.handleBrowserStatus)
+	s.apiProduct("POST /api/browser/verify", s.handleBrowserVerify)
+	s.apiProduct("GET /api/browser/recordings", s.handleListBrowserRecordings)
+	s.apiProduct("GET /api/browser/recordings/{name}", s.handleGetBrowserRecording)
+	s.apiProduct("PUT /api/browser/recordings/{name}", s.handleSaveBrowserRecording)
+	s.apiProduct("DELETE /api/browser/recordings/{name}", s.handleDeleteBrowserRecording)
 
 	// Upload
-	s.api("POST /api/upload", s.handleUpload)
-	s.api("GET /api/uploads/{name}", s.handleGetUpload)
+	s.apiProduct("POST /api/upload", s.handleUpload)
+	s.apiProduct("GET /api/uploads/{name}", s.handleGetUpload)
 
 	// File action (open / download)
-	s.api("POST /api/file-action", s.handleFileAction)
+	s.apiProduct("POST /api/file-action", s.handleFileAction)
 
 	// Skill toggle & delete
-	s.api("PATCH /api/skills/{name}/toggle", s.handleToggleSkill)
-	s.api("DELETE /api/skills/{name}", s.handleDeleteSkill)
-	s.api("POST /api/skills/import", s.handleImportSkill)
-	s.api("GET /api/skills/{name}/export", s.handleExportSkill)
+	s.apiProduct("PATCH /api/skills/{name}/toggle", s.handleToggleSkill)
+	s.apiProduct("DELETE /api/skills/{name}", s.handleDeleteSkill)
+	s.apiProduct("POST /api/skills/import", s.handleImportSkill)
+	s.apiProduct("GET /api/skills/{name}/export", s.handleExportSkill)
 
 	// Workflow detail, delete & export (list is registered above)
-	s.api("GET /api/workflows/{name}", s.handleGetWorkflow)
-	s.api("DELETE /api/workflows/{name}", s.handleDeleteWorkflow)
-	s.api("GET /api/workflows/{name}/export", s.handleExportWorkflow)
+	s.apiProduct("GET /api/workflows/{name}", s.handleGetWorkflow)
+	s.apiProduct("DELETE /api/workflows/{name}", s.handleDeleteWorkflow)
+	s.apiProduct("GET /api/workflows/{name}/export", s.handleExportWorkflow)
 
 	// Agent profiles (multi-agent system)
-	s.api("GET /api/agents", s.handleListAgents)
-	s.api("POST /api/agents", s.handleCreateAgent)
-	s.api("GET /api/agents/{id}", s.handleGetAgent)
-	s.api("PUT /api/agents/{id}", s.handleUpdateAgent)
-	s.api("DELETE /api/agents/{id}", s.handleDeleteAgent)
-	s.api("POST /api/agents/{id}/bind", s.handleBindAgent)
-	s.api("DELETE /api/agents/{id}/bind", s.handleUnbindAgent)
-	s.api("PATCH /api/agents/{id}/toggle", s.handleToggleAgent)
+	s.apiProduct("GET /api/agents", s.handleListAgents)
+	s.apiProduct("POST /api/agents", s.handleCreateAgent)
+	s.apiProduct("GET /api/agents/{id}", s.handleGetAgent)
+	s.apiProduct("PUT /api/agents/{id}", s.handleUpdateAgent)
+	s.apiProduct("DELETE /api/agents/{id}", s.handleDeleteAgent)
+	s.apiProduct("POST /api/agents/{id}/bind", s.handleBindAgent)
+	s.apiProduct("DELETE /api/agents/{id}/bind", s.handleUnbindAgent)
+	s.apiProduct("PATCH /api/agents/{id}/toggle", s.handleToggleAgent)
 
 	// MCP server management
-	s.api("GET /api/mcp/servers", s.handleListMCPServers)
-	s.api("GET /api/mcp/servers/{name}", s.handleGetMCPServer)
-	s.api("POST /api/mcp/servers", s.handleCreateMCPServer)
-	s.api("DELETE /api/mcp/servers/{name}", s.handleDeleteMCPServer)
-	s.api("PATCH /api/mcp/servers/{name}/toggle", s.handleToggleMCPServer)
-	s.api("POST /api/mcp/servers/{name}/reconnect", s.handleReconnectMCPServer)
-	s.api("POST /api/mcp/servers/{name}/oauth/start", s.handleStartMCPOAuth)
-	s.api("GET /api/mcp/servers/{name}/oauth/status", s.handleMCPOAuthStatus)
+	s.apiProduct("GET /api/mcp/servers", s.handleListMCPServers)
+	s.apiProduct("GET /api/mcp/servers/{name}", s.handleGetMCPServer)
+	s.apiProduct("POST /api/mcp/servers", s.handleCreateMCPServer)
+	s.apiProduct("DELETE /api/mcp/servers/{name}", s.handleDeleteMCPServer)
+	s.apiProduct("PATCH /api/mcp/servers/{name}/toggle", s.handleToggleMCPServer)
+	s.apiProduct("POST /api/mcp/servers/{name}/reconnect", s.handleReconnectMCPServer)
+	s.apiProduct("POST /api/mcp/servers/{name}/oauth/start", s.handleStartMCPOAuth)
+	s.apiProduct("GET /api/mcp/servers/{name}/oauth/status", s.handleMCPOAuthStatus)
 	s.mux.HandleFunc("GET /api/mcp/servers/{name}/oauth/callback", s.handleMCPOAuthCallback)
-	s.api("POST /api/mcp/reload", s.handleReloadMCP)
-	s.api("GET /api/config/toolsearch", s.handleGetToolSearch)
-	s.api("PUT /api/config/toolsearch", s.handlePutToolSearch)
+	s.apiProduct("POST /api/mcp/reload", s.handleReloadMCP)
+	s.apiProduct("GET /api/config/toolsearch", s.handleGetToolSearch)
+	s.apiProduct("PUT /api/config/toolsearch", s.handlePutToolSearch)
 
 	// Benchmark
-	s.api("POST /api/sessions/{id}/benchmark", s.handleBenchmark)
+	s.apiProduct("POST /api/sessions/{id}/benchmark", s.handleBenchmark)
 
 	// Memory detail
-	s.api("GET /api/memories/{filename}", s.handleGetMemory)
-	s.api("DELETE /api/memories/{filename}", s.handleDeleteMemory)
+	s.apiProduct("GET /api/memories/{filename}", s.handleGetMemory)
+	s.apiProduct("DELETE /api/memories/{filename}", s.handleDeleteMemory)
 
 	// Version & restart
-	s.api("POST /api/version/upgrade", s.handleVersionUpgrade)
-	s.api("POST /api/restart", s.handleRestart)
+	s.apiProduct("POST /api/version/upgrade", s.handleVersionUpgrade)
+	s.apiProduct("POST /api/restart", s.handleRestart)
 
-	s.api("GET /ws", s.handleWS)
+	s.apiProduct("GET /ws", s.handleWS)
 
 	// Static files (Web UI) — served from embedded filesystem.
 	s.mux.Handle("/", s.staticHandler())
@@ -1502,6 +1604,27 @@ func writeInvalidJSONBody(w http.ResponseWriter, err error) {
 // the result to app.NewSender — internal/app is the single place that builds the
 // vendor client, so the server no longer imports internal/provider.
 
+// newSensitiveEngine builds the P7 engine over the product dictionary file.
+// data/sensitive-words.txt holds user-extensible words; an unresolvable data
+// root or missing file degrades to the built-in list (sensitive.New(path) falls
+// back to its embedded dictionary when the file is absent) rather than failing
+// server startup. OCTO-FORK: P8 敏感词接入.
+func newSensitiveEngine() *sensitive.Engine {
+	p, err := datapath.Join("sensitive-words.txt")
+	if err != nil {
+		return sensitive.New("")
+	}
+	return sensitive.New(p)
+}
+
+// wrapSensitive decorates a freshly built sender with the output filter so the
+// model's visible text is masked before it reaches the agent loop. nil engine
+// (unresolvable data root) or nil sender pass through unchanged — app.
+// WrapSensitive handles both.
+func (s *Server) wrapSensitive(sender agent.Sender) agent.Sender {
+	return app.WrapSensitive(sender, s.sensitiveEngine)
+}
+
 func resolveProviderAndModel(flagProvider, flagModel string) (agent.Sender, string, string, error) {
 	cfg, err := config.Load()
 	if err != nil {
@@ -1687,8 +1810,8 @@ func (s *Server) cachedSenderForEntry(ref string, entry config.ModelEntry) (agen
 	if s.senderCache == nil {
 		s.senderCache = make(map[string]agent.Sender)
 	}
-	s.senderCache[key] = sender
-	return sender, nil
+	s.senderCache[key] = s.wrapSensitive(sender)
+	return s.senderCache[key], nil
 }
 
 // invalidateEndpointSenders drops every cached sender whose key is prefixed
@@ -2058,7 +2181,7 @@ func (s *Server) ensureSender() error {
 		s.senderMu.Unlock()
 		return fmt.Errorf("server not configured: complete setup via the Web UI")
 	}
-	s.sender = sender
+	s.sender = s.wrapSensitive(sender)
 	s.model = model
 	s.provider = provName
 	enableTools := s.cfg.Tools
@@ -2114,7 +2237,7 @@ func (s *Server) reloadDefaultSender() error {
 	}
 	s.model = model
 	if sender != nil {
-		s.sender = sender
+		s.sender = s.wrapSensitive(sender)
 		s.provider = provName
 	}
 	return nil

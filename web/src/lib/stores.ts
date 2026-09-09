@@ -49,6 +49,11 @@ export const pendingPermissionMode = writable<string>('')
 // above: without this, toggleShowReasoning's `!sid` guard made the switch a
 // silent no-op until a session existed.
 export const pendingShowReasoning = writable<boolean | null>(null)
+// Chat mode (P9) picked on the landing page before any session exists. ''
+// means "no override" — the session born from ensureActiveSession inherits the
+// account's default mode. Consumed once by createSessionForFirstMessage, same
+// shape as pendingModel/pendingPermissionMode. OCTO-FORK: P9 模式与模型.
+export const pendingChatMode = writable<string>('')
 export const sidebar = writable('full')
 export const cmdkOpen = writable(false)
 // Drives the MCP import-JSON modal. Adding a single server and editing an
@@ -310,6 +315,11 @@ export const chatSuggestion = writable<Record<string, string>>({})
 // Per-session model name, updated on model switch so the Composer chip stays
 // reactive independently of the sessions store array subscription.
 export const chatModel = writable<Record<string, string>>({})
+// Per-session chat mode (P9), updated on mode switch so the Composer chip and
+// ModeMenu stay reactive independently of the sessions store array. Seeded
+// from the session's chat_mode field; empty means the account default.
+// OCTO-FORK: P9 模式与模型选择器.
+export const chatMode = writable<Record<string, string>>({})
 // Live thinking buffer (thinking_delta) shown as a Thoughts block while streaming.
 export const chatThinking = writable<Record<string, string>>({})
 // Live sub-agents, keyed by session. Fed by the sub_agent_event WS stream.

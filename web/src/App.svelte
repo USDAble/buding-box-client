@@ -85,6 +85,18 @@
   // app shows a denied splash instead of booting.
   let authDenied = $state(false)
 
+  // P9: desktop builds suppress the first-run "set up an API key" wizard — the
+  // window token is already wired to the product backend, so key_setup is a
+  // dead end. The server sets productState.suppressOnboarding from config;
+  // when it's true, treat key_setup as already-done and boot the main UI
+  // directly. OCTO-FORK: P9 模式与模型选择器 — see
+  // dev-docs-usdable/需求/2260906/技术方案/P9-模式与模型.md §3.1.
+  let effectiveOnboardPhase = $derived(
+    ($productState?.suppressOnboarding === true && $onboardPhase === 'key_setup')
+      ? ''
+      : $onboardPhase,
+  )
+
   // ── URL routing ─────────────────────────────────────────────────────────────
   // Reflect the current view (and active chat session) in the hash so a refresh
   // lands back where the user was instead of the default chat view.
@@ -215,7 +227,7 @@
   // FirstRunSetup completes and flips the phase to ''. A blocked window (not
   // logged in) never boots the main UI — the template shows the login gate.
   $effect(() => {
-    const phase = $onboardPhase
+    const phase = effectiveOnboardPhase
     if (booted || $productPhase !== 'ready' || phase === 'unknown' || phase === 'key_setup') return
     booted = true
     bootMain()
@@ -228,7 +240,7 @@
   // window closing, but a later cold start's fallback (below) reads this to
   // put the user back where they left off.
   $effect(() => {
-    const v = $view, sid = $activeSessionId, phase = $onboardPhase
+    const v = $view, sid = $activeSessionId, phase = effectiveOnboardPhase
     if (!routeReady || phase === 'unknown' || phase === 'key_setup') return
     const hash = normalizeHash(v, sid)
     if (location.hash !== hash) location.hash = hash
@@ -296,6 +308,7 @@
               show_reasoning: typeof ev.show_reasoning === 'boolean' ? ev.show_reasoning : s.show_reasoning,
               permission_mode: typeof ev.permission_mode === 'string' ? ev.permission_mode : s.permission_mode,
               reasoning_effort: typeof ev.reasoning_effort === 'string' ? ev.reasoning_effort : s.reasoning_effort,
+              chat_mode: typeof ev.chat_mode === 'string' ? ev.chat_mode : s.chat_mode,
             }
           : s
         )
@@ -597,9 +610,9 @@
   <!-- OCTO-FORK: the product gate refused the window (not logged in) — render
        the login/activation form (P4). No skip/guest path (需求 §5.3.1). -->
   <BlockedView />
-{:else if $onboardPhase === 'unknown'}
+{:else if effectiveOnboardPhase === 'unknown'}
   <div class="splash"><div class="spinner"></div></div>
-{:else if $onboardPhase === 'key_setup'}
+{:else if effectiveOnboardPhase === 'key_setup'}
   <FirstRunSetup />
 {:else if mobileShell}
 <MobileApp />

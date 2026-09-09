@@ -12,6 +12,7 @@
     pendingReasoningEffort,
     pendingPermissionMode,
     pendingShowReasoning,
+    pendingChatMode,
     globalReasoningEffort,
     resolveProjectForDir,
     prependSession,
@@ -30,6 +31,7 @@
     chatPermMode,
     chatReasoningEffort,
     chatShowReasoning,
+    chatMode,
     chatSuggestion,
     chatThinking,
     chatSubAgents,
@@ -1191,6 +1193,9 @@ import QuestionModal from '../components/overlays/QuestionModal.svelte'
       if (typeof (ev as any).show_reasoning === 'boolean') {
         chatShowReasoning.update(r => ({ ...r, [sid]: (ev as any).show_reasoning }))
       }
+      if (typeof (ev as any).chat_mode === 'string' && (ev as any).chat_mode) {
+        chatMode.update(m => ({ ...m, [sid]: (ev as any).chat_mode }))
+      }
       if (typeof (ev as any).working_dir === 'string' && (ev as any).working_dir) {
         chatWorkingDir.update(w => ({ ...w, [sid]: (ev as any).working_dir }))
       }
@@ -2260,10 +2265,12 @@ import QuestionModal from '../components/overlays/QuestionModal.svelte'
       // the sidebar's "+" caret can pin per new session, falling back to the
       // globally active one.
       const model = get(pendingModel)
+      const chatModePick = get(pendingChatMode)
       const opts: api.CreateSessionOpts = {
         source: 'manual',
         agent_profile: get(pendingAgent) || get(activeAgent),
         ...(model ? { model } : {}),
+        ...(chatModePick ? { chat_mode: chatModePick } : {}),
       }
       // Where the session lands. An explicitly chosen group (the sidebar's
       // per-group "+") wins outright. Otherwise a working directory picked on
@@ -2295,6 +2302,7 @@ import QuestionModal from '../components/overlays/QuestionModal.svelte'
       pendingAgent.set('')
       pendingGroupId.set('')
       pendingWorkingDir.set('')
+      pendingChatMode.set('')
       const reasoningPick = get(pendingReasoningEffort)
       pendingReasoningEffort.set('')
       const permPick = get(pendingPermissionMode)

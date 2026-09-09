@@ -49,6 +49,11 @@ export interface ProductStateDTO {
     inputSensitiveCheck: boolean;
     defaultChatMode: string;
   };
+  /** P9: desktop builds suppress the first-run "set up an API key" wizard (the
+   *  window token is already wired to the product backend, so onboarding is a
+   *  dead end). The server sets this from config; the Web UI routes away from
+   *  key_setup when true. OCTO-FORK: P9. */
+  suppressOnboarding: boolean;
 }
 
 // windowToken returns the adopted window token, or null outside the desktop

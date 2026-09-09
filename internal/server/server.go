@@ -545,6 +545,17 @@ func New(cfg Config) (*Server, error) {
 		}
 	}
 
+	// OCTO-FORK: P11 假模型通道 — seed the demo buding endpoint so a fresh
+	// install (no data/config.yml) gets the four fake models. This MUST run
+	// after resolveAccessKey above: fileCfg is loaded from disk before the
+	// seed, and its Save (a fresh access key) would otherwise overwrite the
+	// just-seeded buding endpoint with the stale pre-seed config. The sender
+	// is intentionally not re-resolved here — the lazy ensureSender re-reads
+	// config on the first turn and picks up the seeded local channel, so a
+	// keyless fresh install still enters its (P9-suppressed) onboarding state
+	// until then. See P11 技术方案 §3.2.
+	ensureLocalEndpoint()
+
 	// Resolve the shared memory tier. The launch directory deliberately plays
 	// no part: project memory is scoped by the session-group registry, per
 	// turn, so a serve process started inside a checkout gets no more claim on
@@ -1612,6 +1623,43 @@ func writeInvalidJSONBody(w http.ResponseWriter, err error) {
 // The server resolves provider/model/key/base-URL exactly as before, then hands
 // the result to app.NewSender — internal/app is the single place that builds the
 // vendor client, so the server no longer imports internal/provider.
+
+// localEndpointID is the config endpoint id seeded for the P11 demo channel.
+// It is an ASCII data key (需求 §5.6.3「id 固定」) — not the English brand name.
+const localEndpointID = "buding"
+
+// ensureLocalEndpoint seeds the demo buding endpoint (provider: local) into
+// the config when it is absent, so the four P11 fake models are reachable out
+// of the box for demos and offline use. It is a no-op when buding already
+// exists or the config cannot be read/saved — the same degrade-to-default
+// policy the sensitive dictionary and chat-modes.json use. A seeded endpoint
+// has an empty api_key by design: 需求 §5.1.2-3 forbids the key-setup wizard,
+// and the local channel needs no key (app.VendorKeyOptional("local") == true).
+// OCTO-FORK: P11 假模型通道 — see P11 技术方案 §3.2.
+func ensureLocalEndpoint() {
+	cfg, err := config.Load()
+	if err != nil {
+		return
+	}
+	for _, ep := range cfg.Endpoints {
+		if ep.ID == localEndpointID {
+			return
+		}
+	}
+	cfg.Endpoints = append(cfg.Endpoints, config.Endpoint{
+		ID:       localEndpointID,
+		Provider: app.ProviderLocal,
+		Models: []config.EndpointModel{
+			{Model: "buding-local-general"},
+			{Model: "buding-local-fast"},
+			{Model: "buding-cloud-plus"},
+			{Model: "buding-cloud-pro"},
+		},
+	})
+	if err := cfg.Save(); err != nil {
+		slog.Warn("could not seed local demo endpoint", "err", err)
+	}
+}
 
 // newSensitiveEngine builds the P7 engine over the product dictionary file.
 // data/sensitive-words.txt holds user-extensible words; an unresolvable data

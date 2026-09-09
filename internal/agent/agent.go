@@ -580,7 +580,10 @@ func UserFacingError(err error) string {
 // knownProviderPrefixes are the provider names used as error-message prefixes
 // in internal/provider/*. Adding a new provider should add its name here so
 // its error messages are user-friendly.
-var knownProviderPrefixes = []string{"anthropic", "openai"}
+// OCTO-FORK: P11 假模型通道 — "local" is the demo fake provider; it has no
+// wire prefix of its own but must be listed so TestKnownProviderPrefixesInSync
+// (every internal/provider/* dir needs a prefix entry) stays green.
+var knownProviderPrefixes = []string{"anthropic", "openai", "local"}
 
 // stripProviderPrefix removes a leading "<provider>: " from msg if the
 // provider is in knownProviderPrefixes.

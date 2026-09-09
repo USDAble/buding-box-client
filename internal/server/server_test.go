@@ -874,6 +874,11 @@ func mustServer(t *testing.T, cfg Config) *Server {
 		srv.productState = st
 		srv.productGate = productgate.New(cfg.WindowToken, st)
 	}
+	// Match New: build the sensitive engine and wire the nickname hook so the
+	// nickname/input checks behave identically to the real server. OCTO-FORK:
+	// P8 敏感词接入.
+	srv.sensitiveEngine = newSensitiveEngine()
+	productstate.Sensitive = func(v string) bool { return srv.sensitiveEngine.Filter(v).Matched() }
 	srv.loginCodes = make(map[string]*loginCodeSession)
 	srv.registerRoutes()
 	// Same chain as New: host routing outside, CORS inside, so tests that

@@ -887,6 +887,16 @@ import QuestionModal from '../components/overlays/QuestionModal.svelte'
       }
     }))
 
+    // P8: server-side input gate fallback. The Composer normally catches a hit
+    // via the check API before sending; this fires only when that client check
+    // was skipped or failed and the server rejected the message. Restore the
+    // masked text into the input box and surface the same notice.
+    cleanups.push(ws.on('input_sensitive', (ev: any) => {
+      if (ev.session_id && ev.session_id !== sid) return
+      composer?.restore(ev.text ?? '', undefined)
+      showToast($t('sensitive.hit_notice'), 'error')
+    }))
+
     cleanups.push(ws.on('history_user_message', (ev) => {
       if ((ev as any).session_id && (ev as any).session_id !== sid) return
       const content = (ev as any).content ?? ''

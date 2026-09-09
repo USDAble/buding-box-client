@@ -363,6 +363,14 @@ func (s *Server) handleCreateChat(w http.ResponseWriter, r *http.Request) {
 		s.releaseSessionBinding(sess.ID, agent.EntryWeb)
 	}()
 
+	// P8: server-side input gate — runs before the credit deduction so a
+	// blocked message is never charged (P8 §3.6). The frontend does the same
+	// check for responsiveness; this one can't be bypassed. OCTO-FORK: P8 敏感词接入.
+	if masked, hit := s.checkInputSensitive(req.Message); hit {
+		writeJSON(w, http.StatusBadRequest, map[string]any{"code": "input_sensitive", "text": masked})
+		return
+	}
+
 	// P6: deduct one credit for the outgoing message ("成功交给模型" = 送入
 	// agent 循环), then hand the fresh balance back in the response so API
 	// callers see it without a second GET. OCTO-FORK: P6 credits — see
@@ -448,6 +456,13 @@ func (s *Server) handleTurn(w http.ResponseWriter, r *http.Request) {
 	sess, err = agent.LoadSession(id)
 	if err != nil {
 		writeError(w, http.StatusNotFound, err.Error())
+		return
+	}
+
+	// P8: server-side input gate before the credit deduction (see
+	// handleCreateChat). OCTO-FORK: P8 敏感词接入.
+	if masked, hit := s.checkInputSensitive(req.Message); hit {
+		writeJSON(w, http.StatusBadRequest, map[string]any{"code": "input_sensitive", "text": masked})
 		return
 	}
 
@@ -726,6 +741,9 @@ func (s *Server) handleGetSessionMessages(w http.ResponseWriter, r *http.Request
 					}
 				}
 			}
+			// The stored block is the provider round-trip copy (verbatim); mask
+			// only the display copy here, matching the live assistant_message.
+			thinking = s.filterThinking(thinking)
 			if hasToolUse {
 				// Intermediate (tool) round — replay in block order so it mirrors
 				// the live stream's think → act sequence: the reasoning (and any

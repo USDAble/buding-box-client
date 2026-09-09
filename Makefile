@@ -64,7 +64,8 @@ RG_EMBED_BIN := $(RG_EMBED_DIR)/rg
         eval-build eval-list eval \
         rg-embed rg-embed-clean \
         bundle-tools-windows bundle-tools-macos \
-        web-build web-dev dev build-full desktop desktop-app desktop-appimage \
+        web-build web-dev dev build-full desktop desktop-dev desktop-binary desktop-app desktop-appimage \
+        desktop-portable desktop-portable-all portable-check \
         brand-assets brand-assets-check
 
 all: test
@@ -115,6 +116,24 @@ desktop: web-build
 		CGO_LDFLAGS="-Wl,-macos_version_min,$(DESKTOP_MACOS_VERSION)" \
 		go build -ldflags='$(DESKTOP_LDFLAGS)' -o ../../octo-desktop .
 
+# OCTO-FORK: desktop-binary is an explicit alias for the bare desktop binary
+# build (the `desktop` target) — lets docs and scripts ask for "just the
+# binary" without implying a packaged .app or an installer.
+desktop-binary: desktop
+
+# OCTO-FORK: desktop-dev runs the desktop shell against the Vite dev server so
+# web/ edits hot-reload inside the real window instead of the embedded build.
+# Start `make web-dev` in a second terminal first (Vite on :5173), then this
+# target builds the shell and points the window at :5173. The window's
+# in-process hub still owns 8088; Vite proxies /api and /ws back to it (see
+# desktopWebviewURL in cmd/octo-desktop/main.go and web/vite.config.ts).
+desktop-dev:
+	cd cmd/octo-desktop && CGO_ENABLED=1 \
+		CGO_CFLAGS="-mmacosx-version-min=$(DESKTOP_MACOS_VERSION)" \
+		CGO_LDFLAGS="-Wl,-macos_version_min,$(DESKTOP_MACOS_VERSION)" \
+		go build -ldflags='$(DESKTOP_LDFLAGS)' -o ../../octo-desktop-dev .
+	OCTO_DESKTOP_DEV_URL="http://localhost:5173" ./octo-desktop-dev
+
 # Package the desktop shell into a double-clickable macOS Octo.app bundle
 # (embeds the web UI, ad-hoc signed for local use). Real Developer ID
 # notarization is a release step. Windows packaging rides the Inno Setup
@@ -127,6 +146,28 @@ desktop-app: web-build
 # are taken from the host — the AppRun launcher preflights them.
 desktop-appimage: web-build
 	bash scripts/package-desktop-linux.sh
+
+# Portable Windows directory — the product's PRIMARY deliverable (需求 §5.1.1).
+# One command builds the GUI exe (VERSIONINFO + icon injected), assembles
+# PuddingBox/ (bundled tools + pre-filled data/ + bilingual usage note), runs
+# the product self-check, and zips. The installer targets above still build but
+# are no longer the main output. See
+# dev-docs-usdable/需求/2260906/技术方案/P12-便携打包.md.
+desktop-portable: web-build brand-check
+	$(MAKE) rg-embed GOOS=windows GOARCH=amd64
+	node scripts/package-portable.mjs
+
+# One command for BOTH portable deliverables (P12 §3.7): the Windows PuddingBox/
+# directory (cross-compiled — works from any host) and the macOS Octo.app bundle
+# (native; needs macOS + Xcode CLT, so this target is for a mac host). CI splits
+# these into per-OS jobs in portable.yml rather than running this target.
+desktop-portable-all: web-build brand-check desktop-app desktop-portable
+
+# Node unit tests for the packaging pipeline (self-check predicates, the
+# zero-dependency ZIP writer, the PE reader) — same pattern as brand-check /
+# datapath-check. Runs in the Portable workflow (portable.yml).
+portable-check:
+	node --test scripts/package-portable.test.mjs scripts/pe-info.test.mjs
 
 install: web-build rg-embed
 	go install $(GOFLAGS) -tags='$(GOTAGS) $(RG_TAGS)' -ldflags='$(LDFLAGS)' ./cmd/octo

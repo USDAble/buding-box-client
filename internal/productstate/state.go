@@ -203,6 +203,13 @@ type PublicState struct {
 	Credits       Credits           `json:"credits"`
 	Plan          Plan              `json:"plan"`
 	Prefs         Prefs             `json:"prefs"`
+	// SuppressOnboarding tells the desktop shell to never enter the upstream
+	// first-run "configure API key" wizard, even with an empty model list
+	// (需求 §5.1.2-3「禁止出现首次配 Key 向导」). It is NOT part of the
+	// persisted state — it is a server-runtime flag the handler stamps on, true
+	// only when the server runs in the desktop shell (window token present).
+	// OCTO-FORK: P9 — see dev-docs-usdable/需求/2260906/技术方案/P9-模式与模型.md §3.5.
+	SuppressOnboarding bool `json:"suppressOnboarding"`
 }
 
 // PublicActivation is the activation timestamps the UI may see. Activated (the

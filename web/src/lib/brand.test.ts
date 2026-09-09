@@ -145,9 +145,11 @@ describe('class C identifiers and paths', () => {
     expect(brandLink('inApp', 'terms')).toMatch(/^\//)
     expect(brandLink('nope', 'license')).toBe('')
     expect(brandAsset('mark')).not.toBe('')
-    // The brand colour is not decided yet, so the accessor must degrade to an
-    // empty string rather than throw on the missing group.
-    expect(brandColor('primary')).toBe('')
+    // The primary brand colour is decided (sampled from logo-mark.png,
+    // 2026-09-09); an unknown colour group must still degrade to an empty
+    // string rather than throw on the missing key.
+    expect(brandColor('primary')).toBe('#437EB1')
+    expect(brandColor('nope')).toBe('')
   })
 })
 

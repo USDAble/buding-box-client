@@ -60,7 +60,7 @@ RG_EMBED_DIR := internal/tools/rgembed/binaries
 RG_EMBED_BIN := $(RG_EMBED_DIR)/rg
 
 .PHONY: all build install test cover vet fmt fmt-check tidy clean \
-        brand brand-check datapath-check \
+        brand brand-check datapath-check norms-check agents agents-check \
         eval-build eval-list eval \
         rg-embed rg-embed-clean \
         bundle-tools-windows bundle-tools-macos \
@@ -187,6 +187,23 @@ brand-check:
 datapath-check:
 	node scripts/datapath-guard.mjs
 	node --test scripts/datapath-guard.test.mjs
+
+# ── AI-tool entry-point guards ────────────────────────────────────────────────
+# Every AI coding tool reads a different file (.cursor/rules, CLAUDE.md,
+# .github/copilot-instructions.md, AGENTS.md, .octorules). norms-check asserts
+# each one still points at dev-docs-usdable/开发规范.md; agents-check asserts the
+# generated AGENTS.md matches the inlined .octorules. CI runs both (norms-guard /
+# agents-guard jobs).
+norms-check:
+	node scripts/norms-guard.mjs
+	node --test scripts/norms-guard.test.mjs
+
+agents:
+	node scripts/sync-agents.mjs
+
+agents-check:
+	node scripts/sync-agents.mjs --check
+	node --test scripts/sync-agents.test.mjs
 
 # ── ripgrep embed (build-time only) ──────────────────────────────────────────
 # Downloads the matching rg release for GOOS/GOARCH, extracts the binary,

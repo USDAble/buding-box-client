@@ -1,0 +1,23 @@
+---
+description: 布丁盒子 fork 强制开发规范 —— 所有改动先读 dev-docs-usdable/开发规范.md
+alwaysApply: true
+---
+
+# 本仓库的强制开发规范
+
+**在修改任何文件前，先读 `dev-docs-usdable/开发规范.md`。** 它是本 fork 的规范性文件（binding），不是参考资料。`.octorules` 与 `CLAUDE.md` 是上游规范性文件，**效力相同**（`CLAUDE.md` 是完整版，`.octorules` 是精简索引）。
+
+`scripts/norms-guard.mjs`（CI `norms-guard` job / `make norms-check` / 出包 preflight）会断言每个 AI 工具入口文件都存在且指向该规范。
+
+## 三条硬规则（CI 强制；全文见 开发规范 §3.1–§3.3）
+
+1. **不许自己解析数据路径。** 禁止 `os.UserHomeDir()`、`".octo"` 字面量；一律走 `internal/datapath`。数据根是 `<exe dir>/data`，仅 `$OCTO_DATA_ROOT` 可覆盖。
+2. **不许写死品牌字面量。** 产品名一律插值 `{brand}` / `{brandShort}`（来自 `branding/brand.json`）。两个例外须显式注释：端口提示里的 "Octo" 指上游产品；`BUDING-DEMO-0001` / `buding-*` 是固定 ASCII 数据键。
+3. **改上游文件必须打标记** `// OCTO-FORK: <原因> — see <设计文档>`。优先让上游功能"到不了"，而不是删除。
+
+## 其它必须先读的
+
+- 上游合并策略：`dev-docs-usdable/上游合并策略.md`（`merge`，绝不 `rebase`）。
+- 评审与 DoD：`开发规范.md` §3.4–§3.11、§5、§8。
+- 需求与方案：`dev-docs-usdable/需求/20260909/`。
+- 上游架构：`dev-docs/`（上游目录，禁止往里加下游文档）。

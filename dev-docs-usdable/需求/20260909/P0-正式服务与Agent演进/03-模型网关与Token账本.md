@@ -50,7 +50,7 @@ productruntime:
 2. SSE 必须区分 `meta`、`delta`、`tool_call`、`usage`、`error`、`done`；仅 `usage.state=settled` 更新最终余额。
 3. 将远端错误码、余额不足、`reconciliation_pending` 映射为明确的会话/UI 状态，不能依据客户端猜测 token 价格或自行扣减。
 4. 余额不足不回退 local/provider；只有目录显式允许的免费或套餐额度模型可继续调用。
-5. sandbox 未到位时以 合同测试实现 SSE 和请求状态 contract sample 覆盖事件顺序、取消、重复 request ID 和恢复路径。
+5. sandbox 未到位时以 mock SSE 和请求状态 contract sample 覆盖事件顺序、取消、重复 request ID 和恢复路径。
 
 ## 验收场景
 
@@ -60,4 +60,4 @@ productruntime:
 
 ## 合并策略
 
-当前仓库先用 合同测试实现 SSE/状态查询完成 sender 协议测试，再接中台 sandbox。账本 schema、价格配置、供应商调用和服务端迁移由中台在其仓库独立交付；本仓库不创建相关 PR，也不将其与 UI 修改混合。
+当前仓库先用 mock SSE/状态查询完成 sender 协议测试，再接中台 sandbox。账本 schema、价格配置、供应商调用和服务端迁移由中台在其仓库独立交付；本仓库不创建相关 PR，也不将其与 UI 修改混合。

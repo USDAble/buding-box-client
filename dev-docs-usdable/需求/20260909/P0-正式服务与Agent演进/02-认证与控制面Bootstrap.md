@@ -27,7 +27,7 @@
 3. 将 access/refresh token、policy snapshot、catalog cache 分级保存；access token 只驻留内存，refresh token 只能通过 P0-08 的 credential store 保存，严禁写回 `product-state.json`；导出/诊断包一律排除凭证。
 4. bootstrap 缓存必须带版本、过期时间、签名结果；离线只能使用未过期且已验证缓存，不可接受空策略扩权。`ControlPlaneClient` 的目录/词库/策略信封共用一套验签 + 缓存 + 刷新机制（见 P0-04 §模型目录的本地缓存与刷新），不在各客户端里重复实现验签。
 5. 将账号 panel、登录页、模型选择器读取的状态统一从 bootstrap DTO 派生，避免本地 product-state 与远端各自为准。
-6. 在 sandbox 到位前，使用同一 OpenAPI contract sample 的 合同测试实现 client 做单元/集成测试；不得把临时 JSON 写进页面层，也不得将 合同测试实现 作为生产 local 服务。
+6. 在 sandbox 到位前，使用同一 OpenAPI contract sample 的 mock client 做单元/集成测试；不得把临时 JSON 写进页面层，也不得将 mock 作为生产 local 服务。
 
 ## 验收
 
@@ -37,4 +37,4 @@
 
 ## 合并方式
 
-字段合同由 P0-01 的 B0 先冻结并发给中台；当前仓库随后以 **手写 DTO + 合同测试实现** 开发中台 client（不引入代码生成依赖，见 [P0-01 §中台请求客户端的实现形态](01-运行时Profile与窄端口抽象.md) §4）。中台交付的 OpenAPI 用于产出 contract sample 与测试断言，**不用来生成生产代码** —— 生成器会带进新依赖，且生成物天然拒绝手写校正。中台提供 OpenAPI + sandbox 后，通过 contract CI 才合真实 HTTP 实现；不要让页面团队直接使用临时 JSON。
+字段合同由 P0-01 的 B0 先冻结并发给中台；当前仓库随后以 **手写 DTO + mock** 开发中台 client（不引入代码生成依赖，见 [P0-01 §中台请求客户端的实现形态](01-运行时Profile与窄端口抽象.md) §4）。中台交付的 OpenAPI 用于产出 contract sample 与测试断言，**不用来生成生产代码** —— 生成器会带进新依赖，且生成物天然拒绝手写校正。中台提供 OpenAPI + sandbox 后，通过 contract CI 才合真实 HTTP 实现；不要让页面团队直接使用临时 JSON。

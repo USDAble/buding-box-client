@@ -33,7 +33,7 @@ flowchart TB
 | `internal/server` | 保持上游 HTTP/WS、agent、会话和工具；不迁移或重构这些通用能力，也不再接受布丁产品逻辑。既有布丁逻辑按 P0-01A 迁出；仅无替代方案时允许一个通用窄扩展端口。 |
 | `internal/productruntime` | 产品 HTTP 映射、运行时装配、聊天前置策略和既有布丁 server 逻辑的迁移归属；不复制 server 的通用生命周期。 |
 | `internal/productprofile` | 加载嵌入二进制的 `production`/`developer` 全局配置；不是 `data/config.yml`，不能在运行时切换。详见[运行时 Profile 配置](../../../运行时Profile配置.md)。 |
-| `internal/productclient` | 中台身份、bootstrap、目录、词库、只读 usage 的 DTO、错误语义、remote client 与 合同测试实现。名字明确表示“当前客户端”，不暗示本仓库有 backend。 |
+| `internal/productclient` | 中台身份、bootstrap、目录、词库、只读 usage 的 DTO、错误语义、remote client 与 mock。名字明确表示“当前客户端”，不暗示本仓库有 backend。 |
 | `internal/productclient/gateway` | 网关 SSE、取消/恢复和终态 usage 的 `agent.Sender` 适配；不算钱、不写余额、不持有供应商密钥。 |
 | `internal/productpolicy` | 验签/缓存策略快照与本地 PEP；可决定 `allow`/`ask`/`deny`，不能被隐藏 UI 或模型输出绕过。 |
 | `internal/credentialstore` | 平台安全存储可撤销凭证；不进入 `product-state.json`、导出或诊断。 |
@@ -52,14 +52,14 @@ P0-00/00A 将当前入口分为两类：`OCTO_DESKTOP_DEV_URL`、环境模型来
 | --- | --- | --- | --- | --- |
 | P0-00 | Server 最小改动与 production profile 前置 | `buding` 已接收批准的 `main`、全局嵌入式 profile 配置、server 零改预算、开发输入拒绝黑盒测试 | 发布 profile 决策 | 无 |
 | P0-00A | 生产入口可见性与功能保留 | 保留 `config.yml`、MCP、channel、工具与后台能力；冻结首发 UI 入口清单和 capability ID 初稿 | 首发入口决策 | P0-00 |
-| P0-01 | 产品客户端契约与产品运行时装配 | `productruntime`/`productclient`/gateway/policy/credential store contract、合同测试实现、装配设计 | DTO 字段草案评审 | P0-00 |
+| P0-01 | 产品客户端契约与产品运行时装配 | `productruntime`/`productclient`/gateway/policy/credential store contract、mock、装配设计 | DTO 字段草案评审 | P0-00 |
 | P0-01A | 既有产品逻辑迁出 `internal/server` | 产品 HTTP/状态/门/词库/发送策略迁出；本地积分删除；中性端口与回归证据 | P0-01 runtimeport contract；P0-02/04/05 的正式替换输入 | P0-01 |
 | P0-02 | 客户端认证与控制面中台接入 | 登录/刷新、bootstrap 校验和缓存 | OpenAPI、签名公钥、sandbox、错误码 | P0-01 |
 | P0-03 | 客户端模型网关 sender 与账本状态接入 | SSE、取消恢复、usage 投影 | 网关协议、request status、sandbox | P0-01 |
 | P0-04 | 目录、能力矩阵和本地 PEP | catalog adapter、policy snapshot、菜单/执行双校验 | catalog/policy contract sample、能力 ID 表 | P0-01 |
-| P0-05 | 正式模型调用链与 production 装配 | gateway resolver、session 绑定、删除固定积分 旧本地实现 | P0-02/03/04 sandbox | P0-00 至 P0-04 |
+| P0-05 | 正式模型调用链与 production 装配 | gateway resolver、session 绑定、删除固定积分 mock | P0-02/03/04 sandbox | P0-00 至 P0-04 |
 | P0-06 | 隐私发送副本、词库、数据流与正式告知 | 脱敏副本、三层词库、文案/版本呈现、诊断脱敏 | 词库、保留规则、批准文案 | P0-01、P0-02、P0-04 |
-| P0-07 | 安全、契约与 Windows E2E 门禁 | 合同测试实现/contract suite、sandbox/真机记录 | 测试账号、可检索 request ID | P0-02 至 P0-10 |
+| P0-07 | 安全、契约与 Windows E2E 门禁 | mock/contract suite、sandbox/真机记录 | 测试账号、可检索 request ID | P0-02 至 P0-10 |
 | P0-08 | 凭证、设备与本地数据安全 | credential store、数据迁移、桌面数据根保护 | token/撤销/删除语义 | P0-00、P0-01 |
 | P0-09 | 发布完整性、更新恢复与诊断 | 签名验证、回退、恢复、SBOM/诊断 | 发布清单、渠道、支持流程 | P0-00、P0-01 |
 | P0-10 | 内容安全、滥用防护与运营处置 | 安全事件 UI、工具阻断、机器码映射 | 安全策略、限流/封禁/申诉合同 | P0-03、P0-04、P0-06 |
@@ -100,9 +100,9 @@ flowchart LR
 | 波次 | 可并行的编号文件 | 协作方式 |
 | --- | --- | --- |
 | W0 | `00-Server最小改动与生产Profile前置.md`、`00A-生产入口可见性与功能保留.md` | 唯一先行项，由发布/profile 负责人完成；00A 是 00 的纠偏项，两者共享同一位 owner，未通过不开始功能代码。 |
-| W1 | `01-运行时Profile与窄端口抽象.md`、`01A-既有产品逻辑迁出internal-server.md` 的 A/B 阶段 | 一位客户端核心负责人先完成共享 DTO、合同测试实现 与中性端口合同，再迁出独立产品 HTTP；其余人此时只准备 contract sample/文档。 |
+| W1 | `01-运行时Profile与窄端口抽象.md`、`01A-既有产品逻辑迁出internal-server.md` 的 A/B 阶段 | 一位客户端核心负责人先完成共享 DTO、mock 与中性端口合同，再迁出独立产品 HTTP；其余人此时只准备 contract sample/文档。 |
 | W2 | `02`、`03`、`04`、`06`、`08`、`09`、`10`、`11` | 每个文件各一位 owner、各一条开发分支；只改本文件指定的新包/UI/测试，不修改 `internal/server` 的通用路径。`11` 是**前端独立工作流**：`web/` 只由它改，用 P0-01 B0 冻结的 DTO 与 contract sample 假数据先做投影和文案，不等联调（见 `P0-开发顺序与协作计划.md` §2 元规则 3）。 |
-| W3 | `05-正式客户端模型调用链.md` | 唯一集成人员接入 W2 成果，在 productruntime 装配并删除固定积分 旧本地实现；若需要 server 端口，按 P0-00 单独申请。 |
+| W3 | `05-正式客户端模型调用链.md` | 唯一集成人员接入 W2 成果，在 productruntime 装配并删除固定积分 mock；若需要 server 端口，按 P0-00 单独申请。 |
 | W4 | `07-安全契约测试与E2E验收.md` | QA/发布负责人汇总 W0-W3 证据，执行 sandbox 与 Windows 真机发布门。 |
 
 - W2 内的依赖通过 P0-01 冻结的 DTO、错误码和 versioned contract sample 协作；某个中台 sandbox 未到位，只阻塞该文件的真实接入，不阻塞其他 W2 文件。

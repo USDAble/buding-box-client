@@ -19,7 +19,7 @@ P0 的默认约束是：**不新增 `internal/server` 产品逻辑。** 2026-09-
 2. 在本文件登记既有 P4/P6/P8/P11 下游改动，以及 P0 允许触碰的文件、原因、负责人和退出条件；未登记即默认禁止改 `internal/server`。
 3. 冻结产品包命名：P0 不创建 `internal/backend` 或 `internal/productapp`。新建 `internal/productruntime`、`internal/productprofile`、`internal/productclient`、`internal/productclient/gateway`、`internal/productpolicy`、`internal/credentialstore`；各自职责见[P0-01](01-运行时Profile与窄端口抽象.md)。
 4. 按[全局 Profile 配置](../../../运行时Profile配置.md)定义可信来源：只存在 `production` 和 `developer` 两种编译期 Profile，且由嵌入二进制的只读 JSON 与构建标签选择；环境变量、`config.yml`、本地数据和 WebView 参数均不得切换。`developer` 仅表示开发能力集，不对应用户可写的“环境”。
-5. 在 合同测试实现 下先完成 production profile 的黑盒测试清单，不能以“接到 sandbox 后再补”替代。后续每个 P0 PR 都必须引用该清单。
+5. 在 mock 下先完成 production profile 的黑盒测试清单，不能以“接到 sandbox 后再补”替代。后续每个 P0 PR 都必须引用该清单。
 
 ## Production 启动面审计
 

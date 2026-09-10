@@ -21,7 +21,7 @@
 
 | 当前仓库做 | 中台做 |
 | --- | --- |
-| `productclient` remote/合同测试实现、gateway sender、签名验证、缓存、凭证安全保存、PEP、UI 状态与 Windows 验收 | 短信/账号、控制面、供应商路由、token 预留/结算、账本、KMS、服务端审计、sandbox 与运维 |
+| `productclient` remote/mock、gateway sender、签名验证、缓存、凭证安全保存、PEP、UI 状态与 Windows 验收 | 短信/账号、控制面、供应商路由、token 预留/结算、账本、KMS、服务端审计、sandbox 与运维 |
 
 正式模型请求由中台网关在同一 `clientRequestId` 内鉴权、预留、调用、结算与记账。客户端仅消费最终 usage/余额投影；**没有**客户端 `amount` 扣费接口，也不保留本地固定积分兼容路径。供应商 endpoint/key 永不下发给标准客户端。
 
@@ -30,7 +30,7 @@
 ```text
 P0-00 upstream/profile 基线
   -> P0-01 productclient / gateway / policy contract
-  -> 合同测试实现 并行开发 P0-02/03/04/06/08/09/10
+  -> mock 并行开发 P0-02/03/04/06/08/09/10
   -> sandbox 联调
   -> P0-05 production gateway 装配 + 删除固定积分
   -> P0-07 Windows 发布门

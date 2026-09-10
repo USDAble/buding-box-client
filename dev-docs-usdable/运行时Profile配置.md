@@ -50,6 +50,9 @@ internal/productprofile/profiles/developer.json
   "allowDevWebview": false,
   "allowEnvironmentModelSource": false,
   "allowDataRootOverride": false,
+  "apiHost": "https://<prod-api-host>/v1",
+  "gatewayHost": "https://<prod-gateway-host>/v1",
+  "trustedKeyIDs": { "policy-2026-a": "<ed25519-public-key-base64>" },
   "startup": {
     "channels": true,
     "tools": true,
@@ -58,6 +61,8 @@ internal/productprofile/profiles/developer.json
   }
 }
 ```
+
+`apiHost` / `gatewayHost` / `trustedKeyIDs` 由 [P0-01](需求/20260909/P0-正式服务与Agent演进/01-运行时Profile与窄端口抽象.md)「中台请求客户端的实现形态」§1 定义，**尚未在代码里落地，随 P0-01 B0 一起加**：production 的中台地址与受信公钥必须**编译期嵌入**，不能来自 `config.yml`、环境变量、`product-state.json`、缓存或 WebView 输入（地址是 bootstrap 自身的前提，不可能由远端下发）。**fail-closed**：production 构建 `apiHost` 为空即拒绝启动、不发起任何中台请求；`trustedKeyIDs` 为空则任何签名策略都无法验证，等同无目录 —— 两者都不得回退到默认值、`localhost` 或 `config.yml`。`developer.json` 可指向 sandbox 或留空。字段落地时，同步更新本文件、两份 JSON、解析/校验测试与打包脚本。
 
 `production.json` 必须把所有 `allow*` 值设为 `false`。这组字段只约束开发 WebView、环境模型来源与数据根覆盖，不能被 WebView、模型输出、环境变量或本地配置开启。用户模型配置和 local provider 不在 Profile schema 中：它们是既有功能，正式会话的模型来源边界由 P0-05 的 gateway sender 实现，不能用未接入的 Profile 字段假装关闭。`startup` 保留上游已有能力；菜单显示、用户资格和实际执行权限分别由 P0-04 的能力矩阵与本地 PEP 决定，不能将隐藏误当成删除。`developer.json` 明确列出其允许的开发入口，避免“未设置即默认开放”。
 

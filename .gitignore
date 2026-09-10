@@ -33,6 +33,10 @@ coverage.html
 .codegraph/
 /.worktrees/
 /.octo/
+# OCTO-FORK: the data root is <exe dir>/data (internal/datapath), so a build and
+# run from the repo root drops runtime state into ./data/ — config.yml,
+# sessions, logs, desktop.json. Not source. See 技术方案/P1-便携数据根.md §3.2.
+/data/
 # Designer reference images (not deliverables) — shared ad hoc, not committed.
 /branding/reference/
 

@@ -152,6 +152,17 @@ developer/test         =  可覆盖（本地联调、sandbox、mock），沿用�
 | `gatewayHost` | 模型网关主机（可与 `apiHost` 同源） |
 | `trustedKeyIDs` | 受信签名公钥的 keyId → 公钥（或指向编译期嵌入的公钥表） |
 
+**`trustedKeyIDs` 的注入 owner 与时间点（2026-09-11 定）**：B0/B1 期间 `production.json` 里它是 `{}`，于是 `release-config-guard` 每次出包都会报「trustedKeyIDs is empty — no signed policy or catalog can be verified」。**这个警告是预期的，不是待修的缺陷**，但它必须有人接手，否则会在几个月后变成永久噪音以致被无视 —— 那这个 guard 就死了。因此把它写死在这里：
+
+| 项 | 值 |
+| --- | --- |
+| 注入内容 | 中台**签名服务**的 ed25519 公钥（keyId → base64 32 字节公钥），**至少一把、建议两把**（轮换期需要新旧并存，只放一把则换钥当日所有老客户端同时失效） |
+| owner | **中台/服务端**（签名服务与公钥的持有方）—— 客户端只是消费方，不由客户端研发决定公钥内容 |
+| 时间点 | **P0-04 目录/策略验签接通之前**（`productpolicy.Verifier` 的第一次真实实现）。在此之前 `{}` 是自洽的：没有真公钥就没有真目录，`Preflight` 一律 fail-closed |
+| 交付形式 | 更新 `internal/productprofile/profiles/production.json` 的 `trustedKeyIDs` + 一次 `make release-config-check` 转绿 —— **是发布动作（改数据），不是代码改动** |
+| 未注入时的行为 | 出包**允许**（advisory 只告警不阻断，理由见 `运行时Profile配置.md`）；但该包**不能验签任何策略**，因而拿不到任何模型目录 —— 它是内部测试包，不是可发布包 |
+| 如何防止被遗忘 | `问题盘点.md` §0.1 已把「发布面无人认领的项」单列，本项是其中第 6 项；**P0-04 开工清单的第一条就是检查它是否已注入** —— 而不是等出包时被 guard 提醒（那时离发布已经很近，且 guard 只告警不阻断，很容易被放过） |
+
 **fail-closed**：production 构建若 `apiHost` 为空 → **拒绝启动并发起任何中台请求**，而不是回退到任何默认值、`localhost` 或 `config.yml`。
 
 #### 2. 一个共享 HTTP transport，不是每个 client 一套
@@ -218,15 +229,16 @@ B1 的验收句是「这些输入都不能让 production session 绕过 gateway�
 
 | # | 入口 | 位置 | 在 production 下必须的结果 | 建议的封堵方式 |
 | --- | --- | --- | --- | --- |
-| 1 | `OCTO_PROVIDER` | `internal/server/server.go:1649`（`firstNonEmpty(flagProvider, os.Getenv("OCTO_PROVIDER"), entry.Provider, "anthropic")`） | 被忽略 | **上游文件。** 优先走 P0-00 批准的中性端口（server 接收一个"provider 已由宿主决定"的中性标记），而不是在 handler 里写 `if production`——否则就是本任务要消除的那类产品分支 |
+| 1 | `OCTO_PROVIDER` | `internal/server/server.go:1649`（`firstNonEmpty(flagProvider, os.Getenv("OCTO_PROVIDER"), entry.Provider, "anthropic")`） | 被忽略 | **上游文件。** 走端口 4（宿主 sender 工厂），不是在 handler 里写 `if production`。注意：只把 `Config.Provider` 设为非空**并没有封堵** —— provider 名一旦非空，凭据就改由 `resolveAPIKey` 从厂商环境变量或 `data/config.yml` 取，只是换了入口 |
 | 2 | `OCTO_PROVIDER`（CLI 路径） | `cmd/octo/config.go:47` | 只影响 CLI，不影响便携包 | **已核实：出 B1 范围。** `package-portable.mjs` 断言顶层**有且仅有一个** exe 且必须是品牌 exe（`unexpected top-level exe` / `missing … at package root` 两处硬失败），`bin/` 下只捆绑 `uv.exe` —— 便携包不含 `octo` 可执行文件，所以这个入口发不出去，不要为它改代码 |
-| 3 | `config.yml` 的 endpoint 条目 | `internal/server/server.go:1649` 的 `entry.Provider`；`config/endpoints` 路由 | endpoint 不参与 provider/model 选择 | 同上；且标准产品 UI 不提供添加入口（D6/C7 已定） |
+| 3 | `config.yml` 的 endpoint 条目 | `internal/server/server.go:1649` 的 `entry.Provider`；`config/endpoints` 路由 | endpoint 不参与 provider/model 选择 | 同 #1（同一处代码）；且标准产品 UI 不提供添加入口（D6/C7 已定） |
 | 4 | 本地 provider（`internal/provider/local`） | 已用 `product_production` 编译排除（2026-09-11） | 不可达 | **已完成**，由 `package-portable.mjs` 的 `checkProductionBinary()` 反向断言 |
-| 5 | `OCTO_DESKTOP_DEV_URL` | `cmd/octo-desktop/main.go:90`（仅 `AllowDevWebview` 为真时） | 被忽略 | 已由 profile 门控（`main.go:89`）；B1 只需补一条 production 反向测试 |
-| 6 | `OCTO_DATA_ROOT` | `internal/datapath` | **保持可用**（测试/只读安装需要），但它只改数据根、不改 profile | 不封堵；但要用测试断言它**不能**切换 profile、也不能让 production 读到 developer profile |
-| 7 | `data/product-state.json` / 缓存 | 见 P0-08 | 不能被当作已登录，不能携带 provider 配置 | 归 P0-08；B1 只断言「profile 不从缓存读」 |
-| 8 | WebView 输入 | 见 P0-02 | 不能改 profile / 不能配 endpoint | 归 P0-02；B1 只断言 profile 只来自编译期嵌入 |
+| 5 | **会话绑定的 `ModelConfig`** | `internal/server/server.go:1768` `senderForSession`：读 `sess.ModelConfig` → `config.LoadCached()` → `cachedSenderForEntry`，**构建失败还静默回落到默认 sender** | 被忽略；且**不得回落** | **端口 4 存在的真正理由。** 输入是已落盘的会话 JSON + `data/config.yml`，都不经过 `server.Config`，所以 desktop 侧关不掉（除非去改写上游的会话结构）。申请见 [01A §3.1](01A-既有产品逻辑迁出internal-server.md) |
+| 6 | `OCTO_DESKTOP_DEV_URL` | `cmd/octo-desktop/main.go:90`（仅 `AllowDevWebview` 为真时） | 被忽略 | 已由 profile 门控（`main.go:89`）；B1 只需补一条 production 反向测试 |
+| 7 | `OCTO_DATA_ROOT` | `internal/datapath` | **保持可用**（测试/只读安装需要），但它只改数据根、不改 profile | 不封堵；但要用测试断言它**不能**切换 profile、也不能让 production 读到 developer profile |
+| 8 | `data/product-state.json` / 缓存 | 见 P0-08 | 不能被当作已登录，不能携带 provider 配置 | 归 P0-08；B1 只断言「profile 不从缓存读」 |
+| 9 | WebView 输入 | 见 P0-02 | 不能改 profile / 不能配 endpoint | 归 P0-02；B1 只断言 profile 只来自编译期嵌入 |
 
-**两条结论**：① 真正需要动上游文件的只有 #1 和 #3 两处，且都建议走中性端口而非产品分支——**这是 B1 里唯一需要申请 P0-00 端口的地方，应先申请、后编码**；② #2、#7、#8 不要顺手做——#2 可能根本不发出去，#7/#8 属 P0-08/P0-02，在 B1 里做会越界（§3.4 的「别的方案也会这么干」问一次：#2 的答案很可能是"不发这个二进制，所以不改"）。
+**三条结论**：① 决定 sender 的输入有 **9 个入口、但只有 3 处代码**（#1/#3 同一处、#5 一处），且**只有 #5 是 desktop 侧真的关不掉的** —— 这就是 [01A §3.1](01A-既有产品逻辑迁出internal-server.md) 那份端口申请的依据；② 除端口 4 之外，B1 **只改 desktop**，不要再顺手动 `internal/server`；③ #2、#8、#9 不要顺手做 —— #2 已核实不发出去，#8/#9 属 P0-08/P0-02，在 B1 里做会越界（§3.4 的「别的方案也会这么干」问一次：#2 的答案就是"不发这个二进制，所以不改"）。
 
 **每一条堵完都要有一条"反向测试"**：developer 下该入口**必须仍然有效**（否则就是拿开发能力换安全，`开发规范` §3.9 的降级路径要有去处）。只写"production 下被忽略"的测试是不够的——那样把 developer 功能一起关掉也能通过。

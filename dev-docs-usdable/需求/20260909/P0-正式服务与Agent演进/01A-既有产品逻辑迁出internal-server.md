@@ -35,6 +35,7 @@
 | `server.go` 的产品字段、产品状态初始化、产品 sender 包装、产品路由注册 | 产品状态被耦合进 server 构造和路由 | **迁出** | desktop 构造 `productruntime`；server 只接收中性扩展接口。`server.New` 的配置读取、通用 sender/session 初始化及 generic route 注册保留。 |
 | `server.go` 的 `apiProduct()` 与全部 157 处 `s.apiProduct(` 调用点 | P3 为产品门把**整张上游路由表逐行改写**：上游 `main` 里 `apiProduct` 出现 **0** 次，`main` 的 147 处 `s.api(` 被替换 | **还原 + 折叠为顶层中间件（本任务最大的一笔回收）** | 见下文「apiProduct 折叠」一节。通过条件：`registerRoutes()` 与上游逐行一致，`internal/server` 不再存在 `apiProduct` 符号，而产品门语义（默认拦截、显式豁免）不变。`server-diff-guard` 以棘轮断言（基线 161，目标 0）。 |
 | `ensureLocalEndpoint()` 与 `local_endpoint_test.go` | 为既有本地模型配置种入 4 个 `buding-*` 假模型 endpoint | **已删除**（2026-09-11） | 假模型不再是产品能力：正式模型列表来自中台签名目录并本地缓存（见 P0-04 模型目录）。删除后 `server.New` 不再写用户 `config.yml`，也消除了「seed 被 access-key 保存覆盖」那类读改写竞态。 |
+| `server.go` 的 sender 选择入口 + 新增 `internal/runtimeport/senderfactory.go` | 三处输入（`resolveProviderAndModel` 的 `OCTO_PROVIDER`/`entry.Provider`、`ensureSender` 的懒重试、`senderForSession` 的会话绑定 `ModelConfig`）能让 session 用上非中台 sender | **不回收（端口化）**，见 §3.1 | P0-01 B1 申请的端口 4：`Config` 加 1 个 `SenderFactory` 字段 + 2 个分支；`nil` 时逐行等于今天的路径；置位时失败即失败、不回落。这是 B1 唯一的 server 改动，除它之外 B1 只改 desktop。 |
 
 ### `apiProduct` 折叠（本任务最大的一笔回收）
 
@@ -88,8 +89,62 @@ server.go diff：317 added / 167 removed = 484 行
 1. **认证后路由注册器**：server 提供已完成机器访问校验、统一 no-store 的 `RouteRegistrar`；productruntime 注册自己的 HTTP handler。产品门作为 productruntime 的 handler/middleware，而非 `server.apiProduct`。
 2. **请求过滤器 / 产品门中间件**：`apiProduct` 折叠**必须**用这个端口。形态是一个中性 `func(http.Handler) http.Handler`，由 productruntime 实现（其 allowlist、登录判定和错误体都由 productruntime 持有），在 `internal/server` 内以顶层中间件方式接入。server 不保存产品状态，也不逐路由改写路由表。这是 P0-01A 唯一必须引入的端口 —— 不做它就得保留 157 处 `apiProduct` 改写。
 3. **turn 上下文钩子或 sender 装配点**：仅当 P0-05 迁出隐私/发送前策略时使用。输入只能是 `context`、`agent.Session`、通用 sender/请求元数据；不得暴露 server 私有锁、mux 或产品状态。
+4. **宿主 sender 工厂（`SenderFactory`）**：见 §3.1 —— 由 P0-01 B1 申请。它和端口 3 都要一个"sender 装配点"，但回答的是不同问题：端口 3 是"每一轮在既有 sender 上做什么"，端口 4 是"这一轮的 sender 由谁决定"。**不要合并成一个端口** —— 合并后 `internal/server` 就会知道"产品会换 sender"这件事，那正是 B1 要消除的知识。
 
 `internal/productruntime` 可依赖上述中性 `runtimeport` 接口，但不得依赖 `internal/server` 的实现或私有类型；`internal/server` 也不得导入 productruntime。由 `cmd/octo-desktop` 负责把两者装配起来。这是为了移除已有耦合的最小例外，不是为产品业务扩大 server API。
+
+### 3.1 端口 4 申请：宿主 sender 工厂（P0-01 B1，2026-09-11）
+
+**要解决的问题**：B1 的验收句是「`OCTO_PROVIDER` / `config.yml` endpoint / 本地 provider 都不能让 production session 绕过 gateway」。经侦察，当前 `buding` 上决定 sender 的输入有**三处**，且**只有第三处无法从 desktop 侧关闭**：
+
+| 输入 | 位置 | desktop 能否单独关闭 |
+| --- | --- | --- |
+| `OCTO_PROVIDER` / `entry.Provider` | `internal/server/server.go:1649`（`resolveProviderAndModel`） | 勉强能（`Config.Provider` 是 `firstNonEmpty` 的第一项），但 provider 名一旦非空，凭据就转由 `resolveAPIKey` 从**厂商环境变量或 `data/config.yml`** 取 —— 等于换了个入口，没有真正封堵 |
+| 同一函数被懒重试再次调用 | `internal/server/server.go:2193`（`ensureSender`） | 同上 |
+| **会话绑定的 `ModelConfig`** | `internal/server/server.go:1768`（`senderForSession`）：读 `sess.ModelConfig` → `config.LoadCached()` → `cachedSenderForEntry` 建 sender，**且构建失败时静默回落到默认 sender** | **不能。** 输入是**已落盘的会话 JSON** 加上 `data/config.yml`，都不经过 `server.Config`。desktop 唯一的替代是改会话状态 —— 让客户端去改写上游的会话结构，比加一个端口糟得多 |
+
+**结论**：第三处构成 01A §3 要求的"证明 desktop 不能完成装配"，端口 4 因此成立；而且它同时让前两处不必各自打补丁。
+
+**端口形态**（中性包 `internal/runtimeport`，无 `product`/账号/积分/供应商名词）：
+
+```go
+// SenderFactory supplies the agent.Sender one turn runs on. A host that sets it
+// has taken responsibility for vendor, endpoint and credentials.
+type SenderFactory interface {
+	// SenderForTurn returns the sender and the model id for one turn. A
+	// non-nil error fails the turn: the server does not fall back to its own
+	// resolution, because that fallback is the bypass this port exists to
+	// close.
+	SenderForTurn(ctx context.Context, req SenderRequest) (agent.Sender, string, error)
+}
+
+type SenderRequest struct {
+	Session *agent.Session // read-only; the host may read Model / ModelConfig
+	Model   string         // the model the session asked for, if any
+}
+```
+
+**三条语义必须写死在端口里**，否则它会退化成第四个绕过入口：
+
+1. **置位即独占**：`SenderFactory != nil` 时，`resolveProviderAndModel` 不再读 `OCTO_PROVIDER`、厂商 API key 环境变量、`data/config.yml` 默认条目；`senderForSession` 不再读 `sess.ModelConfig`。
+2. **失败即失败，不回落**：工厂返回 error 时该轮直接失败。这与上游"构建失败则静默回落到默认 sender"的既有降级相反 —— 那个降级在 production 下就是绕过 gateway。**回落语义必须在端口上写死，不能留给调用方选择**，否则迟早有人为了"更健壮"把回落加回来。
+3. **`nil` 时零变化**：`octo serve` 与现有所有构造点（含测试）都不设置它，走今天完全相同的代码路径。这条是"不扩大上游行为"的保证，也是端口能通过评审的前提。
+
+**改动清单**（每处都要 `// OCTO-FORK:` 标记，并按 §2 登记）：
+
+| 文件 | 改动 | 量 |
+| --- | --- | --- |
+| `internal/runtimeport/senderfactory.go` | 新增：上面两个类型 | 新文件，约 40 行 |
+| `internal/server/server.go` | `Config` 加一个 `SenderFactory` 字段；`senderForSession` 与 `ensureSender` 各加一个"工厂非 nil 则走工厂"的分支；`registerRoutes()` 不动 | +1 字段，+2 分支，约 50 行 |
+
+**不做的事**：不改 `resolveProviderAndModel` 的内部逻辑（`nil` 路径必须逐行等于今天）、不动 `registerRoutes()`、不动 `apiProduct`（那是 C 阶段）、不把 `runtimeport` 变成通用插件系统。
+
+**验收（正向 + 反向都要）**：
+
+- 正向：注入一个工厂后，同时设置 `OCTO_PROVIDER=anthropic`、`OCTO_ANTHROPIC_API_KEY=…`、`data/config.yml` 里一个指向第三方的默认条目、以及会话里 `ModelConfig` 指向同一第三方 —— 断言三处**全部无效**，实际使用的是工厂给的 sender。
+- 失败路径：工厂返回 error → 该轮失败，**且断言没有回落到 env/config 的 sender**（这条是端口 2 号语义唯一的守卫）。
+- 反向：工厂为 `nil` 时，现有 provider/model 解析测试**一字不改**地通过（它们已存在，正是 01A §4 A 阶段要的特征测试）。
+- production：`cmd/octo-desktop` 在 `product_production` 下恒设置它；developer 下不设置，保留 `config.yml` 配第三方 endpoint/URL/key 的能力。
 
 ## 4. 执行顺序
 

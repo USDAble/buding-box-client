@@ -14,6 +14,8 @@
 #   make brand      regenerate the branding files from branding/brand.json
 #   make brand-check validate brand.json + fail if a generated copy is stale
 #   make datapath-check  fail if product code reintroduces a ~/.octo path
+#   make agents     regenerate AGENTS.md from .octorules (AI-tool entry point)
+#   make agents-check    fail if AGENTS.md drifts from .octorules
 #
 # octo-eval — lightweight eval (manual; needs a model key, NOT in CI):
 #   make eval-build           build the ./octo-eval tool
@@ -61,7 +63,7 @@ RG_EMBED_BIN := $(RG_EMBED_DIR)/rg
 
 .PHONY: all build install test cover vet fmt fmt-check tidy clean \
         brand brand-check datapath-check release-profile-check \
-        server-diff-check reuse-check norms-check preflight-check \
+        server-diff-check reuse-check norms-check agents agents-check preflight-check \
         eval-build eval-list eval \
         rg-embed rg-embed-clean \
         bundle-tools-windows bundle-tools-macos \
@@ -294,6 +296,24 @@ reuse-check:
 norms-check:
 	node scripts/norms-guard.mjs
 	node --test scripts/norms-guard.test.mjs
+
+# ── AI tool entry points ─────────────────────────────────────────────────────
+# AGENTS.md is GENERATED from .octorules (开发规范 §7.4). Codex reads AGENTS.md
+# and has no include directive, so a pointer is only a request — inlining is the
+# only guarantee. `.octorules` (~10 KB) fits Codex's project_doc_max_bytes
+# budget (32 KiB default, cumulative); 开发规范.md (~41 KB) and CLAUDE.md
+# (~15 KB) do not, so those two stay pointers.
+#
+# Edit .octorules, run `make agents`, commit both. `agents-check` also asserts
+# `.octorules` still carries the three hard rules, so an upstream merge that
+# reverts them fails the build instead of silently generating an AGENTS.md
+# without them. CI's agents-guard job runs the same script.
+agents:
+	node scripts/sync-agents.mjs
+
+agents-check:
+	node scripts/sync-agents.mjs --check
+	node --test scripts/sync-agents.test.mjs
 
 # Reports whether the embedded production profile carries a real control plane
 # or still has the RFC 6761 `.invalid` placeholders plus an empty trust store.

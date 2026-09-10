@@ -20,7 +20,9 @@
 //     release-profile-guard    this build carries product_production
 //     reuse-guard              no fork package re-implements a provider
 //     norms-guard              every AI-tool entry point points at the fork spec
-//     All four are pure source scans with no external refs.
+//     agents-guard             AGENTS.md matches .octorules and still carries
+//                              the fork's three hard rules
+//     All five are pure source scans with no external refs.
 //
 //   ADVISORY (warn, do not fail)
 //     release-config-guard     the embedded production profile's values are real
@@ -54,6 +56,7 @@ import { check as checkDatapath } from './datapath-guard.mjs'
 import { check as checkReleaseProfile } from './release-profile-guard.mjs'
 import { check as checkReuse } from './reuse-guard.mjs'
 import { check as checkNorms } from './norms-guard.mjs'
+import { check as checkAgents } from './sync-agents.mjs'
 import { check as checkServerDiff, resolveUpstream } from './server-diff-guard.mjs'
 import { check as checkReleaseConfig } from './release-config-guard.mjs'
 
@@ -73,6 +76,9 @@ export async function runHardChecks(root) {
 
   const { problems: norms } = await checkNorms(root)
   for (const p of norms) problems.push(`norms-guard: ${p}`)
+
+  const { problems: agents } = await checkAgents(root)
+  for (const p of agents) problems.push(`agents-guard: ${p}`)
 
   return problems
 }

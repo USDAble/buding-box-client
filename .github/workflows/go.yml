@@ -159,6 +159,29 @@ jobs:
       - name: Run norms guard tests
         run: node --test scripts/norms-guard.test.mjs
 
+  # Guards the AI-tool entry point that must carry the upstream rules *inline*
+  # (开发规范 §7.4). Codex reads AGENTS.md and has no include directive, so a
+  # pointer is only a request; `.octorules` is inlined verbatim to make it a
+  # guarantee. This job fails when the generated file drifts, and — the case no
+  # other check sees — when an upstream merge reverts the fork rules out of
+  # `.octorules`, which would otherwise regenerate a compliant-looking AGENTS.md
+  # with the three hard rules missing. No npm dependencies.
+  agents-guard:
+    name: Agents Guard
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '22'
+
+      - name: Check AGENTS.md is in sync with .octorules
+        run: node scripts/sync-agents.mjs --check
+
+      - name: Run sync-agents tests
+        run: node --test scripts/sync-agents.test.mjs
+
   svelte-check:
     name: Svelte Check
     runs-on: ubuntu-latest

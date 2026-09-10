@@ -211,3 +211,22 @@ P0-01 先以 mock 验证 contract，不改动所有 handler。实际接入时：
 | B1 | production profile 和 productruntime 最小装配；优先只改 desktop，确有必要才申请 P0-00 的通用 server 端口 | 开发 URL、环境 provider/model、`config.yml` endpoint/本地 provider 都不能让 production session 绕过 gateway；profile 不能由环境变量、配置、缓存或 WebView 输入切换；developer 回归仍通过（developer/test 保留 `config.yml` 配第三方 endpoint/URL/key 的能力） |
 
 固定积分、旧本地 token 和本地账号状态不是 B0/B1 的“兼容目标”。它们分别按 P0-02、P0-05、P0-08 的正式链路替换或删除；P0-01 不为将被删除的 mock 增加抽象。
+
+### B1.0 绕过面清单（2026-09-11 侦察，**动手前必须逐行定案**）
+
+B1 的验收句是「这些输入都不能让 production session 绕过 gateway」。但把这句话变成代码之前，得先知道**到底有哪几个入口**——否则 B1 会变成「发现一个堵一个」的一串散改，而每一笔都可能落在上游文件上。以下是在当前 `buding` 上实际能读到 provider/model 的入口（`文件:行号` 均为实测）：
+
+| # | 入口 | 位置 | 在 production 下必须的结果 | 建议的封堵方式 |
+| --- | --- | --- | --- | --- |
+| 1 | `OCTO_PROVIDER` | `internal/server/server.go:1649`（`firstNonEmpty(flagProvider, os.Getenv("OCTO_PROVIDER"), entry.Provider, "anthropic")`） | 被忽略 | **上游文件。** 优先走 P0-00 批准的中性端口（server 接收一个"provider 已由宿主决定"的中性标记），而不是在 handler 里写 `if production`——否则就是本任务要消除的那类产品分支 |
+| 2 | `OCTO_PROVIDER`（CLI 路径） | `cmd/octo/config.go:47` | 只影响 CLI，不影响便携包 | **已核实：出 B1 范围。** `package-portable.mjs` 断言顶层**有且仅有一个** exe 且必须是品牌 exe（`unexpected top-level exe` / `missing … at package root` 两处硬失败），`bin/` 下只捆绑 `uv.exe` —— 便携包不含 `octo` 可执行文件，所以这个入口发不出去，不要为它改代码 |
+| 3 | `config.yml` 的 endpoint 条目 | `internal/server/server.go:1649` 的 `entry.Provider`；`config/endpoints` 路由 | endpoint 不参与 provider/model 选择 | 同上；且标准产品 UI 不提供添加入口（D6/C7 已定） |
+| 4 | 本地 provider（`internal/provider/local`） | 已用 `product_production` 编译排除（2026-09-11） | 不可达 | **已完成**，由 `package-portable.mjs` 的 `checkProductionBinary()` 反向断言 |
+| 5 | `OCTO_DESKTOP_DEV_URL` | `cmd/octo-desktop/main.go:90`（仅 `AllowDevWebview` 为真时） | 被忽略 | 已由 profile 门控（`main.go:89`）；B1 只需补一条 production 反向测试 |
+| 6 | `OCTO_DATA_ROOT` | `internal/datapath` | **保持可用**（测试/只读安装需要），但它只改数据根、不改 profile | 不封堵；但要用测试断言它**不能**切换 profile、也不能让 production 读到 developer profile |
+| 7 | `data/product-state.json` / 缓存 | 见 P0-08 | 不能被当作已登录，不能携带 provider 配置 | 归 P0-08；B1 只断言「profile 不从缓存读」 |
+| 8 | WebView 输入 | 见 P0-02 | 不能改 profile / 不能配 endpoint | 归 P0-02；B1 只断言 profile 只来自编译期嵌入 |
+
+**两条结论**：① 真正需要动上游文件的只有 #1 和 #3 两处，且都建议走中性端口而非产品分支——**这是 B1 里唯一需要申请 P0-00 端口的地方，应先申请、后编码**；② #2、#7、#8 不要顺手做——#2 可能根本不发出去，#7/#8 属 P0-08/P0-02，在 B1 里做会越界（§3.4 的「别的方案也会这么干」问一次：#2 的答案很可能是"不发这个二进制，所以不改"）。
+
+**每一条堵完都要有一条"反向测试"**：developer 下该入口**必须仍然有效**（否则就是拿开发能力换安全，`开发规范` §3.9 的降级路径要有去处）。只写"production 下被忽略"的测试是不够的——那样把 developer 功能一起关掉也能通过。

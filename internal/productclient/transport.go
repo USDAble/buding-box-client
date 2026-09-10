@@ -260,6 +260,19 @@ type Request struct {
 	ETag string
 	// Out receives the decoded `data` object; nil for calls with no payload.
 	Out any
+	// SkipAuthRefresh marks a request as part of credential recovery itself, so
+	// a 401 must be answered as a final failure instead of triggering the
+	// refresh-and-replay below.
+	//
+	// Exactly one caller sets it: AuthClient.Refresh, whose whole job is to
+	// decide whether the stored refresh token is still good. Without it a 401
+	// from the refresh endpoint is catastrophic rather than merely terminal —
+	// the recovery call re-enters the same single-flight it is being run from
+	// and waits for itself, so the call never returns and the goroutine never
+	// exits. That is the normal shape of a *revoked* session
+	// (中台交付包 §4.2.4: "客户端下次 refresh 必须失败并清理本地凭证"), not an
+	// edge case.
+	SkipAuthRefresh bool
 }
 
 func (r Request) op() string {
@@ -359,7 +372,7 @@ func (t *Transport) attempt(ctx context.Context, req Request, body []byte, timeo
 			return e.Retryable(), e
 		}
 
-		if status == http.StatusUnauthorized && t.tokens != nil {
+		if status == http.StatusUnauthorized && t.tokens != nil && !req.SkipAuthRefresh {
 			if *refreshed {
 				// A 401 *after* a successful refresh means the new token is also
 				// refused. Retrying would loop, and refreshing again would burn

@@ -82,6 +82,10 @@ func (c *authClient) Login(ctx context.Context, req LoginRequest) (LoginResult, 
 //
 // The returned Session is the caller's to persist — the credential store owns
 // that, not this package.
+//
+// SkipAuthRefresh is what keeps a revoked session from hanging the client: this
+// call is the recovery path, so its own 401 must be the final answer. See the
+// field's comment.
 func (c *authClient) Refresh(ctx context.Context, refreshToken string) (Session, error) {
 	body := struct {
 		RefreshToken string `json:"refreshToken"`
@@ -89,12 +93,13 @@ func (c *authClient) Refresh(ctx context.Context, refreshToken string) (Session,
 
 	var out Session
 	err := c.t.Do(ctx, Request{
-		Op:     "Refresh",
-		Method: "POST",
-		Path:   "/auth/refresh",
-		Kind:   CallWrite,
-		Body:   body,
-		Out:    &out,
+		Op:              "Refresh",
+		Method:          "POST",
+		Path:            "/auth/refresh",
+		Kind:            CallWrite,
+		Body:            body,
+		Out:             &out,
+		SkipAuthRefresh: true,
 	})
 	return out, err
 }

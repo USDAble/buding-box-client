@@ -570,8 +570,149 @@ func TestRefreshFailureReportsAuthLost(t *testing.T) {
 	}
 }
 
-// ----- ETag / errors / network -----
+// delegatingTokens is the production shape of TokenSource: the refresh path is
+// the AuthClient over the *same* transport, not a second HTTP client. P0-02 D
+// and P0-08 both wire it this way, and P0-02's contract says so — the transport
+// "does not decide how tokens are stored, rotated or discarded". A transport
+// whose recovery path re-enters itself therefore has to survive being built the
+// documented way.
+//
+// It holds the rotated token the way credentialstore will, because the replay
+// reads the token back through AccessToken(): a stub that returned a constant
+// would 401 forever and hide the success path.
+type delegatingTokens struct {
+	auth AuthClient
 
+	mu    sync.Mutex
+	token string
+	lost  []error
+}
+
+func (d *delegatingTokens) AccessToken() string {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	if d.token == "" {
+		return "stale"
+	}
+	return d.token
+}
+
+func (d *delegatingTokens) Refresh(ctx context.Context) (string, error) {
+	s, err := d.auth.Refresh(ctx, "refresh-token")
+	if err != nil {
+		return "", err
+	}
+	d.mu.Lock()
+	d.token = s.AccessToken
+	d.mu.Unlock()
+	return s.AccessToken, nil
+}
+
+func (d *delegatingTokens) AuthLost(err error) {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	d.lost = append(d.lost, err)
+}
+
+func (d *delegatingTokens) lostCount() int {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	return len(d.lost)
+}
+
+// TestA401FromTheRefreshEndpointEndsTheCallInsteadOfHangingIt pins the one
+// failure mode worse than a wrong answer: no answer at all.
+//
+// A revoked session makes POST /auth/refresh answer 401, and 中台交付包 §4.2.4
+// requires exactly that ("客户端下次 refresh 必须失败并清理本地凭证"). Without
+// SkipAuthRefresh the transport treats that 401 like any other and tries to
+// recover from it, which means the recovery call joins the single-flight it is
+// already running inside and waits for itself: the request never returns, the
+// goroutine never exits, and the user gets a spinner instead of the login page.
+//
+// The in-test watchdog matters as much as the assertion. A regression here
+// hangs, so without it the failure surfaces as a ten-minute CI timeout with no
+// indication of which test hung.
+func TestA401FromTheRefreshEndpointEndsTheCallInsteadOfHangingIt(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusUnauthorized)
+		if r.URL.Path == "/auth/refresh" {
+			_, _ = w.Write([]byte(`{"code":"unauthorized","message":"refresh token revoked"}`))
+			return
+		}
+		_, _ = w.Write([]byte(`{"code":"token_expired"}`))
+	}))
+	defer srv.Close()
+
+	// Tokens is wired after construction because the delegating source needs the
+	// transport it refreshes through — the same order the assembly root uses.
+	tr := newTestTransport(t, srv.URL, nil, noSleep)
+	tokens := &delegatingTokens{auth: NewAuthClient(tr)}
+	tr.tokens = tokens
+
+	done := make(chan error, 1)
+	go func() {
+		// Deliberately context.Background(): runtimeport.Resolve and most server
+		// paths pass no deadline, so a context timeout must not be what saves us.
+		done <- tr.Do(context.Background(), Request{Op: "Usage", Method: "GET", Path: "/usage", Kind: CallRead})
+	}()
+
+	select {
+	case err := <-done:
+		if CodeOf(err) != CodeUnauthorized {
+			t.Fatalf("err = %v (code %q), want unauthorized — a refused refresh is a final answer", err, CodeOf(err))
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("Do never returned: the refresh call re-entered the single-flight it was running inside and waited for itself")
+	}
+
+	if lost := tokens.lostCount(); lost != 1 {
+		t.Fatalf("AuthLost called %d times, want 1 — the caller has to learn it must show the login page", lost)
+	}
+}
+
+// TestAuthClientRefreshIsTheOnlyCallThatSkipsRecovery is the counterpart guard:
+// SkipAuthRefresh must not leak into ordinary calls. If it did, an expired
+// access token would stop being refreshed anywhere and every session would end
+// at the first token expiry — a silent regression that the hang test above
+// cannot see, because it only ever exercises the failing branch.
+func TestAuthClientRefreshIsTheOnlyCallThatSkipsRecovery(t *testing.T) {
+	var refreshCalls atomic.Int32
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if r.URL.Path == "/auth/refresh" {
+			refreshCalls.Add(1)
+			_, _ = w.Write(okBody(t, map[string]any{
+				"accessToken": "fresh", "refreshToken": "r2", "accessTokenExpiresInSec": 7200,
+			}))
+			return
+		}
+		if r.Header.Get("Authorization") != "Bearer fresh" {
+			w.WriteHeader(http.StatusUnauthorized)
+			_, _ = w.Write([]byte(`{"code":"token_expired"}`))
+			return
+		}
+		_, _ = w.Write(okBody(t, map[string]string{"ok": "1"}))
+	}))
+	defer srv.Close()
+
+	tr := newTestTransport(t, srv.URL, nil, noSleep)
+	tokens := &delegatingTokens{auth: NewAuthClient(tr)}
+	tr.tokens = tokens
+
+	if err := tr.Do(context.Background(), Request{Op: "Usage", Method: "GET", Path: "/usage", Kind: CallRead}); err != nil {
+		t.Fatalf("err = %v, want nil: the ordinary path must still refresh and replay", err)
+	}
+	if got := refreshCalls.Load(); got != 1 {
+		t.Fatalf("/auth/refresh calls = %d, want 1", got)
+	}
+	if lost := tokens.lostCount(); lost != 0 {
+		t.Fatalf("AuthLost called %d times, want 0 — the session recovered", lost)
+	}
+}
+
+// ----- ETag / errors / network -----
 func TestNotModifiedIsNotAnError(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusNotModified)

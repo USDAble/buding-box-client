@@ -1,4 +1,8 @@
-# P0-01：产品客户端契约与最小 Server 挂点
+# P0-01：运行时 Profile 与窄端口抽象
+
+> **关于本文的名字（D4 决策，2026-09-11）**：本文在 2026-09-09 评审时的 H1 是「产品客户端契约与最小 Server 挂点」，但**文件名**一直是 `01-运行时Profile与窄端口抽象.md`，`README.md` 里又用「`productclient` / gateway / policy / credential store 合同」描述它 —— 三种叫法指的是同一份文档，引用时无法判断是不是同一处。
+>
+> **canonical 名 = 文件名去掉扩展名：`01-运行时Profile与窄端口抽象`，简称「P0-01」。** 其他叫法一律不再使用。H1 已改为与文件名一致。之所以**改标题而不改文件名**：全文有 12 处链接指向该路径（`grep -rn "01-运行时Profile与窄端口抽象.md"`），改名要同步 12 处且每处都可能漏；而文档标题只是人读的入口，与链接稳定性无关。内容范围以「合同骨架」一节为准 —— 标题里的「窄端口」只是本文的一个子话题，不是全文范围。
 
 | 项 | 内容 |
 | --- | --- |
@@ -81,7 +85,9 @@ type ControlClient interface {
 
 `mock` 包（`internal/productclient/mock`、`.../gateway/mock`）带 `//go:build !product_production`：一个能返回"登录成功、余额充足"的 mock 若可被链接进发行二进制，就等于"平台说可以"这件事能被一个构建标签伪造 —— 与已删除的假模型同一类风险，故发行构建里不存在该包（`go list -tags product_production ./internal/productclient/...` 只剩 `productclient` 和 `gateway`）。
 
-**B0 未决、必须在 B1 之前定案的一项**（本文档先记录，不预先拍板）：`clientRequestId` **如何到达 wire**。`app.SenderOptions.Headers` 是构造期（每个 sender 一份），而 `clientRequestId` 是**每次调用**一份，两者粒度不同。候选形态有二：① 每次调用构造一个 sender（header 随调用固定，代价是连接复用按调用粒度重建）；② 在 sender 之上做一个 decorator。若选 ②，必须遵守 `gateway.Observer` 的能力保持契约 —— `internal/productclient/gateway/capabilities.go` 的 `CapabilitiesOf`/`PreservesCapabilities` 就是为此提供的探针，因为 agent loop 是用**五处独立类型断言**（`agent.go:770/848/948/1617`）探测能力的，一个只返回 `agent.Sender` 的 decorator 不会编译失败、不会报错，只会静默地丢掉流式、工具或标题生成。
+**B1 已定案（2026-09-11）：`clientRequestId` 通过"每次网关调用构造一个 sender"送达 wire，不用装饰器。** 起因是粒度不匹配：`app.SenderOptions.Headers` 是**构造期**（每个 sender 一份），而 `clientRequestId` 是**每次调用**一份。备选方案是在 sender 之上做 decorator，被否掉的理由是 `agent` 的能力不是一条链而是**五处独立类型断言**（`agent.go:770/848/948/1617` 的 `StreamingSender`/`ToolSender`/`ToolStreamingSender`/`NoReasoningSender`/`LowEffortSender`），手工装饰器要逐层追这套会**持续增长**的接口集合，漏掉一个不会编译失败、不会报错，只会静默丢掉流式、工具或标题生成；而且 `NoReasoning()`/`LowEffort()` 返回的是 `agent.Sender`，装饰器还得再包一层才不把身份丢掉。
+
+因此 B1 的形态是：每次调用用该次的 `clientRequestId` 构造 sender（`Headers` 随调用固定），调用结束即弃。代价是连接复用按调用粒度重建 —— 相比控制面，模型流本身是长连接，这个代价可接受。`internal/productclient/gateway/capabilities.go` 的 `CapabilitiesOf`/`PreservesCapabilities` 仍然保留：它是这个决定的安全网（一旦有人日后引入装饰器，`gateway_test.go` 里的契约测试会立刻报出能力丢失）。
 
 ### gateway 的复用形态（不要把已有能力再写一遍）
 

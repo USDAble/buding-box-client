@@ -35,7 +35,7 @@
 | `server.go` 的产品字段、产品状态初始化、产品 sender 包装、产品路由注册 | 产品状态被耦合进 server 构造和路由 | **迁出** | desktop 构造 `productruntime`；server 只接收中性扩展接口。`server.New` 的配置读取、通用 sender/session 初始化及 generic route 注册保留。 |
 | `server.go` 的 `apiProduct()` 与全部 157 处 `s.apiProduct(` 调用点 | P3 为产品门把**整张上游路由表逐行改写**：上游 `main` 里 `apiProduct` 出现 **0** 次，`main` 的 147 处 `s.api(` 被替换 | **还原 + 折叠为顶层中间件（本任务最大的一笔回收）** | 见下文「apiProduct 折叠」一节。通过条件：`registerRoutes()` 与上游逐行一致，`internal/server` 不再存在 `apiProduct` 符号，而产品门语义（默认拦截、显式豁免）不变。`server-diff-guard` 以棘轮断言（基线 161，目标 0）。 |
 | `ensureLocalEndpoint()` 与 `local_endpoint_test.go` | 为既有本地模型配置种入 4 个 `buding-*` 假模型 endpoint | **已删除**（2026-09-11） | 假模型不再是产品能力：正式模型列表来自中台签名目录并本地缓存（见 P0-04 模型目录）。删除后 `server.New` 不再写用户 `config.yml`，也消除了「seed 被 access-key 保存覆盖」那类读改写竞态。 |
-| `server.go` 的 sender 选择入口 + 新增 `internal/runtimeport/senderfactory.go` | 三处输入（`resolveProviderAndModel` 的 `OCTO_PROVIDER`/`entry.Provider`、`ensureSender` 的懒重试、`senderForSession` 的会话绑定 `ModelConfig`）能让 session 用上非中台 sender | **不回收（端口化）**，见 §3.1 | P0-01 B1 申请的端口 4：`Config` 加 1 个 `SenderFactory` 字段 + 2 个分支；`nil` 时逐行等于今天的路径；置位时失败即失败、不回落。这是 B1 唯一的 server 改动，除它之外 B1 只改 desktop。 |
+| `server.go` 的 3 个 `resolveProviderAndModel` 调用点 + 新增 `internal/runtimeport/senderfactory.go` | 四类输入（`New`/`ensureSender`/`reloadDefaultSender` 的 `OCTO_PROVIDER`·`entry.Provider`，以及 `senderForSession` 的会话绑定 `ModelConfig`）能让 session 用上非中台 sender | **不回收（端口化）**，见 §3.1 | P0-01 B1 申请的端口 4：`Config` 加 1 个 `SenderFactory` 字段，3 个调用点统一走 `chooseDefaultSender`，`senderForSession` 加 1 个分支；`nil` 时逐行等于今天的路径；置位时失败即失败、不回落。`server-diff-guard` 上限 484 → 543（§3.1 有让步理由）。除端口 4 之外 B1 只改 desktop。 |
 
 ### `apiProduct` 折叠（本任务最大的一笔回收）
 
@@ -134,8 +134,16 @@ type SenderRequest struct {
 
 | 文件 | 改动 | 量 |
 | --- | --- | --- |
-| `internal/runtimeport/senderfactory.go` | 新增：上面两个类型 | 新文件，约 40 行 |
-| `internal/server/server.go` | `Config` 加一个 `SenderFactory` 字段；`senderForSession` 与 `ensureSender` 各加一个"工厂非 nil 则走工厂"的分支；`registerRoutes()` 不动 | +1 字段，+2 分支，约 50 行 |
+| `internal/runtimeport/senderfactory.go` | 新增：`SenderFactory`、`SenderRequest`、`Resolve`（优先级与"不回落"策略住在这里）、`FailingSender`、`ErrNoSender` | 新文件 |
+| `internal/server/server.go` | `Config` 加 1 个 `SenderFactory` 字段；**3 个 `resolveProviderAndModel` 调用点**（`New`、`ensureSender`、`reloadDefaultSender`）统一改走新的 `chooseDefaultSender`；`senderForSession` 加 1 个分支接管会话绑定 `ModelConfig`；`registerRoutes()` 不动 | +56 / −3 行 |
+
+**已经落地的三个实现决定**（都是实现时才发现、值得记下来的）：
+
+1. **策略不住在 server 里。** 第一版把"工厂置位即独占、出错不回落"的判断写在 `server.go` 的 `chooseDefaultSender` 里，diff 是 +82 行。`server-diff-guard` 立刻拒了。改成：判断与降级策略放进 `runtimeport.Resolve`，`server.go` 只留"问宿主；宿主没意见就照旧"—— diff 降到 +56/−3。这不是为了讨好行数守卫：**优先级规则是 fork 知识，不是上游知识**，`internal/server` 只该知道"宿主决定这件事"，不该知道为什么。
+2. **`reloadDefaultSender` 是第 4 个入口。** 它同样调 `resolveProviderAndModel`，在"全局设置或 model-config 条目变化"时重建默认 sender。只堵 `New`+`ensureSender` 会漏掉它。正因为有 3 个调用点，才必须**统一走一个 `chooseDefaultSender`** —— 逐个打补丁的话，将来第五个调用点没人会记得加判断。
+3. **工厂提供的 sender 仍要过 `wrapProductSender`。** 否则 P8（敏感词回显过滤）与 P10（隐私模式副本打码）会在这一条路径上静默失效 —— 而那正是"能复用不复用"要避免的降级。用 `FailingSender` 表达失败时也要包，保持一致。
+
+**做过的守卫让步（§3.7 人工确认项）**：`server-diff-guard` 的 `internal/server/server.go` 上限由 **484 提到 543**（+59）。理由三条，缺一条就该改成折叠而不是提上限：① 端口是已批准的架构变更；② 没有更小的形态（`Config` 是唯一构造通道；守卫建议的"包级 setter + server 读取"是隐藏全局状态，是真实退化而非更小的 diff）；③ 提之前**先**把策略行搬进了 fork 包（−23 行）。C 阶段折叠 `apiProduct` 时这个数必须落到 484 **以下**，而不只是 543 以下。
 
 **不做的事**：不改 `resolveProviderAndModel` 的内部逻辑（`nil` 路径必须逐行等于今天）、不动 `registerRoutes()`、不动 `apiProduct`（那是 C 阶段）、不把 `runtimeport` 变成通用插件系统。
 

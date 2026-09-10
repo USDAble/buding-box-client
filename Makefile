@@ -60,7 +60,7 @@ RG_EMBED_DIR := internal/tools/rgembed/binaries
 RG_EMBED_BIN := $(RG_EMBED_DIR)/rg
 
 .PHONY: all build install test cover vet fmt fmt-check tidy clean \
-        brand brand-check datapath-check \
+        brand brand-check datapath-check reuse-check \
         eval-build eval-list eval \
         rg-embed rg-embed-clean \
         bundle-tools-windows bundle-tools-macos \
@@ -187,6 +187,16 @@ brand-check:
 datapath-check:
 	node scripts/datapath-guard.mjs
 	node --test scripts/datapath-guard.test.mjs
+
+# ── reuse guard ───────────────────────────────────────────────────────────────
+# Guards 开发规范 §3.5: a fork package must not grow a second implementation of
+# an upstream capability — the 中台 gateway assembles an app.Sender over
+# internal/provider instead of speaking HTTP/SSE itself. CI's reuse-guard job
+# runs the same script; the scan is a no-op until internal/productclient/gateway
+# exists.
+reuse-check:
+	node scripts/reuse-guard.mjs
+	node --test scripts/reuse-guard.test.mjs
 
 # ── ripgrep embed (build-time only) ──────────────────────────────────────────
 # Downloads the matching rg release for GOOS/GOARCH, extracts the binary,

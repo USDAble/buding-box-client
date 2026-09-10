@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <installer-gui-script minSpecVersion="2">
-    <title>octo</title>
+    <title>Pudding Box</title>
     <!-- Per-user only: no admin password, no root-owned files. Mirrors the
          Windows installer's PrivilegesRequired=lowest — Installer.app skips
          the credential prompt entirely since localSystem is disabled. -->

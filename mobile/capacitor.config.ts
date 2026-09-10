@@ -7,7 +7,7 @@ import type { CapacitorConfig } from '@capacitor/cli'
 // /api + /ws out to the remote octo serve.
 const config: CapacitorConfig = {
   appId: 'dev.octo.mobile',
-  appName: 'octo',
+  appName: 'Pudding Box',
   webDir: 'www',
 }
 

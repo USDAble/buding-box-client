@@ -27,8 +27,8 @@ var releaseAssets = []ghprovider.ReleaseAsset{
 	{Name: "Octo-x86_64.AppImage"},
 	{Name: "Octo-aarch64.AppImage"},
 	{Name: "Octo-darwin-universal.zip"},
-	{Name: "octo-desktop-windows-amd64.exe"},
-	{Name: "octo-desktop-windows-arm64.exe"},
+	{Name: "PuddingBox-windows-amd64.exe"},
+	{Name: "PuddingBox-windows-arm64.exe"},
 }
 
 // The matcher must hit the desktop artifact by exact name — a substring
@@ -37,8 +37,8 @@ var releaseAssets = []ghprovider.ReleaseAsset{
 func TestDesktopAssetIndex_ExactName(t *testing.T) {
 	for _, want := range []string{
 		"Octo-darwin-universal.zip",
-		"octo-desktop-windows-amd64.exe",
-		"octo-desktop-windows-arm64.exe",
+		"PuddingBox-windows-amd64.exe",
+		"PuddingBox-windows-arm64.exe",
 	} {
 		idx := desktopAssetIndex(releaseAssets, want)
 		if idx < 0 {

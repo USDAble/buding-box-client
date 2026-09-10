@@ -39,7 +39,7 @@ jobs:
           # Generate the icon+manifest .syso in the package directory so go build
           # links it into the .exe; then build the desktop binary.
           go run -C cmd/octo-desktop ./build/windows/generate-syso amd64 build/windows/icon.ico build/windows/wails.exe.manifest
-          go build -C cmd/octo-desktop -ldflags "-H windowsgui" -o "$PWD\staging\octo-desktop.exe" .
+          go build -C cmd/octo-desktop -ldflags "-H windowsgui" -o "$PWD\staging\PuddingBox.exe" .
           Copy-Item LICENSE.txt staging\LICENSE.txt
           # uv.exe is skipifsourcedoesntexist in the .iss, so a check compile that
           # doesn't stage it still succeeds.

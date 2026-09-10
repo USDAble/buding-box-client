@@ -1,0 +1,108 @@
+{
+  "schemaVersion": 2,
+  "brandId": "puddingbox",
+  "product": {
+    "names": {
+      "zh-CN": "布丁盒子",
+      "en-US": "Pudding Box"
+    },
+    "shortName": {
+      "zh-CN": "布丁盒子",
+      "en-US": "Pudding"
+    },
+    "tagline": {
+      "zh-CN": "让本地工具、任务与智能代理，在一个工作台里协作。",
+      "en-US": "One workspace for local tools, tasks, and agents."
+    },
+    "description": {
+      "zh-CN": "布丁盒子是一套面向个人和团队的智能代理工作台，用于连接本地工具、管理任务，并在 Web、桌面和移动端之间保持连续的工作体验。",
+      "en-US": "Pudding Box is an agent workspace for individuals and teams to connect local tools, manage tasks, and keep work connected across web, desktop, and mobile."
+    }
+  },
+  "about": {
+    "teamName": {
+      "zh-CN": "布丁盒子工作室",
+      "en-US": "Pudding Box Studio"
+    },
+    "copyright": {
+      "zh-CN": "© {year} 布丁盒子工作室",
+      "en-US": "© {year} Pudding Box Studio"
+    },
+    "termsTitle": {
+      "zh-CN": "布丁盒子用户协议",
+      "en-US": "Pudding Box Terms of Use"
+    },
+    "privacyTitle": {
+      "zh-CN": "布丁盒子隐私政策",
+      "en-US": "Pudding Box Privacy Policy"
+    }
+  },
+  "copy": {
+    "termsBody": {
+      "zh-CN": "本页为开发占位，非正式协议。",
+      "en-US": "Placeholder for development. Not a legal agreement."
+    },
+    "privacyBody": {
+      "zh-CN": "本页为开发占位，非正式协议。",
+      "en-US": "Placeholder for development. Not a legal agreement."
+    }
+  },
+  "display": {
+    "windows": {
+      "productName": "Pudding Box",
+      "fileDescription": "布丁盒子"
+    }
+  },
+  "identifiers": {
+    "current": {
+      "exeName": "PuddingBox.exe",
+      "cliExeName": "octo.exe",
+      "portableDirName": "PuddingBox",
+      "singleInstanceId": "app.puddingbox.desktop",
+      "windowsInternalName": "pudding-box-desktop",
+      "dataRoot": "data/",
+      "workspaceDir": "data/workspace/",
+      "port": "8088",
+      "cliCommand": "octo",
+      "configDir": "~/.octo",
+      "envPrefix": "OCTO_",
+      "uiProtocol": "octo-ui",
+      "pairingProtocol": "octo-pair",
+      "goModule": "github.com/open-octo/octo-agent",
+      "macBundleId": "dev.octo-agent.desktop",
+      "innoAppId": "{{8F2A6B1C-3D4E-4F50-9A6B-7C8D9E0F1A2B}",
+      "mobileAppId": "dev.octo.mobile",
+      "installDir": "%LOCALAPPDATA%\\Programs\\octo",
+      "linuxDesktopEntry": "octo-desktop.desktop"
+    },
+    "future": {
+      "cliCommand": "puddingbox",
+      "configDir": "~/.puddingbox",
+      "envPrefix": "PUDDINGBOX_",
+      "uiProtocol": "puddingbox-ui",
+      "pairingProtocol": "puddingbox-pair",
+      "macBundleId": "com.puddingbox.desktop",
+      "mobileAppId": "com.puddingbox.mobile",
+      "linuxDesktopEntry": "puddingbox.desktop"
+    }
+  },
+  "links": {
+    "inApp": {
+      "terms": "/legal/terms",
+      "privacy": "/legal/privacy"
+    },
+    "external": {
+      "license": "https://github.com/open-octo/octo-agent/blob/main/LICENSE.txt",
+      "website": "https://octo-agent.dev/"
+    }
+  },
+  "visual": {
+    "logo": {
+      "mark": "assets/logo-mark.png",
+      "favicon": "favicon.ico"
+    },
+    "colors": {
+      "primary": "#437EB1"
+    }
+  }
+}

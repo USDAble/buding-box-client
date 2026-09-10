@@ -3,9 +3,9 @@
 <plist version="1.0">
 <dict>
 	<key>CFBundleName</key>
-	<string>Octo</string>
+	<string>Pudding Box</string>
 	<key>CFBundleDisplayName</key>
-	<string>Octo</string>
+	<string>Pudding Box</string>
 	<key>CFBundleExecutable</key>
 	<string>octo-desktop</string>
 	<key>CFBundleIdentifier</key>

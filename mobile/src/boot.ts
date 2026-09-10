@@ -4,6 +4,7 @@ import { ManagedRelayTransport } from './transport'
 import { OctoTunnel, registerPlugin } from './plugin'
 import { parsePairingURL, type PairingInfo } from './pairing'
 import { scanPairingURL } from './qr'
+import { brandName } from './brand'
 
 // The first-party App plugin, resolved through the same native bridge as
 // OctoTunnel (see plugin.ts) rather than @capacitor/app's JS, so a scanned QR
@@ -78,12 +79,20 @@ async function showOverlay(): Promise<void> {
     'display:flex;flex-direction:column;align-items:center;justify-content:center;' +
     'gap:20px;font-family:system-ui,-apple-system,sans-serif;padding:32px;text-align:center;'
 
+  // The pairing overlay's product name and tagline come from brand.config.json
+  // (via brand.ts), resolved against the device language — not hardcoded, so a
+  // rename is a configuration edit. The Octo* type/plugin/URL names below stay
+  // unchanged: they are class-C identifiers, not user-facing text.
+  const locale = navigator.language || 'zh-CN'
+  const name = brandName(locale)
+  const isZh = locale.toLowerCase().startsWith('zh')
+
   const title = document.createElement('div')
-  title.textContent = 'octo'
+  title.textContent = name
   title.style.cssText = 'font-size:32px;font-weight:700;letter-spacing:-0.5px;'
 
   const sub = document.createElement('div')
-  sub.textContent = '连接到你的 octo serve'
+  sub.textContent = isZh ? `连接到你的 ${name}` : `Connect to your ${name}`
   sub.style.cssText = 'font-size:15px;opacity:0.7;'
 
   const button = document.createElement('button')

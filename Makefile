@@ -290,6 +290,15 @@ norms-check:
 	node scripts/norms-guard.mjs
 	node --test scripts/norms-guard.test.mjs
 
+# Reports whether the embedded production profile carries a real control plane
+# or still has the RFC 6761 `.invalid` placeholders plus an empty trust store.
+# Advisory, like the server-drift check the packaging preflight folds into the
+# same tier: packaging such a build is legitimate during B0/B1 and the runtime
+# stays safe (`.invalid` resolves nowhere). See scripts/release-config-guard.mjs.
+release-config-check:
+	node scripts/release-config-guard.mjs
+	node --test scripts/release-config-guard.test.mjs
+
 # ── packaging preflight ──────────────────────────────────────────────────────
 # The same check every packager runs at the start of a build (hard-fails on
 # datapath/release-profile/reuse drift; warns on server drift when the upstream

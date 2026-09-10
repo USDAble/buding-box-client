@@ -16,16 +16,28 @@ const ROOT = repositoryRoot(import.meta.url)
 test('advisory: a missing upstream ref warns instead of failing', async () => {
   const { warnings, notes } = await runAdvisoryChecks(ROOT, { resolve: () => null })
   assert.deepEqual(notes, [])
-  assert.equal(warnings.length, 1)
-  assert.match(warnings[0], /no upstream ref/)
-  assert.match(warnings[0], /NOT verified/)
+  const upstream = warnings.filter((w) => w.startsWith('server-diff-guard: '))
+  assert.equal(upstream.length, 1)
+  assert.match(upstream[0], /no upstream ref/)
+  assert.match(upstream[0], /NOT verified/)
 })
 
 test('advisory: with an upstream ref the drift result is reported', async () => {
   // The real repo has main, so this reports real numbers rather than a warning.
   const { warnings, notes } = await runAdvisoryChecks(ROOT)
   assert.ok(notes.length > 0, 'expected server-diff notes when the ref resolves')
-  for (const w of warnings) assert.match(w, /^server-diff-guard: /)
+  for (const w of warnings) assert.match(w, /^(server-diff-guard|release-config-guard): /)
+})
+
+test('advisory: an unset control plane is warned about, not failed', async () => {
+  // Packaging a build whose production host is still `.invalid` is legitimate
+  // during B0/B1, so it must warn. The runtime stays safe: `.invalid` cannot
+  // resolve, so no request reaches anything.
+  const { warnings } = await runAdvisoryChecks(ROOT, { resolve: () => null })
+  assert.ok(
+    warnings.some((w) => w.startsWith('release-config-guard: ') && /placeholder/.test(w)),
+    `expected a release-config-guard placeholder warning, got: ${JSON.stringify(warnings)}`,
+  )
 })
 
 // ─── hard tier ──────────────────────────────────────────────────────────────

@@ -23,14 +23,23 @@
 //     All four are pure source scans with no external refs.
 //
 //   ADVISORY (warn, do not fail)
+//     release-config-guard     the embedded production profile's values are real
 //     server-diff-guard        fork drift vs the upstream-tracking branch
-//     This one needs an `origin/main` (or `main`) ref to diff against. A
-//     packaging host may legitimately lack it — a shallow clone, a machine
-//     that only ever fetched one branch, a release runner checking out a tag.
-//     Blocking packaging on "you have not fetched main" would push people to
-//     disable the check, which is worse than warning. When the ref IS present
-//     the result is reported either way, so real drift is still visible in the
-//     build log.
+//
+//     release-config-guard is advisory because packaging a build whose
+//     control-plane host is not set yet is legitimate during B0/B1 and for
+//     internal test packages; the profile is structurally valid (Go enforces
+//     non-empty https hosts and ed25519 keys) but the host may still be the
+//     RFC 6761 `.invalid` placeholder, which cannot resolve — so nothing is
+//     sent anywhere, and the build log is the right place to say so.
+//
+//     server-diff-guard needs an `origin/main` (or `main`) ref to diff
+//     against. A packaging host may legitimately lack it — a shallow clone, a
+//     machine that only ever fetched one branch, a release runner checking out
+//     a tag. Blocking packaging on "you have not fetched main" would push
+//     people to disable the check, which is worse than warning. When the ref
+//     IS present the result is reported either way, so real drift is still
+//     visible in the build log.
 //
 // Usage:
 //   node scripts/preflight.mjs
@@ -46,6 +55,7 @@ import { check as checkReleaseProfile } from './release-profile-guard.mjs'
 import { check as checkReuse } from './reuse-guard.mjs'
 import { check as checkNorms } from './norms-guard.mjs'
 import { check as checkServerDiff, resolveUpstream } from './server-diff-guard.mjs'
+import { check as checkReleaseConfig } from './release-config-guard.mjs'
 
 // HARD: returns a list of problem strings. Every entry is prefixed with its
 // guard name so a build log shows which rule stopped the build.
@@ -71,6 +81,13 @@ export async function runHardChecks(root) {
 export async function runAdvisoryChecks(root, { resolve = resolveUpstream } = {}) {
   const warnings = []
   const notes = []
+
+  // The production profile is structurally valid (Go enforces the shape) but
+  // may still carry `.invalid` placeholders, which resolve on no DNS. Packaging
+  // such a build is legitimate during B0/B1, so this warns rather than fails;
+  // the runtime is safe because `.invalid` cannot reach anything.
+  const releaseConfig = await checkReleaseConfig(root)
+  for (const p of releaseConfig) warnings.push(`release-config-guard: ${p}`)
 
   if (!resolve(root)) {
     warnings.push(

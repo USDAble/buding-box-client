@@ -4,6 +4,9 @@
   "allowDevWebview": true,
   "allowEnvironmentModelSource": true,
   "allowDataRootOverride": true,
+  "apiHost": "",
+  "gatewayHost": "",
+  "trustedKeyIDs": {},
   "startup": {
     "channels": true,
     "tools": true,

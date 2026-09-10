@@ -50,11 +50,38 @@ type UsageClient interface {
 // internal/productclient/gateway: 中台特有的终态控制面。
 // 注意：模型流本身不在这里 —— 它复用 internal/app 的既有 provider 栈
 // （见下方「gateway 的复用形态」）。本接口只覆盖中台独有、上游没有的两件事。
-type GatewayControlClient interface {
+//
+// 包内命名去掉 *Gateway* 前缀：`gateway.GatewayControlClient` 会重复，落点见
+// internal/productclient/gateway/gateway.go。
+type ControlClient interface {
     Cancel(ctx context.Context, clientRequestID string) error
     RequestStatus(ctx context.Context, clientRequestID string) (RequestStatus, error)
 }
 ```
+
+### 合同在代码中的落点（B0 已冻结，2026-09-11）
+
+上面这段 Go 不再是"文档里的签名"，已落地为可编译、可测试的包；**方法签名以这些文件为准，本文不复述**：
+
+| 位置 | 内容 |
+| --- | --- |
+| `internal/productclient/code.go` | `Code` 常量表（中台码 + 客户端本地 fail-closed 码）与唯一的 `*Error` 类型；`Retryable()` / `RetryAfter()` |
+| `internal/productclient/envelope.go` | 成功/失败信封的唯一解码入口 `DecodeEnvelope`，错误映射集中在这一处 |
+| `internal/productclient/dto.go` | 全部 wire DTO（字段名逐字引用[中台交付包](../产品客户端与中台对接/中台交付包.md) §4） |
+| `internal/productclient/contract.go` | `AuthClient` / `ControlPlaneClient` / `UsageClient` / `SessionLister` |
+| `internal/productclient/gateway/` | `ControlClient`（取消/状态）、`Observer`、`CallMeta` |
+| `internal/productpolicy/` | `Verifier`、`Policy`（PEP）、`Signed`、版本单调与时钟窗口 |
+| `internal/credentialstore/` | `Store` 最小接口（P0-08 实现） |
+| `internal/productruntime/` | 装配根：`Deps` 全必填、`Preflight`、`Evaluate`、`Observe` |
+
+两条**可执行**的约束（不是注释里的一句话）：
+
+- `internal/productclient/code_test.go` 的 `TestEveryCodeIsRegisteredInTheDoc` 断言每个 `Code` 常量都出现在[中台交付包](../产品客户端与中台对接/中台交付包.md) §3.2 中 —— 登记表漂移会让测试失败，而不是等到前端漏映射一个错误码。
+- `internal/productruntime/deps_test.go` 断言依赖方向：产品包不得 import `internal/server` / `internal/app` / `internal/provider`，且只有 `productclient` 可以 import `net/http`；`gateway` 包出现 `net/http` 即失败（与 `scripts/reuse-guard.mjs` 同一意图，但更早）。该测试**不带构建标签**，因此 `product_production` 下同样执行。
+
+`mock` 包（`internal/productclient/mock`、`.../gateway/mock`）带 `//go:build !product_production`：一个能返回"登录成功、余额充足"的 mock 若可被链接进发行二进制，就等于"平台说可以"这件事能被一个构建标签伪造 —— 与已删除的假模型同一类风险，故发行构建里不存在该包（`go list -tags product_production ./internal/productclient/...` 只剩 `productclient` 和 `gateway`）。
+
+**B0 未决、必须在 B1 之前定案的一项**（本文档先记录，不预先拍板）：`clientRequestId` **如何到达 wire**。`app.SenderOptions.Headers` 是构造期（每个 sender 一份），而 `clientRequestId` 是**每次调用**一份，两者粒度不同。候选形态有二：① 每次调用构造一个 sender（header 随调用固定，代价是连接复用按调用粒度重建）；② 在 sender 之上做一个 decorator。若选 ②，必须遵守 `gateway.Observer` 的能力保持契约 —— `internal/productclient/gateway/capabilities.go` 的 `CapabilitiesOf`/`PreservesCapabilities` 就是为此提供的探针，因为 agent loop 是用**五处独立类型断言**（`agent.go:770/848/948/1617`）探测能力的，一个只返回 `agent.Sender` 的 decorator 不会编译失败、不会报错，只会静默地丢掉流式、工具或标题生成。
 
 ### gateway 的复用形态（不要把已有能力再写一遍）
 
@@ -83,7 +110,7 @@ type GatewayControlClient interface {
    }
 3. s, err := app.NewSender(opts)          // ← 复用；app 是构造 provider client 的唯一位置
 4. sender = gateway.NewObserver(s)        // ← 唯一新增：终态/usage/错误码 → 会话事件
-5. 终态控制（Cancel / RequestStatus）走 GatewayControlClient（中台独有）
+5. 终态控制（Cancel / RequestStatus）走 `gateway.ControlClient`（中台独有）
 ```
 
 > 字段名以上游 `app.SenderOptions` 为准（`Provider` / `Protocol` / `APIKey` / `BaseURL` / `Headers` / `RPM` / `MaxConcurrency`）。`Protocol` 对 `custom` 供应商是必填 —— 中台网关用 `"openai"`。
@@ -91,7 +118,7 @@ type GatewayControlClient interface {
 **判据（§3.5）**：任何在 `internal/productclient/gateway` 里出现的 SSE 解析、JSON 分片拼接、token 计数或 HTTP 重试代码，都必须先回答"为什么 `internal/provider/openai` 不能做这件事"。答不出来就是重复实现，必须删掉改走 `app.NewSender`。
 
 - `remote` 实现只存在于 `internal/productclient`；请求/响应以[中台交付包](../产品客户端与中台对接/中台交付包.md)的 OpenAPI 为准。
-- 方法覆盖与需求基线的对应关系：`AuthClient`→R3/R8；`ControlPlaneClient`（含 `LegalDocuments`/`AcceptLegal`）→R4/R11；`UsageClient`（含只读 `Ledger`）→R5/R10；`GatewayControlClient`→R5（模型流部分复用既有 `agent.Sender`，见「gateway 的复用形态」）。新增方法前先更新本节与需求基线。
+- 方法覆盖与需求基线的对应关系：`AuthClient`→R3/R8；`ControlPlaneClient`（含 `LegalDocuments`/`AcceptLegal`）→R4/R11；`UsageClient`（含只读 `Ledger`）→R5/R10；`gateway.ControlClient`→R5（模型流部分复用既有 `agent.Sender`，见「gateway 的复用形态」）。新增方法前先更新本节与需求基线。
 - `mock` 是测试 contract sample，不是正式 local 服务或本地业务权威。既有 developer 登录/本地 provider 继续留在 developer 的本地功能集合中，不迁入新包。
 - `gateway` 接受 credential provider、受信 catalog/policy snapshot 和 `clientRequestId`；它把既有 `agent.Sender` 的输出转成会话事件与终态 usage，不计算价格、不写产品余额、不解析 SSE。
 - `productpolicy` 只产生本地决定和审计字段；工具执行仍复用现有 permission/agent 机制。
@@ -123,7 +150,7 @@ developer/test         =  可覆盖（本地联调、sandbox、mock），沿用�
 
 #### 2. 一个共享 HTTP transport，不是每个 client 一套
 
-`AuthClient`、`ControlPlaneClient`、`UsageClient`、`GatewayControlClient` 的**控制面调用**共用一个 `internal/productclient` 内部的 HTTP 底座，集中实现：
+`AuthClient`、`ControlPlaneClient`、`UsageClient`、`gateway.ControlClient` 的**控制面调用**共用一个 `internal/productclient` 内部的 HTTP 底座，集中实现：
 
 | 关注点 | 规定 |
 |---|---|

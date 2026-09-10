@@ -62,7 +62,23 @@ internal/productprofile/profiles/developer.json
 }
 ```
 
-`apiHost` / `gatewayHost` / `trustedKeyIDs` 由 [P0-01](需求/20260909/P0-正式服务与Agent演进/01-运行时Profile与窄端口抽象.md)「中台请求客户端的实现形态」§1 定义，**尚未在代码里落地，随 P0-01 B0 一起加**：production 的中台地址与受信公钥必须**编译期嵌入**，不能来自 `config.yml`、环境变量、`product-state.json`、缓存或 WebView 输入（地址是 bootstrap 自身的前提，不可能由远端下发）。**fail-closed**：production 构建 `apiHost` 为空即拒绝启动、不发起任何中台请求；`trustedKeyIDs` 为空则任何签名策略都无法验证，等同无目录 —— 两者都不得回退到默认值、`localhost` 或 `config.yml`。`developer.json` 可指向 sandbox 或留空。字段落地时，同步更新本文件、两份 JSON、解析/校验测试与打包脚本。
+`apiHost` / `gatewayHost` / `trustedKeyIDs` 由 [P0-01](需求/20260909/P0-正式服务与Agent演进/01-运行时Profile与窄端口抽象.md)「中台请求客户端的实现形态」§1 定义，**已于 P0-01 B0（2026-09-11）落地**：production 的中台地址与受信公钥必须**编译期嵌入**，不能来自 `config.yml`、环境变量、`product-state.json`、缓存或 WebView 输入（地址是 bootstrap 自身的前提，不可能由远端下发）。
+
+**校验规则**（`internal/productprofile`，随二进制编译）：
+
+| 规则 | production | developer |
+|---|---|---|
+| `apiHost` / `gatewayHost` 非空 | **必需** —— 缺失即 `Current()` panic，进程拒绝启动，而不是回退到默认值、`localhost` 或 `config.yml` | 可留空 |
+| 格式 | 绝对 URL、必须有 host、不得带 userinfo | 同 |
+| 协议 | **必须 `https`**（控制面传输不明文，对齐[中台交付包](需求/20260909/产品客户端与中台对接/中台交付包.md) §3.1） | 允许 `http`（本地 sandbox，见[开发规范](开发规范.md) §3.10 作用域） |
+| `trustedKeyIDs` | 每个值必须是 base64 的 32 字节 ed25519 公钥；**可以为空**，空表示任何签名策略都无法验证 = 等同无目录（不是"不验签也能用"） | 同（但通常为空） |
+
+**未配置的发布包用 `.invalid` 占位**：仓库内 `production.json` 目前是 `https://api.invalid/v1` / `https://gateway.invalid/v1`（RFC 6761 保留 TLD，DNS 永不解析）。这样"形状正确但还没填真实地址"的包**不会**把产品流量发到意外的地方，也不会静默回退。两个方法把这个状态暴露给调用方：
+
+- `Profile.ControlPlaneConfigured()` —— 地址仍是 `.invalid`（或为空）时为 `false`；
+- `Profile.HasTrustedKeys()` —— `trustedKeyIDs` 为空时为 `false`。
+
+**这两项是发布前必须替换的发布动作，不是代码改动 —— 由 `release-config-guard` 在出包时把关。** 打包前必须把真实地址与公钥填入 `production.json`；`scripts/release-config-guard.mjs`（`make release-config-check`，并作为 `scripts/preflight.mjs` 的 advisory 项随每条出包路径运行）会报出未替换的 `.invalid` 占位与空的 `trustedKeyIDs`。它**只告警不阻断**：B0/B1 期间打内部测试包是合法的，且 `.invalid` 永不解析，运行时不会把流量发到任何地方 —— 这与 `server-diff-guard` 在 preflight 里同属 advisory 层是同一个理由。
 
 `production.json` 必须把所有 `allow*` 值设为 `false`。这组字段只约束开发 WebView、环境模型来源与数据根覆盖，不能被 WebView、模型输出、环境变量或本地配置开启。用户模型配置和 local provider 不在 Profile schema 中：它们是既有功能，正式会话的模型来源边界由 P0-05 的 gateway sender 实现，不能用未接入的 Profile 字段假装关闭。`startup` 保留上游已有能力；菜单显示、用户资格和实际执行权限分别由 P0-04 的能力矩阵与本地 PEP 决定，不能将隐藏误当成删除。`developer.json` 明确列出其允许的开发入口，避免“未设置即默认开放”。
 
@@ -77,6 +93,7 @@ internal/productprofile/profiles/developer.json
 3. P0-05 完成后，正式桌面会话的模型请求只经中台目录与网关；这不删除 developer/test 对已有配置的使用。
 4. 产品 HTTP、认证、目录、策略、词库和模型网关逻辑由 `internal/productruntime` 及其下游 `productclient`、`productpolicy`、`credentialstore` 持有；不得继续加入 `internal/server`。
 5. 若上游运行时确实无法在 desktop 装配层接入，只能新增一个无布丁业务名词的窄扩展端口；每一处例外都须在 P0-00 登记、单独评审并有黑盒回归。
+6. **P0-02 的控制面 bootstrap 在发起任何中台请求前必须先查 `Profile.ControlPlaneConfigured()` 与 `HasTrustedKeys()`**：为 `false` 时拒绝启动控制面并给出可诊断的提示，不得回退到默认地址、`localhost`、`config.yml` 或"先跳过验签"。这两个方法在 B0 只有定义没有调用方（控制面尚未存在），随 P0-02 接线 —— 若 P0-02 合入时仍未接线，则"fail-closed"只是文档里的一句话。
 
 ## 5. 发布验收
 

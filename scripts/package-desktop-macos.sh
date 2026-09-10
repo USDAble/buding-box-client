@@ -54,10 +54,16 @@ for arch in amd64 arm64; do
 	# also fully eliminates the SDK-vs-link-target warning this flag was
 	# added for in the first place.
 	macos_ver="11.0"
+	# OCTO-FORK: no -Wl,-no_warn_duplicate_libraries — it only silences the
+	# benign duplicate -lobjc from Go + Wails, and the Apple linkers reject it
+	# (ld64-530 in Xcode 14.3.1 answers "ld: unknown option", failing the link;
+	# so does the Xcode 15 linker). The version-min pair below already covers
+	# the SDK-vs-link-target warning it was added alongside. See
+	# dev-docs-usdable/需求/2260906/需求20260906.md §8.
 	( cd "$MOD_DIR" && \
 		GOOS=darwin GOARCH="$arch" CGO_ENABLED=1 CC="clang -arch $cc_arch" \
 		CGO_CFLAGS="-mmacosx-version-min=$macos_ver" \
-		CGO_LDFLAGS="-Wl,-macos_version_min,$macos_ver -Wl,-no_warn_duplicate_libraries" \
+		CGO_LDFLAGS="-Wl,-macos_version_min,$macos_ver" \
 		go build -tags embedrg -ldflags "$LDFLAGS" -o "$out" . )
 	slices+=("$out")
 done

@@ -25,16 +25,16 @@
 1. 在 `internal/productclient` 实现 P0-01 的 `AuthClient` / `ControlPlaneClient`；外部请求/响应类型只在该包映射为客户端 DTO，server handler 不直接发 HTTP。
 2. 实现 refresh 单飞：并发 401 只发一次刷新；失败后清本地短期会话并回登录页。
 3. 将 access/refresh token、policy snapshot、catalog cache 分级保存；access token 只驻留内存，refresh token 只能通过 P0-08 的 credential store 保存，严禁写回 `product-state.json`；导出/诊断包一律排除凭证。
-4. bootstrap 缓存必须带版本、过期时间、签名结果；离线只能使用未过期且已验证缓存，不可接受空策略扩权。
+4. bootstrap 缓存必须带版本、过期时间、签名结果；离线只能使用未过期且已验证缓存，不可接受空策略扩权。`ControlPlaneClient` 的目录/词库/策略信封共用一套验签 + 缓存 + 刷新机制（见 P0-04 §模型目录的本地缓存与刷新），不在各客户端里重复实现验签。
 5. 将账号 panel、登录页、模型选择器读取的状态统一从 bootstrap DTO 派生，避免本地 product-state 与远端各自为准。
-6. 在 sandbox 到位前，使用同一 OpenAPI fixture 的 fake client 做单元/集成测试；不得把临时 JSON 写进页面层，也不得将 fake 作为生产 local 服务。
+6. 在 sandbox 到位前，使用同一 OpenAPI contract sample 的 合同测试实现 client 做单元/集成测试；不得把临时 JSON 写进页面层，也不得将 合同测试实现 作为生产 local 服务。
 
 ## 验收
 
 - 正常登录、刷新、登出、token 撤销、复制数据目录、手机不匹配、过期策略、离线缓存分别有 contract test。
-- 伪造签名、降级 `policyVersion`、错误 audience、过期 token 均被拒绝。
+- 无效签名、降级 `policyVersion`、错误 audience、过期 token 均被拒绝。
 - 日志、错误上报和诊断包中查不到 access token、refresh token、完整手机号。
 
 ## 合并方式
 
-字段合同由 P0-01 的 B0 先冻结并发给中台；当前仓库随后以 generated/fake client 开发中台 client。中台提供 OpenAPI + sandbox 后，通过 contract CI 才合真实 HTTP 实现；不要让页面团队直接使用临时 JSON。
+字段合同由 P0-01 的 B0 先冻结并发给中台；当前仓库随后以 generated/合同测试实现 client 开发中台 client。中台提供 OpenAPI + sandbox 后，通过 contract CI 才合真实 HTTP 实现；不要让页面团队直接使用临时 JSON。

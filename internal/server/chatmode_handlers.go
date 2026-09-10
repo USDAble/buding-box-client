@@ -15,9 +15,15 @@ import (
 
 // chatModeModelJSON is one model under a mode. CompositeID is the
 // "<endpoint>::<model>" id the existing PATCH /sessions/{id}/model handler
-// accepts; empty means the model is listed in chat-modes.json but not present
-// in config.yml's endpoint system (so it cannot be selected yet — see P9 §3.2,
-// the four buding-* models are registered into the endpoint system by P11).
+// accepts; empty means the model is not resolvable in config.yml's endpoint
+// system (so it cannot be selected yet).
+//
+// OCTO-FORK: P9 — the factory grouping carries no model ids at all: the modes
+// are product-fixed, the models inside them are a projection of the signed
+// central-platform catalog (P0-04). Until that lands, a stock install serves
+// the three empty groups from chatmode.Builtin() rather than four fake
+// `buding-*` ids, which is the honest state — see internal/chatmode. On the
+// wire nothing changes: `models` is `[]` and `defaultModel` is `""`.
 type chatModeModelJSON struct {
 	ID          string `json:"id"`
 	CompositeID string `json:"compositeId,omitempty"`

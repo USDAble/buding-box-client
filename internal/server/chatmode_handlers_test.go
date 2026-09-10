@@ -37,20 +37,20 @@ func TestGetChatModesFactoryList(t *testing.T) {
 	for _, m := range resp.Modes {
 		byID[m.ID] = m
 	}
-	privacy := byID["privacy"]
-	for _, m := range privacy.Models {
-		if m.ID == "buding-cloud-plus" || m.ID == "buding-cloud-pro" {
-			t.Errorf("privacy mode contains %q, want local-only", m.ID)
+	// The factory grouping carries the three mode ids and NO model ids: the
+	// models are a catalog projection (P0-04). A stock install must not list a
+	// model it cannot select.
+	for _, id := range []string{"privacy", "smart", "default"} {
+		m, ok := byID[id]
+		if !ok {
+			t.Fatalf("factory list is missing mode %q", id)
 		}
-	}
-	smart := byID["smart"]
-	for _, m := range smart.Models {
-		if m.ID == "buding-local-general" || m.ID == "buding-local-fast" {
-			t.Errorf("smart mode contains %q, want cloud-only", m.ID)
+		if len(m.Models) != 0 {
+			t.Errorf("mode %q lists hardcoded models %v, want none", id, m.Models)
 		}
-	}
-	if byID["default"].DefaultModel != "buding-cloud-plus" {
-		t.Errorf("default mode defaultModel = %q, want buding-cloud-plus", byID["default"].DefaultModel)
+		if m.DefaultModel != "" {
+			t.Errorf("mode %q has hardcoded defaultModel %q, want empty", id, m.DefaultModel)
+		}
 	}
 
 	// First GET seeds chat-modes.json so the user can edit it (需求 §5.6 规则 1).
@@ -60,14 +60,21 @@ func TestGetChatModesFactoryList(t *testing.T) {
 	}
 }
 
+// The mode→model grouping is user-editable config; each model id is resolved
+// against config.yml's endpoint system so the selector gets the composite id
+// it needs to bind a session. This drives both files explicitly — the factory
+// grouping no longer carries model ids of its own.
 func TestGetChatModesResolvesCompositeIDs(t *testing.T) {
 	tmp := t.TempDir()
 	t.Setenv("OCTO_DATA_ROOT", tmp)
-	// Seed a config.yml endpoint exposing one of the factory models so the
-	// handler resolves its composite id.
 	cfgPath, _ := datapath.Join("config.yml")
 	_ = os.MkdirAll(filepath.Dir(cfgPath), 0o700)
 	if err := os.WriteFile(cfgPath, []byte("endpoints:\n  - id: buding\n    provider: local\n    models:\n      - model: buding-local-general\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	modesPath, _ := datapath.Join("chat-modes.json")
+	modes := `{"schemaVersion":1,"modes":[{"id":"privacy","models":["buding-local-general","not-configured"],"defaultModel":"buding-local-general"}]}`
+	if err := os.WriteFile(modesPath, []byte(modes), 0o600); err != nil {
 		t.Fatal(err)
 	}
 
@@ -81,14 +88,16 @@ func TestGetChatModesResolvesCompositeIDs(t *testing.T) {
 		t.Fatal(err)
 	}
 	privacy := resp.Modes[0]
-	var got string
+	got := map[string]string{}
 	for _, m := range privacy.Models {
-		if m.ID == "buding-local-general" {
-			got = m.CompositeID
-		}
+		got[m.ID] = m.CompositeID
 	}
-	if got != "buding::buding-local-general" {
-		t.Errorf("composite id for buding-local-general = %q, want buding::buding-local-general", got)
+	if got["buding-local-general"] != "buding::buding-local-general" {
+		t.Errorf("composite id for buding-local-general = %q, want buding::buding-local-general", got["buding-local-general"])
+	}
+	// An id with no matching endpoint stays listed but unselectable.
+	if id, ok := got["not-configured"]; !ok || id != "" {
+		t.Errorf("composite id for not-configured = %q (present=%v), want empty but listed", id, ok)
 	}
 }
 

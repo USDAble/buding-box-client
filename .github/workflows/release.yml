@@ -132,10 +132,13 @@ jobs:
         # check recognizes a real release build — without them
         # internal/upgrade.Eligible sees an empty Commit and the app reports
         # "up to date" forever. $env:version is set by the staging step above.
+        # product_production selects the production runtime profile; a release
+        # artifact built without it would be a developer package with every
+        # production rejection disabled (dev-docs-usdable/运行时Profile配置.md).
         run: |
           $commit = git rev-parse --short HEAD
           $pkg = "github.com/open-octo/octo-agent/internal/version"
-          go build -tags embedrg -ldflags "-H windowsgui -X $pkg.Version=$env:version -X $pkg.Commit=$commit" -o ..\..\staging\PuddingBox.exe .
+          go build -tags "embedrg product_production" -ldflags "-H windowsgui -X $pkg.Version=$env:version -X $pkg.Commit=$commit" -o ..\..\staging\PuddingBox.exe .
 
       # Fetches uv.exe from its upstream GitHub release so the installer can
       # bundle it — see octo.iss's [Files] section. Native PowerShell rather

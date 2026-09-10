@@ -7,7 +7,10 @@ import (
 	"testing"
 )
 
-func TestBuiltinMatchesRequirement(t *testing.T) {
+// The factory default must not invent model ids: the models offered under each
+// mode come from the signed catalog (P0-04), so a hardcoded id here would ship
+// a model that cannot be selected. Modes themselves are product-fixed.
+func TestBuiltinHasNoHardcodedModels(t *testing.T) {
 	c := Builtin()
 	if c.SchemaVersion != 1 {
 		t.Fatalf("schemaVersion = %d, want 1", c.SchemaVersion)
@@ -16,29 +19,29 @@ func TestBuiltinMatchesRequirement(t *testing.T) {
 		t.Fatalf("len(modes) = %d, want 3", len(c.Modes))
 	}
 
-	privacy, _ := c.ModeByID(ModePrivacy)
-	smart, _ := c.ModeByID(ModeSmart)
-	def, _ := c.ModeByID(ModeDefault)
-
-	// 出厂断言（需求 §8 明确验收）：隐私列无云端项、智能列无本地项.
-	for _, m := range privacy.Models {
-		if strings.HasPrefix(m, "buding-cloud") {
-			t.Errorf("privacy mode contains cloud model %q, want local-only", m)
+	wantIDs := []string{ModePrivacy, ModeSmart, ModeDefault}
+	for i, id := range wantIDs {
+		m, ok := c.ModeByID(id)
+		if !ok {
+			t.Fatalf("mode %q missing from builtin", id)
 		}
-	}
-	for _, m := range smart.Models {
-		if strings.HasPrefix(m, "buding-local") {
-			t.Errorf("smart mode contains local model %q, want cloud-only", m)
+		if c.Modes[i].ID != id {
+			t.Errorf("modes[%d].id = %q, want %q (order is part of the selector)", i, c.Modes[i].ID, id)
 		}
-	}
-
-	if def.DefaultModel != "buding-cloud-plus" {
-		t.Errorf("default mode defaultModel = %q, want buding-cloud-plus (云端智能)", def.DefaultModel)
-	}
-	if privacy.DefaultModel != "buding-local-general" {
-		t.Errorf("privacy defaultModel = %q, want buding-local-general", privacy.DefaultModel)
+		if len(m.Models) != 0 {
+			t.Errorf("mode %q carries hardcoded models %v — the catalog projects them (P0-04)", id, m.Models)
+		}
+		if m.DefaultModel != "" {
+			t.Errorf("mode %q has hardcoded defaultModel %q — the catalog projects it (P0-04)", id, m.DefaultModel)
+		}
 	}
 }
+
+// The factory grouping used to assert "privacy has no cloud model, smart has no
+// local model" (需求 §8). That invariant moved with the projection: with no ids
+// in Builtin() it is vacuous here, so it is asserted where ids now come from —
+// the catalog projection in P0-04 — rather than left as a test that always
+// passes. Keep the ids out; see TestBuiltinHasNoHardcodedModels.
 
 func TestLoadMissingFileSeedsBuiltin(t *testing.T) {
 	dir := t.TempDir()
@@ -101,22 +104,29 @@ func TestLoadParsesUserConfig(t *testing.T) {
 	}
 }
 
+// ModesForModel is pure grouping logic over whatever ids the config carries —
+// the ids themselves come from the catalog at runtime (P0-04), so this drives
+// it with an explicit config rather than Builtin().
 func TestModesForModelOverlap(t *testing.T) {
-	c := Builtin()
-	got := c.ModesForModel("buding-cloud-plus")
-	// 智能 + 默认 都含云端智能，不含隐私（需求 §5.6 规则 1 允许重叠）.
-	want := []string{ModeSmart, ModeDefault}
-	if len(got) != len(want) {
-		t.Fatalf("ModesForModel(buding-cloud-plus) = %v, want %v", got, want)
-	}
-	for i := range want {
-		if got[i] != want[i] {
-			t.Fatalf("ModesForModel = %v, want %v", got, want)
-		}
+	c := Config{
+		SchemaVersion: 1,
+		Modes: []Mode{
+			{ID: ModePrivacy, Models: []string{"m-local"}},
+			{ID: ModeSmart, Models: []string{"m-cloud"}},
+			// Overlap is allowed: one model may belong to several modes
+			// (需求 §5.6 规则 1).
+			{ID: ModeDefault, Models: []string{"m-local", "m-cloud"}},
+		},
 	}
 
-	if got := c.ModesForModel("buding-local-fast"); len(got) != 2 || got[0] != ModePrivacy || got[1] != ModeDefault {
-		t.Fatalf("ModesForModel(buding-local-fast) = %v, want [privacy default]", got)
+	if got := c.ModesForModel("m-cloud"); len(got) != 2 || got[0] != ModeSmart || got[1] != ModeDefault {
+		t.Fatalf("ModesForModel(m-cloud) = %v, want [smart default]", got)
+	}
+	if got := c.ModesForModel("m-local"); len(got) != 2 || got[0] != ModePrivacy || got[1] != ModeDefault {
+		t.Fatalf("ModesForModel(m-local) = %v, want [privacy default]", got)
+	}
+	if got := c.ModesForModel("not-listed"); len(got) != 0 {
+		t.Fatalf("ModesForModel(not-listed) = %v, want empty", got)
 	}
 }
 

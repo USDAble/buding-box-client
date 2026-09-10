@@ -1,10 +1,11 @@
-// Feature switches for the portable product form. Upstream ships IM channels,
-// MCP servers and Light Apps as first-class views; this fork keeps the code
-// (需求 §7: do not delete upstream capability) but removes the UI reach into
-// them, because they present config surfaces that cannot actually be used in
-// this phase (需求 §5.4.3).
+// Entry visibility for the portable product form. Upstream ships IM channels,
+// MCP servers and Light Apps as first-class views; this fork keeps their
+// existing routes and runtime behavior, but omits their navigation entries
+// from the first-release product interface. UI visibility is not an execution
+// permission or a capability switch; P0-04 will replace this fixed list with
+// the verified capability matrix.
 //
-// Every hide decision reads this ONE module. Deleting the views outright would
+// Every current visibility decision reads this ONE module. Deleting the views outright would
 // turn every upstream change to them into a delete-vs-modify conflict (the
 // hardest git class to auto-resolve); a switch array is a one-line revert when
 // the feature is later opened up.

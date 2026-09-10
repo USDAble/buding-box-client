@@ -1,0 +1,13 @@
+{
+  "schemaVersion": 1,
+  "name": "production",
+  "allowDevWebview": false,
+  "allowEnvironmentModelSource": false,
+  "allowDataRootOverride": false,
+  "startup": {
+    "channels": true,
+    "tools": true,
+    "mcp": true,
+    "backgroundTasks": true
+  }
+}

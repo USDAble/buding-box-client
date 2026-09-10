@@ -11,6 +11,12 @@ set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 MOD_DIR="$ROOT/cmd/octo-desktop"
+
+# Refuse to build a shipped artifact the fork guards reject. The build below
+# hardcodes product_production, but this also covers datapath/reuse drift, and
+# keeps every packaging path (make target, CI job, direct invocation) aligned.
+node "$ROOT/scripts/preflight.mjs"
+
 VERSION="${1:-$(git -C "$ROOT" describe --tags --always 2>/dev/null || echo 0.1.0)}"
 VERSION="${VERSION#v}"
 COMMIT="$(git -C "$ROOT" rev-parse --short HEAD 2>/dev/null || echo unknown)"
@@ -62,7 +68,7 @@ for arch in amd64 arm64; do
 		GOOS=darwin GOARCH="$arch" CGO_ENABLED=1 CC="clang -arch $cc_arch" \
 		CGO_CFLAGS="-mmacosx-version-min=$macos_ver" \
 		CGO_LDFLAGS="-Wl,-macos_version_min,$macos_ver" \
-		go build -tags embedrg -ldflags "$LDFLAGS" -o "$out" . )
+		go build -tags 'embedrg product_production' -ldflags "$LDFLAGS" -o "$out" . )
 	slices+=("$out")
 done
 

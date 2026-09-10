@@ -48,16 +48,29 @@ type Config struct {
 // (需求 §9: 损坏时用内置默认并保留原文件，界面提示一次).
 var ErrUnreadable = errors.New("chatmode: config is unreadable, using built-in")
 
-// Builtin returns the factory grouping (需求 §5.6.3): privacy is local-only,
-// smart is cloud-only, default spans both. The "default" group's default model
-// is the cloud-plus model (需求 §8: 出厂默认模型为云端智能).
+// Builtin returns the factory grouping: the three product mode ids, with NO
+// model ids.
+//
+// Modes are product-fixed (需求 §5.2.4「标识符例外」— the ids are data keys, not
+// brand strings). The models *inside* them are not: under the P0 design they
+// are a projection of the signed catalog downloaded from the central platform
+// (P0-04), so any id hardcoded here would list a model that no shipped build
+// can actually select.
+//
+// History — why the four `buding-*` ids were removed instead of kept as a
+// "known transitional state": they used to be registered into config.yml by
+// ensureLocalEndpoint(), which was deleted on 2026-09-11. Because the packaged
+// data/chat-modes.json is `{}`, Load falls back to this function, so every
+// packaged build listed four models with an empty compositeId — including
+// `default`'s defaultModel. A factory default that cannot be selected is a
+// defect, not a state to document. P0-04 only has to ADD the projection now.
 func Builtin() Config {
 	return Config{
 		SchemaVersion: 1,
 		Modes: []Mode{
-			{ID: ModePrivacy, Models: []string{"buding-local-general", "buding-local-fast"}, DefaultModel: "buding-local-general"},
-			{ID: ModeSmart, Models: []string{"buding-cloud-plus", "buding-cloud-pro"}, DefaultModel: "buding-cloud-plus"},
-			{ID: ModeDefault, Models: []string{"buding-local-general", "buding-local-fast", "buding-cloud-plus", "buding-cloud-pro"}, DefaultModel: "buding-cloud-plus"},
+			{ID: ModePrivacy},
+			{ID: ModeSmart},
+			{ID: ModeDefault},
 		},
 	}
 }

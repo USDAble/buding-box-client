@@ -66,6 +66,78 @@ jobs:
       - name: Run datapath guard tests
         run: node --test scripts/datapath-guard.test.mjs
 
+  # Guards the release-profile rule (运行时Profile配置.md §2): every build of
+  # cmd/octo-desktop that produces a shipped artifact must carry the
+  # product_production tag. A pipeline that forgets it still compiles and still
+  # produces a working binary — it just silently ships a developer package.
+  # No npm dependencies, so no install step.
+  release-profile-guard:
+    name: Release Profile Guard
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '22'
+
+      - name: Run release profile guard
+        run: node scripts/release-profile-guard.mjs
+
+      - name: Run release profile guard tests
+        run: node --test scripts/release-profile-guard.test.mjs
+
+  # Guards the fork-drift ratchet (开发规范 §3.4/§3.7): apiProduct is a
+  # fork-only symbol that rewrites ~150 upstream route lines, and product
+  # logic must not accumulate in the upstream internal/server tree. Both
+  # ceilings may only shrink (P0-01A folds them).
+  #
+  # Needs both refs: the guard diffs the working tree against the
+  # upstream-tracking branch, so a shallow single-branch checkout cannot run it.
+  server-diff-guard:
+    name: Server Diff Guard
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      # A PR checkout is a detached merge commit; `main` must be present as a
+      # ref for the guard to compare against.
+      - name: Fetch the upstream-tracking branch
+        run: git fetch --no-tags origin main:refs/remotes/origin/main
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '22'
+
+      - name: Run server diff guard
+        run: node scripts/server-diff-guard.mjs
+
+      - name: Run server diff guard tests
+        run: node --test scripts/server-diff-guard.test.mjs
+
+  # Guards the reuse rule (开发规范 §3.5): the 中台 gateway package assembles
+  # an app.Sender over the existing provider stack; it must not grow a second
+  # SSE/HTTP/usage implementation. No npm dependencies, and the governed
+  # package does not exist yet, so this is expected to pass trivially until
+  # P0-01 B0 creates it.
+  reuse-guard:
+    name: Reuse Guard
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '22'
+
+      - name: Run reuse guard
+        run: node scripts/reuse-guard.mjs
+
+      - name: Run reuse guard tests
+        run: node --test scripts/reuse-guard.test.mjs
+
   svelte-check:
     name: Svelte Check
     runs-on: ubuntu-latest

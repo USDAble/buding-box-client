@@ -30,9 +30,14 @@ import os from 'node:os'
 
 import { repositoryRoot, loadBrand } from './brand-schema.mjs'
 import { inspectFile } from './pe-info.mjs'
+import { runPreflight } from './preflight.mjs'
 
 const VERSION_PKG = 'github.com/open-octo/octo-agent/internal/version'
 const DEFAULT_VERSION = '0.0.0-dev'
+// Build tags for the packaged desktop binary. product_production selects the
+// immutable production profile; see the buildExe comment and
+// dev-docs-usdable/运行时Profile配置.md.
+export const BUILD_TAGS = 'embedrg product_production'
 // The pre-filled data/ files P12 §3.1 mandates. chat-modes.json (P9) and
 // config.yml (P11 buding endpoint) are placeholders until those PRs land —
 // see packaging/portable/README.txt.
@@ -354,7 +359,13 @@ function buildExe({ root, brand, target, dest }) {
 
   const commit = process.env.COMMIT || gitShortHead(root)
   const ldflags = `-H windowsgui -X ${VERSION_PKG}.Version=${target.version} -X ${VERSION_PKG}.Commit=${commit}`
-  execFileSync('go', ['build', '-trimpath', '-tags', 'embedrg', '-ldflags', ldflags, '-o', out, '.'], {
+  // product_production selects the immutable production profile (see
+  // dev-docs-usdable/运行时Profile配置.md). Packaged artifacts are standard
+  // production binaries; a distributor that omitted the tag would ship a
+  // developer package with every production rejection disabled. Keep in sync
+  // with release.yml / package-desktop-macos.sh / package-desktop-linux.sh;
+  // scripts/release-profile-guard.mjs fails CI if any of them drifts.
+  execFileSync('go', ['build', '-trimpath', '-tags', BUILD_TAGS, '-ldflags', ldflags, '-o', out, '.'], {
     cwd: modDir,
     stdio: 'inherit',
     env,
@@ -393,6 +404,15 @@ async function main() {
   if (target.goos !== 'windows') {
     console.error(`便携交付只支持 windows，收到 GOOS=${target.goos}`)
     process.exitCode = 2
+    return
+  }
+
+  // Refuse to build a shipped artifact from a tree the fork guards reject —
+  // CI runs them on the commit, but packaging can start from a dirty or stale
+  // checkout and would otherwise silently produce a developer package.
+  const preflight = await runPreflight(root)
+  if (preflight.failureCount > 0) {
+    process.exitCode = 1
     return
   }
 

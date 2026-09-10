@@ -36,6 +36,7 @@ import (
 	"github.com/open-octo/octo-agent/internal/crashlog"
 	"github.com/open-octo/octo-agent/internal/datapath"
 	"github.com/open-octo/octo-agent/internal/logfile"
+	"github.com/open-octo/octo-agent/internal/productprofile"
 	"github.com/open-octo/octo-agent/internal/serveenv"
 	"github.com/open-octo/octo-agent/internal/serveproc"
 	"github.com/open-octo/octo-agent/internal/server"
@@ -80,19 +81,41 @@ func newWindowToken() string {
 }
 
 // desktopWebviewURL returns the URL the Wails window loads. It defaults to the
-// in-process hub (hubAddr), whose server serves the embedded webdist. OCTO-FORK:
-// OCTO_DESKTOP_DEV_URL overrides it for a shell + Vite hot-reload dev loop —
-// the window loads the Vite dev server (http://localhost:5173), whose /api and
-// /ws proxy back to this process's in-process hub on 8088 (see `make
-// desktop-dev`). The shell marker and window token still ride shellURL's query
-// string, and the product gate keys on the token, not the origin, so nativeShell
-// and the gate keep working unchanged. See
-// dev-docs-usdable/需求/2260906/技术方案/P12-便携打包.md.
+// in-process hub (hubAddr), whose server serves the embedded webdist.
+// OCTO_DESKTOP_DEV_URL is accepted only by a developer Profile for the shell +
+// Vite hot-reload loop; a production build ignores it. See
+// dev-docs-usdable/运行时Profile配置.md.
 func desktopWebviewURL() string {
-	if dev := strings.TrimSpace(os.Getenv("OCTO_DESKTOP_DEV_URL")); dev != "" {
-		return dev
+	if productprofile.Current().AllowDevWebview {
+		if dev := strings.TrimSpace(os.Getenv("OCTO_DESKTOP_DEV_URL")); dev != "" {
+			return dev
+		}
 	}
 	return "http://" + hubAddr
+}
+
+// applyDesktopProfile removes developer-only process inputs before any desktop
+// startup code can read the data root, serve.env, or server configuration. It
+// complements (rather than replaces) the immutable build-selected profile:
+// clearing the inputs makes accidental release-environment leakage harmless.
+func applyDesktopProfile() productprofile.Profile {
+	p := productprofile.Current()
+	if !p.AllowDevWebview {
+		os.Unsetenv("OCTO_DESKTOP_DEV_URL")
+	}
+	if !p.AllowDataRootOverride {
+		os.Unsetenv("OCTO_DATA_ROOT")
+	}
+	if !p.AllowEnvironmentModelSource {
+		os.Unsetenv("OCTO_PROVIDER")
+		for _, entry := range os.Environ() {
+			name, _, ok := strings.Cut(entry, "=")
+			if ok && (strings.HasSuffix(name, "_MODEL") || strings.HasSuffix(name, "_API_KEY")) {
+				os.Unsetenv(name)
+			}
+		}
+	}
+	return p
 }
 
 // isBundled reports whether we're running inside a .app. The Wails
@@ -168,6 +191,8 @@ func ensureValidTempDir() {
 }
 
 func main() {
+	profile := applyDesktopProfile()
+
 	// macOS's postinstall script launches the app with `open` from inside
 	// installd's ephemeral PKInstallSandbox.*; the launched process can inherit
 	// that sandbox's $TMPDIR. The desktop app then runs for days as a tray
@@ -210,7 +235,9 @@ func main() {
 	// login shell (e.g. TAVILY_API_KEY, provider keys). Best-effort — missing
 	// file is a no-op, explicit env always wins. Mirrors the `octo serve` CLI
 	// path so both backends resolve the same set of environment variables.
-	serveenv.Load()
+	if profile.AllowEnvironmentModelSource {
+		serveenv.Load()
+	}
 
 	// Pick the language for native dialogs/tray from the system UI language.
 	applyLang()
@@ -435,7 +462,7 @@ func main() {
 		// Prompt for notification permission (macOS blocks until answered, so
 		// off the UI thread) — without it every toast silently no-ops.
 		go bridge.requestNotificationAuthorization()
-		startHub(app, bridge, settings)
+		startHub(app, bridge, settings, profile)
 	})
 
 	// macOS: clicking the dock icon after the window was closed (hidden to the
@@ -525,7 +552,7 @@ func hubLogLevel() slog.Level {
 // startHub takes ownership of the loopback port (offering to take over a running
 // daemon), starts the in-process server, and opens the window. It runs inside
 // the ApplicationStarted hook so its dialogs have a live event loop.
-func startHub(app *application.App, bridge *nativeBridge, settings desktopSettings) {
+func startHub(app *application.App, bridge *nativeBridge, settings desktopSettings, profile productprofile.Profile) {
 	// If another backend already owns the port, ask before displacing it.
 	tookOver := false
 	if pid, ok := serveproc.Running(); ok {
@@ -577,7 +604,11 @@ func startHub(app *application.App, bridge *nativeBridge, settings desktopSettin
 	server.StartUploadsHousekeeping()
 
 	srv, err := server.New(server.Config{
-		Tools: true,
+		Tools: profile.Startup.Tools,
+		// P0-00A: a production Profile does not remove existing channel/tool
+		// behavior. Product policy later controls visibility and authorization;
+		// hiding a menu must never become a destructive feature toggle.
+		NoChannel: !profile.Startup.Channels,
 		// On: the version badge needs the latest-release lookup to know an update
 		// exists. It reports upgrade_mode "installer" (Native is set), so the web
 		// UI offers a download link; the desktop shell's own in-place update flow

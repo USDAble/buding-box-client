@@ -170,7 +170,7 @@ jobs:
         env:
           GOARCH: ${{ matrix.goarch }}
           CGO_ENABLED: '0'
-        run: go build -v -tags embedrg -ldflags "-H windowsgui" -o PuddingBox.exe .
+        run: go build -v -tags "embedrg product_production" -ldflags "-H windowsgui" -o PuddingBox.exe .
 
       # Raw .exe for now; wrapping it in an installer rides the existing Inno
       # Setup track (see windows-installer-check.yml), a separate change.

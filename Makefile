@@ -60,7 +60,8 @@ RG_EMBED_DIR := internal/tools/rgembed/binaries
 RG_EMBED_BIN := $(RG_EMBED_DIR)/rg
 
 .PHONY: all build install test cover vet fmt fmt-check tidy clean \
-        brand brand-check datapath-check \
+        brand brand-check datapath-check release-profile-check \
+        server-diff-check reuse-check preflight-check \
         eval-build eval-list eval \
         rg-embed rg-embed-clean \
         bundle-tools-windows bundle-tools-macos \
@@ -244,6 +245,39 @@ brand-assets-check:
 datapath-check:
 	node scripts/datapath-guard.mjs
 	node --test scripts/datapath-guard.test.mjs
+
+# ── release profile guard ────────────────────────────────────────────────────
+# Every build of cmd/octo-desktop that produces a shipped artifact must carry
+# the product_production tag, or the package is a developer build with all the
+# production rejections disabled (运行时Profile配置.md §2). CI's
+# release-profile-guard job runs the same script.
+release-profile-check:
+	node scripts/release-profile-guard.mjs
+	node --test scripts/release-profile-guard.test.mjs
+
+# ── server diff guard ────────────────────────────────────────────────────────
+# internal/server is an upstream tree this fork must keep mergeable. The guard
+# is a ratchet: apiProduct (0 upstream, 161 here) and the per-file fork diff
+# ceilings may only shrink. CI's server-diff-guard job runs the same script;
+# it needs the upstream ref fetched (fetch-depth: 0).
+server-diff-check:
+	node scripts/server-diff-guard.mjs
+	node --test scripts/server-diff-guard.test.mjs
+
+# ── reuse guard ──────────────────────────────────────────────────────────────
+# The 中台 gateway package must assemble an app.Sender, not grow a second
+# SSE/HTTP client (开发规范 §3.5). CI's reuse-guard job runs the same script.
+reuse-check:
+	node scripts/reuse-guard.mjs
+	node --test scripts/reuse-guard.test.mjs
+
+# ── packaging preflight ──────────────────────────────────────────────────────
+# The same check every packager runs at the start of a build (hard-fails on
+# datapath/release-profile/reuse drift; warns on server drift when the upstream
+# ref is not fetched). Exposed here so a developer can run it without packaging.
+# See scripts/preflight.mjs.
+preflight-check:
+	node scripts/preflight.mjs
 
 # ── ripgrep embed (build-time only) ──────────────────────────────────────────
 # Downloads the matching rg release for GOOS/GOARCH, extracts the binary,

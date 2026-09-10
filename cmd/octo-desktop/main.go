@@ -625,6 +625,12 @@ func startHub(app *application.App, bridge *nativeBridge, settings desktopSettin
 		// desktop window's requests from other loopback peers (CLI, VS Code,
 		// Obsidian). Empty under `octo serve`, where nothing is gated.
 		WindowToken: bridge.windowToken,
+		// OCTO-FORK: 宿主 sender 工厂装配（端口 4）— see 01A §3.1. In a
+		// production Profile this is the only thing that picks a turn's sender,
+		// which is what closes the "a production session can still be routed to
+		// a third-party endpoint by config.yml / OCTO_PROVIDER" bypass. Nil for
+		// a developer Profile, where config.yml endpoints are the point.
+		SenderFactory: productSenderFactory(profile),
 	})
 	if err != nil {
 		bridge.showError(L().errTitle, fmt.Sprintf(L().errStartFmt, err))

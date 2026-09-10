@@ -96,6 +96,17 @@ func (p Profile) ControlPlaneConfigured() bool {
 // (P0-01 §1). It is never a reason to accept an unverified source.
 func (p Profile) HasTrustedKeys() bool { return len(p.TrustedKeyIDs) > 0 }
 
+// RequiresControlPlane reports whether this Profile's model traffic must come
+// from the product control plane — the gateway and the signed catalog — rather
+// than from the environment or data/config.yml.
+//
+// A developer Profile may source models from the environment (that is what
+// allowEnvironmentModelSource is for), so it does not. Anything that must not be
+// overridable by ambient configuration asks this instead of comparing
+// Profile.Name against a string, so the two profiles cannot drift apart from the
+// predicate that reads them.
+func (p Profile) RequiresControlPlane() bool { return !p.AllowEnvironmentModelSource }
+
 // isUnsetHost reports whether host is absent or a `.invalid` placeholder.
 func isUnsetHost(host string) bool {
 	u, err := url.Parse(strings.TrimSpace(host))

@@ -111,6 +111,26 @@ server.go diff：317 added / 167 removed = 484 行
 
 **不再计入暂留项**：`ensureLocalEndpoint()` 与 4 个 `buding-*` 假模型 endpoint 已删除（2026-09-11，见 §2）。`internal/server` 不再在启动期写入用户 `config.yml`。
 
+### 5.1 恢复上限（B 类：永久不可恢复）
+
+本任务常被理解成"迁完产品业务，`internal/server` 就回到上游原样"。**这个理解是错的**，需要在开工前写清楚，否则 §7.2 的验收会被误设成"`git diff` 对上游为空"，而那是一个永远达不成、且达成即违规的目标。
+
+恢复目标分两类：
+
+| 类别 | 内容 | 是否恢复 | 原因 |
+| --- | --- | --- | --- |
+| **A 类：产品业务** | 产品 HTTP handler、产品门、登录态、词库、隐私与发送策略、积分 mock、`apiProduct` 折叠 | **恢复**（§4 阶段 B–E 的目标） | 它们本就属于 productruntime，不属于上游 server |
+| **B 类：datapath 强制的承载** | 见下方清单 | **永久保留，不恢复** | 恢复它们 = 让 `datapath-guard` 变红 = 违反[开发规范](../../../开发规范.md) §3.1 硬规则 |
+
+**B 类清单**（`buding @ ea37bc53` 实测）：
+
+- **测试侧 58 个文件**：`internal/server/*_test.go` 中 `t.Setenv("OCTO_DATA_ROOT", …)` 的调用。上游测试直接读写 `~/.octo`，本 fork 必须把测试数据根指到临时目录 —— 没有这一行，测试会污染真实数据根。这是 fork 硬规则的直接后果，逐行改写无法避免。
+- **非测试侧 11 个文件、18 处 `datapath.` 调用**：`server.go`(3)、`sensitive_dict_handlers.go`(3)、`profile_handler.go`(2)、`onboard_config_handlers.go`(2)、`attachments.go`(2)、`uploads_housekeeping.go`(1)、`tasks_handlers.go`(1)、`session_groups.go`(1)、`lightapps_handlers.go`(1)、`handlers.go`(1)、`chatmode_handlers.go`(1)。这些是**上游就存在**的路径解析（附件、上传清理、会话分组、任务、profile 等），本 fork 只把 `os.UserHomeDir()` + `".octo"` 换成了 `datapath.*`，逻辑与上游一致。
+
+**与 §6「不保留 `apiProduct`」的区别**：`apiProduct` 是**纯 fork 改写**（收益为零、成本为每次合并），所以目标是 0。B 类是**硬规则强制的承载**（不写就违反 CI），所以目标是"行数冻结、只降不升"。两者的验收口径不同，不要混用。
+
+**与 `server-diff-guard` 的关系**：B 类的 diff 行数正是 `DEBT_CEILINGS`（§7.1 R2）里 6 个登记文件的构成部分。因此"恢复上限"不是一句免责声明 —— 它有 CI 断言：B 类 diff **只允许降不允许升**，上调 ceilings 属于[开发规范](../../../开发规范.md) §3.7 的人工确认事项。
+
 ## 6. 禁止的捷径
 
 - 不因首发 UI 不显示某个入口而关闭其 route、MCP、channel、工具或后台执行能力。
@@ -151,7 +171,15 @@ scripts/server-diff-guard.mjs        断言 vs 上游 main：
 
 最终验收至少包括：
 
-1. `git diff` 与静态搜索证明产品字段、`product_*.go` handler、产品 gate、词库 HTTP、积分扣减和产品 sender 包装不再遗留在 `internal/server`；`apiProduct` 出现次数为 0（由 `server-diff-guard` 断言）。
+1. `git diff` 与静态搜索证明**产品业务**（产品字段、`product_*.go` handler、产品 gate、词库 HTTP、积分扣减、产品 sender 包装）不再遗留在 `internal/server`；`apiProduct` 出现次数为 0（由 `server-diff-guard` 断言）。**验收对象是 A 类，不是"对上游 diff 为空"** —— B 类（§5.1）永久保留，其 diff 只允许降不允许升。
 2. server 的通用 HTTP/WS/session/MCP/channel/tool/background 回归通过；`server.New` 仍读取 `config.yml`，且**启动期不再写用户 `config.yml`**。
 3. productruntime 的 API、状态、门控、词库、隐私和 sender 装配测试通过；P0-05 后再增加 production gateway 唯一出口断言。
 4. production/developer 的入口可见性、功能保留和权限判定符合 P0-00A/P0-04；任何隐藏入口都不能充当授权或删除功能的证据。
+
+## 8. 修订记录
+
+| 日期 | 说明 |
+| --- | --- |
+| 2026-09-11 | 初版：边界、精确盘点、`apiProduct` 折叠、阶段 B–E、`server-diff-guard`。 |
+| 2026-09-11 | 补 §5.1「恢复上限」：区分 A 类（产品业务，恢复）与 B 类（datapath 强制承载，永久保留），给出 B 类实测清单（58 个测试文件 + 11 个非测试文件 18 处），并修正 §7.2 的验收口径，避免被误设成"对上游 diff 为空"。 |
+

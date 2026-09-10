@@ -291,6 +291,12 @@ func maxAttemptsFor(kind CallKind) int {
 	}
 }
 
+// InstallID returns the per-install identifier the transport sends as
+// X-Install-Id. AuthClient needs it because the platform's login body carries
+// the same value (中台交付包 §4.2.2), and reading it from the transport keeps it
+// from being configured twice into disagreeing values.
+func (t *Transport) InstallID() string { return t.installID }
+
 // Do performs one logical call, including any permitted retries.
 func (t *Transport) Do(ctx context.Context, req Request) error {
 	body, err := encodeBody(&req)

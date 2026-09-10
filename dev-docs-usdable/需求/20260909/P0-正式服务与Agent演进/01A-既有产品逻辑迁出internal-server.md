@@ -189,6 +189,8 @@ type SenderRequest struct {
 
 **不做的事**：不改 `resolveProviderAndModel` 的内部逻辑（`nil` 路径必须逐行等于今天）、不动 `registerRoutes()`、不动 `apiProduct`（那是 C 阶段）、不把 `runtimeport` 变成通用插件系统。
 
+**端口 4 的作用域窄于绕过面（2026-09-11 审计新增，必读）**：端口 4 收口的是「**决定默认/会话 sender 是谁**」这一类。还有**第二类**绕过 —— 视觉描述器、lite sender（压缩/标题）、channel 模型绑定 —— 它们**不问 sender 是谁，各自从 `data/config.yml` 造一个 client**，因此端口 4 管不到它们，其中 channel 那条**出厂即启用**（`production.json` 的 `"channels": true`）。收口点实测只有两个（`cachedSenderForEntry` 覆盖 lite+channel 两个，视觉描述器独立一处），方案、代价与否决理由见 [P0-01 §B1.0a](01-运行时Profile与窄端口抽象.md#b10a-第二类绕过的收口方案2026-09-11-新增待决策)。**在该收口完成前，任何"production 只走网关"的结论都不成立。**
+
 **验收（正向 + 反向都要）**：
 
 - 正向：注入一个工厂后，同时设置 `OCTO_PROVIDER=anthropic`、`OCTO_ANTHROPIC_API_KEY=…`、`data/config.yml` 里一个指向第三方的默认条目、以及会话里 `ModelConfig` 指向同一第三方 —— 断言三处**全部无效**，实际使用的是工厂给的 sender。
@@ -291,4 +293,5 @@ scripts/server-diff-guard.mjs        断言 vs 上游 main：
 | 2026-09-11 | 补 §5.1「恢复上限」：区分 A 类（产品业务，恢复）与 B 类（datapath 强制承载，永久保留），给出 B 类实测清单（58 个测试文件 + 11 个非测试文件 18 处），并修正 §7.2 的验收口径，避免被误设成"对上游 diff 为空"。 |
 | 2026-09-11 | 产品门端口从「中性 `func(http.Handler) http.Handler`」改写为具体 `runtimeport.ProductGate`（注册期拿到 route pattern）：原形态与「豁免按 pattern 判断」互相矛盾，实现者只能自行发明一套。§2.1 豁免集由散文清单改为精确到 `文件:行号` 的表（4 条 `s.api(` + 4 条非 `requireAuth` 路由），并声明豁免集唯一来源是 productruntime 的导出常量。 |
 | 2026-09-11 | 外部审计落地：① §2 补登**既有包** `internal/productgate` —— 此前只登记了「要新增的端口 `runtimeport.ProductGate`」，没登记「已有实现是谁」，做端口 2 的人极易新写一套（§3.5/§3.8 都禁止）；并写明现状 `Gate.Middleware(next)` 拿不到 route pattern，正是 §3 端口 2 否决的形态；② §2 的 `chatmode_handlers.go` 行明确**唯一 owner 是阶段 D**，投影接入必须与迁出同 PR（此前 `05` 实施步骤 3 也自认领了它）；③ 新增 §3.1「未接通项：`Resolve` 的 ctx 是死参数」—— 记录现状、临时约束（工厂实现不得依赖取消语义）、owner（阶段 C 腾额度 + 阶段 D 接通）与验收。 |
+| 2026-09-11 | **代码审计（P0-02 A/B 完成后）**：§3.1 增补「端口 4 的作用域窄于绕过面」—— 审计发现**第二类**绕过（视觉描述器 #10、lite sender #11、channel 模型绑定 #12），它们不问 sender 是谁、各自从 `data/config.yml` 造 client，端口 4 管不到，其中 channel 那条出厂即启用（`production.json` 的 `"channels": true`）。收口点实测只有两个（`cachedSenderForEntry` 覆盖 lite+channel，视觉描述器独立一处），方案与选项见 [P0-01 §B1.0a](01-运行时Profile与窄端口抽象.md)。**收口完成前"production 只走网关"不成立**；收口动作并入阶段 C（`server.go` 543/543 零余量）。 |
 

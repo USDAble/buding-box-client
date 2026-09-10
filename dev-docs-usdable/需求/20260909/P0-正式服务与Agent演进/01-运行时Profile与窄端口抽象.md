@@ -278,7 +278,45 @@ B1 的验收句是「这些输入都不能让 production session 绕过 gateway�
 | 7 | `OCTO_DATA_ROOT` | `internal/datapath` | **保持可用**（测试/只读安装需要），但它只改数据根、不改 profile | 不封堵；但要用测试断言它**不能**切换 profile、也不能让 production 读到 developer profile |
 | 8 | `data/product-state.json` / 缓存 | 见 P0-08 | 不能被当作已登录，不能携带 provider 配置 | 归 P0-08；B1 只断言「profile 不从缓存读」 |
 | 9 | WebView 输入 | 见 P0-02 | 不能改 profile / 不能配 endpoint | 归 P0-02；B1 只断言 profile 只来自编译期嵌入 |
+| **10** | **视觉描述器**（`vision_helper`） | `internal/server/server.go:1454`（`buildAgent`，WS/REST/scheduled）与 `:2724`（`buildChannelAgent`，IM）：`a.SetImageDescriber(app.NewVisionDescriber(a, cfg))`，而 `internal/app/vision.go:71` 用 `entry.Provider`/`entry.BaseURL` 直接 `NewSender` | 不构造；描述器为 `nil`（图片不作描述，无外发） | **本次审计新增。** 不经 `senderForEntry`，是**独立的一处**。读 config.yml 的 `vision_helper`，把**图片内容**发给该 endpoint —— 与 `/ai/chat/completions` 之外的第二个内容出口 |
+| **11** | **lite sender**（压缩与标题生成） | `internal/server/server.go:1455`（`buildAgent`）与 `:2725`（`buildChannelAgent`）→ `liteSenderFromConfig`（`:1917`）→ `cachedSenderForEntry` | 不构造；`a.LiteSender` 为 `nil`，压缩回落会话自身的 sender（生产下即工厂 sender） | **本次审计新增。** `internal/agent/compaction.go:552` 真发模型请求，把**会话原文**发给该 endpoint。读 config.yml 的 `lite`/`lite_model` |
+| **12** | **channel 模型绑定** | `internal/server/server.go:2712`（`buildChannelAgent` 的 `Resolve(profile.Model)`）、`applyChannelModel`（`:2887`，每回合在 `:3720` 调用）：经 `channelModelOps`（`:2831`）→ `cachedSenderForEntry`（`:2869`/`:2899`） | 不构造；回落服务器默认 sender（生产下即工厂 sender） | **本次审计新增，且出厂即启用**（`profiles/production.json` 为 `"channels": true`）。IM 的 `/model` 或 web 模型选择器写入的绑定可在每回合覆盖工厂。其注释自述"解析失败就**回落默认**，和 `senderForSession` 给 REST 的降级一样"——正是端口 4 要消灭的那件事 |
 
-**三条结论**：① 决定 sender 的输入有 **9 个入口、但只有 3 处代码**（#1/#3 同一处、#5 一处），且**只有 #5 是 desktop 侧真的关不掉的** —— 这就是 [01A §3.1](01A-既有产品逻辑迁出internal-server.md) 那份端口申请的依据；② 除端口 4 之外，B1 **只改 desktop**，不要再顺手动 `internal/server`；③ #2、#8、#9 不要顺手做 —— #2 已核实不发出去，#8/#9 属 P0-08/P0-02，在 B1 里做会越界（§3.4 的「别的方案也会这么干」问一次：#2 的答案就是"不发这个二进制，所以不改"）。
+**结论（2026-09-11 修订）**：这张清单原本只覆盖「**决定 sender 的输入**」，因此漏掉了**第二类**——「**另外几处自己造 provider client 的地方**」：#10/#11/#12。两类都要堵，但它们不是一回事，且第二类的收口方式要选（见下节 B1.0a）：
+
+- **第一类（#1–#9）**：决定"默认/会话 sender 是谁"。**9 个入口、只有 3 处代码**（#1/#3 同一处、#5 一处），且**只有 #5 是 desktop 侧真的关不掉的** —— 这就是 [01A §3.1](01A-既有产品逻辑迁出internal-server.md) 那份端口申请的依据。已由端口 4 收口。
+- **第二类（#10–#12）**：根本不问 sender 是谁，各自从 `data/config.yml` 造一个 client。端口 4 管不到它们，因为它们不经过 `resolveProviderAndModel`，也不经过 `senderForSession` 的工厂分支。
+
+其余两条不变：② 除端口 4 之外，B1 **只改 desktop**，不要再顺手动 `internal/server`；③ #2、#8、#9 不要顺手做 —— #2 已核实不发出去，#8/#9 属 P0-08/P0-02，在 B1 里做会越界（§3.4 的「别的方案也会这么干」问一次：#2 的答案就是"不发这个二进制，所以不改"）。
+
+### B1.0a 第二类绕过的收口方案（2026-09-11 新增，**待决策**）
+
+**为什么第二类不能靠"出厂不配那些键"解决。** 表面上，只要 `config.yml` 里没有 `vision_helper`/`lite`，三条路径就都不生效。但 `开发规范` §3.10 已经把口径定死：**"the production **session** must not use `config.yml` as its model source"** —— 约束的是**生产会话**，不是"我们没发这个键"。而 portable 产品的 `data/config.yml` 是**用户可写**的（这正是端口 4 存在的理由：输入不经过 `server.Config`），所以"没发这个键"不是边界，只是默许。三条路径都会把**内容**（图片、会话原文、整轮对话）发给一个未受信的 endpoint，这是与 `03` 同级的出口问题，不能靠默认值挡。
+
+**好消息：收口点只有两个，不是三处。** 实测调用链——#11 与 #12 **共用**一个咽喉，`cachedSenderForEntry`（`server.go:1865`）是它们唯一的低层构造入口；#10 是独立的一处：
+
+| 要堵的 | 位置 | 覆盖 |
+| --- | --- | --- |
+| ① `cachedSenderForEntry` | `server.go:1865` | #11 lite（`:1922`）、#12 channel（`:2869`/`:2899`），以及 #5 会话绑定（`:1847`，端口 4 已覆盖，此处是冗余保险） |
+| ② 视觉描述器构造 | `server.go:1454` / `:2724` | #10 |
+
+**把①堵掉之后，现有回落语义恰好变成正确行为**，这是这套方案最值得记的一点：三条路径在构造失败时的既有回落**都指向"默认 sender"**，而生产下默认 sender **就是工厂 sender**（`senderForSession` 的工厂分支）。也就是说它们从"静默降级到未授权来源"变成"降级到唯一授权来源" —— `Bounded degradation`（§3.9）要求的"回落目标要可命名"，在这里的答案就是"网关"。
+
+**唯一残留**：`a.LiteModel` 这个**模型名**仍可能来自 config（`buildAgent:1461` 用 `EntryByModel(sess.ModelConfig)` 的 provider/baseURL 问厂商注册表），于是会拿一个网关不认识的模型名去请求 → 回合失败（不是外发，是坏请求）。生产下 lite 模型应当取自目录，属 P0-05。
+
+**三个选项**：
+
+| 选项 | 做法 | 代价 | 判断 |
+| --- | --- | --- | --- |
+| **A 扩宽端口 4**（让工厂也决定这三处） | 端口加一个"按 ref 取 sender"的方法，把 ①② 两处改为先问宿主 | 更中性的语义更宽；`internal/server` 改动最多 | 不推荐：语义上"lite 模型""视觉助手"在生产下**没有网关对应物**，扩宽端口会把一个产品决策伪装成接口问题 |
+| **B 出厂不配 + 不暴露入口** | profile/打包层保证不含这三类键；生产 UI 隐藏 endpoint 管理 | 几乎零代码 | **单独不成立**：用户手改 `config.yml` 即可绕过（§3.10 的措辞正是为了避免这种"听起来更严"的假边界）。可作为 A/C 之外的**附加**措施 |
+| **C 结构性收口（推荐）** | 工厂置位时，①② 两处**拒绝**构造 config sender；失败即走既有回落（生产下落到工厂 sender） | `internal/server` 上加两处判断；**server.go 当前 543/543，零余量** | **推荐**。它把"3 处散堵"变成"2 个点"，且复用既有回落语义，不需要新增降级路径 |
+
+**推荐的落地方式（两条都要）**：
+
+1. **现在就登记，不现在改代码。** `internal/server/server.go` 是 `543/543`、零余量；刚用三条理由申请过 484→543（[01A §3.1](01A-既有产品逻辑迁出internal-server.md)），紧接着再抬会削弱这个棘轮。收口动作**并入 01A 阶段 C**（`apiProduct` 折叠会砍掉数百行，届时这两处判断不占新额度），与 §3.1 已登记的 `Resolve` 的 ctx 债同一个窗口。
+2. **在收口完成前，它必须是发布门而非常识。** 在 01A 阶段 C 完成前，任何声称"production 只走网关"的结论都**不成立**；P0-05 开工清单要把 #10/#11/#12 列为前置检查，`package-portable.mjs` 的产物自检增加一条反向断言（生产包内出现 `vision_helper`/`lite` 配置即告警）——注意这条只是**附加**措施，不能替代 C。
+
+**需要产品拍板的一个问题（§3.7）**：收口后 `vision_helper` 与 lite 在 production 下**就没有对应能力了**（描述器 `nil`、压缩回落主 sender）。是要"生产下关闭视觉描述"（安全、少功能），还是要"用目录里 `capabilities.vision` 的模型通过网关做视觉"（多一个目录字段的消费方，属 P0-05）？两条路的实现量与验收都不同，必须先答。无论选哪条，**都不得**保留 `config.yml` 作为来源。
 
 **每一条堵完都要有一条"反向测试"**：developer 下该入口**必须仍然有效**（否则就是拿开发能力换安全，`开发规范` §3.9 的降级路径要有去处）。只写"production 下被忽略"的测试是不够的——那样把 developer 功能一起关掉也能通过。

@@ -70,7 +70,11 @@
   import * as api from '../lib/api'
   import { observeArtifact, resetArtifacts } from '../lib/artifacts'
   import { renderMarkdown, escapeHtml, setupCopyButtons } from '../lib/markdown'
-  import { t, tr, pickLocalized } from '../lib/i18n'
+  import { t, tr, pickLocalized, locale } from '../lib/i18n'
+  // OCTO-FORK: the assistant label is the product name, not a literal — the
+  // hardcoded "Octo" survived the copy sweep because the guard scans the i18n
+  // dictionary, not .svelte literals. See 品牌升级方案.md §2.5.
+  import { brandName, brandShortName } from '../lib/brand'
   import { insertPendingSend, takeConfirmedSend } from '../lib/pendingSendOrder'
   import { inlineSlashCommand } from '../lib/inlineSlash'
   import { exportModeStore, selectedMessagesStore } from '../lib/exportStore'
@@ -1927,7 +1931,7 @@ import QuestionModal from '../components/overlays/QuestionModal.svelte'
         lines.push('## You', '')
         lines.push(ev.content ?? '', '')
       } else if (type === 'assistant_message') {
-        lines.push('## Octo', '')
+        lines.push(`## ${brandName(getExportLocale())}`, '')
         if (ev.thinking) {
           lines.push('<details><summary>Thoughts</summary>', '', ev.thinking, '', '</details>', '')
         }
@@ -2075,7 +2079,7 @@ import QuestionModal from '../components/overlays/QuestionModal.svelte'
           const thinking = ev.thinking
             ? `<div class="msg-thinking-wrap"><div class="msg-thinking-label">Thoughts</div><div class="msg-thinking">${renderMarkdown(ev.thinking, true)}</div></div>`
             : ''
-          return `<article class="msg assistant"><div class="msg-head"><span class="msg-label">Octo</span></div><div class="msg-body">${renderMarkdown(ev.content ?? '', true)}</div>${thinking}</article>`
+          return `<article class="msg assistant"><div class="msg-head"><span class="msg-label">${brandShortName(locale)}</span></div><div class="msg-body">${renderMarkdown(ev.content ?? '', true)}</div>${thinking}</article>`
         }
         return ''
       })
@@ -2096,7 +2100,7 @@ import QuestionModal from '../components/overlays/QuestionModal.svelte'
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>${escapeHtml(title)} - Octo Export</title>
+  <title>${escapeHtml(title)} - ${brandName(locale)} Export</title>
   <style>${exportConversationStyles()}</style>
 </head>
 <body>
@@ -2731,7 +2735,7 @@ import QuestionModal from '../components/overlays/QuestionModal.svelte'
                   <span class="meta-name">{boundAgentName}</span>
                 {:else}
                   <span class="meta-avatar bot" aria-hidden="true"><OctoLogo size={22} /></span>
-                  <span class="meta-name">Octo</span>
+                    <span class="meta-name">{brandShortName($locale)}</span>
                 {/if}
                 {#if ts}<span class="meta-time">{fmtTime(ts)}</span>{/if}
               </div>

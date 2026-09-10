@@ -3,7 +3,7 @@
 | 项 | 内容 |
 | --- | --- |
 | 当前仓库主责 | 客户端 provider/Agent 组 |
-| 中台协作方式 | 网关/计费组实现服务端状态机；当前仓库只按[中台交付包](../backend抽象层与中台对接/中台交付包.md)接入 SSE 和状态查询 |
+| 中台协作方式 | 网关/计费组实现服务端状态机；当前仓库只按[中台交付包](../产品客户端与中台对接/中台交付包.md)接入 SSE 和状态查询 |
 | 可并行 | 与 P0-02、P0-04、P0-06、P0-07 并行 |
 | 依赖 | P0-01 的 `ModelGatewaySender` 契约；目录模型 ID 约定 |
 | 需求基线 | [P0 正式上线需求基线](../P0-正式上线需求基线.md) R4、R5、R10；客户端不定义或兼容扣费接口 |
@@ -14,7 +14,7 @@
 
 ## 发给中台的交付要求（本仓库不实现）
 
-1. 实现 `POST /v1/ai/chat/completions` SSE、`GET /v1/ai/requests/{clientRequestId}`、`GET /v1/credits/ledger`，字段以[中台交付包](../backend抽象层与中台对接/中台交付包.md) §5 为准。
+1. 实现 `POST /v1/ai/chat/completions` SSE、`GET /v1/ai/requests/{clientRequestId}`、`GET /v1/credits/ledger`，字段以[中台交付包](../产品客户端与中台对接/中台交付包.md) §5 为准。
 2. 客户端只上传 `modelId`、脱敏消息副本、`clientRequestId`、会话 ID、最大输出和已批准的 tool policy；不得上传 `amount`、供应商 base URL/key 或价格。
 3. 账本状态仅允许 `received → reserved → streaming → settled|reversed|reconciliation_pending`；同 key 的第二次请求不调用供应商。
 4. 按 `modelId + pricingVersion + plan + token 分类` 计算整数 `microCredits`；供应商缺 usage 时标记估算或待对账，不能让客户端补扣。

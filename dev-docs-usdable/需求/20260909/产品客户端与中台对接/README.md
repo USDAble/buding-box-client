@@ -1,0 +1,35 @@
+# 产品客户端与中台对接
+
+> 本目录只定义当前客户端调用外部中台所需的合同、DTO 和测试方案。中台控制面、模型网关、账本、数据库、密钥管理和部署不在当前仓库实现。
+>
+> **命名已修正**：P0 不创建 `internal/backend` 或 `internal/productapp`。新建 `internal/productclient` 表示“客户端的产品服务 API client”；模型流在 `internal/productclient/gateway`，本地策略在 `internal/productpolicy`。详见[客户端架构演进评审](../P0-正式服务与Agent演进/客户端架构演进评审.md)。
+>
+> **上游约束**：`internal/server` 是上游核心运行时，P0 不迁移或重构它；只在 [P0-00](../P0-正式服务与Agent演进/00-Fork基线与生产Profile前置.md) 已批准的产品挂点做小改动。
+
+## 文件清单
+
+| 文件 | 内容 | 阅读对象 |
+| --- | --- | --- |
+| [开发计划.md](开发计划.md) | `productclient`、gateway、policy、credential store 的客户端契约与 server 最小挂点 | 客户端研发 |
+| [中台交付包.md](中台交付包.md) | 可直接转发的外部接口、网关计费、能力矩阵、更新、文档版本和验收合同 | 中台/网关/运维/测试 |
+| [P0 正式上线需求基线](../P0-正式上线需求基线.md) | 产品范围与不可突破的安全、计费、隐私边界 | 全部角色 |
+| [P0 开发顺序与协作计划](../P0-正式服务与Agent演进/P0-开发顺序与协作计划.md) | 上游基线、并行分工、合并门和发布门 | 客户端/中台/测试 |
+
+## 客户端与中台的边界
+
+| 当前仓库做 | 中台做 |
+| --- | --- |
+| `productclient` remote/fake、gateway sender、签名验证、缓存、凭证安全保存、PEP、UI 状态与 Windows 验收 | 短信/账号、控制面、供应商路由、token 预留/结算、账本、KMS、服务端审计、sandbox 与运维 |
+
+正式模型请求由中台网关在同一 `clientRequestId` 内鉴权、预留、调用、结算与记账。客户端仅消费最终 usage/余额投影；**没有**客户端 `amount` 扣费接口，也不保留本地固定积分兼容路径。供应商 endpoint/key 永不下发给标准客户端。
+
+## 当前执行顺序
+
+```text
+P0-00 upstream/profile 基线
+  -> P0-01 productclient / gateway / policy contract
+  -> fake 并行开发 P0-02/03/04/06/08/09/10
+  -> sandbox 联调
+  -> P0-05 production gateway 装配 + 删除固定积分
+  -> P0-07 Windows 发布门
+```

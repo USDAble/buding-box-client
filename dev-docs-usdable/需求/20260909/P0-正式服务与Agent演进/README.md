@@ -4,12 +4,12 @@
 | --- | --- |
 | 文档状态 | 当前客户端仓库的 P0 总览；中台仅按交付包提供外部合同、sandbox 和验收证据 |
 | 目标 | 在保留上游 `internal/server` 的前提下，把本地演示态升级为“本地执行、云端受控、可计费、可恢复”的正式产品基座 |
-| 前置阅读 | [P0 正式上线需求基线](../P0-正式上线需求基线.md)、[P0-00](00-Fork基线与生产Profile前置.md)、[中台交付包](../产品客户端与中台对接/中台交付包.md) |
+| 前置阅读 | [P0 正式上线需求基线](../P0-正式上线需求基线.md)、[P0-00](00-Server最小改动与生产Profile前置.md)、[中台交付包](../产品客户端与中台对接/中台交付包.md) |
 | 不做 | P0 不做通用工作流引擎、多 Agent 编排、技能/MCP 市场、团队/组织、跨端同步或中台服务实现 |
 
 ## 0. 先守住 Fork 边界
 
-`internal/server` 与 `cmd/octo-desktop` 均为上游长期演进的核心区域。P0 的首要工程约束不是“把层分得越多越好”，而是**新增产品逻辑放到新包，server 只留可审核的小挂点**。P0-00 未完成前，不开始任何真实中台接入。
+`internal/server` 与 `cmd/octo-desktop` 均为长期演进的核心区域。P4/P6/P8/P11 已在 2026-09-08 至 09 向 `internal/server` 加入登录/激活、积分占位、敏感词和本地假模型路径；这是受控的历史负担，不应继续扩大。P0 的首要工程约束是**新增产品逻辑放到新包，`internal/server` 默认零改**。只有 P0-00 逐项批准且无外部替代方案的例外，才保留可审核的小挂点。P0-00 未完成前，不开始任何真实中台接入。
 
 当前仓库只实现客户端、adapter、测试和交付文档。账号服务、控制面、模型网关、账本、KMS、数据库和运维部署由中台团队在独立仓库实现；可直接转发的唯一输入是[中台交付包](../产品客户端与中台对接/中台交付包.md)。
 
@@ -40,7 +40,7 @@ flowchart TB
 
 ## 2. Production Profile 的硬边界
 
-标准包必须只使用中台目录和网关。developer/demo 的 local provider、配置页面和隐藏菜单功能保留，但不能靠环境变量、手工 API、旧缓存或 `config.yml` 变成正式模型来源。
+标准包必须只使用中台目录和网关。developer/demo 的 local provider、配置页面和隐藏菜单功能保留，但不能靠环境变量、手工 API、旧缓存或 `config.yml` 变成正式模型来源。更重要的是，profile 只能由签名发布包内的构建标记或签名清单决定；任何运行时输入都不能把标准包切换为 developer/demo。
 
 P0-00 将当前实际旁路全部列为验收项：`OCTO_DESKTOP_DEV_URL`、`OCTO_PROVIDER`、`*_MODEL`、供应商环境密钥、endpoint 配置、`ensureLocalEndpoint()`、`OCTO_DATA_ROOT` 以及 desktop 默认启动的 channel/工具能力。生产环境的默认启动面是显式 allowlist，能力开放需要受信 profile、能力矩阵和本地 PEP 三者共同允许。
 
@@ -48,7 +48,7 @@ P0-00 将当前实际旁路全部列为验收项：`OCTO_DESKTOP_DEV_URL`、`OCT
 
 | ID | 当前仓库子需求 | 当前仓库交付 | 外部输入 | 主要依赖 |
 | --- | --- | --- | --- | --- |
-| P0-00 | Fork 基线与 production profile 前置 | upstream 基线、server 改动预算、旁路黑盒测试、启动面 allowlist | 上游地址确认、发布 profile 决策 | 无 |
+| P0-00 | Server 最小改动与 production profile 前置 | `buding` 已接收批准的 `main`、server 例外改动预算、旁路黑盒测试、启动面 allowlist | 发布 profile 决策 | 无 |
 | P0-01 | 产品客户端契约与最小 server 挂点 | `productclient`/gateway/policy/credential store contract、fake、resolver 设计 | DTO 字段草案评审 | P0-00 |
 | P0-02 | 客户端认证与控制面中台接入 | 登录/刷新、bootstrap 校验和缓存 | OpenAPI、签名公钥、sandbox、错误码 | P0-01 |
 | P0-03 | 客户端模型网关 sender 与账本状态接入 | SSE、取消恢复、usage 投影 | 网关协议、request status、sandbox | P0-01 |
@@ -62,7 +62,7 @@ P0-00 将当前实际旁路全部列为验收项：`OCTO_DESKTOP_DEV_URL`、`OCT
 
 ```mermaid
 flowchart LR
-    Z[P0-00<br/>Fork + production profile] --> A[P0-01<br/>productclient contract]
+    Z[P0-00<br/>minimal server + production profile] --> A[P0-01<br/>productclient contract]
     A --> B[P0-02 Auth / ControlPlane]
     A --> C[P0-03 Gateway Sender]
     A --> D[P0-04 Catalog / PEP]
@@ -88,7 +88,7 @@ flowchart LR
 
 | 波次 | 可并行的编号文件 | 协作方式 |
 | --- | --- | --- |
-| W0 | `00-Fork基线与生产Profile前置.md` | 唯一先行项，由 fork/profile 负责人完成；未通过不开始功能代码。 |
+| W0 | `00-Server最小改动与生产Profile前置.md` | 唯一先行项，由发布/profile 负责人完成；未通过不开始功能代码。 |
 | W1 | `01-运行时Profile与窄端口抽象.md` | 一位客户端核心负责人完成共享 DTO、fake 与 resolver 合同；其余人此时只准备 fixture/文档。 |
 | W2 | `02`、`03`、`04`、`06`、`08`、`09`、`10` | 每个文件各一位 owner、各一条开发分支；只改本文件指定的新包/UI/测试，不修改 `internal/server` 的通用路径。 |
 | W3 | `05-正式客户端模型调用链.md` | 唯一集成人员接入 W2 成果，按 P0-00 挂点预算修改 server，并删除固定积分 mock。 |
@@ -102,7 +102,7 @@ flowchart LR
 
 | 文件 | 内容 |
 | --- | --- |
-| [00-Fork基线与生产Profile前置.md](00-Fork基线与生产Profile前置.md) | 上游合并、启动面、最小 server 改动预算 |
+| [00-Server最小改动与生产Profile前置.md](00-Server最小改动与生产Profile前置.md) | `main` → `buding` 确认、启动面、最小 server 改动预算 |
 | [01-运行时Profile与窄端口抽象.md](01-运行时Profile与窄端口抽象.md) | `productclient` / gateway / policy / credential store 合同 |
 | [02-认证与控制面Bootstrap.md](02-认证与控制面Bootstrap.md) | P0-02 开发方案 |
 | [03-模型网关与Token账本.md](03-模型网关与Token账本.md) | P0-03 开发方案 |

@@ -4,7 +4,7 @@
 >
 > **命名已修正**：P0 不创建 `internal/backend` 或 `internal/productapp`。新建 `internal/productclient` 表示“客户端的产品服务 API client”；模型流在 `internal/productclient/gateway`，本地策略在 `internal/productpolicy`。详见[客户端架构演进评审](../P0-正式服务与Agent演进/客户端架构演进评审.md)。
 >
-> **上游约束**：`internal/server` 是上游核心运行时，P0 不迁移或重构它；只在 [P0-00](../P0-正式服务与Agent演进/00-Fork基线与生产Profile前置.md) 已批准的产品挂点做小改动。
+> **上游约束**：`internal/server` 是上游核心运行时，P0 默认零改、不迁移也不重构；只在 [P0-00](../P0-正式服务与Agent演进/00-Server最小改动与生产Profile前置.md) 已逐项批准且无外部替代方案时做小改动。
 
 ## 文件清单
 
@@ -13,7 +13,7 @@
 | [开发计划.md](开发计划.md) | `productclient`、gateway、policy、credential store 的客户端契约与 server 最小挂点 | 客户端研发 |
 | [中台交付包.md](中台交付包.md) | 可直接转发的外部接口、网关计费、能力矩阵、更新、文档版本和验收合同 | 中台/网关/运维/测试 |
 | [P0 正式上线需求基线](../P0-正式上线需求基线.md) | 产品范围与不可突破的安全、计费、隐私边界 | 全部角色 |
-| [P0 开发顺序与协作计划](../P0-正式服务与Agent演进/P0-开发顺序与协作计划.md) | 上游基线、并行分工、合并门和发布门 | 客户端/中台/测试 |
+| [P0 开发顺序与协作计划](../P0-正式服务与Agent演进/P0-开发顺序与协作计划.md) | `main` → `buding` 基线确认、并行分工、合并门和发布门 | 客户端/中台/测试 |
 
 ## 客户端与中台的边界
 

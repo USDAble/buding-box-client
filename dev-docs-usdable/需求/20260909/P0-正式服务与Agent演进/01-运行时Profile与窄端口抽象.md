@@ -4,7 +4,7 @@
 | --- | --- |
 | 主责建议 | 客户端核心组 |
 | 优先级 | P0-00 完成后的首个功能 PR |
-| 依赖 | [P0-00](00-Fork基线与生产Profile前置.md)；不依赖中台真实服务 |
+| 依赖 | [P0-00](00-Server最小改动与生产Profile前置.md)；不依赖中台真实服务 |
 | 当前仓库范围 | 新建产品专属包、fake/contract、最小 server 注入设计；不迁移或重构上游运行时 |
 | 需求基线 | [P0 正式上线需求基线](../P0-正式上线需求基线.md) R1、R4、R5、R6、R8、R12 |
 
@@ -61,6 +61,6 @@ P0-01 先以 fake 验证 extension contract，不改动所有 handler。实际�
 | PR | 内容 | 验收 |
 | --- | --- | --- |
 | B0 | `productclient` DTO/错误、fake、gateway sender contract、policy fixture 与 resolver interface；无真实 HTTP | 新包依赖方向正确；无 `Consume`；fake 覆盖成功/401/过期/取消/余额不足；既有 server 行为不变 |
-| B1 | production profile 和 resolver 最小接入；仅触碰 P0-00 已批准的 server/desktop 挂点 | 开发 URL、环境 provider/model、local endpoint、config endpoint 都不能让 production session 绕过 gateway；developer/demo 回归仍通过 |
+| B1 | production profile 和 resolver 最小接入；优先只改 desktop，确有必要才触碰 P0-00 已批准的 server 挂点 | 开发 URL、环境 provider/model、local endpoint、config endpoint 都不能让 production session 绕过 gateway；profile 不能由环境变量、配置、缓存或 WebView 输入切换；developer/demo 回归仍通过 |
 
 固定积分、假 token 和本地账号状态不是 B0/B1 的“兼容目标”。它们分别按 P0-02、P0-05、P0-08 的正式链路替换或删除；P0-01 不为将被删除的 mock 增加抽象。

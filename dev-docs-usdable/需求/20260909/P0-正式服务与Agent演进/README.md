@@ -44,7 +44,7 @@ flowchart TB
 
 Profile 只有 `production` 和 `developer`。两种构建都保留上游 `config.yml`、MCP、channel、工具和后台能力；P0-00A 只控制 standard production 首发 UI 是否显示入口，隐藏不等于删除或授权。P0-05 完成后，正式会话的模型请求不能靠环境变量、手工 API、旧缓存或 `config.yml` 绕过中台网关。Profile 只能由嵌入二进制的全局配置和构建标签决定；任何运行时输入都不能把标准包切换为 developer。
 
-P0-00/00A 将当前入口分为两类：`OCTO_DESKTOP_DEV_URL`、环境模型来源和 `OCTO_DATA_ROOT` 是 production 应拒绝的开发输入；`config.yml`、MCP、channel、工具与后台能力则保留实现和既有启动，菜单显示、资格与 PEP 由后续能力矩阵分别决定。`config.yml` 保留的是**功能**：它可以在 developer/test 配置第三方模型（含 endpoint/URL/key）；P0-05 只限制 production 正式会话不能选择该模型来源。`ensureLocalEndpoint()` 与 4 个 `buding-*` 假模型 endpoint 已删除（2026-09-11）—— 模型列表改由中台签名目录下发并本地缓存（P0-04）；`internal/provider/local` 作为 developer/test 通道保留，但需显式配置才可用，不再自动种入。
+P0-00/00A 将当前入口分为两类：`OCTO_DESKTOP_DEV_URL`、环境模型来源和 `OCTO_DATA_ROOT` 是 production 应拒绝的开发输入；`config.yml`、MCP、channel、工具与后台能力则保留实现和既有启动，菜单显示、资格与 PEP 由后续能力矩阵分别决定。`config.yml` 保留的是**功能**：它可以在 developer/test 配置第三方模型（含 endpoint/URL/key）；P0-05 只限制 production 正式会话不能选择该模型来源。`ensureLocalEndpoint()` 与 4 个 `buding-*` 假模型 endpoint 已删除（2026-09-11）—— 模型列表改由中台签名目录下发并本地缓存（P0-04）；`internal/provider/local` 作为 developer/test 通道保留，需显式配置才可用，不再自动种入，并且**整体被排除在 production 二进制之外**（`!product_production`，production 只得到恒失败的桩；见 [P11 §7.1](../../2260906/技术方案/P11-本地确定性模型通道.md)）。
 
 ## 3. P0 工作包与依赖
 
@@ -63,6 +63,7 @@ P0-00/00A 将当前入口分为两类：`OCTO_DESKTOP_DEV_URL`、环境模型来
 | P0-08 | 凭证、设备与本地数据安全 | credential store、数据迁移、桌面数据根保护 | token/撤销/删除语义 | P0-00、P0-01 |
 | P0-09 | 发布完整性、更新恢复与诊断 | 签名验证、回退、恢复、SBOM/诊断 | 发布清单、渠道、支持流程 | P0-00、P0-01 |
 | P0-10 | 内容安全、滥用防护与运营处置 | 安全事件 UI、工具阻断、机器码映射 | 安全策略、限流/封禁/申诉合同 | P0-03、P0-04、P0-06 |
+| P0-11 | 前端投影与文案（M7） | `web/` 全部：模型投影渲染、入口可见性、状态/错误码文案映射、legal 展示 | machine code + projection 字段（P0-04/06/10 提供数据） | P0-01（B0 冻结 DTO 即可用 contract sample 假数据开工） |
 
 ```mermaid
 flowchart LR
@@ -73,6 +74,7 @@ flowchart LR
     A --> B[P0-02 Auth / ControlPlane]
     A --> C[P0-03 Gateway Sender]
     A --> D[P0-04 Catalog / PEP]
+    A --> N[P0-11 Frontend projection / copy]
     ZA --> D
     Z --> H[P0-08 Credentials]
     Z --> I[P0-09 Release]
@@ -99,7 +101,7 @@ flowchart LR
 | --- | --- | --- |
 | W0 | `00-Server最小改动与生产Profile前置.md`、`00A-生产入口可见性与功能保留.md` | 唯一先行项，由发布/profile 负责人完成；00A 是 00 的纠偏项，两者共享同一位 owner，未通过不开始功能代码。 |
 | W1 | `01-运行时Profile与窄端口抽象.md`、`01A-既有产品逻辑迁出internal-server.md` 的 A/B 阶段 | 一位客户端核心负责人先完成共享 DTO、合同测试实现 与中性端口合同，再迁出独立产品 HTTP；其余人此时只准备 contract sample/文档。 |
-| W2 | `02`、`03`、`04`、`06`、`08`、`09`、`10` | 每个文件各一位 owner、各一条开发分支；只改本文件指定的新包/UI/测试，不修改 `internal/server` 的通用路径。 |
+| W2 | `02`、`03`、`04`、`06`、`08`、`09`、`10`、`11` | 每个文件各一位 owner、各一条开发分支；只改本文件指定的新包/UI/测试，不修改 `internal/server` 的通用路径。`11` 是**前端独立工作流**：`web/` 只由它改，用 P0-01 B0 冻结的 DTO 与 contract sample 假数据先做投影和文案，不等联调（见 `P0-开发顺序与协作计划.md` §2 元规则 3）。 |
 | W3 | `05-正式客户端模型调用链.md` | 唯一集成人员接入 W2 成果，在 productruntime 装配并删除固定积分 旧本地实现；若需要 server 端口，按 P0-00 单独申请。 |
 | W4 | `07-安全契约测试与E2E验收.md` | QA/发布负责人汇总 W0-W3 证据，执行 sandbox 与 Windows 真机发布门。 |
 
@@ -124,6 +126,7 @@ flowchart LR
 | [08-凭证设备与本地数据安全.md](08-凭证设备与本地数据安全.md) | P0-08 开发方案 |
 | [09-便携发布更新与运行诊断.md](09-便携发布更新与运行诊断.md) | P0-09 开发方案 |
 | [10-内容安全与服务运营处置.md](10-内容安全与服务运营处置.md) | P0-10 开发方案 |
+| [11-前端投影与文案.md](11-前端投影与文案.md) | P0-11 开发方案（M7：`web/` 投影渲染、可见性、错误码文案） |
 | [客户端架构演进评审.md](客户端架构演进评审.md) | 保留上游 server 的包边界与 P1 演进条件 |
 | [P0-开发顺序与协作计划.md](P0-开发顺序与协作计划.md) | 合并波次、多人文件所有权与发布门 |
 | [P1 上线前能力治理与运营闭环](../P1-上线前能力治理与运营闭环.md) | P0 完成后的账户、恢复、扩展、长任务、发布支持和运营工作包 |

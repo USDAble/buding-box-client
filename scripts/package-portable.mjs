@@ -100,6 +100,42 @@ export async function listFiles(dir, rel = '', acc = []) {
 
 // ── self-check (P12 §3.3) ─────────────────────────────────────────────────
 
+// Marker strings that must not exist in a `product_production` binary.
+//
+// Every marker is canned content from internal/provider/local (the P11 fake
+// channel) or the path of its P10 PII log. The package is tagged
+// !product_production, so a production build excludes all of them.
+//
+// Why check the artifact when release-profile-guard already checks the source:
+// the two catch different failures. That guard proves the tag is *written* in
+// the build command; this proves it *reached the compiler and changed the
+// output*. A BUILD_TAGS constant edited to drop product_production, a `go build`
+// whose -tags is shadowed by an env GOFLAGS, or a reply.go that loses its build
+// tag would all pass the source check and still ship the demo channel.
+//
+// Keep sorted by prominence: the first is the user-visible reply text, the
+// second is the PII log path.
+export const FORBIDDEN_MARKERS = [
+  '本地演示模型的固定回复',
+  'local-provider.jsonl',
+]
+
+// checkProductionBinary returns the problems found in a built binary. Pure, so
+// a test can drive it with synthetic bytes.
+export function checkProductionBinary(buf) {
+  const problems = []
+  for (const marker of FORBIDDEN_MARKERS) {
+    if (buf.includes(Buffer.from(marker, 'utf8'))) {
+      problems.push(
+        `binary contains ${JSON.stringify(marker)} — the P11 local fake channel was not ` +
+          `compiled out; check that BUILD_TAGS still lists product_production and that ` +
+          `internal/provider/local/reply.go kept its !product_production tag`,
+      )
+    }
+  }
+  return problems
+}
+
 export function checkDevResiduals(files) {
   const failures = []
   for (const f of files) {
@@ -343,7 +379,7 @@ async function copyDir(src, dest) {
   }
 }
 
-function buildExe({ root, brand, target, dest }) {
+async function buildExe({ root, brand, target, dest }) {
   const modDir = path.join(root, 'cmd', 'octo-desktop')
   const exeName = brand.identifiers.current.exeName
   const out = path.join(dest, exeName)
@@ -375,6 +411,14 @@ function buildExe({ root, brand, target, dest }) {
     stdio: 'inherit',
     env,
   })
+
+  // Artifact-level counterpart of release-profile-guard: that script proves the
+  // tag is *written down*, this proves it *took effect*. See
+  // checkProductionBinary.
+  const problems = checkProductionBinary(await fs.readFile(out))
+  if (problems.length > 0) {
+    throw new Error(`refusing to package ${exeName}:\n- ${problems.join('\n- ')}`)
+  }
   return out
 }
 
@@ -428,7 +472,7 @@ async function main() {
   console.log(`==> 构建 ${exeName} (${target.goos}/${target.goarch}, ${target.version})`)
   await fs.rm(dest, { recursive: true, force: true })
   await fs.mkdir(dest, { recursive: true })
-  buildExe({ root, brand, target, dest })
+  await buildExe({ root, brand, target, dest })
   await assemble({ root, brand, target, dest })
 
   console.log(`==> 产物自检 ${dirName}/`)

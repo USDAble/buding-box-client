@@ -16,10 +16,8 @@ import (
 
 	"github.com/open-octo/octo-agent/internal/agent"
 	"github.com/open-octo/octo-agent/internal/config"
-	"github.com/open-octo/octo-agent/internal/datapath"
 	"github.com/open-octo/octo-agent/internal/provider"
 	"github.com/open-octo/octo-agent/internal/provider/anthropic"
-	"github.com/open-octo/octo-agent/internal/provider/local"
 	"github.com/open-octo/octo-agent/internal/provider/openai"
 	"github.com/open-octo/octo-agent/internal/provider/ratelimit"
 )
@@ -182,15 +180,10 @@ func limiterKey(providerName, baseURL string) string {
 // Custom catch-all); named vendors ignore it and use their own protocol.
 func buildClient(name, apiKey, baseURL, protocol string, headers map[string]string, limiter *ratelimit.Limiter) (provider.Provider, error) {
 	// OCTO-FORK: P11 假模型通道 — the local fake channel bypasses the vendor
-	// registry entirely: no base URL, no API key, no wire protocol. The log
-	// path is resolved here (bootstrap layer) so internal/provider/local stays
-	// free of datapath. See P11 技术方案 §3.
+	// registry (no base URL, key or wire protocol); construction lives in
+	// localsender.go / localsender_production.go. See P11 技术方案 §3.
 	if name == ProviderLocal {
-		logPath, err := datapath.Join("logs", "local-provider.jsonl")
-		if err != nil {
-			logPath = ""
-		}
-		return local.New(logPath), nil
+		return newLocalProvider(), nil
 	}
 	v := vendorByID(name)
 	if v == nil {

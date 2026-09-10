@@ -1,3 +1,5 @@
+//go:build !product_production
+
 package local
 
 import (

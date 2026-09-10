@@ -1,3 +1,5 @@
+//go:build !product_production
+
 // Package local implements the P11 demo/offline fake model channel.
 //
 // It is not a real backend: Send/SendStream return fixed, deterministic
@@ -10,6 +12,14 @@
 // OCTO-FORK: P11 假模型通道 — 纯新增 provider 子包，走 .octorules「新 provider」
 // 扩展路径，零上游冲突。见
 // dev-docs-usdable/需求/2260906/技术方案/P11-假模型通道.md.
+//
+// This whole package is compiled out of production builds (`product_production`).
+// Deleting ensureLocalEndpoint() removed the automatic *seeding* of config.yml
+// with buding-* endpoints, but it did not remove the reply engine itself: it
+// was still linked into the shipped binary, so "production cannot use it"
+// rested on a runtime selection check. The build tag makes it structural. The
+// production build gets local_production.go instead — same exported names, no
+// demo text, no PII log writer, hard failure on use.
 package local
 
 import (

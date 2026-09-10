@@ -217,6 +217,20 @@ jobs:
         if: matrix.os != 'windows-latest'
         run: go test -timeout 20m ${{ matrix.os == 'ubuntu-latest' && '-race' || '' }} ./...
 
+      # The shipped desktop build carries `-tags product_production`, which
+      # swaps in internal/productprofile/profile_production.go and
+      # internal/provider/local/local_production.go. Tagged code that is never
+      # compiled or tested in CI rots silently — the production stub would drift
+      # from the developer implementation with no failing check. build + vet are
+      # the important half (they catch a broken stub); the test pass also runs
+      # the production-only assertions in internal/app.
+      - name: go build/vet/test (product_production tags)
+        if: matrix.os == 'ubuntu-latest'
+        run: |
+          go build -tags product_production ./...
+          go vet -tags product_production ./...
+          go test -timeout 20m -tags product_production ./...
+
       # Windows runs internal/browser on its own. `go test ./...` runs up to
       # GOMAXPROCS package test binaries at once, and on the 4-core
       # windows-latest runner the browser tests' headless Chrome shared the

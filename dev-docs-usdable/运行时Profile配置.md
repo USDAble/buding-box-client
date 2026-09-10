@@ -28,6 +28,15 @@ internal/productprofile/profiles/developer.json
 
 构建标签选择其中之一：标准发布脚本必须使用 `product_production`；未指定该标签的本地构建使用 `developer`。安装包签名覆盖最终二进制，因此用户不能修改 Profile 配置而不破坏签名。
 
+**`product_production` 是本仓库唯一的反向标签，作用范围不止 Profile 本身。** 目前有两处代码由它决定是否编译：
+
+| 包 | 被排除的内容 | 排除后 production 拿到什么 |
+|---|---|---|
+| `internal/productprofile` | `profile_developer.go`（`developer.json` 嵌入） | `profile_production.go`（`production.json` 嵌入） |
+| `internal/provider/local` | 确定性回复引擎、含敏感词的演示文案、`data/logs/local-provider.jsonl` 写入器 | 恒失败的桩（同导出面），见 [P11 §7.1](需求/2260906/技术方案/P11-本地确定性模型通道.md) |
+
+因此**被该标签排除的代码必须单独编译与测试**，否则它会静默腐烂到出包才暴露：`make test-production`（= `go build/vet/test -tags product_production`），CI 在 `go.yml` 的 Ubuntu job 跑同一组命令。`package-portable.mjs` 还会对**已构建的 exe** 断言 P11 假模型 marker 不存在（`checkProductionBinary()`）—— `release-profile-guard` 只证明标签写进了构建命令，它证明标签到达了编译器。
+
 `data/config.yml` 仍是上游的用户偏好与模型配置，供 developer、自动化测试和既有功能兼容使用，**绝不**保存或覆盖 Profile。production 是否显示相关入口由能力矩阵决定；中台下发的目录、策略、词库和协议版本也不是 Profile 配置：它们各自验签、缓存并受版本语义约束。
 
 ## 3. 配置 schema

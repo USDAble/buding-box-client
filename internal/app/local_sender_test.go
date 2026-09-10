@@ -1,3 +1,5 @@
+//go:build !product_production
+
 package app
 
 import (
@@ -7,6 +9,10 @@ import (
 	"github.com/open-octo/octo-agent/internal/agent"
 	"github.com/open-octo/octo-agent/internal/sensitive"
 )
+
+// These tests exercise the developer-only local fake channel. They are tagged
+// !product_production because the reply engine is excluded from production
+// builds; local_sender_production_test.go covers the production stub instead.
 
 // TestNewSenderLocalBuildsKeylessProvider pins the P11 wiring: provider "local"
 // builds without a key/base URL, and the resulting sender is lifted to the

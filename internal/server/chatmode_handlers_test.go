@@ -71,7 +71,7 @@ func TestGetChatModesResolvesCompositeIDs(t *testing.T) {
 	t.Setenv("OCTO_DATA_ROOT", tmp)
 	cfgPath, _ := datapath.Join("config.yml")
 	_ = os.MkdirAll(filepath.Dir(cfgPath), 0o700)
-	if err := os.WriteFile(cfgPath, []byte("endpoints:\n  - id: buding\n    provider: local\n    models:\n      - model: buding-local-general\n"), 0o600); err != nil {
+	if err := os.WriteFile(cfgPath, []byte("endpoints:\n  - id: buding\n    provider: openai\n    models:\n      - model: buding-local-general\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
 	modesPath, _ := datapath.Join("chat-modes.json")

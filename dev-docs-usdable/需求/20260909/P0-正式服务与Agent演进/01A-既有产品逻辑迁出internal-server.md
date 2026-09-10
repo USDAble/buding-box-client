@@ -141,7 +141,7 @@ scripts/server-diff-guard.mjs        断言 vs 上游 main：
 
 **为什么是棘轮而不是“必须为 0”**：`01A` 是分阶段做的（B/C/D/E），一上来把目标设成 0 会让 guard 永远红着，从而被忽略。棘轮让每次折叠都立刻被 CI 确认，同时任何新增都当场失败。
 
-**上限表改高 = 触发人工确认**：`DEBT_CEILINGS` / `PRODUCT_FILES` 是唯一可调的地方，改它属于 [开发规范](../../开发规范.md) §3.7 的人工确认事项。这样“又顺手多改了几行”会在 CI 里显式暴露，而不是在半年后的合并里。
+**上限表改高 = 触发人工确认**：`DEBT_CEILINGS` / `PRODUCT_FILES` 是唯一可调的地方，改它属于 [开发规范](../../../开发规范.md) §3.7 的人工确认事项。这样“又顺手多改了几行”会在 CI 里显式暴露，而不是在半年后的合并里。
 
 **执行**：`make server-diff-check`；CI 的 `server-diff-guard` job。需要 `fetch-depth: 0` 并有 `main` ref（guard 拿它当上游基线）。
 

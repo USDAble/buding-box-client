@@ -37,4 +37,4 @@
 
 ## 合并方式
 
-字段合同由 P0-01 的 B0 先冻结并发给中台；当前仓库随后以 generated/合同测试实现 client 开发中台 client。中台提供 OpenAPI + sandbox 后，通过 contract CI 才合真实 HTTP 实现；不要让页面团队直接使用临时 JSON。
+字段合同由 P0-01 的 B0 先冻结并发给中台；当前仓库随后以 **手写 DTO + 合同测试实现** 开发中台 client（不引入代码生成依赖，见 [P0-01 §中台请求客户端的实现形态](01-运行时Profile与窄端口抽象.md) §4）。中台交付的 OpenAPI 用于产出 contract sample 与测试断言，**不用来生成生产代码** —— 生成器会带进新依赖，且生成物天然拒绝手写校正。中台提供 OpenAPI + sandbox 后，通过 contract CI 才合真实 HTTP 实现；不要让页面团队直接使用临时 JSON。

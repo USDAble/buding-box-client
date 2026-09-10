@@ -1,3 +1,5 @@
+//go:build !product_production
+
 package local
 
 // chunks splits the reply text into rune-sized fragments, forcing one

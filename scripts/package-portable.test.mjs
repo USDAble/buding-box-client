@@ -16,6 +16,7 @@ import {
   checkDataFiles,
   checkDevResiduals,
   checkNoAbsolutePaths,
+  checkProductionBinary,
   listFiles,
   crc32,
   buildZipBuffer,
@@ -79,6 +80,31 @@ test('checkDataFiles: does not require chat-modes.json', () => {
   ]
   assert.ok(!DATA_FILES.includes('chat-modes.json'))
   assert.deepEqual(checkDataFiles(files), [])
+})
+
+// The shipped binary must not contain the P11 fake-channel reply text or its
+// PII log path — the build tag is what removes them, so their presence means
+// the production tag did not take effect.
+test('checkProductionBinary: passes on a binary without the fake channel', () => {
+  const buf = Buffer.from('a production binary with no demo content', 'utf8')
+  assert.deepEqual(checkProductionBinary(buf), [])
+})
+
+test('checkProductionBinary: flags the demo reply text', () => {
+  const buf = Buffer.from('…本地演示模型的固定回复…', 'utf8')
+  const problems = checkProductionBinary(buf)
+  assert.equal(problems.length, 1)
+  assert.match(problems[0], /product_production/)
+})
+
+test('checkProductionBinary: flags the PII log path', () => {
+  const problems = checkProductionBinary(Buffer.from('logs/local-provider.jsonl', 'utf8'))
+  assert.equal(problems.length, 1)
+})
+
+test('checkProductionBinary: flags both when the tag is missing entirely', () => {
+  const buf = Buffer.from('本地演示模型的固定回复 logs/local-provider.jsonl', 'utf8')
+  assert.equal(checkProductionBinary(buf).length, 2)
 })
 
 test('checkDataFiles: fails when data/ is absent', () => {

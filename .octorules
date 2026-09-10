@@ -50,6 +50,16 @@ Enforced by CI. Full text and rationale in `dev-docs-usdable/开发规范.md` §
 2. **Never hardcode a brand string.** Interpolate `{brand}` / `{brandShort}` from `branding/brand.json` (`brand-guard`). Annotate the two exceptions: "Octo" in the port-conflict message names the *upstream* product; `BUDING-DEMO-0001` and `buding-*` model ids are fixed ASCII data keys that do not follow the English brand name.
 3. **Mark every change to an upstream file** with `// OCTO-FORK: <why> — see <design doc>`. Prefer making an upstream feature unreachable over deleting it; deletions cause delete-vs-modify conflicts git cannot auto-resolve.
 
+Beyond those three, the fork spec adds five discipline rules (`开发规范.md` §3.4–§3.10) that every plan and PR is judged against. They are binding, not advice:
+
+4. **Reuse first (§3.5).** Before creating a package, client, or HTTP path, run a capability search and write it into the plan: what you checked, why it cannot be reused (name the function/field), what the reused shape looks like. ~80% coverage means reuse and add the missing 20%. Reusing-or-not is a human-confirm item.
+5. **Single sources of truth (§3.8).** Contracts, error codes, and DTO field names live in `中台交付包` §3.2 and the P0-01 §合同骨架. **Model display names come from the signed catalog `displayName`** and the frontend keeps no id→name table (debug/test fallback only). Data paths, brand strings, permission, and mode grouping each have exactly one owner. A derivative doc quotes a one-line conclusion + a link — never a copy of the reasoning or the table.
+6. **Bounded degradation (§3.9).** Every fallback answers: fall back to what, is the user told, when does it recover. Never degrade silently to an unauthorized source, never treat degradation as authorization, fail closed on signature/version/audience/clock checks. **Never write a user-editable file at startup** (an idempotent first-run seed is the only exception — §3.9.1).
+7. **Stop and ask (§3.7).** Reuse-avoidance, breaking an architectural convention, touching auth/credential/data-root/brand/billing/permission/routing, unconventional logic (an extra layer to dodge a rule, one concept stored twice, silent fallback), upstream core files, and using a capability outside its design intent all need explicit human confirmation recorded in the PR: which row, the facts, the choice, who confirmed.
+8. **Write the scope (§3.10).** Every rule says which domain it governs — production vs developer, build-time vs run-time, local vs remote. A rule without a scope gets cited in both directions.
+
+These are ratcheted by `norms-guard`, `datapath-guard`, `brand-guard`, `reuse-guard`, `server-diff-guard`, and `release-profile-guard` — all wired into `make *-check`, CI, and the packaging preflight.
+
 Upstream merges use `merge`, never `rebase`, and land as their own PR with no functional changes riding along.
 
 ## Code style

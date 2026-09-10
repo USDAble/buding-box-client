@@ -62,10 +62,16 @@ export function modeDisplayName(id: string): string {
   return v === key ? id : v
 }
 
-// modelDisplayName localises a model id. Factory models buding-* have i18n
-// keys; anything else falls back to the raw id (a real endpoint's model name).
-export function modelDisplayName(id: string): string {
-  const key = `model.${id}`
-  const v = tr(key)
-  return v === key ? id : v
+// modelDisplayName renders the display name the central platform returned.
+//
+// The signed catalog is the only source of model names (中台交付包 §4.3): a
+// local id→name table would shadow the server's copy, so a rename on the
+// platform would keep showing the old name. Mode names are the opposite case
+// — the three modes are product-fixed — which is why modeDisplayName above is
+// still localised while this one is not.
+//
+// Falls back to the raw id only when no name was projected, which is the
+// debug/test path (developer builds and contract tests without a catalog).
+export function modelDisplayName(id: string, displayName?: string | null): string {
+  return displayName?.trim() || id
 }

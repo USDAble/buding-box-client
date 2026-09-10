@@ -74,7 +74,7 @@
               class:disabled={!m.compositeId}
               onclick={() => pick(mode.id, m)}
             >
-              <span class="mi-name">{modelDisplayName(m.id)}</span>
+              <span class="mi-name">{modelDisplayName(m.id, m.displayName)}</span>
             </button>
           {/each}
         {/if}

@@ -68,6 +68,20 @@ Full text in `dev-docs-usdable/开发规范.md`. These three are enforced by CI:
 
 3. **Mark every change to an upstream file** with `// OCTO-FORK: <why> — see <design doc>`. `grep -rn "OCTO-FORK" .` is this fork's complete diff-from-upstream inventory. Prefer making an upstream feature unreachable over deleting it — deletions produce delete-vs-modify conflicts that git cannot auto-resolve.
 
+### Fork norms beyond the three hard rules
+
+The fork spec (`开发规范.md` §3.4–§3.10) adds five discipline rules of equal force. `.octorules` carries the one-line index; this is the operative detail.
+
+| Rule | What it forbids | The test applied in review |
+|---|---|---|
+| **Reuse first** (§3.5) | Creating a package/client/HTTP path because writing one is cheaper than finding one | The plan records a capability search: *what was checked, why it cannot be reused (name the function/field), what the reused shape is.* ~80% coverage ⇒ reuse + add the 20%. "Reused but chose not to" is a §3.7 item, because a second implementation doubles the cost of every fix, security patch, and protocol change. `reuse-guard` asserts the high-risk cases (e.g. `internal/productclient/gateway` must not grow its own `net/http`/SSE/token parsing instead of reusing `internal/provider`). |
+| **Single sources of truth** (§3.8) | A second place that defines the same thing | One owner per fact: provider construction → `internal/app`; data paths → `internal/datapath`; brand → `branding/brand.json`; contract signatures → the P0-01 §合同骨架; error codes and DTO field names → `中台交付包` §3.2/§4.3; mode grouping → `internal/chatmode`; permission → `internal/permission`. **Model display names are server data**: render the catalog `displayName` verbatim, and keep no `web/` id→name table (a local table shadows the server's copy, so a platform rename silently keeps showing the old name). Debug/test may fall back to the raw id, never in the production render path. A derivative doc quotes a one-line conclusion + a link, never the reasoning or the table — the copy goes stale on the next edit. |
+| **Bounded degradation** (§3.9) | "It fell back and kept working" as a complete answer | Every fallback names its target (a *verified* cache, built-in words, read-only mode — never another model source), whether the user is told, and when it recovers. No silent degradation to an unauthorized source; no treating degradation as authorization; fail closed on signature/version/audience/clock failure. **Startup must not write a user-editable file** (§3.9.1): absence of a file means "use the default", not "materialise the default" — the only exception is an idempotent first-run seed, and it must not block startup or race a user edit. |
+| **Stop and ask** (§3.7) | "I judged it fine" | Explicit human confirmation, recorded in the PR as *which row + facts + choice + who confirmed*, for: reuse-avoidance; breaking a layered/dependency/single-entry/SSOT convention; touching auth, credentials, data root, brand copy, credits/billing, permission, or routing; unconventional logic (an extra layer to dodge a constraint, one concept stored in two places, silent fallback, startup writes); upstream core files; and using a capability outside its design intent (provider channel as a general HTTP client, `productstate` as a credential store). |
+| **Write the scope** (§3.10) | A rule stated without saying which domain it governs | State production vs developer, build-time vs run-time, local vs remote. Scope is the usual silent bug: `config.yml` *may* carry URLs/keys and be used in developer builds; the correct constraint is "the production **session** must not use `config.yml` as its model source" — the stronger-sounding "config.yml must not hold keys" breaks local development. |
+
+These are ratcheted by `norms-guard`, `datapath-guard`, `brand-guard`, `reuse-guard`, `server-diff-guard`, and `release-profile-guard` — wired into `make *-check`, CI (`go.yml`), and the packaging preflight.
+
 Upstream merges: `merge`, never `rebase`; see `dev-docs-usdable/上游合并策略.md`.
 
 ## Conventions

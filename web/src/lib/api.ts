@@ -318,6 +318,13 @@ export async function updateSessionPermissionMode(id: string, mode: string): Pro
 // dev-docs-usdable/需求/2260906/技术方案/P9-模式与模型.md §4.
 export interface ChatModeModel {
   id: string
+  /** Display name from the signed catalog projection; see
+   *  dev-docs-usdable/需求/20260909/产品客户端与中台对接/中台交付包.md §4.3.
+   *  The catalog is the only source of model names — the frontend must render
+   *  this verbatim rather than keeping an id→name table of its own. Absent
+   *  only before a catalog is available (debug/test builds), where the raw id
+   *  is shown instead. */
+  displayName?: string
   /** Composite "<endpoint>::<model>" id; empty when the model is listed in
    *  chat-modes.json but not present in config.yml (not selectable yet). */
   compositeId?: string

@@ -30,10 +30,11 @@
 | `product_handlers.go`、`product_nickname.go`、`product_prefs.go` | 产品状态、退出、语言、昵称、偏好 HTTP | **迁出** | `productruntime/httpapi`；产品路由测试随实现移动，状态读写及语言/昵称校验结果不变。 |
 | `product_login.go` | 本地验证码、激活、账号状态 | **迁出后替换** | 先迁入 `productruntime/httpapi` 的兼容适配层；P0-02 改为 `productclient.AuthClient`，P0-08 接管凭证保存。不得把固定验证码、激活码、进程内会话或本地 token 作为新接口契约。 |
 | `product_sensitive.go`、`sensitive_dict_handlers.go` | 输入检查、词库编辑、输出过滤所需状态 | **迁出** | HTTP 与词库编排进入 `productruntime`；词库文件和 `internal/sensitive` 算法保持复用。P0-06 决定正式词库/隐私合同，不能在 server 内扩展产品规则。 |
-| `chatmode_handlers.go`、`privacy.go` | 会话模式、默认模式、发送副本的隐私上下文 | **分阶段迁出** | P0-04 的目录/策略替换旧模式选择，P0-05 通过中性 turn hook 或 sender 装配接入。会话装载、绑定锁和 WS 生命周期留在 server。 |
+| `chatmode_handlers.go`、`privacy.go` | 会话模式、默认模式、发送副本的隐私上下文 | **分阶段迁出** | **`chatmode_handlers.go`（含 `handleGetChatModes` 的模式/模型来源）的唯一 owner 是本任务阶段 D**：P0-04 只交付 `chatmode.Project` 纯函数，P0-05 只做 session/UI 接线，**两者都不改此文件**（早先 `05` 实施步骤 3 曾把它写成自己的步骤，已删）。投影接入必须与迁出**同 PR**，禁止"先在 server 里加、以后再搬"的两处并存中间态（§6）；`compositeIDForModel` 不动。会话装载、绑定锁和 WS 生命周期留在 server。 |
 | `handlers.go`、`ws_handlers.go`、`tasks_handlers.go` 的 `consumeCredit()` 与产品门/隐私调用点 | 本地积分、产品门、发送前产品策略 | **删除或改接中性端口** | 本地积分在 P0-05 删除；产品门和发送策略改由 productruntime 提供的通用请求/turn 适配执行，不在通用 handler 内写产品分支。 |
 | `server.go` 的产品字段、产品状态初始化、产品 sender 包装、产品路由注册 | 产品状态被耦合进 server 构造和路由 | **迁出** | desktop 构造 `productruntime`；server 只接收中性扩展接口。`server.New` 的配置读取、通用 sender/session 初始化及 generic route 注册保留。 |
 | `server.go` 的 `apiProduct()` 与全部 157 处 `s.apiProduct(` 调用点 | P3 为产品门把**整张上游路由表逐行改写**：上游 `main` 里 `apiProduct` 出现 **0** 次，`main` 的 147 处 `s.api(` 被替换 | **还原 + 折叠为顶层中间件（本任务最大的一笔回收）** | 见下文「apiProduct 折叠」一节。通过条件：`registerRoutes()` 与上游逐行一致，`internal/server` 不再存在 `apiProduct` 符号，而产品门语义（默认拦截、显式豁免）不变。`server-diff-guard` 以棘轮断言（基线 161，目标 0）。 |
+| `internal/productgate`（**既有包**，`gate.go` / `gate_test.go`） | 产品门的**当前**实现：请求期中间件 `Gate.Middleware(next http.Handler)`；`server.go` 直接 import 并持有 `productGate *productgate.Gate`（`server.go:43` / `423` / `620` / `919`） | **折叠后替换**（阶段 C，与 `apiProduct` 折叠同一个 PR） | 替换为注册期端口 `runtimeport.ProductGate`（§3 端口 2） + `productruntime` 的实现，**不新写一套**。注意现状的 `Middleware(next)` 拿不到 route pattern，正是 §3 端口 2 明确否决的形态 —— 所以这是**待替换的现状**，不是"已经做好了"；拒绝响应与 `WriteDenied` 的语义原样保留。 |
 | `ensureLocalEndpoint()` 与 `local_endpoint_test.go` | 为既有本地模型配置种入 4 个 `buding-*` 假模型 endpoint | **已删除**（2026-09-11） | 假模型不再是产品能力：正式模型列表来自中台签名目录并本地缓存（见 P0-04 模型目录）。删除后 `server.New` 不再写用户 `config.yml`，也消除了「seed 被 access-key 保存覆盖」那类读改写竞态。 |
 | `server.go` 的 3 个 `resolveProviderAndModel` 调用点 + 新增 `internal/runtimeport/senderfactory.go` | 四类输入（`New`/`ensureSender`/`reloadDefaultSender` 的 `OCTO_PROVIDER`·`entry.Provider`，以及 `senderForSession` 的会话绑定 `ModelConfig`）能让 session 用上非中台 sender | **不回收（端口化）**，见 §3.1 | P0-01 B1 申请的端口 4：`Config` 加 1 个 `SenderFactory` 字段，3 个调用点统一走 `chooseDefaultSender`，`senderForSession` 加 1 个分支；`nil` 时逐行等于今天的路径；置位时失败即失败、不回落。`server-diff-guard` 上限 484 → 543（§3.1 有让步理由）。除端口 4 之外 B1 只改 desktop。 |
 
@@ -172,6 +173,18 @@ type SenderRequest struct {
 2. **`reloadDefaultSender` 是第 4 个入口。** 它同样调 `resolveProviderAndModel`，在"全局设置或 model-config 条目变化"时重建默认 sender。只堵 `New`+`ensureSender` 会漏掉它。正因为有 3 个调用点，才必须**统一走一个 `chooseDefaultSender`** —— 逐个打补丁的话，将来第五个调用点没人会记得加判断。
 3. **工厂提供的 sender 仍要过 `wrapProductSender`。** 否则 P8（敏感词回显过滤）与 P10（隐私模式副本打码）会在这一条路径上静默失效 —— 而那正是"能复用不复用"要避免的降级。用 `FailingSender` 表达失败时也要包，保持一致。
 
+**未接通项：`Resolve` 的 `ctx` 目前是死参数（2026-09-11 登记，本阶段不修）。**
+
+端口形态上 `SenderForTurn(ctx, …)` 带 ctx，但 `runtimeport.Resolve` 的实现把它替换成了 `context.Background()`，因为 **server 侧四个调用点手上根本没有 ctx 可传**：`server.go:479`（`New`）、`1429`（`buildAgent(sess)` → `senderForSession`）、`2246`（`ensureSender()`）、`2305`（`reloadDefaultSender()`）都不是带 ctx 的函数。要让 turn 的取消/超时真的到达工厂，必须把 ctx 穿过 `buildAgent`/`senderForSession` 这一串 server 内部函数 —— 那是**改上游代码**，而 `internal/server/server.go` 现在是 `543/543`、**零余量**，任何改动都会立刻触发 `server-diff-guard`。
+
+| 项 | 值 |
+| --- | --- |
+| 现状 | `Resolve` 传 `context.Background()`；接口上的 ctx 不生效 |
+| **临时约束（必须遵守）** | **工厂实现不得依赖 ctx 的取消/超时语义**，也不得在其中做需要被取消的 I/O。P0-05 若要在工厂里取/刷新产品 token，必须先回到本节把 ctx 接通，不能假设它已经能取消 |
+| owner | 01A **阶段 D**（sender/state 搬迁）+ 阶段 C（`apiProduct` 折叠让 `server.go` 降回 484 以下，腾出额度） |
+| 恢复动作 | 给 `runtimeport.Resolve` 与四个调用点加 ctx（二选一：加参数，或从接口删掉 ctx 并写明"工厂不得做可取消 I/O"）。**保留一个恒被丢弃的参数是最坏选项** —— 它让实现者以为拿到了取消语义 |
+| 验收 | 取消一个进行中的 turn，断言工厂收到的 ctx 已 done |
+
 **做过的守卫让步（§3.7 人工确认项）**：`server-diff-guard` 的 `internal/server/server.go` 上限由 **484 提到 543**（+59）。理由三条，缺一条就该改成折叠而不是提上限：① 端口是已批准的架构变更；② 没有更小的形态（`Config` 是唯一构造通道；守卫建议的"包级 setter + server 读取"是隐藏全局状态，是真实退化而非更小的 diff）；③ 提之前**先**把策略行搬进了 fork 包（−23 行）。C 阶段折叠 `apiProduct` 时这个数必须落到 484 **以下**，而不只是 543 以下。
 
 **不做的事**：不改 `resolveProviderAndModel` 的内部逻辑（`nil` 路径必须逐行等于今天）、不动 `registerRoutes()`、不动 `apiProduct`（那是 C 阶段）、不把 `runtimeport` 变成通用插件系统。
@@ -277,4 +290,5 @@ scripts/server-diff-guard.mjs        断言 vs 上游 main：
 | 2026-09-11 | 初版：边界、精确盘点、`apiProduct` 折叠、阶段 B–E、`server-diff-guard`。 |
 | 2026-09-11 | 补 §5.1「恢复上限」：区分 A 类（产品业务，恢复）与 B 类（datapath 强制承载，永久保留），给出 B 类实测清单（58 个测试文件 + 11 个非测试文件 18 处），并修正 §7.2 的验收口径，避免被误设成"对上游 diff 为空"。 |
 | 2026-09-11 | 产品门端口从「中性 `func(http.Handler) http.Handler`」改写为具体 `runtimeport.ProductGate`（注册期拿到 route pattern）：原形态与「豁免按 pattern 判断」互相矛盾，实现者只能自行发明一套。§2.1 豁免集由散文清单改为精确到 `文件:行号` 的表（4 条 `s.api(` + 4 条非 `requireAuth` 路由），并声明豁免集唯一来源是 productruntime 的导出常量。 |
+| 2026-09-11 | 外部审计落地：① §2 补登**既有包** `internal/productgate` —— 此前只登记了「要新增的端口 `runtimeport.ProductGate`」，没登记「已有实现是谁」，做端口 2 的人极易新写一套（§3.5/§3.8 都禁止）；并写明现状 `Gate.Middleware(next)` 拿不到 route pattern，正是 §3 端口 2 否决的形态；② §2 的 `chatmode_handlers.go` 行明确**唯一 owner 是阶段 D**，投影接入必须与迁出同 PR（此前 `05` 实施步骤 3 也自认领了它）；③ 新增 §3.1「未接通项：`Resolve` 的 ctx 是死参数」—— 记录现状、临时约束（工厂实现不得依赖取消语义）、owner（阶段 C 腾额度 + 阶段 D 接通）与验收。 |
 

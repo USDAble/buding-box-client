@@ -51,6 +51,13 @@ type UsageClient interface {
     Ledger(ctx context.Context, query LedgerQuery) (LedgerPage, error)
 }
 
+// 可选的设备会话面（中台交付包 §4.2.4）。与 AuthClient 分开：只需要登录的调用方
+// 不必依赖会话吊销，两者也可以由不同 PR 拥有。
+type SessionLister interface {
+    Sessions(ctx context.Context) ([]DeviceSession, error)
+    RevokeSession(ctx context.Context, sessionID string) error
+}
+
 // internal/productclient/gateway: 中台特有的终态控制面。
 // 注意：模型流本身不在这里 —— 它复用 internal/app 的既有 provider 栈
 // （见下方「gateway 的复用形态」）。本接口只覆盖中台独有、上游没有的两件事。
@@ -96,7 +103,7 @@ productprofile.TrustedKeyIDs ──┐
 两条**可执行**的约束（不是注释里的一句话）：
 
 - `internal/productclient/code_test.go` 的 `TestEveryCodeIsRegisteredInTheDoc` 断言每个 `Code` 常量都出现在[中台交付包](../产品客户端与中台对接/中台交付包.md) §3.2 中 —— 登记表漂移会让测试失败，而不是等到前端漏映射一个错误码。
-- `internal/productruntime/deps_test.go` 断言依赖方向：产品包不得 import `internal/server` / `internal/app` / `internal/provider`，且只有 `productclient` 可以 import `net/http`；`gateway` 包出现 `net/http` 即失败（与 `scripts/reuse-guard.mjs` 同一意图，但更早）。该测试**不带构建标签**，因此 `product_production` 下同样执行。
+- `internal/productruntime/deps_test.go` 断言依赖方向：**产品包**（`productPackages` 列表，含 `productruntime` 自身、`productclient` 及其子包）不得 import `internal/server` / `internal/app` / `internal/provider`（`bannedImports`）。net/http 一侧由 `TestOnlyTheTransportLayerSpeaksHTTP` 断言，它**只拦 `internal/productclient/gateway`**：该包出现 `net/http` 或 `net/http/*` 即失败（与 `scripts/reuse-guard.mjs` 同一意图，但更早）。**不要把它读成"只有 `productclient` 可以 import `net/http`"** —— 没有测试做这个全局断言，`productpolicy` / `productruntime` 当前不受 net/http 约束；该缺口已登记在[问题盘点](../问题盘点.md)，不假装被覆盖。该测试**不带构建标签**，因此 `product_production` 下同样执行。
 
 `mock` 包（`internal/productclient/mock`、`.../gateway/mock`）带 `//go:build !product_production`：一个能返回"登录成功、余额充足"的 mock 若可被链接进发行二进制，就等于"平台说可以"这件事能被一个构建标签伪造 —— 与已删除的假模型同一类风险，故发行构建里不存在该包（`go list -tags product_production ./internal/productclient/...` 只剩 `productclient` 和 `gateway`）。
 
@@ -117,26 +124,34 @@ productprofile.TrustedKeyIDs ──┐
 | 限流 | `config.Endpoint.RPM` + `buildClient` limiter | 客户端侧限流 |
 | 取消 | `context` 取消 → `ChatStream` 关闭 | `Cancel` 的流侧 |
 
-因此正确形态是**装配 + 装饰**，不是新建 client：
+因此正确形态是**装配 + 装饰**，不是新建 client。
+
+**装配点是宿主 `cmd/octo-desktop`**（它实现 `runtimeport.SenderFactory`，见 [01A §3.1](01A-既有产品逻辑迁出internal-server.md)）。`productruntime` 只**持有**依赖、做观察与判定，**不构造 provider client** —— `internal/productruntime/deps_test.go` 禁止任何产品包（含 `productruntime` 自身与 `productclient/gateway`）import `internal/app`，所以"由 productruntime 调 `app.NewSender`"写在文档里也实现不出来。真实调用链：
 
 ```text
-1. productruntime 解析凭证与策略快照
-2. 构造 app.SenderOptions{
-       Provider: app.ProviderCustom,      // 既有自定义 endpoint 通道
-       Protocol: "openai",                // Custom 必须显式指定 wire 协议
-       BaseURL:  <中台网关地址（来自受信配置，非 config.yml>）,
-       APIKey:   <产品 access token>,
-       Headers:  {"X-Client-Request-Id": id, ...},
-       RPM:      <目录/策略给定的限流>,
-   }
-3. s, err := app.NewSender(opts)          // ← 复用；app 是构造 provider client 的唯一位置
-4. sender = gateway.NewObserver(s)        // ← 唯一新增：终态/usage/错误码 → 会话事件
-5. 终态控制（Cancel / RequestStatus）走 `gateway.ControlClient`（中台独有）
+productSenderFactory(p) → productSender.SenderForTurn(ctx, req)
+  │
+  1. 向 productruntime 取这次调用的受信参数：网关地址（profile.GatewayHost，
+     不是 config.yml）、产品 access token、目录/策略给定的限流，以及**这次调用**
+     的 clientRequestId（每次网关调用一个，见本节末 B1 定案）
+  2. 构造 app.SenderOptions{ Provider: app.ProviderCustom, Protocol: "openai", ... }
+  3. base, err := app.NewSender(opts)   // ← 复用；app 是构造 provider client 的唯一位置
+  4. sender, err := rt.Observe(base, meta, sink)
+     // ← 唯一新增：终态/usage/错误码 → 会话事件。签名在
+     //    internal/productruntime/runtime.go：
+     //    Observe(agent.Sender, gateway.CallMeta, gateway.TerminalSink) (agent.Sender, error)
+  5. 终态控制（Cancel / RequestStatus）走 productruntime → `gateway.ControlClient`（中台独有）
 ```
 
 > 字段名以上游 `app.SenderOptions` 为准（`Provider` / `Protocol` / `APIKey` / `BaseURL` / `Headers` / `RPM` / `MaxConcurrency`）。`Protocol` 对 `custom` 供应商是必填 —— 中台网关用 `"openai"`。
 
-**判据（§3.5）**：任何在 `internal/productclient/gateway` 里出现的 SSE 解析、JSON 分片拼接、token 计数或 HTTP 重试代码，都必须先回答"为什么 `internal/provider/openai` 不能做这件事"。答不出来就是重复实现，必须删掉改走 `app.NewSender`。
+> **没有 `gateway.NewObserver` 这个函数，也不要有。** 冻结合同是一个接口一次 `Wrap`：`gateway.Observer.Wrap(base, meta, sink) agent.Sender`（`internal/productclient/gateway/gateway.go`），由 `productruntime.Observe` 调用，实现经 `productruntime.Deps.Observer` 注入。本文与 `03`/`05` 早先的伪代码写作 `gateway.NewObserver(s)` 且漏了 `meta`/`sink` 两个必需参数，照着写编译不过 —— 这是"文档说 A、代码是 B"，以代码为准。
+>
+> **`meta` 与 `sink` 由谁提供**：`meta`（`gateway.CallMeta`）是这次网关调用的身份（`clientRequestId` 等），由装配点在构造这次调用时就地产生；`sink`（`gateway.TerminalSink`）**由宿主实现** —— `cmd/octo-desktop` 把 `OnMeta`/`OnTerminal` 转成会话事件推给 UI。sink 只报事实、不做决定：用户可见的"已结算/已冲正/待对账"呈现与余额刷新发生在这个边界之上。哪个调用点传哪个 sink、绑到哪条会话是 P0-05 的接线，P0-03 只负责 contract 与观察实现。
+
+**判据（§3.5）**：任何在 `internal/productclient/gateway` 里出现的 SSE 解析、JSON 分片拼接、token 计数或 HTTP 重试代码，都必须先回答"为什么 `internal/provider/openai` 不能做这件事"。答不出来就是重复实现，必须删掉：`gateway` 不允许出现 `net/http`（`deps_test.go` 与 `scripts/reuse-guard.mjs` 双重拦截），它只做装配与观察，SSE 由装配点复用的 provider 栈承担。
+
+> **这条判据的实际覆盖范围**：`reuse-guard` 的 `REUSE_SCOPES` 目前**只有 `internal/productclient/gateway` 一条**，而真正做装配的 `cmd/octo-desktop` 是独立 `go.mod` 的嵌套模块 —— 根模块的 `go build ./...`、`go test ./...` 与 `deps_test.go` 都到不了它。即：**"复用 `internal/app` 而非自写 HTTP/SSE"这个决策的落点，是全仓唯一没有守卫覆盖的目录。** 待补，见[问题盘点](../问题盘点.md)。
 
 - `remote` 实现只存在于 `internal/productclient`；请求/响应以[中台交付包](../产品客户端与中台对接/中台交付包.md)的 OpenAPI 为准。
 - 方法覆盖与需求基线的对应关系：`AuthClient`→R3/R8；`ControlPlaneClient`（含 `LegalDocuments`/`AcceptLegal`）→R4/R11；`UsageClient`（含只读 `Ledger`）→R5/R10；`gateway.ControlClient`→R5（模型流部分复用既有 `agent.Sender`，见「gateway 的复用形态」）。新增方法前先更新本节与需求基线。
@@ -178,7 +193,15 @@ developer/test         =  可覆盖（本地联调、sandbox、mock），沿用�
 | 未注入时的行为 | 出包**允许**（advisory 只告警不阻断，理由见 `运行时Profile配置.md`）；但该包**不能验签任何策略**，因而拿不到任何模型目录 —— 它是内部测试包，不是可发布包 |
 | 如何防止被遗忘 | `问题盘点.md` §0.1 已把「发布面无人认领的项」单列，本项是其中第 6 项；**P0-04 开工清单的第一条就是检查它是否已注入** —— 而不是等出包时被 guard 提醒（那时离发布已经很近，且 guard 只告警不阻断，很容易被放过） |
 
-**fail-closed**：production 构建若 `apiHost` 为空 → **拒绝启动并发起任何中台请求**，而不是回退到任何默认值、`localhost` 或 `config.yml`。
+**fail-closed 分两种状态，别混为一谈。** `Validate()` 只校验"非空 + https + 绝对 URL"，所以 `https://api.invalid/v1` 这种占位**能通过校验、进程也能启动** —— 把它读成"占位会拒绝启动"会让实现者以为不用处理首屏：
+
+| 出厂状态 | `Validate()` | 进程 | 首屏 |
+| --- | --- | --- | --- |
+| `apiHost` **为空** | 失败 | **拒绝启动** | 不适用（进程未起） |
+| `apiHost` = `.invalid` 占位（当前 `production.json` 的形态） | 通过 | **可以启动** | 立即呈现"未配置/不可用"：`ControlPlaneConfigured() == false`，`Preflight` 一律 fail-closed。不是等第一个回合失败 |
+| 真实主机 + 受信公钥 | 通过 | 启动 | 正常 |
+
+占位能启动是**故意**的：一个开不了机的桌面客户端连登录页都显示不出来，用户只看到进程闪退，没有任何可采取的动作。所以 fail-closed 落在 `ControlPlaneConfigured()`（每个回合都拒绝）而不是 `Validate()`（拒绝进程）。**发布门由 `release-config-guard` 承担**：它报 `apiHost`/`gatewayHost` 仍是占位、或 `trustedKeyIDs` 为空 —— 即"占位包是内部测试包，不是可发布包"（该 guard 是 advisory，理由见 `运行时Profile配置.md`）。任何情况下都**不得**回退到默认值、`localhost` 或 `config.yml`。
 
 #### 2. 一个共享 HTTP transport，不是每个 client 一套
 
@@ -220,6 +243,8 @@ developer/test         =  可覆盖（本地联调、sandbox、mock），沿用�
 #### 5. 与 `productruntime` 的边界
 
 `productruntime` 只**调用**上面这些窄接口并做产品映射；它不持有 HTTP 细节、不自己拼 URL、不自己加头。`internal/server` 完全不参与（`01A` 负责把既有产品 HTTP 迁出）。
+
+**装配关系（避免 P0-03 / P0-05 各写一套）**：构造 provider client 的唯一位置是 `internal/app`，而**调用它的唯一位置是宿主 `cmd/octo-desktop`**（见 §gateway 的复用形态）。`productruntime` **不得** import `internal/app`（`deps_test.go` 的 `bannedImports` 会针对它变红），它只提供这次网关调用所需的受信参数，以及 `Observe` 这个装饰入口。
 
 
 P0-01 先以 mock 验证 contract，不改动所有 handler。实际接入时：

@@ -12,7 +12,7 @@
 
 废弃客户端“每条消息扣一分”的做法。当前仓库不再新增一个 LLM 客户端：P0-03 交付的 gateway sender 是在**既有 provider 栈之上**的一层装配与装饰（见下节），只负责注入 `clientRequestId`、消费既有 SSE 输出、处理取消/恢复和呈现最终状态；外部中台模型网关才是唯一正式云端模型出口，并在同一 `clientRequestId` 中完成鉴权、模型路由、最大额度预留、流式转发、token 结算/释放和账本记录。
 
-> **命名**：本文与 `05`/`06` 提到的 “gateway sender” 指同一件事 —— `gateway.NewObserver(app.NewSender(opts))`，不是一个新的 `agent.Sender` 实现。见 [P0-01 §gateway 的复用形态](01-运行时Profile与窄端口抽象.md)。
+> **命名**：本文与 `05`/`06` 提到的 “gateway sender” 指同一件事 —— 在**宿主 `cmd/octo-desktop`** 里 `app.NewSender(opts)` 之后交给 `productruntime.Observe(base, meta, sink)` 的那个 sender，不是一个新的 `agent.Sender` 实现。**不存在 `gateway.NewObserver` 函数**；见 [P0-01 §gateway 的复用形态](01-运行时Profile与窄端口抽象.md)。
 
 ### 复用的既有能力（P0-03 不重写）
 
@@ -28,18 +28,21 @@
 | 取消 | `context` 取消 → `ChatStream` 关闭 |
 
 ```text
-productruntime:
+cmd/octo-desktop（宿主，唯一的装配点；productruntime 不得 import internal/app）:
   opts := app.SenderOptions{Provider: app.ProviderCustom, BaseURL: <网关>, APIKey: <产品 token>, Headers: {...}}
-  s, _ := app.NewSender(opts)          // ← internal/app 是构造 provider client 的唯一位置
-  sender := gateway.NewObserver(s)     // ← 唯一新增：clientRequestId + 终态/usage/错误码 → 会话事件
+  base, _ := app.NewSender(opts)             // ← internal/app 是构造 provider client 的唯一位置
+  sender, _ := rt.Observe(base, meta, sink)  // ← 唯一新增：clientRequestId + 终态/usage/错误码 → 会话事件
+                                             //   sink 由宿主实现；meta 是这次调用的身份
 ```
+
+> `meta`（`gateway.CallMeta`）与 `sink`（`gateway.TerminalSink`）是 `Observe` 的**必需参数**。早先的伪代码漏了它们、并把装饰写成不存在的 `gateway.NewObserver(s)` —— 以 [P0-01 §gateway 的复用形态](01-运行时Profile与窄端口抽象.md) 与 `internal/productruntime/runtime.go` 的签名为准。
 
 **验收判据**：`internal/productclient/gateway` 中不得出现 SSE 解析、JSON 分片拼接、token 计数或 HTTP 重试实现。出现即视为重复实现，按[开发规范](../../../开发规范.md) §3.5 打回。
 
 ## 发给中台的交付要求（本仓库不实现）
 
 1. 实现 `POST /v1/ai/chat/completions` SSE、`GET /v1/ai/requests/{clientRequestId}`、`GET /v1/credits/ledger`，字段以[中台交付包](../产品客户端与中台对接/中台交付包.md) §5 为准。
-2. 客户端只上传 `modelId`、脱敏消息副本、`clientRequestId`、会话 ID、最大输出和已批准的 tool policy；不得上传 `amount`、供应商 base URL/key 或价格。
+2. 客户端只上传 `modelId`、脱敏消息副本、`clientRequestId`（**每次网关调用一个**，见[中台交付包](../产品客户端与中台对接/中台交付包.md) §3.1/§5.1）、最大输出和已批准的 tool policy；不得上传 `amount`、供应商 base URL/key 或价格。**不上传任何会话 ID** —— 网关是无状态的单次调用入口，会话由客户端本地持有；[中台交付包 §5.2](../产品客户端与中台对接/中台交付包.md) 明文规定不得新增 `conversationId`，跨请求关联一律用 `clientRequestId`（单次）与 `requestId`（网关侧）。
 3. 账本状态仅允许 `received → reserved → streaming → settled|reversed|reconciliation_pending`；同 key 的第二次请求不调用供应商。
 4. 按 `modelId + pricingVersion + plan + token 分类` 计算整数 `microCredits`；供应商缺 usage 时标记估算或待对账，不能让客户端补扣。
 5. 使用服务端密钥管理系统存供应商 key，按模型 allowlist 路由；网关 access token 的 `aud` 与 scope 必须校验，不能把 token 转发给供应商。

@@ -33,6 +33,7 @@ import (
 	"github.com/open-octo/octo-agent/internal/crashlog"
 	"github.com/open-octo/octo-agent/internal/datapath"
 	"github.com/open-octo/octo-agent/internal/logfile"
+	"github.com/open-octo/octo-agent/internal/productprofile"
 	"github.com/open-octo/octo-agent/internal/serveenv"
 	"github.com/open-octo/octo-agent/internal/serveproc"
 	"github.com/open-octo/octo-agent/internal/server"
@@ -60,6 +61,20 @@ var trayColorIcon []byte
 // `octo serve` binds, so every existing client (Web, VS Code, Obsidian, CLI)
 // finds it without configuration. LAN exposure stays a CLI concern.
 const hubAddr = "127.0.0.1:8088"
+
+// OCTO-FORK: desktopWebviewURL returns the URL the window loads. It defaults to
+// the in-process hub (hubAddr), whose server serves the embedded webdist.
+// OCTO_DESKTOP_DEV_URL is accepted only by a developer Profile, for the shell +
+// Vite hot-reload loop (`make web-dev` + `make desktop-dev`); a production build
+// ignores it. See dev-docs-usdable/运行时Profile配置.md.
+func desktopWebviewURL() string {
+	if productprofile.Current().AllowDevWebview {
+		if dev := strings.TrimSpace(os.Getenv("OCTO_DESKTOP_DEV_URL")); dev != "" {
+			return dev
+		}
+	}
+	return "http://" + hubAddr
+}
 
 // isBundled reports whether we're running inside a .app. The Wails
 // notifications service needs a bundle identifier and hard-fails startup
@@ -194,7 +209,7 @@ func main() {
 	// it runs before the bridge takes its copy of settings below.
 	ensureBundledOcto(&settings)
 
-	bridge := &nativeBridge{settings: settings, url: "http://" + hubAddr}
+	bridge := &nativeBridge{settings: settings, url: desktopWebviewURL()}
 	// On Windows/Linux a window close would otherwise quit the app; start with
 	// quit allowed only when the user opted out of keep-running-in-background.
 	bridge.allowQuit.Store(!settings.KeepRunningInBackground)

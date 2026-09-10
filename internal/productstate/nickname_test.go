@@ -38,11 +38,9 @@ func TestValidateNicknameCountsRunesNotBytes(t *testing.T) {
 	}
 }
 
-func TestSensitiveStubNeverMatches(t *testing.T) {
-	// The default stub must never flag, or a nickname would be refused before
-	// P8 lands the real engine.
-	if Sensitive("anything") {
-		t.Fatal("stub Sensitive must always return false")
+func TestSensitiveDefaultFailsClosed(t *testing.T) {
+	if !Sensitive("anything") {
+		t.Fatal("unwired sensitive gate must reject nicknames")
 	}
 }
 

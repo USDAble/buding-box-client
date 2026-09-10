@@ -42,8 +42,13 @@ func ValidateNickname(v string) error {
 	return nil
 }
 
-// Sensitive is the sensitive-word gate applied to nicknames before save. It is
-// a stub that never matches until P8 wires the P7 engine in (需求 §5.3.3: a
-// hit is refused outright, never masked-and-saved). A package-level var so P8
-// swaps the implementation without touching call sites.
-var Sensitive = func(v string) bool { return false }
+// rejectNicknameUntilWired keeps nickname validation fail-closed until the
+// server installs the real sensitive-word engine. A nickname hit is refused
+// outright, never masked-and-saved.
+func rejectNicknameUntilWired(string) bool { return true }
+
+// Sensitive is the sensitive-word gate applied to nicknames before save. The
+// server replaces it with the real engine during startup. Keeping the default
+// fail-closed prevents a new entry point from silently saving nicknames without
+// sensitive-word validation when that wiring is missed.
+var Sensitive = rejectNicknameUntilWired

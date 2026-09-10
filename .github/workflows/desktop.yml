@@ -117,7 +117,7 @@ jobs:
         working-directory: cmd/octo-desktop
         run: go test ./...
 
-      # The *shipped* binary is the product_production one (BUILD_TAGS in
+      # The *shipped* binary is the product_production one (the tag set lives in
       # scripts/package-portable.mjs). Its production-only tests are what prove
       # the shipped build installs the host SenderFactory port and stays
       # fail-closed (P0-01 B1), so they have to run here — the dev build above

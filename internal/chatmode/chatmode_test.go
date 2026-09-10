@@ -43,7 +43,9 @@ func TestBuiltinHasNoHardcodedModels(t *testing.T) {
 // the catalog projection in P0-04 — rather than left as a test that always
 // passes. Keep the ids out; see TestBuiltinHasNoHardcodedModels.
 
-func TestLoadMissingFileSeedsBuiltin(t *testing.T) {
+// A missing file must NOT be written — startup never creates a user-editable
+// file (开发规范 §3.9.1). Missing means "use the factory grouping".
+func TestLoadMissingFileDoesNotWrite(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "chat-modes.json")
 
@@ -54,8 +56,8 @@ func TestLoadMissingFileSeedsBuiltin(t *testing.T) {
 	if len(cfg.Modes) != 3 {
 		t.Fatalf("len(modes) = %d, want 3 (builtin)", len(cfg.Modes))
 	}
-	if _, statErr := os.Stat(path); statErr != nil {
-		t.Fatalf("builtin default not written: %v", statErr)
+	if _, statErr := os.Stat(path); !os.IsNotExist(statErr) {
+		t.Fatalf("Load wrote %s (stat err = %v), want no file created", path, statErr)
 	}
 }
 

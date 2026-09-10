@@ -14,10 +14,10 @@ artifact and renders `使用说明.txt`, replacing the `{nameZh}` / `{nameEn}` /
 | 文件 / file | 归属 / owner | 说明 / note |
 |---|---|---|
 | `sensitive-words.txt` | P7（已合并） | 空词库 + 头部注释；内置词编译进二进制，不落文件 |
-| `chat-modes.json` | P9（待开工） | 占位 `{}`；P9 落地后替换为模式分组 schema |
-| `config.yml` | P11（可延后） | 占位空配置（等价于无文件 → onboarding）；P11 落地后填入 buding 端点 |
+| `config.yml` | P11（可延后） | 占位空配置（等价于无文件 → onboarding）；不在 production 种入本地模型 endpoint |
 | `workspace/.gitkeep` | P1 | 会话默认工作区占位目录 |
 
-> P9 / P11 未落地前，`chat-modes.json` 与 `config.yml` 是占位内容。它们在打包
-> 脚本里作为「data/ 含四个预置文件」自检项存在，正式内容由对应 PR 替换，**打包
-> 脚本不改**（与占位图标同一原则，见 `技术方案/P12-便携打包.md` §3.6、§9）。
+> **`chat-modes.json` 不再预置（2026-09-11）**：它的出厂内容原本是 4 个 `buding-*` 假模型的分组，
+> 而这些 id 依赖已删除的 `ensureLocalEndpoint()` 种入；模型列表现在由中台签名目录下发（P0-04）。
+> 缺失该文件与出厂分组**等价**（`chatmode.Load` 直接返回 `Builtin()` 且不写盘），所以预置它
+> 只会把已删除的假数据重新塞回交付物。`DATA_FILES` 只保留上面三项。

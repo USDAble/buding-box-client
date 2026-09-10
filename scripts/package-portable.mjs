@@ -38,10 +38,15 @@ const DEFAULT_VERSION = '0.0.0-dev'
 // immutable production profile; see the buildExe comment and
 // dev-docs-usdable/运行时Profile配置.md.
 export const BUILD_TAGS = 'embedrg product_production'
-// The pre-filled data/ files P12 §3.1 mandates. chat-modes.json (P9) and
-// config.yml (P11 buding endpoint) are placeholders until those PRs land —
-// see packaging/portable/README.txt.
-export const DATA_FILES = ['sensitive-words.txt', 'chat-modes.json', 'config.yml']
+// The pre-filled data/ files. The portable package ships an empty template so
+// the user can see and edit it (P12 §3.1).
+//
+// `chat-modes.json` is deliberately NOT here: its factory content was the four
+// `buding-*` fake models, and the model list now comes from the signed central
+// catalog (P0-04). A missing file is already equivalent to the factory grouping
+// (chatmode.Load returns Builtin() without writing), so pre-filling it would
+// only re-ship deleted fake data — see P12 §3.1 and 开发规范 §3.9.1.
+export const DATA_FILES = ['sensitive-words.txt', 'config.yml']
 export const WORKSPACE_DIR = 'workspace'
 
 // ── target resolution ─────────────────────────────────────────────────────

@@ -53,10 +53,12 @@ func TestGetChatModesFactoryList(t *testing.T) {
 		}
 	}
 
-	// First GET seeds chat-modes.json so the user can edit it (需求 §5.6 规则 1).
+	// A missing chat-modes.json must NOT be seeded: startup never creates a
+	// user-editable file (开发规范 §3.9.1). The handler serves the factory
+	// grouping straight from memory.
 	path, _ := datapath.Join("chat-modes.json")
-	if _, err := os.Stat(path); err != nil {
-		t.Fatalf("chat-modes.json not written: %v", err)
+	if _, err := os.Stat(path); !os.IsNotExist(err) {
+		t.Fatalf("chat-modes.json was created at %s (stat err = %v), want no file", path, err)
 	}
 }
 

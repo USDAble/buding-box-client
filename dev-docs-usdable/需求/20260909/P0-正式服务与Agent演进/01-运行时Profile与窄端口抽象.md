@@ -96,7 +96,72 @@ type GatewayControlClient interface {
 - `gateway` 接受 credential provider、受信 catalog/policy snapshot 和 `clientRequestId`；它把既有 `agent.Sender` 的输出转成会话事件与终态 usage，不计算价格、不写产品余额、不解析 SSE。
 - `productpolicy` 只产生本地决定和审计字段；工具执行仍复用现有 permission/agent 机制。
 
-## 运行时装配与 Server 约束
+### 中台请求客户端的实现形态（`internal/productclient` 的 "how"）
+
+前面两节规定了**合同**（方法、DTO、错误码）和**中台侧义务**。本节补上此前缺失的一环：**客户端自己怎么发这个请求**。之所以必须写下来，是因为 §合同学只回答了"调用什么"，而实现者会各自发明一套 —— 于是同一个 base URL 来源、同一个 401 刷新、同一个验签会出现三份实现（§3.5/§3.8）。
+
+#### 1. 中台地址从哪里来（**生产必须是编译期常量，不是配置**）
+
+这是本节最要紧的一条。`AuthClient`/`ControlPlaneClient` 的 base URL **在 production 不得来自** `config.yml`、环境变量、`product-state.json`、缓存或 WebView 输入 —— 与 §3.10 的 production 拒绝矩阵一致。
+
+推导：bootstrap 自身需要地址才能发起，所以地址**不可能**由远端下发（先有鸡还是先有蛋）。因此：
+
+```text
+production 的 api-host  =  嵌入式 profile 的一部分（与 product_production 标签一同编译进二进制）
+developer/test         =  可覆盖（本地联调、sandbox、mock），沿用既有开发通道
+```
+
+**需要落地的改动**：`internal/productprofile` 的 `Profile` 目前只有 `allowDevWebview` / `allowEnvironmentModelSource` / `allowDataRootOverride` / `startup` 四个字段，**没有任何 api-host 字段**。需要增加（P0-00 的 profile schema）：
+
+| 字段 | 含义 |
+|---|---|
+| `apiHost` | 正式 API 主机（`https://<host>/v1`） |
+| `gatewayHost` | 模型网关主机（可与 `apiHost` 同源） |
+| `trustedKeyIDs` | 受信签名公钥的 keyId → 公钥（或指向编译期嵌入的公钥表） |
+
+**fail-closed**：production 构建若 `apiHost` 为空 → **拒绝启动并发起任何中台请求**，而不是回退到任何默认值、`localhost` 或 `config.yml`。
+
+#### 2. 一个共享 HTTP transport，不是每个 client 一套
+
+`AuthClient`、`ControlPlaneClient`、`UsageClient`、`GatewayControlClient` 的**控制面调用**共用一个 `internal/productclient` 内部的 HTTP 底座，集中实现：
+
+| 关注点 | 规定 |
+|---|---|
+| 传输 | 单一 `http.Client`（连接复用），`https` only；不得明文 HTTP（对齐[中台交付包](../产品客户端与中台对接/中台交付包.md) §3.1） |
+| 超时 | 见下表；不得依赖默认零值（零 = 永不超时） |
+| 公共头 | `Authorization: Bearer`、`X-Client-Version`、`X-Client-Platform`、`X-Client-Arch`、`X-Install-Id`、`Accept-Language` 集中注入，不在各方法里手写 |
+| 错误映射 | HTTP 状态 + 机器码 → typed error，集中一处；`message` 永不作为文案（只按 `code` 映射） |
+| 401 刷新单飞 | **在底座里拦截**：并发 401 只触发一次 `Refresh`，其余请求等待同一结果；刷新失败统一清凭证并回登录页。不能在每个 client 里各写一份 |
+| 幂等 | 所有创建副作用的请求自动带 `Idempotency-Key` = `clientRequestId`（对齐中台交付包 §3.3） |
+
+**这一条与 `reuse-guard` 的关系（避免误读）**：`reuse-guard` 禁止 `net/http` 的是 `internal/productclient/gateway` —— 因为**模型流**必须复用 `internal/app` 的 provider 栈。`internal/productclient`（认证/控制面/用量）**本来就该自己发 HTTP**：那些是普通 JSON 接口，上游没有对应能力可复用。两者不矛盾，不要因为看到守卫就以为整个 `productclient` 不能出现 `net/http`。
+
+#### 3. 超时与重试（有界，按接口语义定）
+
+| 调用 | 超时 | 重试 |
+|---|---|---|
+| `SendCode` / `Login` | 10s | **不自动重试**（中台交付包 §3.3） |
+| `Refresh` | 10s | 单飞内一次；失败即清凭证 |
+| `Bootstrap` / `Models` / `SensitiveDictionary` / `LegalDocuments` | 15s | 有界退避（≤2 次），带 `If-None-Match` |
+| `Usage` / `RequestStatus` / `Ledger` | 10s | 只读，可退避重试 |
+| `Cancel` | 10s | 幂等，可重试 |
+| 模型流 | 由 `internal/provider` 与 `context` 决定 | **不在此处实现** |
+
+统一原则：退避上限、总时长上限都必须有明确数值并写进实现（§3.9 有界降级）；`429` 一律按 `retryAfterSec` 冷却，`5xx` 先查 `clientRequestId` 状态再决定是否重发。
+
+#### 4. 签名验签只实现一次
+
+`catalog` / `capabilities` / `policy` / 词库四个信封**共用一套**验签 + 缓存 + 刷新（owner 见 [P0-开发顺序与协作计划](P0-开发顺序与协作计划.md) §3 的 M2 消歧）：
+
+- 受信公钥来自**嵌入式 profile**（§1 的 `trustedKeyIDs`），不从网络获取 —— 否则验签失去意义。
+- 规范化（JCS）与 `keyId` 选择集中实现；未知 `keyId` = fail-closed，不是"忽略验签继续"。
+- 四个信封的差异只在 **DTO 与合并规则**，不在验签。
+- **不引入代码生成依赖**：本项目禁止无理由新增三方依赖（`.octorules`）。中台交付的 OpenAPI 用于**产出 contract sample 与测试断言**，客户端实现**手写** DTO —— 见下方 §合并方式。
+
+#### 5. 与 `productruntime` 的边界
+
+`productruntime` 只**调用**上面这些窄接口并做产品映射；它不持有 HTTP 细节、不自己拼 URL、不自己加头。`internal/server` 完全不参与（`01A` 负责把既有产品 HTTP 迁出）。
+
 
 P0-01 先以 合同测试实现 验证 contract，不改动所有 handler。实际接入时：
 
@@ -109,7 +174,7 @@ P0-01 先以 合同测试实现 验证 contract，不改动所有 handler。实�
 
 | PR | 内容 | 验收 |
 | --- | --- | --- |
-| B0 | `productruntime` contract（消费 P0-00 已落地的 `productprofile`）、`productclient` DTO/错误、合同测试实现、gateway sender contract、policy contract sample；无真实 HTTP | 新包依赖方向正确；无 `Consume`；合同测试实现 覆盖成功/401/过期/取消/余额不足；本节合同与 `开发计划` §3 零分歧；既有 server 行为不变 |
+| B0 | `productruntime` contract（消费 P0-00 已落地的 `productprofile`）、`productclient` DTO/错误、合同测试实现、gateway sender contract、policy contract sample；无真实 HTTP。**profile 需含 `apiHost`/`gatewayHost`/`trustedKeyIDs`（P0-01 §1）**，且 production 缺失时 fail-closed | 新包依赖方向正确；无 `Consume`；合同测试实现 覆盖成功/401/过期/取消/余额不足；本节合同与 `开发计划` §3 零分歧；既有 server 行为不变 |
 | B1 | production profile 和 productruntime 最小装配；优先只改 desktop，确有必要才申请 P0-00 的通用 server 端口 | 开发 URL、环境 provider/model、`config.yml` endpoint/本地 provider 都不能让 production session 绕过 gateway；profile 不能由环境变量、配置、缓存或 WebView 输入切换；developer 回归仍通过（developer/test 保留 `config.yml` 配第三方 endpoint/URL/key 的能力） |
 
 固定积分、旧本地 token 和本地账号状态不是 B0/B1 的“兼容目标”。它们分别按 P0-02、P0-05、P0-08 的正式链路替换或删除；P0-01 不为将被删除的 旧本地实现 增加抽象。

@@ -20,6 +20,7 @@ import {
   crc32,
   buildZipBuffer,
   buildZipEntries,
+  DATA_FILES,
 } from './package-portable.mjs'
 
 async function tmpdir(t) {
@@ -47,11 +48,10 @@ test('renderUsageNote: replaces brand placeholders', () => {
   assert.equal(out, '双击 PuddingBox.exe 启动 布丁盒子 / Pudding Box。')
 })
 
-test('checkDataFiles: passes on the four pre-filled items', () => {
+test('checkDataFiles: passes on the pre-filled items', () => {
   const files = [
     { rel: 'data', dir: true },
     { rel: 'data/sensitive-words.txt', dir: false },
-    { rel: 'data/chat-modes.json', dir: false },
     { rel: 'data/config.yml', dir: false },
     { rel: 'data/workspace', dir: true },
   ]
@@ -64,10 +64,21 @@ test('checkDataFiles: fails on a missing data/ file', () => {
     { rel: 'data/sensitive-words.txt', dir: false },
     { rel: 'data/workspace', dir: true },
   ]
-  assert.deepEqual(checkDataFiles(files), [
-    'data/ missing chat-modes.json',
-    'data/ missing config.yml',
-  ])
+  assert.deepEqual(checkDataFiles(files), ['data/ missing config.yml'])
+})
+
+// chat-modes.json must NOT be pre-filled: its factory content was the four
+// deleted buding-* fake models (P12 §3.1). A missing file already means the
+// factory grouping, so shipping it would only re-ship fake data.
+test('checkDataFiles: does not require chat-modes.json', () => {
+  const files = [
+    { rel: 'data', dir: true },
+    { rel: 'data/sensitive-words.txt', dir: false },
+    { rel: 'data/config.yml', dir: false },
+    { rel: 'data/workspace', dir: true },
+  ]
+  assert.ok(!DATA_FILES.includes('chat-modes.json'))
+  assert.deepEqual(checkDataFiles(files), [])
 })
 
 test('checkDataFiles: fails when data/ is absent', () => {

@@ -12,7 +12,6 @@ import (
 	"errors"
 	"fmt"
 	"os"
-	"path/filepath"
 )
 
 // Mode ids. These are fixed ASCII identifiers (需求 §5.2.4「标识符例外」) —
@@ -75,25 +74,29 @@ func Builtin() Config {
 	}
 }
 
-// Load reads the mode config at path. A missing file is seeded with the
-// built-in default and written out (需求 §5.6 规则 1: 用户可改配置，改完按配置走);
-// a present-but-unparseable file degrades to the built-in default WITHOUT
-// overwriting the user's file, returning ErrUnreadable alongside the built-in
-// so the caller can surface a one-time hint. A genuine read error is returned
-// as-is with the built-in config.
+// Load reads the mode config at path.
+//
+// A MISSING file is not an error and is NOT written: the caller gets the
+// factory grouping (Builtin) and nothing touches the disk. This deliberately
+// follows the sensitive-dictionary pattern — missing means "use the default",
+// not "materialize the default". The old behaviour seeded data/chat-modes.json
+// on first load so the user could see and edit it, but that rationale died with
+// the hardcoded model ids: Builtin() now contains only the three fixed mode
+// ids, so a seeded file would show the user three empty groups and give them
+// nothing to edit. Under P0-04 the modes are a projection of the signed
+// catalog, so a locally seeded file would also be an override that could
+// silently empty the selector. See 开发规范 §3.9.1 (no startup writes of
+// user-editable files).
+//
+// A present-but-unparseable file degrades to the built-in default WITHOUT
+// overwriting the user's file, returning ErrUnreadable alongside it so the
+// caller can surface a one-time hint. A genuine read error is returned as-is
+// with the built-in config.
 func Load(path string) (Config, error) {
 	data, err := os.ReadFile(path)
 	if err != nil {
 		if os.IsNotExist(err) {
-			builtin := Builtin()
-			// Seed the factory default so the user can see and edit it. A
-			// failed write must not fail startup — the in-memory builtin is
-			// still served (same degrade-to-builtin policy as the sensitive
-			// dictionary).
-			if werr := writeBuiltin(path, builtin); werr != nil {
-				return builtin, nil
-			}
-			return builtin, nil
+			return Builtin(), nil
 		}
 		return Builtin(), err
 	}
@@ -110,20 +113,6 @@ func Load(path string) (Config, error) {
 		return Builtin(), nil
 	}
 	return cfg, nil
-}
-
-// writeBuiltin persists the built-in config atomically-enough for a first-run
-// seed: create the parent dir, then write. Best-effort — the caller already
-// holds the in-memory builtin to serve regardless.
-func writeBuiltin(path string, cfg Config) error {
-	data, err := json.MarshalIndent(cfg, "", "  ")
-	if err != nil {
-		return err
-	}
-	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
-		return err
-	}
-	return os.WriteFile(path, append(data, '\n'), 0o600)
 }
 
 // ModeByID returns the mode with the given id.

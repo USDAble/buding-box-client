@@ -66,6 +66,29 @@ jobs:
       - name: Run datapath guard tests
         run: node --test scripts/datapath-guard.test.mjs
 
+  server-diff-guard:
+    name: Server Diff Guard
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      # A PR checkout is a detached merge commit; `main` must be present as a
+      # ref for the guard to compare against.
+      - name: Fetch the upstream-tracking branch
+        run: git fetch --no-tags origin main:refs/remotes/origin/main
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '22'
+
+      - name: Run server diff guard
+        run: node scripts/server-diff-guard.mjs
+
+      - name: Run server diff guard tests
+        run: node --test scripts/server-diff-guard.test.mjs
+
   svelte-check:
     name: Svelte Check
     runs-on: ubuntu-latest

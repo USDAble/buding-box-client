@@ -60,7 +60,7 @@ RG_EMBED_DIR := internal/tools/rgembed/binaries
 RG_EMBED_BIN := $(RG_EMBED_DIR)/rg
 
 .PHONY: all build install test cover vet fmt fmt-check tidy clean \
-        brand brand-check datapath-check \
+        brand brand-check datapath-check server-diff-check \
         eval-build eval-list eval \
         rg-embed rg-embed-clean \
         bundle-tools-windows bundle-tools-macos \
@@ -187,6 +187,16 @@ brand-check:
 datapath-check:
 	node scripts/datapath-guard.mjs
 	node --test scripts/datapath-guard.test.mjs
+
+# ── server-diff guard ─────────────────────────────────────────────────────────
+# internal/server is an upstream tree this fork must keep mergeable. The guard
+# is a ratchet: it records today's fork debt (apiProduct call sites, per-file
+# diff ceilings, product files parked in the upstream tree) as a ceiling that
+# may only shrink. It compares against the upstream-tracking branch (origin/main
+# or main), so it needs one fetched.
+server-diff-check:
+	node scripts/server-diff-guard.mjs
+	node --test scripts/server-diff-guard.test.mjs
 
 # ── ripgrep embed (build-time only) ──────────────────────────────────────────
 # Downloads the matching rg release for GOOS/GOARCH, extracts the binary,

@@ -74,9 +74,24 @@ type ControlClient interface {
 | `internal/productclient/dto.go` | 全部 wire DTO（字段名逐字引用[中台交付包](../产品客户端与中台对接/中台交付包.md) §4） |
 | `internal/productclient/contract.go` | `AuthClient` / `ControlPlaneClient` / `UsageClient` / `SessionLister` |
 | `internal/productclient/gateway/` | `ControlClient`（取消/状态）、`Observer`、`CallMeta` |
-| `internal/productpolicy/` | `Verifier`、`Policy`（PEP）、`Signed`、版本单调与时钟窗口 |
-| `internal/credentialstore/` | `Store` 最小接口（P0-08 实现） |
-| `internal/productruntime/` | 装配根：`Deps` 全必填、`Preflight`、`Evaluate`、`Observe` |
+| `internal/productpolicy/` | `Verifier`（**端口声明**，见下）、`Policy`（PEP）、`Signed`、`CompareVersions`、时钟窗口与 fail-closed 判定 |
+| `internal/credentialstore/` | `Store` 最小接口：`Load`（无会话返回 `ErrNotFound`）/ `Save`（替换）/ `Clear`（幂等）；只持久化 refresh token。已随 B0 落地，**方法名以代码为准**（P0-08 实现平台后端） |
+| `internal/productruntime/` | 装配根：`Deps` 全必填、`Preflight`、`Evaluate`、`Observe`、**构造 `productpolicy.Verifier` 的 adapter** |
+
+**信封验签的归属（消歧，避免 01 / 04 / 协作计划各写一版）**：验签的**唯一实现必须服务两个信封** —— 策略/目录信封（P0-04）与词库信封（P0-06）。但 `productpolicy` 已经 import `productclient`（`Signed` 里有 `productclient.Catalog`），所以"把实现放进 `productclient` 并返回 `Signed`"会构成**import 环**。落地形态固定为：
+
+```text
+productprofile.TrustedKeyIDs ──┐
+                               ▼
+  internal/productclient  通用信封验签（ed25519 + JCS 归一 + `signature` 剥离 + keyId 查表）  ← owner 02，只此一份
+                               │  verified payload + keyID
+                               ▼
+  internal/productruntime  adapter：构造 productpolicy.Signed            ← 装配根
+                               ▼
+  internal/productpolicy  Verifier 端口（Policy/Evaluate 消费；audience / 窗口 / 版本单调在这里）  ← owner 04，不含 crypto
+```
+
+即 **crypto 的实现 owner 是 02**（与协作计划 §3「M2 信封的唯一 owner」一致），`04`/`06` 都不得再写一套；密钥由 `productruntime` 从 `productprofile` 注入 `productclient`（`productclient` 是叶子包，`deps_test.go` 不允许它 import `productprofile`）。
 
 两条**可执行**的约束（不是注释里的一句话）：
 

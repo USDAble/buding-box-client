@@ -73,12 +73,26 @@ server.go diff：317 added / 167 removed = 484 行
 **实现约束（必须照做，否则会引入静默安全洞）**：
 
 1. **语义会反转**。现状是"谁用 `api()` 谁豁免"（**隐式**）；改成中间件后是"默认全拦、显式豁免"（**显式**）。因此豁免集必须**显式枚举**，不得依赖"没用 `apiProduct` 就自然豁免"。
-2. **豁免集**（与现状等价，实现前须逐条核对）：`/api/health`、`/api/version`、MCP OAuth callback、静态文件、`/api/product/state`、`/api/product/locale`、`/api/product/send-code`、`/api/product/login`、协议/legal 路由。
-3. **包裹层级**：中间件只能包在 `requireAuth` **那一层之内**，不能包整个 mux —— 否则会拦到心跳、静态文件、OAuth callback 等未登记路由。
-4. **豁免判断用路由 pattern，不用路径字符串**：避免路径前缀匹配把 `/api/product/state/../chat` 之类误判为豁免。
-5. **不保留 `apiProduct` 符号**：折叠后该名字应从 `internal/server` 完全消失（`server-diff-guard` 会断言，见 §7）。
+2. **包裹层级**：产品门只能包在 `requireAuth` **那一层之内**，不能包整个 mux —— 否则会拦到心跳、静态文件、OAuth callback 等未登记路由。
+3. **豁免判断用路由 pattern，不用路径字符串**：避免路径前缀匹配把 `/api/product/state/../chat` 之类误判为豁免。
+4. **不保留 `apiProduct` 符号**：折叠后该名字应从 `internal/server` 完全消失（`server-diff-guard` 会断言，见 §7）。
+5. **豁免集与现状等价，且是可穷举的**（2026-09-11 实测；`rg -c 's\.api\(' internal/server/server.go` 恰好为 4，加上 157 处 `apiProduct` 即棘轮基线 161）：
 
-**回归**：现有 `apiRoutes` 覆盖测试（断言每条路由都拒绝无 key 的非 loopback 请求）必须继续通过，并**新增**一条断言：未登录时被保护的样本路由返回产品门拒绝、豁免集路由不被拦。
+| 路由 / 位置 | 当前注册方式 | 折叠后 | 说明 |
+| --- | --- | --- | --- |
+| `GET /api/health` | 直接 `mux.HandleFunc`（`server.go:982`） | 不变 | 不在 `requireAuth` 内，产品门不参与 |
+| `GET /api/version` | 直接 `mux.HandleFunc`（`server.go:983`） | 不变 | 同上 |
+| `GET /api/mcp/servers/{name}/oauth/callback` | 直接 `mux.HandleFunc`（`server.go:1110`） | 不变 | OAuth 回调**有意**绕过鉴权，不得挪进产品门 |
+| `/` 静态文件 | `mux.Handle("/", …)`（`server.go:1129`） | 不变 | 不在 `requireAuth` 内 |
+| `GET /api/product/state` | `s.api(`（`server.go:989`） | **豁免**（`Wrap` 原样放行） | 登录页/拦截页要读状态 |
+| `PUT /api/product/locale` | `s.api(`（`server.go:990`） | **豁免** | 拦截页语言切换 |
+| `POST /api/product/send-code` | `s.api(`（`server.go:991`） | **豁免** | 登录取码 |
+| `POST /api/product/login` | `s.api(`（`server.go:992`） | **豁免** | 登录提交 |
+| 协议 / legal 路由（**当前尚不存在**） | — | 新增时必须登记为豁免 | 未创建前不得预留裸路径 |
+
+**豁免集的唯一来源**：折叠后豁免集由 `productruntime` 以**导出常量**持有（`internal/server` 只在 `api()` 里把 pattern 交给 `productGate.Wrap`，不自己维护豁免名单）；测试直接引用该常量、不复制字符串 —— 否则「测试里的豁免集」会成为第二份真相（§3.8），而两份里总会先改一份。
+
+**回归**：现有 `apiRoutes` 覆盖测试（断言每条路由都拒绝无 key 的非 loopback 请求）必须继续通过，并**新增**一条断言：未登录时被保护的样本路由返回产品门拒绝、上表 4 条豁免路由不被拦。
 
 ## 3. 唯一允许的通用协作端口
 
@@ -86,8 +100,23 @@ server.go diff：317 added / 167 removed = 484 行
 
 最小端口按以下顺序引入，未被迁移步骤需要时不创建：
 
-1. **认证后路由注册器**：server 提供已完成机器访问校验、统一 no-store 的 `RouteRegistrar`；productruntime 注册自己的 HTTP handler。产品门作为 productruntime 的 handler/middleware，而非 `server.apiProduct`。
-2. **请求过滤器 / 产品门中间件**：`apiProduct` 折叠**必须**用这个端口。形态是一个中性 `func(http.Handler) http.Handler`，由 productruntime 实现（其 allowlist、登录判定和错误体都由 productruntime 持有），在 `internal/server` 内以顶层中间件方式接入。server 不保存产品状态，也不逐路由改写路由表。这是 P0-01A 唯一必须引入的端口 —— 不做它就得保留 157 处 `apiProduct` 改写。
+1. **认证后路由注册器**：server 提供已完成机器访问校验、统一 no-store 的注册入口（`internal/runtimeport` 的 `RouteRegistrar`）；productruntime 用它注册自己的 HTTP handler。产品门作为 productruntime 的 handler/middleware，而非 `server.apiProduct`。**仅阶段 B 迁出产品 `s.api` 路由时才创建**。
+2. **产品门端口（`ProductGate`）**：`apiProduct` 折叠**必须**用这个端口，也是本任务唯一必须新增的端口 —— 不做它就得保留 157 处 `apiProduct` 改写。**此前写的「中性 `func(http.Handler) http.Handler`」与同节要求的「豁免按路由 pattern 判断」不能同时成立**（拿不到 pattern 的请求期中间件做不到后者），形态以这里为准：
+
+```go
+// internal/runtimeport —— 中性包，无 product / 账号 / 积分 / 词典 / 供应商名词。
+type ProductGate interface {
+	// Wrap 在路由**注册期**调用（不是请求期），因此能拿到 Go 1.22 的 pattern
+	// 并按 pattern 判断豁免。实现由 productruntime 提供：豁免集、登录判定、
+	// 拒绝响应体都由它持有；server 不保存产品状态、不逐路由改写路由表。
+	//
+	//   - 豁免 pattern：原样返回 next；
+	//   - 其它 pattern：检查桌面窗口登录态，放行或自行写出拒绝响应。
+	Wrap(pattern string, next http.HandlerFunc) http.HandlerFunc
+}
+```
+
+`internal/server` 的接入：`api()` 在 `requireAuth` **之内**调用 `productGate.Wrap(pattern, h)`；`productGate == nil`（`octo serve` 与现有测试）时**零变化**。豁免集见 §2.1 的精确表，其唯一来源是 productruntime 的导出常量。这是 P0-01A 唯一必须引入的端口。
 3. **turn 上下文钩子或 sender 装配点**：仅当 P0-05 迁出隐私/发送前策略时使用。输入只能是 `context`、`agent.Session`、通用 sender/请求元数据；不得暴露 server 私有锁、mux 或产品状态。
 4. **宿主 sender 工厂（`SenderFactory`）**：见 §3.1 —— 由 P0-01 B1 申请。它和端口 3 都要一个"sender 装配点"，但回答的是不同问题：端口 3 是"每一轮在既有 sender 上做什么"，端口 4 是"这一轮的 sender 由谁决定"。**不要合并成一个端口** —— 合并后 `internal/server` 就会知道"产品会换 sender"这件事，那正是 B1 要消除的知识。
 
@@ -247,4 +276,5 @@ scripts/server-diff-guard.mjs        断言 vs 上游 main：
 | --- | --- |
 | 2026-09-11 | 初版：边界、精确盘点、`apiProduct` 折叠、阶段 B–E、`server-diff-guard`。 |
 | 2026-09-11 | 补 §5.1「恢复上限」：区分 A 类（产品业务，恢复）与 B 类（datapath 强制承载，永久保留），给出 B 类实测清单（58 个测试文件 + 11 个非测试文件 18 处），并修正 §7.2 的验收口径，避免被误设成"对上游 diff 为空"。 |
+| 2026-09-11 | 产品门端口从「中性 `func(http.Handler) http.Handler`」改写为具体 `runtimeport.ProductGate`（注册期拿到 route pattern）：原形态与「豁免按 pattern 判断」互相矛盾，实现者只能自行发明一套。§2.1 豁免集由散文清单改为精确到 `文件:行号` 的表（4 条 `s.api(` + 4 条非 `requireAuth` 路由），并声明豁免集唯一来源是 productruntime 的导出常量。 |
 

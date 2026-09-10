@@ -51,12 +51,12 @@ P0-00/00A 将当前入口分为两类：`OCTO_DESKTOP_DEV_URL`、环境模型来
 | ID | 当前仓库子需求 | 当前仓库交付 | 外部输入 | 主要依赖 |
 | --- | --- | --- | --- | --- |
 | P0-00 | Server 最小改动与 production profile 前置 | `buding` 已接收批准的 `main`、全局嵌入式 profile 配置、server 零改预算、开发输入拒绝黑盒测试 | 发布 profile 决策 | 无 |
-| P0-00A | 生产入口可见性与功能保留 | 保留 `config.yml`、MCP、channel、工具与后台能力；冻结首发 UI 入口清单和 capability ID 初稿 | 首发入口决策 | P0-00 |
+| P0-00A | 生产入口可见性与功能保留 | 保留 `config.yml`、MCP、channel、工具与后台能力；冻结首发 UI 入口清单和 capability ID 初稿（**id 清单登记于[中台交付包 §4.4](../产品客户端与中台对接/中台交付包.md)，待 Q4 确认**） | 首发入口决策 | P0-00 |
 | P0-01 | 产品客户端契约与产品运行时装配 | `productruntime`/`productclient`/gateway/policy/credential store contract、mock、装配设计 | DTO 字段草案评审 | P0-00 |
 | P0-01A | 既有产品逻辑迁出 `internal/server` | 产品 HTTP/状态/门/词库/发送策略迁出；本地积分删除；中性端口与回归证据 | P0-01 runtimeport contract；P0-02/04/05 的正式替换输入 | P0-01 |
 | P0-02 | 客户端认证与控制面中台接入 | 登录/刷新、bootstrap 校验和缓存 | OpenAPI、签名公钥、sandbox、错误码 | P0-01 |
 | P0-03 | 客户端模型网关 sender 与账本状态接入 | SSE、取消恢复、usage 投影 | 网关协议、request status、sandbox | P0-01 |
-| P0-04 | 目录、能力矩阵和本地 PEP | catalog adapter、policy snapshot、菜单/执行双校验 | catalog/policy contract sample、能力 ID 表 | P0-01 |
+| P0-04 | 目录、能力矩阵和本地 PEP | catalog adapter、policy snapshot、菜单/执行双校验 | catalog/policy contract sample、[能力 ID 注册表（§4.4）](../产品客户端与中台对接/中台交付包.md) | P0-01 |
 | P0-05 | 正式模型调用链与 production 装配 | gateway resolver、session 绑定、删除固定积分 mock | P0-02/03/04 sandbox | P0-00 至 P0-04 |
 | P0-06 | 隐私发送副本、词库、数据流与正式告知 | 脱敏副本、三层词库、文案/版本呈现、诊断脱敏 | 词库、保留规则、批准文案 | P0-01、P0-02、P0-04 |
 | P0-07 | 安全、契约与 Windows E2E 门禁 | mock/contract suite、sandbox/真机记录 | 测试账号、可检索 request ID | P0-02 至 P0-10 |

@@ -111,10 +111,17 @@ type Signed struct {
 }
 
 // Verifier checks a raw signed envelope against the compiled-in trusted keys
-// and returns its content. Implementations live in P0-04 B1 and must:
+// and returns its content. This is the policy-side port, not the crypto: the
+// single envelope verifier lives in internal/productclient (ed25519 over the
+// JCS payload, keyId lookup, keys injected by the assembly root) and serves
+// both the policy/catalog envelope and the sensitive-word envelope. An adapter
+// in internal/productruntime turns its verified payload into Signed, so that
+// 04 and 06 cannot each grow a second verifier.
 //
-//   - use only keys from productprofile.TrustedKeyIDs, never a key from the
-//     network — a fetched key makes the signature meaningless;
+// Anything satisfying this interface must:
+//
+//   - use only keys injected from productprofile.TrustedKeyIDs, never a key
+//     from the network — a fetched key makes the signature meaningless;
 //   - treat an unknown `keyId` as failure, not as "skip verification";
 //   - verify over the JCS-normalised payload with the `signature` field
 //     removed;

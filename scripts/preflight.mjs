@@ -19,7 +19,8 @@
 //     datapath-guard          source has no ".octo"/home-dir violations
 //     release-profile-guard    this build carries product_production
 //     reuse-guard              no fork package re-implements a provider
-//     All three are pure source scans with no external refs.
+//     norms-guard              every AI-tool entry point points at the fork spec
+//     All four are pure source scans with no external refs.
 //
 //   ADVISORY (warn, do not fail)
 //     server-diff-guard        fork drift vs the upstream-tracking branch
@@ -43,6 +44,7 @@ import { fileURLToPath } from 'node:url'
 import { check as checkDatapath } from './datapath-guard.mjs'
 import { check as checkReleaseProfile } from './release-profile-guard.mjs'
 import { check as checkReuse } from './reuse-guard.mjs'
+import { check as checkNorms } from './norms-guard.mjs'
 import { check as checkServerDiff, resolveUpstream } from './server-diff-guard.mjs'
 
 // HARD: returns a list of problem strings. Every entry is prefixed with its
@@ -58,6 +60,9 @@ export async function runHardChecks(root) {
 
   const { problems: reuse } = await checkReuse(root)
   for (const p of reuse) problems.push(`reuse-guard: ${p}`)
+
+  const { problems: norms } = await checkNorms(root)
+  for (const p of norms) problems.push(`norms-guard: ${p}`)
 
   return problems
 }

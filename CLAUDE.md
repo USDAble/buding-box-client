@@ -6,7 +6,7 @@ Guidance for Claude Code working in this repository. The octo-agent equivalent i
 
 `octo-agent` — a Go 1.25+ AI agent CLI distributed as a single binary (`go.mod` declares `go 1.25.0`). Module path: `github.com/open-octo/octo-agent`. Ships as CLI + embedded Web UI + IM bridges via `octo serve`. Per-feature design notes live under `dev-docs/`.
 
-**This repository is a downstream fork.** It ships the 布丁盒子 / Pudding Box portable desktop product on top of upstream octo-agent. Fork-specific rules are in `dev-docs-usdable/开发规范.md` and `dev-docs-usdable/上游合并策略.md`; the current requirement batch is `dev-docs-usdable/需求/2260906/`. The three hard rules below (§Fork rules) override the general conventions when they conflict.
+**This repository is a downstream fork.** It ships the 布丁盒子 / Pudding Box portable desktop product on top of upstream octo-agent. **The fork-specific rules in `dev-docs-usdable/开发规范.md` are binding, not reference material**, and `.octorules` + this file are the binding upstream norms of equal standing (see 开发规范 §3.6). Upstream merge policy: `dev-docs-usdable/上游合并策略.md`. The current requirement batch is `dev-docs-usdable/需求/2260906/`. The three hard rules below (§Fork rules) override the general conventions when they conflict. `scripts/norms-guard.mjs` (CI `norms-guard` job / `make norms-check` / packaging preflight) fails the build if any AI-tool entry point (`AGENTS.md`, `.cursor/rules/dev-norms.mdc`, `.github/copilot-instructions.md`, this file, `.octorules`) stops pointing at `开发规范.md`.
 
 ## Commands
 

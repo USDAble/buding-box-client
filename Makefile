@@ -61,7 +61,7 @@ RG_EMBED_BIN := $(RG_EMBED_DIR)/rg
 
 .PHONY: all build install test cover vet fmt fmt-check tidy clean \
         brand brand-check datapath-check release-profile-check \
-        server-diff-check reuse-check preflight-check \
+        server-diff-check reuse-check norms-check preflight-check \
         eval-build eval-list eval \
         rg-embed rg-embed-clean \
         bundle-tools-windows bundle-tools-macos \
@@ -279,6 +279,16 @@ server-diff-check:
 reuse-check:
 	node scripts/reuse-guard.mjs
 	node --test scripts/reuse-guard.test.mjs
+
+# ── norms discovery guard ────────────────────────────────────────────────────
+# Every AI-tool entry point (AGENTS.md, .cursor/rules/dev-norms.mdc,
+# .github/copilot-instructions.md, CLAUDE.md, .octorules) must exist and point
+# at dev-docs-usdable/开发规范.md, and the canonical file must name .octorules
+# and CLAUDE.md as binding upstream specs (开发规范 §3.6). CI's norms-guard job
+# and scripts/preflight.mjs run the same script.
+norms-check:
+	node scripts/norms-guard.mjs
+	node --test scripts/norms-guard.test.mjs
 
 # ── packaging preflight ──────────────────────────────────────────────────────
 # The same check every packager runs at the start of a build (hard-fails on

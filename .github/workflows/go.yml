@@ -138,6 +138,27 @@ jobs:
       - name: Run reuse guard tests
         run: node --test scripts/reuse-guard.test.mjs
 
+  # Guards the discovery of the fork norms (开发规范 §3.6): every AI-tool entry
+  # point (AGENTS.md, .cursor/rules, copilot-instructions, CLAUDE.md, .octorules)
+  # must exist and point at dev-docs-usdable/开发规范.md. A missing or stale
+  # entry file silently strips the fork rules from one whole tool family, which
+  # no reviewer sees. No npm dependencies.
+  norms-guard:
+    name: Norms Guard
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '22'
+
+      - name: Run norms guard
+        run: node scripts/norms-guard.mjs
+
+      - name: Run norms guard tests
+        run: node --test scripts/norms-guard.test.mjs
+
   svelte-check:
     name: Svelte Check
     runs-on: ubuntu-latest

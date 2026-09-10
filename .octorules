@@ -6,7 +6,7 @@ The canonical project guidance for contributors and AI coding agents. Keep this 
 
 `octo-agent` is a Go AI agent CLI (Go 1.25+, single binary). Module path `github.com/open-octo/octo-agent`. Ships as CLI + embedded Web UI + IM bridges (see `octo serve`).
 
-**This repository is a downstream fork** shipping the 布丁盒子 / Pudding Box portable desktop product. Fork-specific rules live in `dev-docs-usdable/开发规范.md`; upstream merge policy in `dev-docs-usdable/上游合并策略.md`. The three hard rules under "Fork rules" below override anything here that conflicts.
+**This repository is a downstream fork** shipping the 布丁盒子 / Pudding Box portable desktop product. **The fork-specific rules in `dev-docs-usdable/开发规范.md` are binding, not reference material**, and `.octorules` + `CLAUDE.md` are the binding upstream norms of equal standing (开发规范 §3.6). Upstream merge policy: `dev-docs-usdable/上游合并策略.md`. `scripts/norms-guard.mjs` enforces that every AI-tool entry point (`AGENTS.md`, `.cursor/rules/dev-norms.mdc`, `.github/copilot-instructions.md`, `CLAUDE.md`, this file) points at that spec. The three hard rules under "Fork rules" below override anything here that conflicts.
 
 ## Commands
 

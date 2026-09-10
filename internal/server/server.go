@@ -43,6 +43,7 @@ import (
 	"github.com/open-octo/octo-agent/internal/productgate"
 	"github.com/open-octo/octo-agent/internal/productstate"
 	"github.com/open-octo/octo-agent/internal/prompt"
+	"github.com/open-octo/octo-agent/internal/runtimeport"
 	"github.com/open-octo/octo-agent/internal/scheduler"
 	"github.com/open-octo/octo-agent/internal/sensitive"
 	"github.com/open-octo/octo-agent/internal/skills"
@@ -123,6 +124,15 @@ type Config struct {
 	// shell, which mints it at startup and injects it into the webview URL.
 	// See internal/productgate.
 	WindowToken string
+
+	// SenderFactory, when non-nil, decides the agent.Sender every turn runs on,
+	// replacing the server's own provider/model resolution and overriding a
+	// session's bound ModelConfig. A factory error fails the turn rather than
+	// degrading to a config-resolved sender. Nil leaves the existing resolution
+	// order byte-for-byte unchanged. See internal/runtimeport.
+	//
+	// OCTO-FORK: 宿主 sender 工厂（端口 4）— see 01A §3.1.
+	SenderFactory runtimeport.SenderFactory
 }
 
 // Server is the HTTP server skeleton. It owns the mux, the agent factory,
@@ -466,7 +476,7 @@ type Server struct {
 // New builds a Server. It resolves provider/model, discovers skills, and
 // resolves the access key that gates non-loopback requests.
 func New(cfg Config) (*Server, error) {
-	sender, model, provName, err := resolveProviderAndModel(cfg.Provider, cfg.Model)
+	sender, model, provName, err := chooseDefaultSender(cfg.SenderFactory, cfg.Provider, cfg.Model)
 	if err != nil {
 		return nil, err
 	}
@@ -1639,6 +1649,30 @@ func (s *Server) wrapProductSender(sender agent.Sender) agent.Sender {
 	return app.WrapPII(app.WrapSensitive(sender, s.sensitiveEngine))
 }
 
+// hostProviderID labels a sender that came from a host-installed
+// runtimeport.SenderFactory. The server only ever reports its provider id back
+// out, so a host-owned sender gets a name the host can recognise instead of a
+// vendor it never chose.
+//
+// OCTO-FORK: 宿主 sender 工厂（端口 4）— see 01A §3.1.
+const hostProviderID = "host"
+
+// chooseDefaultSender resolves the server's default sender. With no factory
+// installed this is exactly resolveProviderAndModel, and that nil path must stay
+// byte-for-byte identical — `octo serve` and every existing test depend on it.
+//
+// OCTO-FORK: 宿主 sender 工厂（端口 4）— see 01A §3.1.
+func chooseDefaultSender(factory runtimeport.SenderFactory, flagProvider, flagModel string) (agent.Sender, string, string, error) {
+	sender, model, ok, err := runtimeport.Resolve(factory, runtimeport.SenderRequest{Model: flagModel})
+	if !ok {
+		return resolveProviderAndModel(flagProvider, flagModel)
+	}
+	if err != nil {
+		return nil, "", "", err
+	}
+	return sender, model, hostProviderID, nil
+}
+
 func resolveProviderAndModel(flagProvider, flagModel string) (agent.Sender, string, string, error) {
 	cfg, err := config.Load()
 	if err != nil {
@@ -1775,6 +1809,25 @@ func (s *Server) senderForSession(sess *agent.Session) (agent.Sender, string) {
 	if sess.Model != "" {
 		model = sess.Model
 	}
+
+	// OCTO-FORK: 宿主 sender 工厂（端口 4）— see 01A §3.1. A host factory owns
+	// sender selection outright, so a session's bound ModelConfig must not
+	// override it: that input is persisted session JSON plus data/config.yml and
+	// never passes through server.Config. This function has no error return, so a
+	// failure travels as a sender that always fails rather than degrading to
+	// defaultSender.
+	if s.cfg.SenderFactory != nil {
+		sender, turnModel, _, err := runtimeport.Resolve(s.cfg.SenderFactory, runtimeport.SenderRequest{Session: sess, Model: model})
+		if err != nil {
+			return s.wrapProductSender(runtimeport.FailingSender(err)), model
+		}
+		if turnModel != "" {
+			model = turnModel
+		}
+		// Wrapped like every other sender so P8/P10 survive on this path too.
+		return s.wrapProductSender(sender), model
+	}
+
 	if sess.ModelConfig == "" {
 		return defaultSender, model
 	}
@@ -2190,7 +2243,7 @@ func (s *Server) ensureSender() error {
 		s.senderMu.Unlock()
 		return nil
 	}
-	sender, model, provName, err := resolveProviderAndModel(s.cfg.Provider, s.cfg.Model)
+	sender, model, provName, err := chooseDefaultSender(s.cfg.SenderFactory, s.cfg.Provider, s.cfg.Model)
 	if err != nil {
 		s.senderMu.Unlock()
 		return err
@@ -2249,7 +2302,7 @@ func (s *Server) getProvider() string {
 func (s *Server) reloadDefaultSender() error {
 	s.senderMu.Lock()
 	defer s.senderMu.Unlock()
-	sender, model, provName, err := resolveProviderAndModel(s.cfg.Provider, s.cfg.Model)
+	sender, model, provName, err := chooseDefaultSender(s.cfg.SenderFactory, s.cfg.Provider, s.cfg.Model)
 	if err != nil {
 		return err
 	}

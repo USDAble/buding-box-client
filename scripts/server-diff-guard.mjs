@@ -56,12 +56,23 @@ export const API_PRODUCT_BASELINE = 161
 // automatically, so a *lower* number is always safe; only growth fails.
 //
 // `convergence` names the work package that is supposed to shrink it.
+//
+// One raise has happened so far, and it is the bar to judge the next one by:
+// server.go 484 → 543 for the host SenderFactory port (P0-01 B1, P0-01A §3.1).
+// It was raised rather than avoided because the port is an explicitly approved
+// architectural change, no smaller form exists (the `Config` field is the only
+// construction channel; the alternative the guard suggests — a package-level
+// setter read by the server — is hidden global state, which is a real
+// regression, not a smaller diff), and the reason for the *policy* lines was
+// moved out of the file into the fork-owned package first (−23 lines before the
+// ceiling was touched). A raise that cannot answer those three points should be
+// a fold instead.
 export const DEBT_CEILINGS = [
   {
     file: 'internal/server/server.go',
-    ceiling: 484,
-    why: 'P3 product gate (apiProduct + 157 call sites), product state wiring, credit/PII sender wrapping',
-    convergence: 'P0-01A C (apiProduct fold) + P0-01A D (sender/state move)',
+    ceiling: 543,
+    why: 'P3 product gate (apiProduct + 157 call sites), product state wiring, credit/PII sender wrapping, host SenderFactory port (P0-01 B1, see P0-01A §3.1)',
+    convergence: 'P0-01A C (apiProduct fold, −hundreds) + P0-01A D (sender/state move); the C fold must bring this well under 484, not just under 543',
   },
   {
     file: 'internal/server/handlers.go',

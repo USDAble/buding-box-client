@@ -59,7 +59,7 @@ GOFILES := $(shell find . -name '*.go' -not -path './vendor/*' -not -path '*/_ve
 RG_EMBED_DIR := internal/tools/rgembed/binaries
 RG_EMBED_BIN := $(RG_EMBED_DIR)/rg
 
-.PHONY: all build install test cover vet fmt fmt-check tidy clean \
+.PHONY: all build install test test-production cover vet fmt fmt-check tidy clean \
         brand brand-check datapath-check \
         eval-build eval-list eval \
         rg-embed rg-embed-clean \
@@ -128,6 +128,20 @@ install: web-build rg-embed
 
 test:
 	go test -race $(GOFLAGS) -tags='$(GOTAGS)' ./...
+
+# Test the build that is actually shipped: everything compiled with the
+# product_production tag, which selects the production runtime profile and
+# compiles the developer-only paths out. This is the configuration a released
+# binary runs, so it is the one whose tests have to pass.
+test-production:
+	go build -tags product_production ./...
+	go vet -tags product_production ./...
+	go test -tags product_production $(GOFLAGS) ./...
+	# cmd/octo-desktop is a nested module, so the lines above skip it — and that
+	# module is where the shipped desktop binary is built from. Its
+	# production-only tests are what prove the shipped build installs the host
+	# port and stays fail-closed, so they run here too.
+	cd cmd/octo-desktop && go test -tags product_production $(GOFLAGS) ./...
 
 cover:
 	go test $(GOFLAGS) -tags='$(GOTAGS)' -coverprofile=coverage.out ./...

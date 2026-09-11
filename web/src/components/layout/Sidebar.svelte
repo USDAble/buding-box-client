@@ -1,7 +1,7 @@
 <script lang="ts">
   import { onMount, onDestroy } from 'svelte'
   import { get } from 'svelte/store'
-  import { view, sidebar, sessions, sessionGroups, pinnedSessions, collapsedSessions, editGroupId, editGroupDraft, activeSessionId, selMode, sel, menuFor, editId, editDraft, showToast, mcpServers, createNewSession, createSessionInGroup, clearPendingSessionOpts, settingsModalOpen, cmdkOpen, nativeShell, dirLeaf } from '../../lib/stores'
+  import { view, sidebar, sessions, sessionGroups, pinnedSessions, collapsedSessions, editGroupId, editGroupDraft, activeSessionId, selMode, sel, menuFor, editId, editDraft, showToast, mcpServers, createNewSession, createSessionInGroup, clearPendingSessionOpts, cmdkOpen, accountPanelOpen, nativeShell, dirLeaf } from '../../lib/stores'
   import * as api from '../../lib/api'
   import { titlebarDblClick } from '../../lib/nativeWindow'
   import { t, tr, locale } from '../../lib/i18n'
@@ -10,14 +10,18 @@
   // dictionary, not .svelte literals. See 品牌升级方案.md §2.5.
   import { brandShortName } from '../../lib/brand'
   import { confirmDialog } from '../../lib/confirm'
+  import { viewHidden, visibleNav } from '../../lib/features'
   import { splitSections, swapWithinSection, parseSectionFold, type SectionFold } from '../../lib/sidebarSections'
   import { SIDEBAR_MIN, SIDEBAR_MAX, CENTER_MIN, readSidebarWidth, saveSidebarWidth } from '../../lib/sidebarWidth'
   import { ago, clockTick } from '../../lib/relTime'
   import { isUnread, sessionSeenAt, sessionTouchedAt } from '../../lib/unread'
+  import { productState } from '../../lib/product'
   import { ws } from '../../lib/ws'
-  import VersionBadge from './VersionBadge.svelte'
   import OctoLogo from './OctoLogo.svelte'
+  import AccountCorner from './AccountCorner.svelte'
+  import AccountPanel from './AccountPanel.svelte'
   import ProjectModal from '../overlays/ProjectModal.svelte'
+  import PrivacyMark from '../ui/PrivacyMark.svelte'
   import type { SessionGroup } from '../../lib/types'
 
   // Mac's traffic lights float over the window's top-left corner, which is this
@@ -30,6 +34,12 @@
   // The project whose settings modal (rename / source folders / output marker)
   // is open; null when closed.
   let settingsGroup = $state<SessionGroup | null>(null)
+
+  // The P5 account corner's DOM node — actually the footer container holding
+  // it, whichever mode is mounted (full footer or rail footer, never both).
+  // The account panel measures this element's rect to anchor itself so the
+  // corner stays visible below as the collapse anchor.
+  let cornerEl = $state<HTMLElement | null>(null)
 
   // Agent list for the new-session picker dropdown.
   let agents: api.Agent[] = $state([])
@@ -383,6 +393,15 @@
     ...topNav.map(item => ({ icon: item.icon, title: item.label, v: item.v })),
   ]
 
+  // P6: filter the hidden upstream capability views (mcp/channels/lightapps)
+  // out of navigation WITHOUT touching the arrays themselves, so upstream
+  // additions to these arrays merge cleanly (需求 §5.4.3: 隐藏不删代码).
+  // OCTO-FORK: P6 入口隐藏 — see
+  // dev-docs-usdable/需求/2260906/技术方案/P6-入口隐藏与积分.md.
+  const visibleTopNav = $derived(visibleNav(topNav))
+  const visibleMoreCategories = $derived(visibleNav(moreCategories))
+  const visibleRailNav = $derived(visibleNav(railNav))
+
   function navActive(v: string) { return $view === v }
   function moreActive() { return moreCategories.some(c => c.v === $view) }
 
@@ -665,7 +684,7 @@
           <iconify-icon icon="ant-design:plus-circle-outlined" width="14" style="color:{onLanding ? 'var(--blue-6)' : 'var(--text-tertiary)'}"></iconify-icon>
           <span style="font-size:13px;color:{onLanding ? 'var(--blue-6)' : 'var(--text-secondary)'};font-weight:{onLanding ? '600' : '400'};">{$t('nav.new_session')}</span>
         </div>
-        {#each topNav as item (item.v)}
+        {#each visibleTopNav as item (item.v)}
         <div class="nav-row" class:solid={navActive(item.v)} onclick={() => view.set(item.v as any)}>
           <iconify-icon icon={item.icon} width="14" style="color:{navActive(item.v) ? 'var(--blue-6)' : 'var(--text-tertiary)'}"></iconify-icon>
           <span style="font-size:13px;color:{navActive(item.v) ? 'var(--blue-6)' : 'var(--text-secondary)'};font-weight:{navActive(item.v) ? '600' : '400'};">{$t(item.label)}</span>
@@ -678,7 +697,7 @@
           </div>
           {#if morePopoverOpen}
           <div class="more-popover" use:portal style="top:{morePos.top}px; left:{morePos.left}px; width:{morePos.width}px;">
-            {#each moreCategories as c (c.v)}
+            {#each visibleMoreCategories as c (c.v)}
             <button class="ap-item" onclick={() => goToMore(c.v)}>
               <iconify-icon icon={c.icon} width="14" style="color:var(--text-tertiary)"></iconify-icon>
               <span>{$t(c.label)}</span>
@@ -944,6 +963,10 @@
             <iconify-icon icon="ant-design:close-outlined" width="13"></iconify-icon>
           </span>
           {:else}
+          <!-- Empty chat_mode is a legacy session and follows the account
+               default, matching the server. OCTO-FORK: P10 隐私模式与 PII 处理 — see
+               dev-docs-usdable/需求/2260906/技术方案/P10-隐私模式与PII.md. -->
+          <PrivacyMark mode={(s as any).chat_mode || $productState?.prefs.defaultChatMode || 'default'} />
           <span class="session-title">{(s as any).name || (s as any).title || s.id}</span>
           <!-- Metadata gives way to the row's actions on hover (CSS, not state:
                the actions are the same width every time, so swapping them in
@@ -1081,12 +1104,11 @@
       </div>
     </div>
     {:else}
-    <div class="footer">
-      <div class="footer-settings" style="color:{$settingsModalOpen ? 'var(--blue-6)' : 'var(--text-secondary)'}" onclick={() => settingsModalOpen.set(true)}>
-        <iconify-icon icon="ant-design:setting-outlined" width="14"></iconify-icon>
-        <span>{$t('nav.settings')}</span>
-      </div>
-      <VersionBadge />
+    <!-- OCTO-FORK: the footer's "settings + version" pair is the account
+         corner (P5): avatar/nickname/points, opening the account panel. The
+         version badge moved into the panel's About page. -->
+    <div class="footer" bind:this={cornerEl}>
+      <AccountCorner />
     </div>
     {/if}
   </div>
@@ -1100,7 +1122,7 @@
       </button>
     </div>
     <div class="rail-scroll">
-      {#each railNav.slice(0, 3) as item}
+      {#each visibleRailNav.slice(0, 3) as item}
       <button
         class="rail-btn"
         class:active={navActive(item.v)}
@@ -1116,7 +1138,7 @@
         </button>
         {#if morePopoverOpen}
         <div class="more-popover" use:portal style="top:{morePos.top}px; left:{morePos.left}px; width:{morePos.width}px;">
-          {#each moreCategories as c (c.v)}
+          {#each visibleMoreCategories as c (c.v)}
           <button class="ap-item" onclick={() => goToMore(c.v)}>
             <iconify-icon icon={c.icon} width="14" style="color:var(--text-tertiary)"></iconify-icon>
             <span>{$t(c.label)}</span>
@@ -1125,7 +1147,7 @@
         </div>
         {/if}
       </div>
-      {#each railNav.slice(3) as item}
+      {#each visibleRailNav.slice(3) as item}
       <button
         class="rail-btn"
         class:active={navActive(item.v)}
@@ -1136,14 +1158,16 @@
       </button>
       {/each}
     </div>
-    <div class="rail-footer">
-      <button class="rail-btn" class:active={$settingsModalOpen} title={$t('nav.settings')} onclick={() => settingsModalOpen.set(true)}>
-        <iconify-icon icon="ant-design:setting-outlined" width="16"></iconify-icon>
-      </button>
+    <div class="rail-footer" bind:this={cornerEl}>
+      <AccountCorner rail />
     </div>
   </div>
   {/if}
 </aside>
+
+{#if $accountPanelOpen && cornerEl}
+  <AccountPanel anchorEl={cornerEl} fixedWidth={$sidebar === 'rail' ? fullWidth : undefined} />
+{/if}
 
 {#if settingsGroup}
   <ProjectModal group={settingsGroup} onClose={() => (settingsGroup = null)} onSaved={() => (settingsGroup = null)} />
@@ -1430,14 +1454,8 @@
 .del:hover { color: var(--error) !important; }
 .footer {
   flex: 0 0 auto; border-top: 1px solid var(--border-secondary);
-  padding: 10px 12px; display: flex; align-items: center; justify-content: space-between;
+  padding: 8px;
 }
-.footer-settings {
-  display: flex; align-items: center; gap: 8px;
-  cursor: pointer; padding: 4px 8px; border-radius: 9999px;
-}
-.footer-settings:hover { background: var(--hover-neutral); }
-.footer-settings span { font-size: 13px; }
 /* Rail */
 .rail {
   width: 64px; height: 100%; display: flex; flex-direction: column;

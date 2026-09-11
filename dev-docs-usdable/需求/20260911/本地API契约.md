@@ -205,7 +205,6 @@
     "modes": [
       {
         "id": "privacy",
-        "displayName": { "zh": "隐私模式", "en": "Privacy" },
         "models": [{ "id": "…", "displayName": {"zh": "…", "en": "…"}, "compositeId": "endpoint::model" }],
         "defaultModel": "endpoint::model"
       }
@@ -216,10 +215,11 @@
   ```
 - **🚧 与现状的差异**（`S-4`，必须一起改）：
   1. **删掉 `fallback: boolean`**。现在的类型注释写「`chat-modes.json` 不可读时用内置默认」——这正是 `B1` 已作废的行为。**顺着旧形状实现，会把「内置名单」带回来**。
-  2. 加上 `displayName`（中英双语）。**模型展示名来自中台签名目录的 `displayName`，前端不得保留 id→名称映射表**（`B6`，§3.8）。
+  2. **模型的 `displayName`**（中英双语）来自中台签名目录。**前端不得保留 id→名称映射表**（`B6`，§3.8）。
   3. `id` 保持**英文 ASCII、不做本地化**（它是数据键，等同 `buding-*` 那类固定标识）。
   4. `catalogVersion` / `policyVersion` 是**本契约新拟的字段名**（🚧），取名的目的是让前端能判断「目录是否换了一版」而不必比对内容。**若中台的信封里已有版本字段，以中台为准并回改本行**（§3.8：同一个事实只有一个 owner）。
-  5. `modes[].displayName` 同样来自中台的**模式分组 `internal/chatmode`**，不是本契约拟定。
+  5. **`modes[]` 不带 `displayName`（2026-09-11 更正）。** 原第 5 条说它"来自模式分组"，方向错了：**模式的展示名是界面文案，不是数据**（`B5` 规则 1「展示名是界面文案、分组归属来自目录，两者不得互相推导」），而前端 i18n **已经拥有**这三个名字（`i18n.ts` 的 `mode.privacy` / `mode.smart` / `mode.default`，中英各一份）。让它同时出现在本应答里就是第二份真相（§3.8）—— 中台或后端改一处、前端显示另一处。**模式展示名一律由前端按 `mode.<id>` 渲染，本应答只给 `id`。**
+  6. **`modes[].models` 是投影结果，其分组来源是模型自身的 `modeIds`**（见 [`中台交付包.md`](中台交付包.md) §4.3「`catalog.modes` 的形状」）—— 中台目录不在 `modes[]` 里再列一遍模型，本应答也不得据此再造一份分组事实。
 - **降级（§3.9）**：目录不可用时的行为是**显示「目录暂不可用 + 重试」，不给内置名单**，也就是 fail-closed。不许回落本地 provider（`A1`/`B1`）。
 - **落点**：`internal/productruntime` 投影中台目录 + `internal/chatmode` 做模式分组。
 

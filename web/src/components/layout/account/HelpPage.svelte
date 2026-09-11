@@ -7,7 +7,12 @@
   // exists this phase, so there is no external link and no network call.
   const items = [
     'product.panel.help.test_code',
+    // The USB activation code and the box code are separate credentials and
+    // separate fields on the activation form (需求基线 E1 rule 2), so they get
+    // separate lines here: one key naming both would not say which demo value
+    // belongs in which input.
     'product.panel.help.test_activation',
+    'product.panel.help.test_box_code',
     'product.panel.help.demo_points',
     'product.panel.help.unplug_first',
     'product.panel.help.change_phone',

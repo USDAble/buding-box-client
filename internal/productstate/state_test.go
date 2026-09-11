@@ -68,6 +68,86 @@ func TestFirstRunSeedsInstallID(t *testing.T) {
 	}
 }
 
+// E6.4 rule 2 (as relaxed on 2026-09-11): an existing file is read, never
+// rewritten. This is the guarantee that carries the whole rule now that startup
+// seeding is allowed - and it is the half that actually protects a user, because
+// it is what makes "open the app" unable to clobber or race an edit.
+//
+// Detecting "did not write" takes care, because the two obvious checks both miss
+// the real case:
+//
+//   - comparing bytes misses a needless rewrite, since rewriting identical state
+//     yields identical bytes;
+//   - expecting an error misses a write whose error the caller swallows.
+//
+// So the primary assertion is os.SameFile: writes here are temp-file-plus-rename
+// (internal/atomicfile), and a rename replaces the inode. SameFile is true only
+// if the file object on disk was never replaced - which is exactly the claim, and
+// it holds regardless of content or of whether a failed write is reported.
+//
+// The read-only-directory step then covers the other direction: it proves Open
+// needs no write access at all, which is what a write-protected USB drive looks
+// like (L-E3).
+func TestExistingStateIsReadNotRewritten(t *testing.T) {
+	root := useTempDataRoot(t)
+
+	if _, err := productstate.Open(productstate.Options{Locale: "zh"}); err != nil {
+		t.Fatalf("first Open: %v", err)
+	}
+	path := statePath(t, root)
+	before, err := os.Stat(path)
+	if err != nil {
+		t.Fatalf("stat state: %v", err)
+	}
+	beforeBytes, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("read state: %v", err)
+	}
+
+	// Ask for a different locale on reopen: the stored value must win, so this
+	// also pins that the seed option cannot override a user's choice.
+	if _, err := productstate.Open(productstate.Options{Locale: "en"}); err != nil {
+		t.Fatalf("second Open: %v", err)
+	}
+	after, err := os.Stat(path)
+	if err != nil {
+		t.Fatalf("stat state: %v", err)
+	}
+	if !os.SameFile(before, after) {
+		t.Error("reopening replaced the state file - an existing file must be read, never rewritten")
+	}
+
+	afterBytes, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("read state: %v", err)
+	}
+	if string(beforeBytes) != string(afterBytes) {
+		t.Errorf("reopening changed the state file\nbefore: %s\nafter:  %s", beforeBytes, afterBytes)
+	}
+
+	var onDisk struct {
+		Prefs struct {
+			Locale string `json:"locale"`
+		} `json:"prefs"`
+	}
+	if err := json.Unmarshal(afterBytes, &onDisk); err != nil {
+		t.Fatalf("unmarshal state: %v", err)
+	}
+	if onDisk.Prefs.Locale != "zh" {
+		t.Errorf("prefs.locale = %q, want %q - an existing file must win over the seed option", onDisk.Prefs.Locale, "zh")
+	}
+
+	// An existing file must be openable with no write access at all.
+	if err := os.Chmod(root, 0o555); err != nil {
+		t.Skipf("cannot make the data root read-only: %v", err)
+	}
+	t.Cleanup(func() { _ = os.Chmod(root, 0o755) })
+
+	if _, err := productstate.Open(productstate.Options{}); err != nil {
+		t.Errorf("Open on an existing file in a read-only data root failed: %v - it must not need write access", err)
+	}
+}
+
 // L-E1: the id belongs to the installation, so it survives logout and a
 // subsequent login. This is what makes it usable as a stable platform identifier.
 func TestInstallIDSurvivesLogoutAndRelogin(t *testing.T) {

@@ -114,6 +114,20 @@ type Config struct {
 	// server down and leave the GUI window attached to a dead backend. Leave
 	// false under `octo serve`, where the supervisor honours ExitRestart.
 	DisableRestart bool
+
+	// OCTO-FORK: mount point for this fork's product routes — see
+	// dev-docs-usdable/需求/20260911/开发计划.md §PR-2b2a
+	//
+	// MountAPI, when non-nil, lets a build register extra routes without this
+	// package learning their names. It receives this server's own authenticated
+	// registrar (s.api), not the raw mux, so a mounted route inherits requireAuth
+	// and the no-store policy like every built-in /api route. Nil registers
+	// nothing — which is what `octo serve` and the tests see.
+	//
+	// The direction is inverted on purpose: the product routes live in a
+	// downstream-only package that this one must not import, or the server would
+	// depend on the fork and every upstream merge would conflict.
+	MountAPI func(api func(pattern string, h http.HandlerFunc))
 }
 
 // Server is the HTTP server skeleton. It owns the mux, the agent factory,
@@ -866,6 +880,13 @@ func (s *Server) registerRoutes() {
 	s.api("DELETE /api/session-groups/{id}", s.handleDeleteSessionGroup)
 	s.api("GET /api/fs/list", s.handleFsList)
 	s.api("GET /api/tunnel/pairing", s.handleTunnelPairing)
+	if s.cfg.MountAPI != nil {
+		// OCTO-FORK: downstream routes, registered through s.api so they get the
+		// same auth and cache policy as everything above. The fork supplies the
+		// route table; this package never learns a product name — see
+		// dev-docs-usdable/需求/20260911/开发计划.md §PR-2b2a
+		s.cfg.MountAPI(s.api)
+	}
 	if s.cfg.Native != nil {
 		// Desktop build only: OS-native capabilities. Absent under `octo serve`.
 		s.api("POST /api/native/pick-folder", s.handleNativePickFolder)

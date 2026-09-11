@@ -498,6 +498,7 @@ func startHub(app *application.App, bridge *nativeBridge, settings desktopSettin
 		// dead backend. Omit the tool; the desktop shell owns its own update
 		// lifecycle (Check for Updates → installer).
 		DisableRestart: true,
+		MountAPI:       mountProductAPI(), // OCTO-FORK: our product routes
 	})
 	if err != nil {
 		bridge.showError(L().errTitle, fmt.Sprintf(L().errStartFmt, err))

@@ -53,19 +53,33 @@ func New(deps Deps) *Runtime {
 	return &Runtime{deps: deps}
 }
 
-// Handler returns the local product routes, mounted at their full paths so the
-// server can register it without knowing any route names.
+// Handler returns the local product routes as a standalone http.Handler, for
+// tests and for any host that wants to serve them without internal/server.
 //
 // The gate is NOT applied here yet: it needs the window token, which is its own
 // change (L-B1). What this returns is the unauthenticated surface.
 func (rt *Runtime) Handler() http.Handler {
 	mux := http.NewServeMux()
-	mux.HandleFunc("GET /api/product/state", rt.handleState)
-	mux.HandleFunc("POST /api/product/send-code", rt.handleSendCode)
-	mux.HandleFunc("POST /api/product/login", rt.handleLogin)
-	mux.HandleFunc("POST /api/product/logout", rt.handleLogout)
-	mux.HandleFunc("PUT /api/product/locale", rt.handleLocale)
+	rt.Mount(func(pattern string, h http.HandlerFunc) { mux.HandleFunc(pattern, h) })
 	return mux
+}
+
+// Mount registers the local product routes through a caller-supplied registrar.
+//
+// This is how the routes reach the real server: cmd/octo-desktop passes the
+// server's own authenticated registrar (server.Config.MountAPI), so every route
+// below inherits requireAuth and the no-store policy without this package
+// knowing that server exists. Handler() below is the standalone adapter, used by
+// tests and by any host that wants a bare http.Handler.
+//
+// This method is the single list of product routes — both adapters call it, so
+// a route cannot be added to one path and forgotten in the other.
+func (rt *Runtime) Mount(api func(pattern string, h http.HandlerFunc)) {
+	api("GET /api/product/state", rt.handleState)
+	api("POST /api/product/send-code", rt.handleSendCode)
+	api("POST /api/product/login", rt.handleLogin)
+	api("POST /api/product/logout", rt.handleLogout)
+	api("PUT /api/product/locale", rt.handleLocale)
 }
 
 // handleState is the first call the UI makes: it decides whether the window

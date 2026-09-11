@@ -66,6 +66,22 @@ jobs:
       - name: Run datapath guard tests
         run: node --test scripts/datapath-guard.test.mjs
 
+  release-profile-guard:
+    name: Release Profile Guard
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '22'
+
+      - name: Run release profile guard
+        run: node scripts/release-profile-guard.mjs
+
+      - name: Run release profile guard tests
+        run: node --test scripts/release-profile-guard.test.mjs
+
   svelte-check:
     name: Svelte Check
     runs-on: ubuntu-latest

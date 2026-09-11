@@ -60,7 +60,7 @@ RG_EMBED_DIR := internal/tools/rgembed/binaries
 RG_EMBED_BIN := $(RG_EMBED_DIR)/rg
 
 .PHONY: all build install test cover vet fmt fmt-check tidy clean \
-        brand brand-check datapath-check \
+        brand brand-check datapath-check release-profile-check release-config-check \
         eval-build eval-list eval \
         rg-embed rg-embed-clean \
         bundle-tools-windows bundle-tools-macos \
@@ -187,6 +187,25 @@ brand-check:
 datapath-check:
 	node scripts/datapath-guard.mjs
 	node --test scripts/datapath-guard.test.mjs
+
+# ── release-profile guard ─────────────────────────────────────────────────────
+# Every build of a *shipped* desktop artifact must carry the product_production
+# build tag. The default profile branch is the developer one, so a release
+# pipeline that forgets the tag still compiles, still passes every test and
+# still produces a working binary — it just ships a developer package where
+# OCTO_DESKTOP_DEV_URL, environment provider keys and OCTO_DATA_ROOT all apply.
+release-profile-check:
+	node scripts/release-profile-guard.mjs
+	node --test scripts/release-profile-guard.test.mjs
+
+# ── release-config guard (advisory) ───────────────────────────────────────────
+# Checks the *content* of the embedded production profile: a release that still
+# carries the `.invalid` placeholder hosts validates perfectly and then fails
+# every control-plane call at runtime. Advisory, because packaging an
+# unconfigured build is legitimate during B0/B1.
+release-config-check:
+	node scripts/release-config-guard.mjs
+	node --test scripts/release-config-guard.test.mjs
 
 # ── ripgrep embed (build-time only) ──────────────────────────────────────────
 # Downloads the matching rg release for GOOS/GOARCH, extracts the binary,

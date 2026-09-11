@@ -60,7 +60,7 @@ RG_EMBED_DIR := internal/tools/rgembed/binaries
 RG_EMBED_BIN := $(RG_EMBED_DIR)/rg
 
 .PHONY: all build install test cover vet fmt fmt-check tidy clean \
-        brand brand-check datapath-check \
+        brand brand-check datapath-check preflight-check \
         eval-build eval-list eval \
         rg-embed rg-embed-clean \
         bundle-tools-windows bundle-tools-macos \
@@ -187,6 +187,15 @@ brand-check:
 datapath-check:
 	node scripts/datapath-guard.mjs
 	node --test scripts/datapath-guard.test.mjs
+
+# ── packaging preflight ───────────────────────────────────────────────────────
+# Runs the fork guards at the START of a packaging run, so a shipped artifact
+# cannot be produced from a tree the guards would reject. CI already runs them
+# on a commit; packaging is a later, different act — it can start from a dirty
+# tree, a stale checkout, or a machine that skipped CI. HARD checks fail the
+# build; the release-config and server-diff checks only warn.
+preflight-check:
+	node scripts/preflight.mjs
 
 # ── ripgrep embed (build-time only) ──────────────────────────────────────────
 # Downloads the matching rg release for GOOS/GOARCH, extracts the binary,

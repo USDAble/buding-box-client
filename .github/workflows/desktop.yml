@@ -117,6 +117,15 @@ jobs:
         working-directory: cmd/octo-desktop
         run: go test ./...
 
+      # The *shipped* binary is the product_production one (the tag set lives in
+      # scripts/package-portable.mjs). Its production-only tests are what prove
+      # the shipped build installs the host SenderFactory port and stays
+      # fail-closed (P0-01 B1), so they have to run here — the dev build above
+      # compiles them out, and nothing else in CI reaches this nested module.
+      - name: go test (product_production)
+        working-directory: cmd/octo-desktop
+        run: go test -tags product_production ./...
+
       - name: Build + package macOS Octo.app
         if: runner.os == 'macOS'
         run: bash scripts/package-desktop-macos.sh
@@ -170,7 +179,7 @@ jobs:
         env:
           GOARCH: ${{ matrix.goarch }}
           CGO_ENABLED: '0'
-        run: go build -v -tags embedrg -ldflags "-H windowsgui" -o PuddingBox.exe .
+        run: go build -v -tags "embedrg product_production" -ldflags "-H windowsgui" -o PuddingBox.exe .
 
       # Raw .exe for now; wrapping it in an installer rides the existing Inno
       # Setup track (see windows-installer-check.yml), a separate change.

@@ -28,7 +28,8 @@
 //   persistence, and the WebSocket event stream. Those are the real backend's
 //   job; reproducing them here would create a SECOND definition of the contract
 //   that drifts from the first (开发规范 §3.8). The only credentials it accepts
-//   are the two 需求 §8 pins, so the error paths stay walkable.
+//   are the demo pins in 需求20260906 §5.3.3 / §9, so the error paths stay
+//   walkable.
 //
 // SCOPE (开发规范 §3.10): DEVELOPMENT, browser-side, run-time only. main.ts
 // installs it behind `import.meta.env.DEV`, so a production build never runs it
@@ -38,9 +39,10 @@ import { chatModes, chatModesFallback } from '../lib/chatMode'
 import { productPhase, productState } from '../lib/product'
 import { accountPanelOpen, accountPanelPage, chatMode, frozen } from '../lib/stores'
 
-/** The two credentials 需求 §8 pins for the demo build. */
+/** The credentials the demo build pins (需求20260906 §5.3.3 / §9). */
 export const DEMO_SMS_CODE = '123456'
 export const DEMO_ACTIVATION_CODE = 'BUDING-DEMO-0001'
+export const DEMO_BOX_CODE = 'BOX-DEMO-0001'
 /** lib/product.ts's sessionStorage key — a token is what makes the gate active. */
 const TOKEN_KEY = 'octo_window_token'
 /** Built-in words the nickname check and the composer's input gate run against (P7/P8). */
@@ -118,7 +120,7 @@ function state() {
     schemaVersion: 1,
     loggedIn,
     activated: loggedIn,
-    activation: loggedIn ? { activatedAt: '2026-01-01T00:00:00Z', expiresAt: '2027-01-01T00:00:00Z' } : null,
+    activation: loggedIn ? { activatedAt: '2026-01-01T00:00:00Z', expiresAt: '2027-01-01T00:00:00Z', boxCode: DEMO_BOX_CODE } : null,
     account: loggedIn ? { phoneMasked: '138****1234', nickname: '测试用户', lastLoginAt: new Date().toISOString() } : null,
     credits: { balance: 1280, monthUsed: 0, monthKey: '2026-09' },
     plan: { name: 'trial' },
@@ -226,8 +228,18 @@ export function installDevBackend(): void {
     '/api/product/login': (b) => {
       if (String(b.code ?? '') !== DEMO_SMS_CODE) return json({ code: 'invalid_code' }, 400)
       if (!loggedIn) {
-        const given = String(b.activationCode ?? '').trim().toLowerCase()
-        if (given !== DEMO_ACTIVATION_CODE.toLowerCase()) return json({ code: 'activation_invalid' }, 400)
+        // Activation takes two independent credentials. The stand-in mirrors
+        // the real server's code split so every failure branch stays walkable:
+        // a wrong activation code, an unknown box code, a code/box mismatch,
+        // and a code that was already spent (POLICY-1).
+        const code = String(b.activationCode ?? '').trim().toLowerCase()
+        const box = String(b.boxCode ?? '').trim().toLowerCase()
+        if (code !== DEMO_ACTIVATION_CODE.toLowerCase()) return json({ code: 'activation_invalid' }, 400)
+        if (box !== DEMO_BOX_CODE.toLowerCase()) {
+          if (box === 'box-demo-mismatch') return json({ code: 'box_code_mismatch' }, 400)
+          if (box === 'box-demo-used') return json({ code: 'activation_code_used' }, 400)
+          return json({ code: 'box_code_unknown' }, 400)
+        }
       }
       loggedIn = true
       const next = state()
@@ -286,6 +298,6 @@ export function installDevBackend(): void {
   // Console handles for the surfaces that are server-pushed, not clickable.
   ;(globalThis as any).__dev = {
     push: (event: unknown) => StubSocket.push(event),
-    codes: { sms: DEMO_SMS_CODE, activation: DEMO_ACTIVATION_CODE },
+    codes: { sms: DEMO_SMS_CODE, activation: DEMO_ACTIVATION_CODE, box: DEMO_BOX_CODE },
   }
 }

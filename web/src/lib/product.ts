@@ -36,7 +36,7 @@ export interface ProductStateDTO {
   /** Activation timestamps (P5): present once activated, so the account
    *  panel can render "active · N days left". The activation code itself is
    *  server-side only and never appears here. */
-  activation?: { activatedAt: string; expiresAt: string } | null;
+  activation?: { activatedAt: string; expiresAt: string; boxCode?: string } | null;
   account?: {
     phoneMasked: string;
     nickname: string;
@@ -143,12 +143,20 @@ function jsonHeaders(): Record<string, string> {
   return headers;
 }
 
-/** Login form input; activationCode is required on first activation only. */
+/**
+ * Login form input. First activation submits five fields: phone, code,
+ * nickname, activationCode and boxCode (需求基线 E1). boxCode answers "which
+ * box does this licence belong to" while activationCode answers "was this
+ * licence paid for" — the server validates them independently, one box code
+ * may pair with several activation codes, and an activation code is one-shot.
+ * Both are omitted on the second login.
+ */
 export interface LoginInput {
   phone: string;
   code: string;
   nickname: string;
   activationCode?: string;
+  boxCode?: string;
 }
 
 /**

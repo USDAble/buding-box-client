@@ -21,6 +21,11 @@
     if (!dateStr) return '—'
     return $t('product.panel.license_valid_until').replaceAll('{date}', dateFmt.format(new Date(dateStr)))
   }
+
+  // The box code is a business attribute, shown verbatim (never masked). An
+  // older data root predates the field, so absence renders "—" rather than
+  // blocking anything (需求基线 E5 rule 1, PQ19).
+  const boxCode = $derived($productState?.activation?.boxCode || '—')
 </script>
 
 <div class="license">
@@ -42,6 +47,7 @@
   {/if}
 
   <p class="valid">{validUntil($productState?.activation?.expiresAt)}</p>
+  <p class="valid">{$t('product.panel.license_box_code').replaceAll('{code}', boxCode)}</p>
 </div>
 
 <style>

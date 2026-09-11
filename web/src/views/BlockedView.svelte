@@ -18,6 +18,7 @@
   let code = $state('')
   let nickname = $state('')
   let activationCode = $state('')
+  let boxCode = $state('')
   let fieldErrors = $state<Record<string, string>>({})
   let formError = $state<string | null>(null)
   let phoneMasked = $state<string | null>(null)
@@ -93,13 +94,22 @@
     if (!/^\d{6}$/.test(code)) errs.code = 'invalid_code'
     if (validateNickname(nickname) !== 'ok') errs.nickname = 'nickname_format'
     if (!activated && !activationCode.trim()) errs.activationCode = 'invalid_activation'
+    // Box code: non-empty only. Its length/charset are the server's call
+    // (需求基线 E1 rule 4) — the client must not pre-judge validity.
+    if (!activated && !boxCode.trim()) errs.boxCode = 'invalid_box_code'
     if (Object.keys(errs).length > 0) { fieldErrors = errs; return }
     fieldErrors = {}
     formError = null
     phoneMasked = null
     submitting = true
     try {
-      await login({ phone, code, nickname, activationCode: activated ? undefined : activationCode })
+      await login({
+        phone,
+        code,
+        nickname,
+        activationCode: activated ? undefined : activationCode.trim(),
+        boxCode: activated ? undefined : boxCode.trim(),
+      })
       // On success login() flips productPhase to 'ready', so App.svelte boots
       // the main UI and this view unmounts.
     } catch (e) {
@@ -123,6 +133,7 @@
       case 'nickname_format': return 'product.err_nickname'
       case 'nickname_sensitive': return 'product.err_nickname_sensitive'
       case 'invalid_activation': return 'product.err_activation'
+      case 'invalid_box_code': return 'product.err_box_code'
       default: return ''
     }
   }
@@ -131,7 +142,13 @@
     switch (formError) {
       case 'code_not_sent': return 'product.err_code_not_sent'
       case 'invalid_code': return 'product.err_invalid_code'
+      // The activation family. Each code renders its own copy: the whole point
+      // is that a user who mistyped one character can tell which of the two
+      // credentials failed (需求基线 E1 rule 2 / PQ9).
       case 'activation_invalid': return 'product.err_activation_invalid'
+      case 'activation_code_used': return 'product.err_activation_used'
+      case 'box_code_unknown': return 'product.err_box_code_unknown'
+      case 'box_code_mismatch': return 'product.err_box_code_mismatch'
       case 'phone_mismatch': return 'product.err_phone_mismatch'
       case 'generic': return 'product.submit_failed'
       default: return ''
@@ -179,12 +196,6 @@
         {#if fieldErrors.code}<p class="field-err">{$t(fieldErrorKey('code'))}</p>{/if}
       </div>
 
-      <div class="field">
-        <label for="nickname">{$t('product.nickname_label')}</label>
-        <input id="nickname" type="text" bind:value={nickname} oninput={() => (nicknameEdited = true)} placeholder={$t('product.nickname_placeholder')} />
-        {#if fieldErrors.nickname}<p class="field-err">{$t(fieldErrorKey('nickname'))}</p>{/if}
-      </div>
-
       {#if !activated}
         <div class="field">
           <label for="activationCode">{$t('product.activation_label')}</label>
@@ -192,7 +203,20 @@
           <p class="field-hint">{$t('product.activation_hint')}</p>
           {#if fieldErrors.activationCode}<p class="field-err">{$t(fieldErrorKey('activationCode'))}</p>{/if}
         </div>
+
+        <div class="field">
+          <label for="boxCode">{$t('product.box_code_label')}</label>
+          <input id="boxCode" type="text" bind:value={boxCode} placeholder={$t('product.box_code_placeholder')} />
+          <p class="field-hint">{$t('product.box_code_hint')}</p>
+          {#if fieldErrors.boxCode}<p class="field-err">{$t(fieldErrorKey('boxCode'))}</p>{/if}
+        </div>
       {/if}
+
+      <div class="field">
+        <label for="nickname">{$t('product.nickname_label')}</label>
+        <input id="nickname" type="text" bind:value={nickname} oninput={() => (nicknameEdited = true)} placeholder={$t('product.nickname_placeholder')} />
+        {#if fieldErrors.nickname}<p class="field-err">{$t(fieldErrorKey('nickname'))}</p>{/if}
+      </div>
 
       <button type="submit" class="submit-btn" disabled={submitting}>
         {submitting

@@ -1,3 +1,28 @@
+Generated from .octorules by scripts/sync-agents.mjs. Do not edit directly.
+
+# AGENTS.md
+
+**This file is an entry point, not the spec.** Every AI coding tool that reads or edits this repository MUST read and obey, in this order:
+
+1. **`dev-docs-usdable/开发规范.md`** — this fork's binding engineering norms (branching, the three hard rules, review, testing, DoD).
+2. **`.octorules`** and **`CLAUDE.md`** — the upstream normative rules, of **equal standing** with the fork spec (开发规范 §3.6). `CLAUDE.md` is the fuller write-up, `.octorules` the short index.
+
+The full `.octorules` text is **inlined below verbatim**, so a tool that reads only this file still receives the upstream rules — including the three hard rules under "Fork rules". `dev-docs-usdable/开发规范.md` and `CLAUDE.md` stay pointers: both exceed the per-file instruction budget Codex imposes (`project_doc_max_bytes`, 32 KiB by default), so they cannot be inlined. Nothing here replaces them.
+
+`scripts/norms-guard.mjs` and `scripts/sync-agents.mjs --check` (CI `norms-guard` / `agents-guard` jobs, `make norms-check` / `make agents-check`, and the packaging preflight) fail the build if this file is missing, stops pointing at the fork spec, or drifts from `.octorules`.
+
+## Where things live
+
+| Content | Location |
+|---|---|
+| This fork's norms and upstream-merge policy | `dev-docs-usdable/开发规范.md`, `dev-docs-usdable/上游合并策略.md` |
+| This fork's requirements, plans, per-PR design docs | `dev-docs-usdable/需求/<批次>/` |
+| Upstream architecture decisions | `dev-docs/` — **upstream directory, do not add downstream docs here** |
+
+---
+
+<!-- BEGIN inlined .octorules — edit .octorules and run `make agents` -->
+
 # octo-agent Project Rules
 
 The canonical project guidance for contributors and AI coding agents. Keep this short — substantive design context belongs in `dev-docs/`.
@@ -107,3 +132,5 @@ See `CLAUDE.md` for the full write-up of each incident.
 **Do not put downstream documents in `dev-docs/`** — it is an upstream directory, and anything added there conflicts on every merge.
 
 Don't commit speculative or unverified claims — verify before writing.
+
+<!-- END inlined .octorules -->

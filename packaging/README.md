@@ -3,7 +3,32 @@
 Service templates and OS packaging assets for running `octo serve` as a
 long-lived daemon.
 
+## Portable package (primary deliverable)
+
+<!-- OCTO-FORK: portable directory is the product's main deliverable, not the
+installer — see dev-docs-usdable/需求/2260906/技术方案/P12-便携打包.md. -->
+
+`make desktop-portable` produces the copy-to-USB deliverable — a self-contained
+`dist/PuddingBox/` directory (GUI exe + bundled `bin/uv.exe` + pre-filled
+`data/` + a bilingual `使用说明.txt`) plus `dist/PuddingBox-windows-amd64.zip`
+for the CI artifact. The script also runs a product self-check (exe name,
+VERSIONINFO, GUI subsystem, pre-filled `data/`, no dev residuals, no
+build-machine paths, size budget) and fails the build if any check fails.
+
+**Where each package is built**: the Windows directory cross-compiles from any
+host (`make desktop-portable`); the macOS `.app` is native-only (`make
+desktop-app`, needs macOS + Xcode). On a Mac, `make desktop-portable-all`
+produces both in one command. CI splits them across the windows-latest /
+macos-latest jobs of `.github/workflows/portable.yml` — see
+`dev-docs-usdable/需求/2260906/技术方案/P12-便携打包.md` §3.5a.
+
+The template lives in [`portable/`](portable/) — `data/` is copied verbatim and
+`使用说明.txt` is rendered with `{nameZh}` / `{nameEn}` / `{exeName}` placeholders
+replaced from `branding/brand.json`. The Windows CI pipeline is
+[`.github/workflows/portable.yml`](../.github/workflows/portable.yml).
+
 ## Running octo serve as a service
+
 
 `octo serve` writes structured logs (Go `slog`, text format) to **stderr**;
 the level is set by `OCTO_LOG_LEVEL` (`debug` | `info` | `warn` | `error`,

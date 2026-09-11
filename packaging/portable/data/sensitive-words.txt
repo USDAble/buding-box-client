@@ -1,0 +1,4 @@
+# data/sensitive-words.txt
+# 一行一词；# 开头为注释，空行忽略。内置词不在此文件，始终生效。
+# One word per line; lines starting with # are comments; blank lines are
+# ignored. Built-in words are compiled in and always active, not listed here.

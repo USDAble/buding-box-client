@@ -64,7 +64,8 @@ RG_EMBED_BIN := $(RG_EMBED_DIR)/rg
         eval-build eval-list eval \
         rg-embed rg-embed-clean \
         bundle-tools-windows bundle-tools-macos \
-        web-build web-dev dev build-full desktop desktop-app desktop-appimage
+        web-build web-dev dev build-full desktop desktop-app desktop-appimage \
+        desktop-portable desktop-portable-all portable-check
 
 all: test
 
@@ -129,6 +130,25 @@ desktop-app: web-build
 # are taken from the host — the AppRun launcher preflights them.
 desktop-appimage: web-build
 	bash scripts/package-desktop-linux.sh
+
+# Portable Windows directory — the product's PRIMARY deliverable. One command
+# builds the GUI exe (VERSIONINFO + icon injected), assembles PuddingBox/
+# (bundled tools + pre-filled data/ + bilingual usage note), runs the product
+# self-check, and zips. See 技术方案/P12-便携打包.md.
+desktop-portable: web-build brand-check
+	$(MAKE) rg-embed GOOS=windows GOARCH=amd64
+	node scripts/package-portable.mjs
+
+# One command for BOTH portable deliverables: the Windows PuddingBox/ directory
+# (cross-compiled — works from any host) and the macOS .app bundle (native;
+# needs macOS + Xcode CLT, so this target is for a mac host). CI splits these
+# into per-OS jobs in portable.yml rather than running this target.
+desktop-portable-all: web-build brand-check desktop-app desktop-portable
+
+# Node unit tests for the packaging pipeline (self-check predicates, the
+# zero-dependency ZIP writer, the PE reader) — same pattern as brand-check.
+portable-check:
+	node --test scripts/package-portable.test.mjs scripts/pe-info.test.mjs
 
 install: web-build rg-embed
 	go install $(GOFLAGS) -tags='$(GOTAGS) $(RG_TAGS)' -ldflags='$(LDFLAGS)' ./cmd/octo

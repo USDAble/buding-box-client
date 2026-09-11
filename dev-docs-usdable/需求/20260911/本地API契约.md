@@ -275,6 +275,7 @@
 | `box_code_unknown` | 业务 | 盒子编号不认识 | `product.err_box_code_unknown` |
 | `box_code_mismatch` | 业务 | 激活码与盒子编号不匹配 | `product.err_box_code_mismatch` |
 | `phone_mismatch` | 业务 | 目录已绑其他手机号（带 `phoneMasked`） | `product.err_phone_mismatch` |
+| `control_plane_unconfigured` | 业务 | 本构建没有配置中台地址（`developer` 构建未填 Sandbox / 正式构建漏配） | —（S-6/S-7 未定，暂由前端兜底文案） |
 
 **三处刻意保留的命名/信封差异（不要"统一"掉）**：
 1. 字段级 `invalid_activation`（空/格式）与业务级 `activation_invalid`（中台校验失败）**语义不同**，故拼写不同。同理 `invalid_box_code`（字段）与 `box_code_unknown` / `box_code_mismatch`（业务）。
@@ -282,6 +283,13 @@
 3. `invalid_phone` 在 `login` 里是字段级、在 `send-code` 里是业务级（前端自己落回 `phone` 字段）。**同一个 code 名、两种信封**，实现者"顺手统一"会造成不报错但文案错的结果（§2.2）。
 
 **前端本地兜底（不是服务端契约）**：`BlockedView` 的 `businessErrorKey()` 有一个 `default` 分支渲染 `product.submit_failed`（「登录失败，请重试」）。这是**收到未知 code 时的兜底文案**，不代表服务端可以返回未登记的 code——**未知 code 应当视为契约违约并记日志**，而不是静默落到通用文案。
+
+**信封层级由本表决定，不由中台决定（2026-09-11，`PR-2b` 实施时明确）。** 中台会在它的错误体里带 `field`（例如它把 `activation_invalid` 标成 `activationCode` 的错），但**本地该走字段级还是业务级，是本契约的决定** —— 上表把 `activation_invalid` / `box_code_unknown` / `box_code_mismatch` / `phone_mismatch` 都定为**业务级**，所以实现必须**忽略中台那个 `field`**，把它们送到顶部横幅而不是输入框下面。理由：用户改不动这些值（`activation_code_used` 只能找客服），落在输入框下面会误导成"改一下就能过"。
+- **实现落点：`internal/productruntime/envelope.go` 的 `fieldLevelCodes` 表**（只有 3 个 code 是字段级：`invalid_code` / `nickname_format` / `nickname_sensitive`）。**本表与那张表必须同步改** —— 这与 §2.10 前端 `normalizeWord` 的同步约束是同一类要求：规范在文档，执行在代码，两处一起动。
+- 其余 code 一律**业务级**（安全默认：宁可让用户在上方看到一条横幅，也不要让文案被静默丢进错误的输入框）。
+- `invalid_phone` / `invalid_code` 在两层都出现，靠**上下文**区分，规则是：**格式问题在本地校验阶段就拦下**（`productruntime` 的 `validPhone`/`validCode`），所以**凡是从中台回来的同码，按业务级处理**。
+
+**`phoneMasked` 的来源（2026-09-11 补）。** 它由**中台**在 `phone_mismatch` 的**错误体**里返回（`中台交付包.md` §3.2 已加该字段），不是本地状态里的号码。理由：触发这条的典型场景是「全新 `data/` + 已被绑定的激活码」，此时本地从没见过那个号码，只有中台知道它。
 
 ---
 

@@ -32,6 +32,12 @@ type Error struct {
 	RetryAfterSec int    `json:"retryAfterSec,omitempty"`
 	RequestID     string `json:"requestId,omitempty"`
 
+	// PhoneMasked accompanies phone_mismatch so the local UI can name the number
+	// the activation is already bound to (本地API契约 §2.3). It is the platform's
+	// record, not the local directory's: the failing case is a fresh directory
+	// that has never seen the bound number, so there is nothing local to read.
+	PhoneMasked string `json:"phoneMasked,omitempty"`
+
 	// Status is the HTTP status that carried the envelope. It is how a caller
 	// distinguishes a 401 that needs a refresh from a 403 that needs a person.
 	Status int `json:"-"`

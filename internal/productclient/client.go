@@ -297,6 +297,7 @@ func decodeError(status int, raw []byte) error {
 		Field         string `json:"field"`
 		RetryAfterSec int    `json:"retryAfterSec"`
 		RequestID     string `json:"requestId"`
+		PhoneMasked   string `json:"phoneMasked"`
 	}
 	if err := json.Unmarshal(raw, &payload); err != nil || payload.Code == "" {
 		code := CodeInternalError
@@ -314,6 +315,7 @@ func decodeError(status int, raw []byte) error {
 		Field:         payload.Field,
 		RetryAfterSec: payload.RetryAfterSec,
 		RequestID:     payload.RequestID,
+		PhoneMasked:   payload.PhoneMasked,
 		Status:        status,
 	}
 }

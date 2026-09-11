@@ -195,10 +195,14 @@ func (s *Server) handleLogin(w http.ResponseWriter, r *http.Request) {
 	case activating:
 		if code := s.checkActivation(req); code != "" {
 			status := http.StatusBadRequest
+			masked := ""
 			if code == productclient.CodePhoneMismatch {
 				status = http.StatusForbidden
+				// The number the code was issued to, so the UI can name it. The
+				// client has no way to know it: the directory may be brand new.
+				masked = maskPhone(s.codes[req.ActivationCode].phone)
 			}
-			writeError(w, status, code, activationField(code))
+			writeErrorMasked(w, status, code, activationField(code), masked)
 			return
 		}
 	case acct == nil:
@@ -397,6 +401,21 @@ func writeData(w http.ResponseWriter, status int, data any) {
 		"requestId":  "req_standin",
 		"serverTime": time.Now().UTC().Format(time.RFC3339),
 	})
+}
+
+// writeErrorMasked is writeError plus the optional masked phone number that
+// phone_mismatch carries (本地API契约 §2.3).
+func writeErrorMasked(w http.ResponseWriter, status int, code, field, phoneMasked string) {
+	body := map[string]any{"code": code}
+	if field != "" {
+		body["field"] = field
+	}
+	if phoneMasked != "" {
+		body["phoneMasked"] = phoneMasked
+	}
+	w.Header().Set("Content-Type", "application/json; charset=utf-8")
+	w.WriteHeader(status)
+	_ = json.NewEncoder(w).Encode(body)
 }
 
 func writeError(w http.ResponseWriter, status int, code, field string) {

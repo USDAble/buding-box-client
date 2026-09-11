@@ -220,7 +220,7 @@
   let showReasoningVal = $state(true)
   let coauthorVal      = $state(true)
   let workspaceDir        = $state('')
-  // Resolved default new sessions get when workspaceDir is empty (~/Octo,
+  // Resolved default new sessions get when workspaceDir is empty (data/workspace/,
   // expanded server-side) — shown as the input's placeholder instead of a
   // bare "auto" that's easy to mistake for an actually-saved value.
   let workspaceDirDefault = $state('')

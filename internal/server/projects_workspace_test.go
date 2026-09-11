@@ -113,12 +113,12 @@ func TestProject_RejectsWorkspaceRootAsSourceDir(t *testing.T) {
 	}
 }
 
-// A session carrying the BUILT-IN default workspace (~/Octo) while the server
-// is configured with a different one still reads as seeded: sessions written
-// before a workspace_dir change never chose that value either.
+// A session carrying the BUILT-IN default workspace (data/workspace/) while the
+// server is configured with a different one still reads as seeded: sessions
+// written before a workspace_dir change never chose that value either.
 func TestProject_BuiltinDefaultAlsoReadsAsSeeded(t *testing.T) {
 	srv := groupTestServer(t)
-	srv.setWorkspaceDir(t.TempDir()) // configured root differs from ~/Octo now
+	srv.setWorkspaceDir(t.TempDir()) // configured root differs from data/workspace/ now
 	builtin, err := tools.ResolveWorkspaceDir("")
 	if err != nil {
 		t.Skipf("cannot resolve the built-in workspace dir: %v", err)

@@ -110,7 +110,7 @@ Layout:
 
 The project directory is keyed by git repo root. Home-directory memories are
 inherited into every project. A directory that is not a git repo (the default
-~/Octo workspace, ~, a scratch path) has no project of its own and uses the
+data/workspace workspace, ~, a scratch path) has no project of its own and uses the
 inherited set instead — a session there is usually working on code elsewhere,
 and notes filed under the scratch directory would be read by nothing.
 

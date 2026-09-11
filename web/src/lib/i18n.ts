@@ -678,7 +678,7 @@ export const en: Record<string, string> = {
   "settings.perm_mode.auto": "Auto",
   "settings.perm_mode.strict": "Strict",
   "settings.workspace_dir": "Default Workspace Directory",
-  "settings.workspace_dir_desc": "Default working directory for new web sessions. Leave blank to use ~/Octo, or enter a path to override it",
+  "settings.workspace_dir_desc": "Default working directory for new web sessions. Leave blank to use data/workspace/, or enter a path to override it",
   "settings.show_reasoning": "Show Reasoning Trace",
   "settings.show_reasoning_desc": "Globally surface model thinking traces; per-model settings can still override",
   "settings.coauthor": "Co-authored Commits",
@@ -1630,7 +1630,7 @@ export const zh: Record<string, string> = {
   "settings.perm_mode.auto": "自动",
   "settings.perm_mode.strict": "严格",
   "settings.workspace_dir": "默认工作目录",
-  "settings.workspace_dir_desc": "新建 Web 会话的默认工作目录；留空则使用 ~/Octo，也可以填写路径自定义",
+  "settings.workspace_dir_desc": "新建 Web 会话的默认工作目录；留空则使用 data/workspace/，也可以填写路径自定义",
   "settings.show_reasoning": "显示推理过程",
   "settings.show_reasoning_desc": "全局显示模型的思考过程；单个模型仍可覆盖此设置",
   "settings.coauthor": "提交署名 Co-author",
@@ -1923,10 +1923,11 @@ function dictFor(l: string): Record<string, string> {
 // placeholder rather than being spelled out, so renaming the product is an edit
 // to branding/brand.json instead of a sweep through 1900 lines of copy.
 //
-// Deliberately not a replaceAll of the old name over the resolved string. That
-// cannot tell a user-visible mention from a path — "~/Octo" in
-// settings.workspace_dir_desc is a real directory, and rewriting it produces
-// copy that names a folder which does not exist. It also forces every language
+  // Deliberately not a replaceAll of the old name over the resolved string. That
+  // cannot tell a user-visible mention from a path — settings.workspace_dir_desc
+  // named the default workspace directory (~/Octo, before P1 moved it to
+  // data/workspace/), and rewriting it would have shipped copy naming a folder
+  // that does not exist. It also forces every language
 // to inherit the same spacing, whereas a placeholder lets each dictionary
 // decide: English writes "About {brand}" with a space, Chinese writes
 // "关于{brand}" without one, because CJK takes no space around an inline name.

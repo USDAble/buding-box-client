@@ -21,13 +21,22 @@ import (
 // never chose a directory carries it instead (applyDefaultWorkspaceDir seeds
 // it), so adopting those would file the whole task list under a single project
 // named after the workspace — destroying the task/project distinction rather
-// than honouring it. Both the built-in default (~/Octo) and whatever
-// workspace_dir currently resolves to are excluded, and the built-in one
-// unconditionally: a machine whose workspace_dir was changed later, or whose
-// sessions were restored from a backup, still carries ~/Octo in sessions
-// written before the change, and comparing only against the live setting would
-// sweep exactly those into a project. Everything else is treated as a choice
-// the user made and becomes a project.
+// than honouring it. Both the built-in default and whatever workspace_dir
+// currently resolves to are excluded, and the built-in one unconditionally: a
+// machine whose workspace_dir was changed later, or whose sessions were
+// restored from a backup, still carries the old default in sessions written
+// before the change, and comparing only against the live setting would sweep
+// exactly those into a project. Everything else is treated as a choice the
+// user made and becomes a project.
+//
+// OCTO-FORK: upstream's built-in default was ~/Octo, so that unconditional arm
+// also covered sessions still carrying it. P1 moved the default to
+// data/workspace/, which means a session written by an upstream build
+// (WorkingDir ~/Octo) now falls through to the live-setting comparison and can
+// be adopted into a project. Left as-is rather than hardcoding the legacy path:
+// the datapath rules forbid naming that root, and a portable install never sees
+// those sessions in the first place, because they live under the old data root.
+// See dev-docs-usdable/需求/2260906/技术方案/P1-便携数据根.md.
 //
 // Idempotent, so it can run on every start: a session already in a project is
 // skipped, and a second run over the same directory finds the project the first

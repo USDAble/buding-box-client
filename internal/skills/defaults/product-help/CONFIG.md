@@ -13,7 +13,7 @@ Path: `<data root>/config.yml`. Every field is optional — a missing file or fi
 | `coauthor` | bool | Append `Co-authored-by` to git commits (default true) |
 | `reasoning_effort` | string | Global reasoning intensity: `low`\|`medium`\|`high`\|`xhigh`\|`max`; empty = off |
 | `show_reasoning` | bool | Global default for surfacing the reasoning trace to the web UI (default off; terminal never renders it) |
-| `workspace_dir` | string | Default working dir for new **web** sessions only; empty → `~/Octo`, or set a literal path to override |
+| `workspace_dir` | string | Default working dir for new **web** sessions only; empty → `data/workspace/`, or set a literal path to override |
 | `goal.enabled` | bool | Gates `/goal` and the goal tools (default true) |
 | `browser.connect_port` / `browser.attach_running` | int / bool | Chrome connection settings — see `octo browser setup` |
 | `memory_backend` | object | Optional external semantic memory (hindsight/mem0/agentmemory) — see `MEMORY.md` |

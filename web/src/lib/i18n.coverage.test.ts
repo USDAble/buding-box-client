@@ -89,11 +89,12 @@ const BRAND_LITERAL = /\bOcto\b|布丁盒子|Pudding Box/
 // Keys allowed to name the product literally, each with the reason. Kept as a
 // map rather than a list so a stale entry is self-documenting.
 const BRAND_LITERAL_ALLOWED: Record<string, string> = {
-  // "~/Octo" is the real default workspace directory
-  // (internal/tools/workspacedir.go). Rewriting the copy alone would describe
-  // a folder that does not exist. 需求20260906.md §182 moves the default to
-  // data/workspace/; the copy changes with that behaviour, not before it.
-  'settings.workspace_dir_desc': 'names the current default workspace path',
+  // Empty on purpose, and cheap to keep: the last entry,
+  // settings.workspace_dir_desc, closed when P1 moved the default workspace to
+  // data/workspace/. That was the documented order — the copy followed the
+  // behaviour, so it no longer names the old directory. The staleness test
+  // below is what deletes an entry that outlives its reason; leaving the map in
+  // place gives the next genuine exemption somewhere to live.
 }
 
 describe('i18n brand placeholders', () => {

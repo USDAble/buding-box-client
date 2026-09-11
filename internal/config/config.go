@@ -223,7 +223,7 @@ type Config struct {
 	// is separate from and does not affect the built-in MEMORY.md layer.
 	MemoryBackend MemoryBackendConfig `yaml:"memory_backend,omitempty"`
 	// WorkspaceDir sets the default working directory new web sessions are
-	// created with. Empty (default) resolves to ~/Octo (see
+	// created with. Empty (default) resolves to data/workspace/ (see
 	// tools.ResolveWorkspaceDir); anything else is used as a literal path,
 	// letting the user override the global default explicitly. Does not
 	// affect CLI/TUI sessions or the server's own cwd, and composes with the

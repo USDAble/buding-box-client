@@ -20,7 +20,7 @@ func TestResolveWorkspaceDir_Empty(t *testing.T) {
 }
 
 // A literal path (anything other than "") is an explicit override that
-// replaces the ~/Octo default: returned unchanged.
+// replaces the data/workspace/ default: returned unchanged.
 func TestResolveWorkspaceDir_LiteralPath(t *testing.T) {
 	const want = "/some/literal/path"
 	got, err := ResolveWorkspaceDir(want)

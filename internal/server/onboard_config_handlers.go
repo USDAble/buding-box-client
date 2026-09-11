@@ -212,7 +212,7 @@ type configResponse struct {
 	Coauthor      *bool  `json:"coauthor,omitempty"`
 	WorkspaceDir  string `json:"workspace_dir,omitempty"`
 	// WorkspaceDirDefault is the resolved directory sessions actually get
-	// when WorkspaceDir is empty (i.e. ~/Octo) — the Settings UI shows it
+	// when WorkspaceDir is empty (i.e. data/workspace/) — the Settings UI shows it
 	// as the effective default instead of a bare, easily-misread "auto".
 	WorkspaceDirDefault string `json:"workspace_dir_default,omitempty"`
 	ReasoningEffort     string `json:"reasoning_effort,omitempty"`
@@ -459,7 +459,7 @@ type putWorkspaceDirRequest struct {
 
 // handlePutWorkspaceDir updates the global default working directory used for
 // new web sessions. It accepts the raw config value: empty clears the
-// override and resolves to ~/Octo, and anything else is stored as a literal
+// override and resolves to data/workspace/, and anything else is stored as a literal
 // path. The server's resolved default is also updated so new sessions pick
 // it up immediately without a restart.
 func (s *Server) handlePutWorkspaceDir(w http.ResponseWriter, r *http.Request) {

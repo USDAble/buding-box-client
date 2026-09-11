@@ -96,7 +96,7 @@ type Config struct {
 	// WorkspaceDir overrides the default working directory new web sessions
 	// are created with (see config.Config.WorkspaceDir / tools.ResolveWorkspaceDir).
 	// Empty (default) falls back to data/config.yml's workspace_dir, which
-	// itself resolves to ~/Octo when unset. No `octo serve` flag sets this;
+	// itself resolves to data/workspace/ when unset. No `octo serve` flag sets this;
 	// it exists mainly so tests can inject a literal path without touching
 	// the real config file.
 	WorkspaceDir string
@@ -473,7 +473,7 @@ func New(cfg Config) (*Server, error) {
 	// Resolve the default workspace dir new web sessions get. cfg.WorkspaceDir
 	// (no `octo serve` flag sets it today) takes precedence so tests can inject
 	// a literal path without touching data/config.yml; production falls back
-	// to the file config's workspace_dir, which resolves to ~/Octo when unset.
+	// to the file config's workspace_dir, which resolves to data/workspace/ when unset.
 	// A resolve error (e.g. no home dir) degrades to "" — no override, session
 	// keeps using the server's launch directory — rather than failing startup.
 	rawWorkspaceDir := cfg.WorkspaceDir
@@ -1819,7 +1819,7 @@ func (s *Server) curCwdEnv() (string, string) {
 // left on disk untouched, merely shadowed, so moving a session out of a project
 // restores it.
 //
-// The last resort is the configured workspace (~/Octo unless overridden), NOT
+// The last resort is the configured workspace (data/workspace/ unless overridden), NOT
 // the directory this process was launched from. Where `octo serve` happened to
 // be started is nobody's choice — the same reason adoptTaskWorkingDirs refuses
 // to turn a workspace directory into a project — and letting it decide meant a

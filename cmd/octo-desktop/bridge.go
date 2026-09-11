@@ -169,7 +169,14 @@ const desktopShellQuery = "shell=octo-desktop"
 // frontend reader isDesktopShell in web/src/lib/stores.ts — keep both sides in
 // sync (TestShellURL pins the Go side).
 func shellURL(base, hash string) string {
-	u := base + "/?" + desktopShellQuery
+	// OCTO-FORK: append this fork's window token — see
+	// dev-docs-usdable/需求/20260911/开发计划.md §PR-2b2b.
+	//
+	// This is the only place the window URL is built, so it is the only place
+	// the token can enter it. The helper is fork-owned and returns "" when no
+	// token exists, which keeps both this file's upstream TestShellURL and the
+	// octo serve URL byte-identical to upstream.
+	u := base + "/?" + desktopShellQuery + windowTokenFragment()
 	if hash != "" {
 		u += "#" + hash
 	}

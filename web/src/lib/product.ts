@@ -17,7 +17,7 @@ export type ProductPhase = "unknown" | "blocked" | "ready";
 export const productPhase = writable<ProductPhase>("unknown");
 export const productState = writable<ProductStateDTO | null>(null);
 
-// Header the server's product gate reads (internal/productgate/gate.go).
+// Header the server's product gate reads (internal/server/server.go, windowAllowed).
 export const WINDOW_TOKEN_HEADER = "X-Octo-Window-Token";
 // Query parameter the WebSocket upgrade uses (browser WS can't set headers).
 export const WINDOW_TOKEN_QUERY = "window_token";
@@ -89,9 +89,12 @@ export async function refreshProductState(): Promise<void> {
     productPhase.set("ready");
     return;
   }
-  try {
-    const res = await fetch("/api/product/state", { cache: "no-store" });
-    if (!res.ok) throw new Error(`${res.status} ${res.statusText}`);
+    try {
+      // The window token must ride this call too: the gate refuses an
+      // unauthenticated /api request, and a 403 here would send the UI to the
+      // login screen with no way through.
+      const res = await fetch("/api/product/state", { cache: "no-store", headers: windowTokenHeaders() });
+      if (!res.ok) throw new Error(`${res.status} ${res.statusText}`);
     const d = (await res.json()) as ProductStateDTO;
     productState.set(d);
     productPhase.set(d.loggedIn ? "ready" : "blocked");
@@ -107,10 +110,7 @@ export async function refreshProductState(): Promise<void> {
 // form can prefill and compare against them (需求 §5.3.4). The logout button
 // itself is P5's; this helper is wired there.
 export async function logout(): Promise<void> {
-  const token = windowToken();
-  const headers: Record<string, string> = {};
-  if (token) headers[WINDOW_TOKEN_HEADER] = token;
-  const res = await fetch("/api/product/logout", { method: "POST", headers });
+  const res = await fetch("/api/product/logout", { method: "POST", headers: windowTokenHeaders() });
   if (!res.ok) throw new Error(`${res.status} ${res.statusText}`);
   productState.set(null);
   productPhase.set("blocked");
@@ -137,10 +137,17 @@ export class ProductError extends Error {
 }
 
 function jsonHeaders(): Record<string, string> {
-  const headers: Record<string, string> = { "Content-Type": "application/json" };
+  return { "Content-Type": "application/json", ...windowTokenHeaders() };
+}
+
+// windowTokenHeaders returns the product gate's header for this window, or an
+// empty object outside the shell. Once a token exists, every request the window
+// makes to /api must carry it: the gate cannot tell this window from any other
+// loopback caller, so a call that forgets the header is refused (403
+// product_gate) exactly as an outside process would be.
+function windowTokenHeaders(): Record<string, string> {
   const token = windowToken();
-  if (token) headers[WINDOW_TOKEN_HEADER] = token;
-  return headers;
+  return token ? { [WINDOW_TOKEN_HEADER]: token } : {};
 }
 
 /**

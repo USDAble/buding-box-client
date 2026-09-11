@@ -499,6 +499,11 @@ func startHub(app *application.App, bridge *nativeBridge, settings desktopSettin
 		// lifecycle (Check for Updates → installer).
 		DisableRestart: true,
 		MountAPI:       mountProductAPI(), // OCTO-FORK: our product routes
+		// OCTO-FORK: the product gate's window identity — see
+		// dev-docs-usdable/需求/20260911/开发计划.md §PR-2b2b. Generated here
+		// because this runs before the first window is shown, which is what lets
+		// shellURL carry the token into that window's very first URL.
+		WindowToken: windowToken(),
 	})
 	if err != nil {
 		bridge.showError(L().errTitle, fmt.Sprintf(L().errStartFmt, err))

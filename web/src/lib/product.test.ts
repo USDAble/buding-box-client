@@ -79,6 +79,20 @@ describe("refreshProductState", () => {
     expect(fetchMock).not.toHaveBeenCalled();
   });
 
+  it("stamps the state read with the window token so the gate lets it through", async () => {
+    sessionStorage.setItem("octo_window_token", "tok");
+    const fetchMock = fetchReturning(200, { loggedIn: false });
+    vi.stubGlobal("fetch", fetchMock);
+
+    await refreshProductState();
+
+    // The gate refuses an unauthenticated window, so this call must carry the
+    // token exactly like login/logout do. Without it the shell would 403 on its
+    // own first request and sit on the login screen with no way forward.
+    const init = fetchMock.mock.calls[0][1];
+    expect(new Headers(init?.headers).get(WINDOW_TOKEN_HEADER)).toBe("tok");
+  });
+
   it("sets ready when the window is logged in", async () => {
     sessionStorage.setItem("octo_window_token", "tok");
     const state = { schemaVersion: 1, loggedIn: true, activated: true, credits: { balance: 1, monthUsed: 0, monthKey: "" }, plan: { name: "" }, prefs: { locale: "", inputSensitiveCheck: false, defaultChatMode: "" } };

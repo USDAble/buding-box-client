@@ -7,6 +7,7 @@ package server
 
 import (
 	"context"
+	"crypto/subtle"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -119,15 +120,35 @@ type Config struct {
 	// dev-docs-usdable/需求/20260911/开发计划.md §PR-2b2a
 	//
 	// MountAPI, when non-nil, lets a build register extra routes without this
-	// package learning their names. It receives this server's own authenticated
-	// registrar (s.api), not the raw mux, so a mounted route inherits requireAuth
-	// and the no-store policy like every built-in /api route. Nil registers
-	// nothing — which is what `octo serve` and the tests see.
+	// package learning their names. It receives this server's authenticated
+	// registrar, not the raw mux, so a mounted route inherits requireAuth and the
+	// no-store policy like every built-in /api route — plus Config.WindowToken's
+	// gate, which is why the fork's product API is the gate's whole scope. Nil
+	// registers nothing — which is what `octo serve` and the tests see.
 	//
 	// The direction is inverted on purpose: the product routes live in a
 	// downstream-only package that this one must not import, or the server would
 	// depend on the fork and every upstream merge would conflict.
 	MountAPI func(api func(pattern string, h http.HandlerFunc))
+
+	// OCTO-FORK: window token for this fork's product gate — see
+	// dev-docs-usdable/需求/20260911/开发计划.md §PR-2b2b
+	//
+	// When non-empty, every route registered through Config.MountAPI additionally
+	// requires the caller to present this value in windowTokenHeader. It is the
+	// desktop shell's per-launch window identity (P3 §3.2): the loopback
+	// exemption in requireAuth cannot tell one loopback process from another, so
+	// the gate is what separates the shell's window from another tab.
+	//
+	// The scope is the mounted routes — this fork's own product API — and not all
+	// of /api/*. Two verified reasons (see windowAllowed): the gate is a header
+	// check and the browser cannot attach a header to a bare <img> subresource
+	// (chat thumbnails, artifact previews), and upstream routes must keep
+	// upstream's trust model so the CLI's loopback path (octo serve) still works.
+	//
+	// Empty means "no gate" — that is the CLI path (octo serve), where there is
+	// no window to identify and behavior must stay exactly as upstream.
+	WindowToken string
 }
 
 // Server is the HTTP server skeleton. It owns the mux, the agent factory,
@@ -818,6 +839,12 @@ func (s *Server) doShutdown(ctx context.Context) error {
 	return s.http.Shutdown(ctx)
 }
 
+// windowTokenHeader carries the desktop shell's window identity. The literal is
+// duplicated across the Go/JS boundary (web/src/lib/product.ts:21) — the same
+// hazard as desktopShellQuery: renaming one side without the other silently
+// opens the gate, so both sides pin it with a test.
+const windowTokenHeader = "X-Octo-Window-Token"
+
 // api registers an authenticated route. The requireAuth wrapper is applied
 // here, in one place, so a new route cannot forget it. /api/health,
 // /api/version, the MCP OAuth callback, and static files are the only
@@ -832,11 +859,62 @@ func (s *Server) doShutdown(ctx context.Context) error {
 // preview showing an old revision — was one endpoint forgetting the header. A
 // handler that ever needs a different policy can overwrite it before writing.
 func (s *Server) api(pattern string, h http.HandlerFunc) {
+	s.register(pattern, h, false)
+}
+
+// productAPI is api plus this fork's window gate, and it is the registrar handed
+// to Config.MountAPI. Making the gate a property of the registrar — not of a
+// path prefix — is what keeps its scope honest: the covered routes are exactly
+// the ones this fork mounts, so a new upstream route (or the /ws upgrade)
+// cannot inherit the gate by matching a string, and a new product route cannot
+// escape it by not matching one.
+func (s *Server) productAPI(pattern string, h http.HandlerFunc) {
+	s.register(pattern, h, true)
+}
+
+func (s *Server) register(pattern string, h http.HandlerFunc, windowGated bool) {
 	s.apiRoutes = append(s.apiRoutes, pattern)
 	s.mux.HandleFunc(pattern, s.requireAuth(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Cache-Control", "no-store, no-cache, must-revalidate, max-age=0")
+		if windowGated && !s.windowAllowed(r) {
+			writeJSON(w, http.StatusForbidden, map[string]string{"error": "product_gate"})
+			return
+		}
 		h(w, r)
 	}))
+}
+
+// windowAllowed applies this fork's product gate (Config.WindowToken) to a route
+// registered through productAPI.
+//
+// The scope is the fork's own mounted routes, and narrowing it there was a bug
+// fix, not a preference. The gate is a request-header check, and the browser
+// cannot attach a header to a bare <img>/<iframe> subresource: gating all of
+// /api/* shipped once and broke the chat's attachment thumbnails
+// (GET /api/uploads/{name}) and artifact image previews
+// (GET /api/sessions/{id}/artifacts) — both are loaded that way, and both
+// answered 403 product_gate. Upstream routes also keep upstream's trust model,
+// which is what lets the CLI's loopback path (octo serve, which presents no
+// window token) go on working.
+//
+// Consequence to be honest about: P3 §5.4.3's "an unactivated window cannot
+// drive the agent API" is not enforced over the upstream /api routes by this
+// gate. Enforcing it there needs a server-side session/activation check rather
+// than a window identity — tracked in 待解决问题 D-006.
+//
+// An empty configured token means no gate: that is the CLI path (octo serve),
+// where there is no window to identify and behavior must stay as upstream.
+//
+// Constant-time compare, matching validateAccessKey: this value is a
+// capability, not a label, and a byte-by-byte early exit leaks it.
+func (s *Server) windowAllowed(r *http.Request) bool {
+	if s.cfg.WindowToken == "" {
+		return true
+	}
+	return subtle.ConstantTimeCompare(
+		[]byte(r.Header.Get(windowTokenHeader)),
+		[]byte(s.cfg.WindowToken),
+	) == 1
 }
 
 // registerRoutes wires all handlers. API and WS routes require auth.
@@ -881,11 +959,12 @@ func (s *Server) registerRoutes() {
 	s.api("GET /api/fs/list", s.handleFsList)
 	s.api("GET /api/tunnel/pairing", s.handleTunnelPairing)
 	if s.cfg.MountAPI != nil {
-		// OCTO-FORK: downstream routes, registered through s.api so they get the
-		// same auth and cache policy as everything above. The fork supplies the
+		// OCTO-FORK: downstream routes, registered through productAPI so they get
+		// the same auth and cache policy as everything above, plus this fork's
+		// window gate (Config.WindowToken) and nothing else. The fork supplies the
 		// route table; this package never learns a product name — see
 		// dev-docs-usdable/需求/20260911/开发计划.md §PR-2b2a
-		s.cfg.MountAPI(s.api)
+		s.cfg.MountAPI(s.productAPI)
 	}
 	if s.cfg.Native != nil {
 		// Desktop build only: OS-native capabilities. Absent under `octo serve`.

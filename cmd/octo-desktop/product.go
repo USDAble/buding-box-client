@@ -6,9 +6,13 @@ package main
 // dev-docs-usdable/需求/20260911/开发计划.md §PR-2b2a
 
 import (
+	"crypto/rand"
+	"encoding/hex"
 	"log/slog"
 	"net/http"
+	"net/url"
 	"runtime"
+	"sync"
 
 	"github.com/open-octo/octo-agent/internal/credentialstore"
 	"github.com/open-octo/octo-agent/internal/productclient"
@@ -31,7 +35,24 @@ import (
 // then gets a 404 rather than a fabricated empty state — absence is reported,
 // not disguised. The one cause worth naming is a schemaVersion newer than this
 // build understands, which E6.2 rule 4 says to refuse rather than migrate.
+//
+// The window token is generated here, at the top, rather than on first read.
+// That ordering is required, not incidental: windowTokenFragment (which
+// shellURL consults when it builds the window URL) deliberately reports only an
+// already-generated token, so a token born later than the first window show
+// would leave that window unable to identify itself. main.go builds the server
+// before it shows any window, so generating here is early enough.
 func mountProductAPI() func(api func(pattern string, h http.HandlerFunc)) {
+	if windowToken() == "" {
+		// Fail closed. Without a token the gate cannot distinguish this window
+		// from any other loopback caller, so mounting the routes would publish
+		// an unauthenticated API. Not mounting them gives the window a 404,
+		// which the frontend already renders as "blocked" — the user is told,
+		// and never silently authorized (开发规范 §3.9).
+		slog.Error("product: window token unavailable, product routes not mounted")
+		return nil
+	}
+
 	state, err := productstate.Open(productstate.Options{
 		// The shell is the only component that knows the OS language, so it
 		// hands it in once (E6.4 rule 1, PQ18).
@@ -84,4 +105,67 @@ func newPlatformClient(installID string) *productclient.Client {
 		Arch:      runtime.GOARCH,
 		InstallID: installID,
 	}, &productclient.CredentialHolder{})
+}
+
+// windowTokenQuery is the URL parameter the shell uses to hand the token to the
+// window. Duplicated across the Go/JS boundary (web/src/lib/product.ts:23) and
+// pinned by test on both sides, like desktopShellQuery.
+const windowTokenQuery = "window_token"
+
+// windowTokenVal is this launch's window token (P3 §3.2). It is generated once
+// and lives only in memory: it is never written to the data root, because its
+// whole meaning is "this process, this window" and a token on disk would
+// outlive the process it identifies.
+var (
+	windowTokenOnce sync.Once
+	windowTokenVal  string
+	windowTokenErr  error
+)
+
+// windowToken returns this launch's token, generating it on first call.
+//
+// It must be called before the first window is shown (main.go's server.Config
+// does), because windowTokenFragment reads the value without generating it —
+// see the note there for why that asymmetry is required.
+func windowToken() string {
+	windowTokenOnce.Do(func() {
+		windowTokenVal, windowTokenErr = newWindowToken()
+		if windowTokenErr != nil {
+			slog.Error("product: window token unavailable", "err", windowTokenErr)
+		}
+	})
+	return windowTokenVal
+}
+
+// windowTokenFragment returns the query fragment shellURL appends so the window
+// can identify itself to the product gate, or "" when there is no token.
+//
+// It deliberately does NOT generate a token, and that is the whole reason it
+// exists separately from windowToken:
+//
+//   - Upstream's TestShellURL asserts the exact string shellURL produces, and it
+//     runs in this package. A fragment that generated on read would make that
+//     test's URL grow a token and fail — i.e. the upstream contract would break
+//     from a purely local change.
+//   - The empty case is also a real runtime case: `octo serve` has no window, so
+//     its URL must stay exactly upstream's.
+//
+// Generation therefore happens once, early, in main (via server.Config), and
+// this function only reports the result.
+func windowTokenFragment() string {
+	if windowTokenVal == "" {
+		return ""
+	}
+	return "&" + windowTokenQuery + "=" + url.QueryEscape(windowTokenVal)
+}
+
+// newWindowToken returns a fresh window token: 32 random bytes, hex-encoded.
+// A per-launch random value is what makes the gate an identity check rather
+// than a shared secret that has to be provisioned or rotated.
+func newWindowToken() (string, error) {
+	var b [32]byte
+	if _, err := rand.Read(b[:]); err != nil {
+		return "", err
+	}
+	return hex.EncodeToString(b[:]), nil
 }

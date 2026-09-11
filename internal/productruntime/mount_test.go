@@ -41,6 +41,13 @@ type mountedHarness struct {
 // newMountedHarness reuses the unit-test harness for its platform stand-in and
 // temp data root, then serves the same runtime through internal/server.
 func newMountedHarness(t *testing.T) *mountedHarness {
+	return newMountedHarnessWithToken(t, "")
+}
+
+// newMountedHarnessWithToken is the same road with the product gate armed, so a
+// test can prove the window's full path — including the token it must present —
+// works end to end. An empty token is the CLI shape (no gate).
+func newMountedHarnessWithToken(t *testing.T, windowToken string) *mountedHarness {
 	t.Helper()
 	h := newHarness(t)
 
@@ -49,10 +56,11 @@ func newMountedHarness(t *testing.T) *mountedHarness {
 	h.local.Close()
 
 	srv, err := server.New(server.Config{
-		Addr:      "127.0.0.1:0",
-		NoChannel: true,
-		NoMemory:  true,
-		MountAPI:  h.rt.Mount,
+		Addr:        "127.0.0.1:0",
+		NoChannel:   true,
+		NoMemory:    true,
+		MountAPI:    h.rt.Mount,
+		WindowToken: windowToken,
 	})
 	if err != nil {
 		t.Fatalf("server.New: %v", err)
@@ -105,6 +113,39 @@ func (m *mountedHarness) request(t *testing.T, method, path string, body any, he
 		t.Fatalf("read body: %v", err)
 	}
 	return resp.StatusCode, raw
+}
+
+// TestMountedProductRoutesRequireTheWindowToken pins L-B1b's request gate on the
+// road the window actually takes. With a token configured, /api/product/state —
+// the UI's very first call — is refused until the window presents its token,
+// because the fork's routes are registered through the server's window-gated
+// registrar and nothing else is. An unauthenticated window must not read state,
+// or the interface gate would be decided by a request the gate never saw.
+func TestMountedProductRoutesRequireTheWindowToken(t *testing.T) {
+	// The wire name is spelled out rather than imported: it is a Go/JS boundary
+	// string (web/src/lib/product.ts:21), and a test that shares the constant
+	// with the implementation cannot catch a rename that breaks the browser.
+	const header = "X-Octo-Window-Token"
+	const token = "3f2a1b0c9d8e7f605142332415061728293a3b3c4d4e4f505152535455565758"
+
+	m := newMountedHarnessWithToken(t, token)
+
+	status, raw := m.request(t, http.MethodGet, "/api/product/state", nil, nil)
+	if status != http.StatusForbidden {
+		t.Fatalf("GET /api/product/state without a token = %d, want 403 (body: %.200s)", status, raw)
+	}
+
+	status, raw = m.request(t, http.MethodGet, "/api/product/state", nil, map[string]string{header: token})
+	if status != http.StatusOK {
+		t.Fatalf("GET /api/product/state with the token = %d, want 200 (body: %.200s)", status, raw)
+	}
+	var state map[string]any
+	if err := json.Unmarshal(raw, &state); err != nil {
+		t.Fatalf("state is not JSON (%v): %.200s", err, raw)
+	}
+	if _, ok := state["loggedIn"]; !ok {
+		t.Fatalf("the gated call returned a non-state body: %.200s", raw)
+	}
 }
 
 // TestMountedStateIsReachableThroughTheRealServer is the smallest end-to-end

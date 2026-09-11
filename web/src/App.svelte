@@ -1,6 +1,7 @@
 <script lang="ts">
   import { onMount } from 'svelte'
-  import { view, sessions, sessionGroups, pinnedSessions, collapsedSessions, activeSessionId, onboardPhase, openAgentSession, chatShowReasoning, globalPermissionMode, globalReasoningEffort, nativeShell, mobileShell, panelContent, panelExpanded, cmdkOpen, settingsModalOpen, createNewSession, clearPendingSessionOpts, isDesktopShell, readLastRoute, writeLastRoute } from './lib/stores'
+  import { view, sessions, sessionGroups, pinnedSessions, collapsedSessions, activeSessionId, onboardPhase, openAgentSession, chatShowReasoning, globalPermissionMode, globalReasoningEffort, nativeShell, mobileShell, panelContent, panelExpanded, cmdkOpen, settingsModalOpen, createNewSession, clearPendingSessionOpts, isDesktopShell, readLastRoute, writeLastRoute, frozen, showToast } from './lib/stores'
+  import { productPhase, productState, adoptWindowToken, refreshProductState } from './lib/product'
   import MobileApp from './mobile/MobileApp.svelte'
   import { ws, wsState } from './lib/ws'
   import { notificationsEnabled } from './lib/notifications'
@@ -11,12 +12,15 @@
   import { installExternalLinkInterceptor } from './lib/externalLinks'
   import { startNativeHeartbeat } from './lib/nativeHeartbeat'
   import { normalizeHash, hashPicksChatTarget } from './lib/hashRouting'
+  import { viewHidden } from './lib/features'
   import { pruneSessions } from './lib/genui/panel-state'
   import { onTurnEnded as onDiffTurnEnded, resetDiff } from './lib/diff'
   import { globalKeyIntent } from './lib/globalKeys'
   import { CENTER_MIN } from './lib/sidebarWidth'
   import AuthGate from './components/overlays/AuthGate.svelte'
   import FirstRunSetup from './components/overlays/FirstRunSetup.svelte'
+  import FrozenOverlay from './components/overlays/FrozenOverlay.svelte'
+  import BlockedView from './views/BlockedView.svelte'
   import Header from './components/layout/Header.svelte'
   import Sidebar from './components/layout/Sidebar.svelte'
   import AgentsView from './views/AgentsView.svelte'
@@ -38,6 +42,13 @@
   import FeedbackModal from './components/overlays/FeedbackModal.svelte'
   import Toast from './components/overlays/Toast.svelte'
   import { touchSession, markSessionSeen, markActiveSessionSeenOnLeave, sessionTouchedAt } from './lib/unread'
+
+  // OCTO-FORK: adopt the window token before any fetch — the desktop shell
+  // injects it into the webview URL, and every API/WS call from inside the
+  // window must carry it back (P3 product gate). Runs at module init (before
+  // onMount), so even the earliest gated call is already stamped. No-op outside
+  // the desktop shell. See dev-docs-usdable/需求/2260906/技术方案/P3-登录态与产品门.md.
+  adoptWindowToken()
 
   // The session on screen is read by definition — this is the only place the
   // sidebar's unread dot gets cleared. It re-marks on every list change and
@@ -73,6 +84,18 @@
   // Set when the server requires an access key the user couldn't provide; the
   // app shows a denied splash instead of booting.
   let authDenied = $state(false)
+
+  // P9: desktop builds suppress the first-run "set up an API key" wizard — the
+  // window token is already wired to the product backend, so key_setup is a
+  // dead end. The server sets productState.suppressOnboarding from config;
+  // when it's true, treat key_setup as already-done and boot the main UI
+  // directly. OCTO-FORK: P9 模式与模型选择器 — see
+  // dev-docs-usdable/需求/2260906/技术方案/P9-模式与模型.md §3.1.
+  let effectiveOnboardPhase = $derived(
+    ($productState?.suppressOnboarding === true && $onboardPhase === 'key_setup')
+      ? ''
+      : $onboardPhase,
+  )
 
   // ── URL routing ─────────────────────────────────────────────────────────────
   // Reflect the current view (and active chat session) in the hash so a refresh
@@ -161,6 +184,12 @@
     // for exactly that reason — see the comment there.
     const stopPanelGC = sessions.subscribe(list => pruneSessions(list.map(s => s.id)))
     const cleanup = () => { cancelled = true; uninstallLinks(); stopHeartbeat(); stopPanelGC(); ws.disconnect() }
+    // OCTO-FORK: load the (de-identified) product state and derive the phase,
+    // in parallel with the auth probe below — the splash clears only when both
+    // answers are in (P3 product gate). A plain browser short-circuits to
+    // "ready" without a call. See
+    // dev-docs-usdable/需求/2260906/技术方案/P3-登录态与产品门.md.
+    refreshProductState()
     // The onboard-status read is issued alongside the auth probe rather than
     // after it, taking one serial round trip out of every cold start. checkAuth
     // goes first: it runs synchronously up to its first await, which is where a
@@ -193,11 +222,13 @@
     return cleanup
   })
 
-  // Boot the normal UI once onboarding doesn't block it. 'key_setup' holds here
-  // until FirstRunSetup completes and flips the phase to ''.
+  // Boot the normal UI once onboarding doesn't block it and the product gate
+  // says the window is logged in (P3). 'key_setup' holds here until
+  // FirstRunSetup completes and flips the phase to ''. A blocked window (not
+  // logged in) never boots the main UI — the template shows the login gate.
   $effect(() => {
-    const phase = $onboardPhase
-    if (booted || phase === 'unknown' || phase === 'key_setup') return
+    const phase = effectiveOnboardPhase
+    if (booted || $productPhase !== 'ready' || phase === 'unknown' || phase === 'key_setup') return
     booted = true
     bootMain()
     if (phase === 'soul_setup') maybeLaunchOnboard()
@@ -209,15 +240,45 @@
   // window closing, but a later cold start's fallback (below) reads this to
   // put the user back where they left off.
   $effect(() => {
-    const v = $view, sid = $activeSessionId, phase = $onboardPhase
+    const v = $view, sid = $activeSessionId, phase = effectiveOnboardPhase
     if (!routeReady || phase === 'unknown' || phase === 'key_setup') return
     const hash = normalizeHash(v, sid)
     if (location.hash !== hash) location.hash = hash
     writeLastRoute(v, sid)
   })
 
+  // P6: a hidden view can still be reached via a hand-typed #/mcp or a stale
+  // last-route entry (Sidebar already filters it out of navigation). Bounce it
+  // back to chat and tell the user why, rather than silently resetting them.
+  // OCTO-FORK: P6 入口隐藏 — see
+  // dev-docs-usdable/需求/2260906/技术方案/P6-入口隐藏与积分.md.
+  $effect(() => {
+    if (viewHidden($view)) {
+      view.set('chat')
+      showToast($t('feature.not_available'))
+    }
+  })
+
   function bootMain() {
     ws.connect()
+
+    // Portable data-root freeze: the desktop shell's watchdog broadcasts
+    // datastore:lost when the data/ directory vanishes (a U盘 pulled out) and
+    // datastore:restored when the SAME path returns. frozen drives the
+    // full-screen FrozenOverlay and disables all input; only a restore — or
+    // the overlay's Quit — clears it.
+    ws.on('datastore:lost', () => { frozen.set(true) })
+    ws.on('datastore:restored', () => { frozen.set(false) })
+
+    // P6: the server broadcasts the fresh credits after each successful send
+    // (ws_handlers.go handleWSUserMessage). Merge them into the global product
+    // state so the sidebar corner + account panel update live without a round
+    // trip. OCTO-FORK: P6 credits — see
+    // dev-docs-usdable/需求/2260906/技术方案/P6-入口隐藏与积分.md.
+    ws.on('credits_update', (ev: any) => {
+      if (!ev?.credits) return
+      productState.update(s => (s ? { ...s, credits: ev.credits } : s))
+    })
 
     // Restore the persisted UI language from server config so a refresh
     // keeps the user's locale choice. Also seed globalPermissionMode and
@@ -247,6 +308,7 @@
               show_reasoning: typeof ev.show_reasoning === 'boolean' ? ev.show_reasoning : s.show_reasoning,
               permission_mode: typeof ev.permission_mode === 'string' ? ev.permission_mode : s.permission_mode,
               reasoning_effort: typeof ev.reasoning_effort === 'string' ? ev.reasoning_effort : s.reasoning_effort,
+              chat_mode: typeof ev.chat_mode === 'string' ? ev.chat_mode : s.chat_mode,
             }
           : s
         )
@@ -542,9 +604,15 @@
 
 {#if authDenied}
   <div class="splash splash-msg">{$t('auth.denied')}</div>
-{:else if $onboardPhase === 'unknown'}
+{:else if $productPhase === 'unknown'}
   <div class="splash"><div class="spinner"></div></div>
-{:else if $onboardPhase === 'key_setup'}
+{:else if $productPhase === 'blocked'}
+  <!-- OCTO-FORK: the product gate refused the window (not logged in) — render
+       the login/activation form (P4). No skip/guest path (需求 §5.3.1). -->
+  <BlockedView />
+{:else if effectiveOnboardPhase === 'unknown'}
+  <div class="splash"><div class="spinner"></div></div>
+{:else if effectiveOnboardPhase === 'key_setup'}
   <FirstRunSetup />
 {:else if mobileShell}
 <MobileApp />
@@ -595,6 +663,7 @@
 <ArtifactModal />
 <FeedbackModal />
 <Toast />
+<FrozenOverlay />
 
 <style>
 /* height 100% (via the html/body/#app chain), NOT 100vh: viewport units are

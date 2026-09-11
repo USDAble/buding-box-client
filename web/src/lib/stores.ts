@@ -49,6 +49,11 @@ export const pendingPermissionMode = writable<string>('')
 // above: without this, toggleShowReasoning's `!sid` guard made the switch a
 // silent no-op until a session existed.
 export const pendingShowReasoning = writable<boolean | null>(null)
+// Chat mode (P9) picked on the landing page before any session exists. ''
+// means "no override" — the session born from ensureActiveSession inherits the
+// account's default mode. Consumed once by createSessionForFirstMessage, same
+// shape as pendingModel/pendingPermissionMode. OCTO-FORK: P9 模式与模型.
+export const pendingChatMode = writable<string>('')
 export const sidebar = writable('full')
 export const cmdkOpen = writable(false)
 // Drives the MCP import-JSON modal. Adding a single server and editing an
@@ -58,6 +63,16 @@ export const cmdkOpen = writable(false)
 export const mcpModalOpen = writable(false)
 // Drives the Settings modal (replaces the old full-page 'settings' view).
 export const settingsModalOpen = writable(false)
+// P5 account panel: the left-side panel that opens from the bottom-left
+// corner. accountPanelPage tracks both the layer ('root' is the navigation
+// list itself) and the open secondary page — one store so the panel can
+// switch in place like a phone settings drill-down. Reset to 'root' every
+// time the panel opens; a reopen must not land on the last page visited.
+// OCTO-FORK: P5 — see
+// dev-docs-usdable/需求/2260906/技术方案/P5-个人中心.md §4.3.
+export type AccountPanelPage = 'root' | 'plan' | 'credits' | 'license' | 'settings' | 'sensitive' | 'help' | 'about'
+export const accountPanelOpen = writable(false)
+export const accountPanelPage = writable<AccountPanelPage>('root')
 // Optional deep link consumed by the next Settings open: which category, and
 // for 数据管理 which sub-view. Callers that just want the modal set only
 // settingsModalOpen and land on the default category. The modal clears this
@@ -74,6 +89,13 @@ export const toasts = writable<ToastEntry[]>([])
 // Runtime / WS state
 export const running = writable(false)
 export const wsDown = writable(false)
+
+// Frozen by the portable data-root watchdog: the data/ directory has vanished
+// (a U盘 pulled out, a folder renamed). While true the app shows a full-screen
+// FrozenOverlay and disables all input; the watchdog clears it via
+// datastore:restored only when the SAME path returns. Fed by App.svelte's
+// ws.on('datastore:lost' / 'datastore:restored') handlers.
+export const frozen = writable(false)
 
 // True when the page runs inside the desktop-shell webview. The shell tags its
 // window URL with this marker (cmd/octo-desktop/bridge.go shellURL); an
@@ -293,6 +315,11 @@ export const chatSuggestion = writable<Record<string, string>>({})
 // Per-session model name, updated on model switch so the Composer chip stays
 // reactive independently of the sessions store array subscription.
 export const chatModel = writable<Record<string, string>>({})
+// Per-session chat mode (P9), updated on mode switch so the Composer chip and
+// ModeMenu stay reactive independently of the sessions store array. Seeded
+// from the session's chat_mode field; empty means the account default.
+// OCTO-FORK: P9 模式与模型选择器.
+export const chatMode = writable<Record<string, string>>({})
 // Live thinking buffer (thinking_delta) shown as a Thoughts block while streaming.
 export const chatThinking = writable<Record<string, string>>({})
 // Live sub-agents, keyed by session. Fed by the sub_agent_event WS stream.

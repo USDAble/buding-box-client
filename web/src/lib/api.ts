@@ -1,4 +1,5 @@
 import type { Session, SessionGroup, Skill, Workflow, ScheduledTask, McpServer, McpServerDetail, Channel, Memory, RecallFile, TagStatus, GitDiffResponse, GitDiffSummaryResponse, GitDiffFile } from './types'
+import { windowToken, WINDOW_TOKEN_HEADER, productPhase } from './product'
 
 // TaskResponse matches the Go server task struct.
 export interface TaskResponse {
@@ -40,11 +41,43 @@ export async function readErrorMessage(res: Response, fallback: string): Promise
 }
 
 export async function request<T>(path: string, init?: RequestInit): Promise<T> {
-  const res = await fetch(path, init)
+  // OCTO-FORK: stamp every call with the adopted window token so the server's
+  // product gate can tell this window from other loopback peers. A plain
+  // browser has no token, so this is a no-op under `octo serve` — see
+  // dev-docs-usdable/需求/2260906/技术方案/P3-登录态与产品门.md.
+  const res = await fetch(path, { ...init, headers: withWindowToken(init?.headers) })
   if (!res.ok) {
-    throw new Error(await readErrorMessage(res, `${res.status} ${res.statusText}`))
+    // Read the error body once. A 403 with error "product_gate" means the
+    // window is no longer logged in — flip the phase so App.svelte shows the
+    // login gate instead of leaving a dead UI on screen.
+    let message = `${res.status} ${res.statusText}`
+    try {
+      const body = await res.json()
+      if (res.status === 403 && body?.error === 'product_gate') {
+        productPhase.set('blocked')
+      }
+      if (typeof body?.error === 'string' && body.error) message = body.error
+      else if (typeof body?.message === 'string' && body.message) message = body.message
+    } catch {
+      // Not JSON (proxy error page, empty body, …) — keep the status line.
+    }
+    throw new Error(message)
   }
   return res.json() as Promise<T>
+}
+
+// OCTO-FORK: withWindowToken returns the given headers with the window token
+// added, so a fetch that can't go through request() (special response handling:
+// 409 → conflict, multipart upload, blob download) still carries it. The
+// product gate only blocks requests that PRESENT a token; an in-window call
+// missing it would be mistaken for a CLI peer and let through, so every
+// window-initiated fetch must be stamped — see
+// dev-docs-usdable/需求/2260906/技术方案/P3-登录态与产品门.md.
+function withWindowToken(initHeaders?: HeadersInit): Headers {
+  const headers = new Headers(initHeaders)
+  const token = windowToken()
+  if (token) headers.set(WINDOW_TOKEN_HEADER, token)
+  return headers
 }
 
 function json(body: unknown): RequestInit {
@@ -92,6 +125,9 @@ export interface CreateSessionOpts {
   // For a project, the server skips seeding a default working dir so the
   // session runs purely in the project's directory.
   group_id?: string
+  // P9: the mode group this one session belongs to (the selector's
+  // landing-page pick). Omitted → the server applies the account default.
+  chat_mode?: string
 }
 
 export async function createSession(opts: CreateSessionOpts): Promise<Session> {
@@ -277,6 +313,36 @@ export async function updateSessionPermissionMode(id: string, mode: string): Pro
   })
 }
 
+// ── P9 chat modes (mode→model selector) ────────────────────────────────────
+// OCTO-FORK: P9 模式与模型选择器 — see
+// dev-docs-usdable/需求/2260906/技术方案/P9-模式与模型.md §4.
+export interface ChatModeModel {
+  id: string
+  /** Composite "<endpoint>::<model>" id; empty when the model is listed in
+   *  chat-modes.json but not present in config.yml (not selectable yet). */
+  compositeId?: string
+}
+export interface ChatModeDTO {
+  id: 'privacy' | 'smart' | 'default' | string
+  models: ChatModeModel[]
+  defaultModel: string
+}
+export interface ChatModesResponse {
+  modes: ChatModeDTO[]
+  /** True when chat-modes.json was unreadable and the built-in default is
+   *  being served (需求 §9: hint once). */
+  fallback: boolean
+}
+export async function getChatModes(): Promise<ChatModesResponse> {
+  return request<ChatModesResponse>('/api/product/chat-modes')
+}
+export async function setSessionChatMode(id: string, mode: string): Promise<{ ok: boolean; chat_mode: string }> {
+  return request<{ ok: boolean; chat_mode: string }>(`/api/sessions/${id}/chat-mode`, {
+    method: 'PUT',
+    ...json({ mode }),
+  })
+}
+
 export interface NativePickResult {
   path: string
   cancelled: boolean
@@ -358,6 +424,13 @@ export async function nativeMinimise(): Promise<void> {
 // hub actually terminates or keeps running in the tray). Best-effort.
 export async function nativeClose(): Promise<void> {
   await request<{ ok: boolean }>('/api/native/window/close', { method: 'POST' })
+}
+
+// Desktop shell only: terminate the process outright. The FrozenOverlay's
+// "Quit" button calls this when the portable data root is gone and recovery is
+// impossible — unlike nativeClose it never hides to the tray. Best-effort.
+export async function nativeQuit(): Promise<void> {
+  await request<{ ok: boolean }>('/api/native/quit', { method: 'POST' })
 }
 
 // Desktop shell only: query whether the window is currently maximised. Lets the
@@ -638,7 +711,8 @@ export interface ImportSkillResult {
 // JSON-only — it does NOT accept a multipart file directly; uploads go through
 // /api/upload first. Mirrors the old web import + `octo skills add`.
 export async function importSkill(source: string, force = false): Promise<ImportSkillResult> {
-  const res = await fetch('/api/skills/import', { method: 'POST', ...json({ source, force }) })
+  const init = json({ source, force })
+  const res = await fetch('/api/skills/import', { method: 'POST', ...init, headers: withWindowToken(init.headers) })
   if (res.status === 409) return { ok: false, conflict: true }
   const d = await res.json().catch(() => ({} as any))
   if (!res.ok) return { ok: false, error: d.error ?? `${res.status} ${res.statusText}` }
@@ -649,7 +723,7 @@ export async function importSkill(source: string, force = false): Promise<Import
 export async function uploadFile(file: File): Promise<string> {
   const form = new FormData()
   form.append('files', file)
-  const res = await fetch('/api/upload', { method: 'POST', body: form })
+  const res = await fetch('/api/upload', { method: 'POST', body: form, headers: withWindowToken() })
   const d = await res.json().catch(() => ({} as any))
   if (!res.ok) throw new Error(d.error ?? `${res.status} ${res.statusText}`)
   const url = d.files?.[0]?.url
@@ -920,7 +994,7 @@ export async function restoreTrash(id: string, onConflict?: 'backup' | 'rename')
   // The id ends in the original basename, which can contain URL-significant
   // characters (# ? % space) — encode it so the path segment survives.
   const q = onConflict ? `?on_conflict=${onConflict}` : ''
-  const res = await fetch(`/api/trash/${encodeURIComponent(id)}/restore${q}`, { method: 'POST' })
+  const res = await fetch(`/api/trash/${encodeURIComponent(id)}/restore${q}`, { method: 'POST', headers: withWindowToken() })
   if (res.status === 409) return { ok: false, conflict: true }
   if (!res.ok) throw new Error(await readErrorMessage(res, `${res.status} ${res.statusText}`))
   const d = await res.json()

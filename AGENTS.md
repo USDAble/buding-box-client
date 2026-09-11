@@ -96,7 +96,7 @@ Upstream merges use `merge`, never `rebase`, and land as their own PR with no fu
 
 ## Workflow
 
-- **Branch off latest `buding`** before editing. Feature PRs target `buding` (the product integration branch); `main` is the upstream-tracking branch. Never commit on either directly.
+- **Branch off latest `v1`** before editing. Feature PRs target `v1` (the product integration branch); `main` is the upstream-tracking branch. Never commit on either directly.
 - Push lands via PR only. Squash-and-merge is the project default; force-push only after explicit approval.
 - Commit messages and PR descriptions in English.
 - One feature per PR: one feature / characteristic = one PR = one squash commit. Mass mechanical changes (rename, move) can ride together but should be a single self-contained change set.

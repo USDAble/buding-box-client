@@ -10,6 +10,6 @@
 2. **Never hardcode a brand string.** Interpolate `{brand}` / `{brandShort}` from `branding/brand.json`. Annotate the two exceptions (upstream "Octo" in the port-conflict message; `buding-*` ASCII identifiers).
 3. **Mark every change to an upstream file** with `// OCTO-FORK: <why> — see <design doc>`.
 
-Upstream merges use `merge`, never `rebase`. One feature = one PR = one squash commit, targeting `buding`.
+Upstream merges use `merge`, never `rebase`. One feature = one PR = one squash commit, targeting `v1`.
 
-Requirements, plans and per-PR design docs live under `dev-docs-usdable/需求/20260909/`; upstream architecture lives in `dev-docs/` (do not add downstream docs there).
+Requirements, plans and per-PR design docs live under `dev-docs-usdable/需求/<批次>/` (current batch: `20260911/`); upstream architecture lives in `dev-docs/` (do not add downstream docs there).

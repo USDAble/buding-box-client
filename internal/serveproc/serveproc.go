@@ -38,6 +38,21 @@ func LogPath() (string, error) {
 	return filepath.Join(dir, "serve.log"), nil
 }
 
+// CLILogPath returns the path of the interactive CLI's log (data/logs/cli.log),
+// creating the logs directory if needed. Separate from serve.log because the two
+// can run at once — a desktop or daemon backend serving while the user also has a
+// terminal session open — and interleaving them would make both harder to read.
+// OCTO-FORK: upstream routes this through octoDir()/~/.octo; the data root is
+// data/ in this fork and octoDir no longer exists — see
+// dev-docs-usdable/需求/2260906/技术方案/P1-便携数据根.md.
+func CLILogPath() (string, error) {
+	dir, err := datapath.Sub("logs")
+	if err != nil {
+		return "", err
+	}
+	return filepath.Join(dir, "cli.log"), nil
+}
+
 // CrashLogPath returns the path of the crash log (data/logs/crash.log),
 // creating the logs directory if needed. Kept separate from serve.log: this
 // file holds only the output of a process dying, so it stays short enough to

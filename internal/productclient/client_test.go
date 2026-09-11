@@ -31,7 +31,11 @@ func newHarness(t *testing.T) *harness {
 	t.Cleanup(server.Close)
 
 	creds := &productclient.CredentialHolder{}
-	client := productclient.New(server.URL, productclient.ClientMeta{
+	// The base URL is versioned, because that is the only shape a control-plane
+	// host ever has: production.json ships `https://api.invalid/v1` and a profile
+	// test asserts the /v1 suffix. Passing the bare origin here (as this harness
+	// used to) hides any disagreement about who owns the version segment.
+	client := productclient.New(server.URL+"/v1", productclient.ClientMeta{
 		Version:   "test",
 		Platform:  "windows",
 		Arch:      "amd64",

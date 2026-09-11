@@ -44,7 +44,11 @@ func newHarness(t *testing.T) *harness {
 	if err != nil {
 		t.Fatalf("credentialstore.Open: %v", err)
 	}
-	client := productclient.New(platformSrv.URL, productclient.ClientMeta{
+	// Versioned base URL, matching the only shape a control-plane host has
+	// (production.json: https://api.invalid/v1). The client's paths are relative
+	// to the version segment, so an unversioned base would silently test a
+	// composition that never happens at run time.
+	client := productclient.New(platformSrv.URL+"/v1", productclient.ClientMeta{
 		Version:   "test",
 		Platform:  "test",
 		Arch:      "test",

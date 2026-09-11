@@ -99,11 +99,18 @@ const (
 )
 
 // Paths this package speaks to. The full registry is 中台交付包 §4.1.
+//
+// These are relative to the version segment, not absolute: the version lives in
+// the host. A control-plane host is always versioned — production.json ships
+// `https://api.invalid/v1`, UnsetAPIHost matches it, and a profile test asserts
+// the /v1 suffix — so baseURL already ends in /v1 and repeating it here composes
+// to /v1/v1/… and 404s. That is not hypothetical: it was the state until a manual
+// run, because the tests passed a bare origin the profile never produces.
 const (
-	pathSendSMS   = "/v1/auth/sms/send"
-	pathLogin     = "/v1/auth/login"
-	pathRefresh   = "/v1/auth/refresh"
-	pathBootstrap = "/v1/client/bootstrap"
+	pathSendSMS   = "/auth/sms/send"
+	pathLogin     = "/auth/login"
+	pathRefresh   = "/auth/refresh"
+	pathBootstrap = "/client/bootstrap"
 )
 
 // PurposeLogin is the only code purpose this build requests.

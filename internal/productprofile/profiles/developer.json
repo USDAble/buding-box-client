@@ -1,12 +1,12 @@
 {
   "schemaVersion": 1,
   "name": "developer",
-  "allowDevWebview": true,
-  "allowEnvironmentModelSource": true,
-  "allowDataRootOverride": true,
-  "apiHost": "",
-  "gatewayHost": "",
-  "trustedKeyIDs": {},
+    "allowDevWebview": true,
+    "allowEnvironmentModelSource": true,
+    "allowDataRootOverride": true,
+    "apiHost": "http://127.0.0.1:8788/v1",
+    "gatewayHost": "http://127.0.0.1:8788/v1",
+    "trustedKeyIDs": {},
   "startup": {
     "channels": true,
     "tools": true,

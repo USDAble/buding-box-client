@@ -1,6 +1,6 @@
 # 本地 API 契约（`/api/product/*`）
 
-> **状态**：`v0.1`（2026-09-11 起草，**待确认**）
+> **状态**：`v0.2`（2026-09-11 自查修订，**待确认**）
 > **本批次第二份契约**，解决 [`需求基线.md`](需求基线.md) §5.1 `S-1` 与 §5.2 `PQ24`。
 > **权威实现落点**：`internal/productruntime`（[`需求基线.md`](需求基线.md) `G1`）。**不继续加进 `internal/server`**——`internal/server/product_*.go` 是 20260909 线上的旧落点，只作参考。
 > **与《中台交付包》的分工**：本文件管「Web UI ↔ 本地 Go 服务」；[`中台交付包.md`](中台交付包.md) 管「本地 Go 服务 ↔ 中台」。两份契约**不互相复制字段定义**，只引用结论。
@@ -16,6 +16,20 @@
   - `⏳ 待补` —— 尚未定，登记在同一行的「未定」栏。
 - **变更流程（三处同改，缺一不可）**：① 本文件 → ② Go handler + 测试 → ③ 前端类型 + 测试。契约里登记的端点与错误码若未被实现，CI 应当失败（见 §5 `S-1` 的契约测试）。
 
+### 0.1 本文件的依据与可信度（重要）
+
+`v1` 上**还没有真后端**（`internal/productruntime` 等包未落地），所以本文件**不是从 Go handler 反向提取的**，而是从以下三处正向整理的：
+
+| 依据 | 位置 | 可信度 |
+| --- | --- | --- |
+| 前端调用与解析逻辑 | `web/src/lib/product.ts`、`api.ts`、`sensitive.ts`、`sensitiveDict.ts` | **高** —— 前端必须这样解析才能工作，字段名与信封形状是硬事实 |
+| 临时假后端 | [`../2260906/技术方案/开发期假后端说明.md`](../2260906/技术方案/开发期假后端说明.md) + `web/src/dev/devBackend.ts` | **中** —— 它是替身，形状可被真后端改动 |
+| 本文档的设计决定 | 本文件新定 | **待实现** —— 一律标 🚧 |
+
+因此每行的状态要这样读：`✅ 现状` = **前端已依赖此形状**（改它要动前端，不是纯后端改动）；`🚧 修订` = 本契约新定，代码尚未实现。
+
+**标 `✅` 不等于「后端已验证」**。后端侧的权威校验（去重、归一化、限流边界）只有真后端写完、契约测试跑起来才算数。
+
 ---
 
 ## 1. 通用约定
@@ -25,11 +39,11 @@
 - 请求与应答体一律 `application/json; charset=utf-8`。
 - 桌面外壳启动时生成**内存态 window token**，注入 webview URL；前端把它落到 `sessionStorage` 后，每个请求带 `X-Octo-Window-Token` 头（`web/src/lib/product.ts` 的 `WINDOW_TOKEN_HEADER`，`api.ts` 的 `withWindowToken`）。
 - **产品门只对外壳窗口生效**。普通浏览器（`octo serve` / 开发期）没有 token，产品门形同不存在，`phase` 直接 `ready`。因此本组端点在浏览器里可能返回 404 或空态——**这不是错误**。
-- 不使用 Cookie，不使用 `Authorization`。中台的 bearer token **绝不经过前端**。
+- 不使用 Cookie，**前端不发送 `Authorization`**；中台的 bearer token **绝不经过前端**（作用域：前端 ↔ 本地服务。本地服务 ↔ 中台 用 `Authorization: Bearer`，那是 [`中台交付包.md`](中台交付包.md) 的事）。
 
-### 1.2 三类错误信封（重要，易漏）
+### 1.2 错误信封（重要，易漏）
 
-本组端点**不用 HTTP 状态码承载业务语义**。只有三类 JSON 信封，**必须能区分**：
+本组端点**不用 HTTP 状态码承载业务语义**。只有下面几种 JSON 信封，**必须能区分**（「限流」是业务级的一个特化形状，共用 `code` 家族）：
 
 | 类型 | 形状 | 触发 | 前端行为 |
 | --- | --- | --- | --- |
@@ -48,7 +62,7 @@
 
 | 字段 | 类型 | 说明 |
 | --- | --- | --- |
-| `schemaVersion` | number | 状态文件结构版本，**只增不减**（§3 `S-5`） |
+| `schemaVersion` | number | 状态文件结构版本，**只增不减**（`S-5`，见 [`需求基线.md`](需求基线.md) §5.1） |
 | `loggedIn` | boolean | 决定前端 `phase` |
 | `activated` | boolean | 是否已激活；`loggedIn===true` 时恒为 `true` |
 | `activation` | object \| null | `{activatedAt, expiresAt, boxCode?}`。`boxCode` 是**明文盒子编号，不脱敏**（`E1` 规则 7）；老数据缺字段时为 `null`，前端显示「—」 |
@@ -77,6 +91,8 @@
 | 11 | POST | `/api/product/sensitive/dict/import` | 是 | 否 | ✅ |
 | 12 | POST | `/api/product/sensitive/check` | 否 | 否 | ✅ |
 
+> **「需登录」列是设计约定，不是观测事实。** 前端对 `/api/product/*` 一律带 window token（`api.ts` 的 `withWindowToken`），**产品门是否拦某条路由由服务端决定**，前端不区分。本列表达的是**应有的门策略**：凡读写账号数据或改词库的都要登录；`state` / `locale` / `send-code` / `login` 必须在未登录时可达，否则登录页根本渲染不出来。实现时应由产品门按**前缀白名单**放行这四条，而不是逐路由判断。
+
 ---
 
 ## 2. 逐端点契约
@@ -98,7 +114,8 @@
 - **请求**：`{"phone": "<11 位>"}`
 - **应答 `200`**：`{"cooldownSec": 60}`
 - **错误**：
-  - `400 {"fieldErrors": {"phone": "invalid_phone"}}`
+  - `400 {"code": "invalid_phone"}` —— ⚠️ **注意信封**：手机号错误走的是**业务级 `code`**，不是 `fieldErrors.phone`。前端在 `product.ts:177` 读到 `body.code` 之后**自己把它落到 `phone` 字段**上（`new ProductError(status, { phone: body.code })`）。
+    这是 §3 那类「命名不要统一掉」的又一个实例：**信封类型由服务端决定，字段归属由前端决定**，两者解耦。实现时若"顺手"改成 `fieldErrors.phone`，前端会把 `invalid_phone` 读成 `undefined` 而回落成默认文案——**不报错，但文案错**。
   - `429 {"retryAfterSec": <int>}` —— 冷却期内重复请求
 - **落点**：`internal/productruntime` → 中台 `POST /v1/auth/sms-code`（见《中台交付包》§3.2）。
 - **备注**：`send-code` 的**响应体预留 `captchaToken` 位**（`PQ23`）：将来中台返回 `{"captchaRequired": true}` 时前端才渲染人机验证 UI；P0 不渲染、不校验。
@@ -149,7 +166,7 @@
 ### 2.4 `POST /api/product/logout` ✅
 
 - **请求**：空体。
-- **应答 `200`**：`{"ok": true}`
+- **应答 `200`**：`{"ok": true}` —— ⚠️ 形状**取自假后端**（`devBackend.ts`），前端目前忽略应答体，因此真后端可改；改则须同步本行。
 - **副作用**：清 `data/credential.json`，`productPhase → blocked`。
 - **备注**：**绑定手机号与昵称仍留在 `data/`**，供二次登录表单预填与比对（`E2`）。注销 ≠ 清数据。
 
@@ -158,8 +175,8 @@
 登录**之前**也要能保存界面语言。
 
 - **请求**：`{"locale": "zh" | "en"}`
-- **应答 `200`**：`{"ok": true}`
-- **错误**：`400 {"fieldErrors": {"locale": "invalid_value"}}`
+- **应答 `200`**：`{"ok": true}`（同上，形状取自假后端）
+- **错误**：`400 {"fieldErrors": {"locale": "invalid_value"}}` —— 🚧 **本契约新定**。前端目前对非 2xx 只抛通用 `Error`、不解析应答体（`product.ts:220`），所以这个形状**尚无任何代码依赖**，现在定下来成本最低。
 - **备注**：默认语言**跟随系统语言**，非中文落 `en`（`PQ18`）。首启时由桌面壳把系统语言带进来，不靠前端猜。
 
 ### 2.6 `PUT /api/product/nickname` ✅
@@ -201,6 +218,8 @@
   1. **删掉 `fallback: boolean`**。现在的类型注释写「`chat-modes.json` 不可读时用内置默认」——这正是 `B1` 已作废的行为。**顺着旧形状实现，会把「内置名单」带回来**。
   2. 加上 `displayName`（中英双语）。**模型展示名来自中台签名目录的 `displayName`，前端不得保留 id→名称映射表**（`B6`，§3.8）。
   3. `id` 保持**英文 ASCII、不做本地化**（它是数据键，等同 `buding-*` 那类固定标识）。
+  4. `catalogVersion` / `policyVersion` 是**本契约新拟的字段名**（🚧），取名的目的是让前端能判断「目录是否换了一版」而不必比对内容。**若中台的信封里已有版本字段，以中台为准并回改本行**（§3.8：同一个事实只有一个 owner）。
+  5. `modes[].displayName` 同样来自中台的**模式分组 `internal/chatmode`**，不是本契约拟定。
 - **降级（§3.9）**：目录不可用时的行为是**显示「目录暂不可用 + 重试」，不给内置名单**，也就是 fail-closed。不许回落本地 provider（`A1`/`B1`）。
 - **落点**：`internal/productruntime` 投影中台目录 + `internal/chatmode` 做模式分组。
 
@@ -242,7 +261,7 @@
 | code | 层级 | 归属字段 / 场景 | i18n key |
 | --- | --- | --- | --- |
 | `product_gate` | 产品门 | 未登录访问受门保护路由 | （`api.ts` 内部处理，不渲染文案） |
-| `invalid_phone` | 字段 | `phone` | `product.err_phone` |
+| `invalid_phone` | 字段 / **业务** | `phone`；**`send-code` 走业务级 `code`**（见 §2.2） | `product.err_phone` |
 | `invalid_code` | 字段 | `code`（格式） | `product.err_code` |
 | `nickname_format` | 字段/业务 | `nickname` | `product.err_nickname` |
 | `nickname_sensitive` | 字段/业务 | `nickname` | `product.err_nickname_sensitive` |
@@ -257,9 +276,12 @@
 | `box_code_mismatch` | 业务 | 激活码与盒子编号不匹配 | `product.err_box_code_mismatch` |
 | `phone_mismatch` | 业务 | 目录已绑其他手机号（带 `phoneMasked`） | `product.err_phone_mismatch` |
 
-**两处刻意保留的命名差异（不要"统一"掉）**：
+**三处刻意保留的命名/信封差异（不要"统一"掉）**：
 1. 字段级 `invalid_activation`（空/格式）与业务级 `activation_invalid`（中台校验失败）**语义不同**，故拼写不同。同理 `invalid_box_code`（字段）与 `box_code_unknown` / `box_code_mismatch`（业务）。
 2. `invalid_code` 同时出现在两个层级，靠**信封类型**区分（有 `fieldErrors` 就是字段级）。
+3. `invalid_phone` 在 `login` 里是字段级、在 `send-code` 里是业务级（前端自己落回 `phone` 字段）。**同一个 code 名、两种信封**，实现者"顺手统一"会造成不报错但文案错的结果（§2.2）。
+
+**前端本地兜底（不是服务端契约）**：`BlockedView` 的 `businessErrorKey()` 有一个 `default` 分支渲染 `product.submit_failed`（「登录失败，请重试」）。这是**收到未知 code 时的兜底文案**，不代表服务端可以返回未登记的 code——**未知 code 应当视为契约违约并记日志**，而不是静默落到通用文案。
 
 ---
 
@@ -297,3 +319,4 @@
 | 版本 | 日期 | 变更 |
 | --- | --- | --- |
 | `v0.1` | 2026-09-11 | 首版：登记 12 个本地端点、三类错误信封、错误码总表、产品相关 WS 事件；标出 `login` 加 `boxCode` 与 `chat-modes` 去 `fallback` 两处 🚧 |
+| `v0.2` | 2026-09-11 | 自查修订（发现 1 处**事实错误** + 4 处**未标来源**）:① **`send-code` 的手机号错误走业务级 `{"code":"invalid_phone"}`，不是 `fieldErrors.phone`** —— 前端 `product.ts:177` 读的是 `body.code` 再自己落到 `phone` 字段；原 `v0.1` 写错了信封，照它实现会导致「不报错但文案错」。§2.2 改正，§3 增列第 3 处「同名不同信封」差异。② 新增 §0.1「依据与可信度」，说明 `v1` 上**没有真后端**、本文件是**从正面前端整理**而非反向后端提取，并给出三档可信度。③ §2.4 `logout` 与 §2.5 `locale` 的应答形状标注「取自假后端 / 本契约新定」，不再伪装成已验证。④ §2.8 标明 `catalogVersion` / `policyVersion` 是本契约新拟名，若中台已有版本字段则以中台为准。⑤ §1.4 补「需登录列是设计约定」，并写明应由产品门按**白名单**放行未登录可达的四条路由。⑥ §3 补「未知 code 应视为契约违约并记日志」，不得静默落到 `product.submit_failed`。 |

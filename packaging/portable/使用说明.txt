@@ -1,0 +1,42 @@
+============================================================
+ {nameZh} / {nameEn}
+============================================================
+
+【中文】
+
+欢迎使用 {nameZh}。
+
+一、启动
+- 双击 {exeName} 即可启动，无需安装。
+- 首次启动需要电脑已安装 Microsoft WebView2 运行时（Windows 10/11 通常已自带；
+  若缺失，程序会给出下载提示）。
+
+二、便携说明
+- 本目录可整体复制到 U 盘或任意位置使用。配置、会话、登录态等全部数据都保存在
+  本目录的 data/ 里，不写入系统其它位置。
+- 请先通过托盘菜单「退出」正常退出程序，再拔出 U 盘，以免数据写坏。
+
+三、安全提示
+- 本程序未做数字签名，Windows 可能弹出 SmartScreen 提示，请选择
+  「更多信息」→「仍要运行」。
+
+【English】
+
+Welcome to {nameEn}.
+
+1. Start
+- Double-click {exeName}. No installation required.
+- The first launch needs the Microsoft WebView2 Runtime (usually present on
+  Windows 10/11; if missing, the app shows a download prompt).
+
+2. Portable notes
+- Copy this whole folder to a USB drive or anywhere. All data (config, sessions,
+  login) lives in data/ inside this folder; nothing is written elsewhere.
+- Quit the app (tray menu → Exit) before unplugging the USB drive, to avoid
+  corrupting data.
+
+3. Security note
+- This app is not code-signed; Windows SmartScreen may warn. Choose
+  "More info" → "Run anyway".
+
+============================================================

@@ -1,0 +1,5 @@
+# data/config.yml
+# 预置的端点与模型名单由 P11（假模型通道）填充；P11 落地前此文件保持为空配置，
+# 与「无此文件」等价 —— 启动进入 onboarding（配 Key 向导）。
+# The bundled endpoint is provided by P11 (fake model channel); until then this
+# stays an empty config, equivalent to "no file" — startup enters onboarding.

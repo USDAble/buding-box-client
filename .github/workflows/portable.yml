@@ -1,0 +1,170 @@
+name: Portable
+
+# Builds the portable Windows deliverable — a self-contained PuddingBox/
+# directory (product exe + bundled uv + pre-filled data/ + bilingual usage
+# note) and zips it for manual download. This is the product's primary
+# deliverable (需求 §5.1.1): the installer (windows-installer-check.yml /
+# release.yml) still builds but is no longer the main output. See
+# dev-docs-usdable/需求/2260906/技术方案/P12-便携打包.md.
+#
+# The package-portable.mjs self-check asserts the exe name / VERSIONINFO /
+# GUI subsystem, the pre-filled data/, no dev residuals, no build-machine
+# paths, and the size budget. This workflow also runs P1's
+# TestPortableServer_WritesOnlyToDataRoot, the automated "running the product
+# leaves no new .octo data in the host home" acceptance item (§3.4).
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'cmd/octo-desktop/**'
+      - 'internal/server/**'
+      - 'web/**'
+      - 'branding/**'
+      - 'internal/brand/**'
+      - 'scripts/package-portable.mjs'
+      - 'scripts/package-portable.test.mjs'
+      - 'scripts/pe-info.mjs'
+      - 'scripts/pe-info.test.mjs'
+      - 'cmd/generate-brand-assets/**'
+      - 'scripts/package-desktop-macos.sh'
+      - 'packaging/portable/**'
+      - 'go.mod'
+      - 'go.sum'
+      - '.github/workflows/portable.yml'
+  pull_request:
+    paths:
+      - 'cmd/octo-desktop/**'
+      - 'internal/server/**'
+      - 'web/**'
+      - 'branding/**'
+      - 'internal/brand/**'
+      - 'scripts/package-portable.mjs'
+      - 'scripts/package-portable.test.mjs'
+      - 'scripts/pe-info.mjs'
+      - 'scripts/pe-info.test.mjs'
+      - 'cmd/generate-brand-assets/**'
+      - 'scripts/package-desktop-macos.sh'
+      - 'packaging/portable/**'
+      - 'go.mod'
+      - 'go.sum'
+      - '.github/workflows/portable.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: portable-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  portable:
+    name: Portable package (windows-amd64)
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-go@v7
+        with:
+          go-version: '1.25'
+          cache: true
+          cache-dependency-path: cmd/octo-desktop/go.sum
+
+      # The desktop app go:embeds the web UI from internal/server/webdist, which
+      # is gitignored — build it from source before the package step so the exe
+      # ships the real UI, not the .gitkeep placeholder.
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+
+      - name: Build web UI
+        working-directory: web
+        run: |
+          npm ci
+          npm run build
+
+      # Run the portable data-root integration test (P1 / P12 §3.4): a full
+      # server boot with the data root and host home pointed at separate temp
+      # dirs must not create a .octo directory under the home.
+      - name: Portable data-root test
+        working-directory: cmd/octo-desktop
+        run: go test -run TestPortableServer_WritesOnlyToDataRoot ./...
+
+      # Fetch uv.exe so the package can bundle bin/uv.exe (seeded into data/bin
+      # on first launch). Native PowerShell rather than `make bundle-tools-windows`
+      # (same fetch; kept for local/dev use) — windows-latest isn't guaranteed to
+      # have GNU Make. The version must stay in sync with UV_VERSION in the Makefile.
+      - name: Fetch bundled uv
+        shell: pwsh
+        run: |
+          $uvVersion = "0.11.26"
+          New-Item -ItemType Directory -Force -Path dist\bundled-tools\windows-amd64 | Out-Null
+          Invoke-WebRequest -Uri "https://github.com/astral-sh/uv/releases/download/$uvVersion/uv-x86_64-pc-windows-msvc.zip" -OutFile uv.zip
+          Expand-Archive -Path uv.zip -DestinationPath uv -Force
+          Copy-Item uv\uv.exe dist\bundled-tools\windows-amd64\uv.exe
+
+      # Bundle ripgrep so the desktop app's grep tool has an `rg` to shell out
+      # to (mirrors desktop.yml; -tags embedrg go:embeds it, and the package
+      # self-check asserts no dev residuals). Kept in pwsh because
+      # windows-latest isn't guaranteed to have GNU Make.
+      - name: Embed ripgrep
+        shell: pwsh
+        run: pwsh scripts/embed-rg-windows.ps1 -Arch amd64
+
+      # Builds the GUI exe (generate-syso + go build), assembles PuddingBox/,
+      # runs the self-check, and zips. GOOS/GOARCH default to windows/amd64.
+      - name: Package portable directory + self-check
+        run: node scripts/package-portable.mjs
+
+      - name: Packaging script tests
+        run: node --test scripts/package-portable.test.mjs scripts/pe-info.test.mjs
+
+      - name: Upload portable artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: PuddingBox-windows-amd64
+          path: dist/PuddingBox-windows-amd64.zip
+
+  macos:
+    name: Portable package (macos)
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          # package-desktop-macos.sh derives the version from `git describe`;
+          # fetch tags so it isn't just the short SHA.
+          fetch-depth: 0
+
+      - uses: actions/setup-go@v7
+        with:
+          go-version: '1.25'
+          cache: true
+          cache-dependency-path: cmd/octo-desktop/go.sum
+
+      # The .app go:embeds the web UI; build it from source first (same as the
+      # windows job).
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+
+      - name: Build web UI
+        working-directory: web
+        run: |
+          npm ci
+          npm run build
+
+      # Self-contained .app (embeds the web UI + rg + uv, ad-hoc signed; the
+      # data root lives inside the bundle via P1). This is the macOS portable
+      # deliverable (P12 §3.7) — same copy-to-anywhere property as PuddingBox/.
+      - name: Build + package macOS app
+        run: bash scripts/package-desktop-macos.sh
+
+      - name: Upload macOS app
+        uses: actions/upload-artifact@v7
+        with:
+          name: PuddingBox-macos
+          path: Octo.app

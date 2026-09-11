@@ -130,6 +130,7 @@ export const PRODUCT_FILES = [
   { file: 'internal/server/chatmode_handlers_test.go', convergence: 'P0-01A D + P0-04' },
   { file: 'internal/server/privacy.go', convergence: 'P0-01A D + P0-06' },
   { file: 'internal/server/privacy_test.go', convergence: 'P0-01A D + P0-06' },
+  { file: 'internal/server/product_gate_test.go', convergence: 'P0-01A C (the MountAPI seam folds with the apiProduct fold)' },
 ]
 
 // ─── pure analyzers (unit-tested) ───────────────────────────────────────────

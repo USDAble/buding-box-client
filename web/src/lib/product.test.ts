@@ -17,8 +17,10 @@ import {
 
 // A fetch stand-in returning a JSON body at a fixed status. `body` is the raw
 // object, so callers assert on what the client does with it (loggedIn, etc.).
+// The two parameters exist so `mock.calls[i][1]` stays typed as RequestInit and
+// a test can read the request body it asserted on.
 function fetchReturning(status: number, body: unknown) {
-  return vi.fn(async () => ({
+  return vi.fn(async (_input: RequestInfo | URL, _init?: RequestInit) => ({
     ok: status >= 200 && status < 300,
     status,
     statusText: "",
@@ -196,6 +198,36 @@ describe("login", () => {
     const err = await login({ phone: "13900009999", code: "123456", nickname: "用户1234" }).catch((e) => e);
     expect(err.code).toBe("phone_mismatch");
     expect(err.phoneMasked).toBe("138****1234");
+  });
+
+  it("sends both activation credentials on first activation", async () => {
+    const fetchMock = fetchReturning(200, { state: stateDTO });
+    vi.stubGlobal("fetch", fetchMock);
+
+    await login({
+      phone: "13800001234",
+      code: "123456",
+      nickname: "用户1234",
+      activationCode: "BUDING-DEMO-0001",
+      boxCode: "BOX-DEMO-0001",
+    });
+
+    const body = JSON.parse(String(fetchMock.mock.calls[0][1]?.body));
+    expect(body).toMatchObject({
+      activationCode: "BUDING-DEMO-0001",
+      boxCode: "BOX-DEMO-0001",
+    });
+  });
+
+  it("carries the activation-family codes through unchanged", async () => {
+    // The view maps each code to its own copy (需求基线 E1 rule 2), so the
+    // client must not fold or rewrite them on the way out of `login`.
+    for (const code of ["activation_invalid", "activation_code_used", "box_code_unknown", "box_code_mismatch"]) {
+      vi.stubGlobal("fetch", fetchReturning(400, { code }));
+
+      const err = await login({ phone: "13800001234", code: "123456", nickname: "用户1234" }).catch((e) => e);
+      expect(err.code).toBe(code);
+    }
   });
 });
 

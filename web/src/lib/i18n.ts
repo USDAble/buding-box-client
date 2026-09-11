@@ -961,8 +961,9 @@ export const en: Record<string, string> = {
   "m.create_fail": "Failed to create session",
 
   // ── product gate / login form (P4) ─────────────────────────────────────────
-  // Fork-added keys, kept in one block at the end of each dictionary so upstream
-  // merges collide at the tail rather than mid-file (P4-拦截页.md §7).
+  // OCTO-FORK: product-gate keys, absent upstream (P4-拦截页.md §7) — see
+  // dev-docs-usdable/需求/20260911/需求基线.md. Kept in one block at the tail of
+  // each dictionary so upstream merges collide at the tail rather than mid-file.
   "product.phone_label": "Phone number",
   "product.phone_placeholder": "Enter phone number",
   "product.code_label": "Verification code",
@@ -974,6 +975,9 @@ export const en: Record<string, string> = {
   "product.activation_label": "Activation code",
   "product.activation_placeholder": "Enter the activation code",
   "product.activation_hint": "Enter the activation code provided with the program directory",
+  "product.box_code_label": "Box code",
+  "product.box_code_placeholder": "Enter the box code",
+  "product.box_code_hint": "Provided with the packaging, by support, or by whoever gave you the drive",
   "product.submit_activate": "Activate and log in",
   "product.submit_login": "Log in",
   "product.submitting": "Logging in…",
@@ -982,9 +986,13 @@ export const en: Record<string, string> = {
   "product.err_nickname": "Nickname format is invalid",
   "product.err_nickname_sensitive": "Nickname contains sensitive content",
   "product.err_activation": "Enter the activation code",
+  "product.err_box_code": "Enter the box code",
   "product.err_code_not_sent": "Get a verification code first",
   "product.err_invalid_code": "Verification code is incorrect or expired",
   "product.err_activation_invalid": "Incorrect activation code",
+  "product.err_activation_used": "This activation code has already been used — contact support",
+  "product.err_box_code_unknown": "No such box code — check it and try again",
+  "product.err_box_code_mismatch": "The activation code and box code do not match — contact support",
   "product.err_phone_mismatch": "This program directory is bound to {masked}",
   "product.code_sent": "Verification code sent",
   "product.send_failed": "Failed to send, please try again",
@@ -1019,6 +1027,7 @@ export const en: Record<string, string> = {
   "product.panel.license_expired": "Expired · 0 days left",
   "product.panel.license_expired_note": "An expired license does not stop the product from working; renewing will be available later.",
   "product.panel.license_valid_until": "Valid until {date}",
+  "product.panel.license_box_code": "Box code: {code}",
   "product.panel.account_info": "Account",
   "product.panel.nickname": "Nickname",
   "product.panel.phone": "Phone",
@@ -1028,7 +1037,7 @@ export const en: Record<string, string> = {
   "product.panel.full_settings": "Open full settings",
   "product.panel.nickname_saved": "Nickname updated",
   "product.panel.help.test_code": "Test verification code: 123456",
-  "product.panel.help.test_activation": "Test activation code: BUDING-DEMO-0001",
+  "product.panel.help.test_activation": "Test activation code: BUDING-DEMO-0001 · box code: BOX-DEMO-0001",
   "product.panel.help.demo_points": "To demo low points: set the points to 0 in the data root, then restart or refresh",
   "product.panel.help.unplug_first": "Quit the app before unplugging the USB drive",
   "product.panel.help.change_phone": "To change your bound phone number, contact customer service",
@@ -2035,7 +2044,9 @@ export const zh: Record<string, string> = {
   "m.create_fail": "创建会话失败",
 
   // ── 产品门 / 登录表单（P4）────────────────────────────────────────────────
-  // Fork 新增键，集中在每份字典末尾，让上游合并冲突只发生在尾部（P4-拦截页.md §7）。
+  // OCTO-FORK: 产品门新增键，上游没有（P4-拦截页.md §7）—— 见
+  // dev-docs-usdable/需求/20260911/需求基线.md。集中在每份字典末尾，让上游合并
+  // 冲突只发生在尾部。
   "product.phone_label": "手机号",
   "product.phone_placeholder": "请输入手机号",
   "product.code_label": "验证码",
@@ -2047,6 +2058,9 @@ export const zh: Record<string, string> = {
   "product.activation_label": "激活码",
   "product.activation_placeholder": "请输入激活码",
   "product.activation_hint": "请输入随程序目录提供的激活码",
+  "product.box_code_label": "盒子编号",
+  "product.box_code_placeholder": "请输入盒子编号",
+  "product.box_code_hint": "随包装提供，也可向客服或转赠人索取",
   "product.submit_activate": "激活并登录",
   "product.submit_login": "登录",
   "product.submitting": "登录中…",
@@ -2055,9 +2069,13 @@ export const zh: Record<string, string> = {
   "product.err_nickname": "昵称格式不正确",
   "product.err_nickname_sensitive": "昵称包含敏感内容",
   "product.err_activation": "请输入激活码",
+  "product.err_box_code": "请输入盒子编号",
   "product.err_code_not_sent": "请先获取验证码",
   "product.err_invalid_code": "验证码不正确或已过期",
   "product.err_activation_invalid": "激活码不正确",
+  "product.err_activation_used": "该激活码已被使用，请联系客服",
+  "product.err_box_code_unknown": "盒子编号不存在，请核对后重试",
+  "product.err_box_code_mismatch": "激活码与盒子编号不匹配，请联系客服",
   "product.err_phone_mismatch": "此程序目录已绑定 {masked}",
   "product.code_sent": "验证码已发送",
   "product.send_failed": "发送失败，请重试",
@@ -2092,6 +2110,7 @@ export const zh: Record<string, string> = {
   "product.panel.license_expired": "已过期 · 剩余 0 天",
   "product.panel.license_expired_note": "授权到期不影响正常使用，续期功能将在后续提供。",
   "product.panel.license_valid_until": "有效期至 {date}",
+  "product.panel.license_box_code": "盒子编号：{code}",
   "product.panel.account_info": "账号信息",
   "product.panel.nickname": "昵称",
   "product.panel.phone": "手机号",
@@ -2101,7 +2120,7 @@ export const zh: Record<string, string> = {
   "product.panel.full_settings": "打开完整设置",
   "product.panel.nickname_saved": "昵称已更新",
   "product.panel.help.test_code": "测试验证码：123456",
-  "product.panel.help.test_activation": "测试激活码：BUDING-DEMO-0001",
+  "product.panel.help.test_activation": "测试激活码：BUDING-DEMO-0001 · 盒子编号：BOX-DEMO-0001",
   "product.panel.help.demo_points": "演示积分不足：把数据根中的积分改为 0 后重启或刷新",
   "product.panel.help.unplug_first": "请先退出再拔出 U 盘",
   "product.panel.help.change_phone": "如需更换手机号，请联系客服",

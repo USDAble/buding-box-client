@@ -130,7 +130,7 @@
   function businessErrorKey(): string {
     switch (formError) {
       case 'code_not_sent': return 'product.err_code_not_sent'
-      case 'code_invalid': return 'product.err_code_invalid'
+      case 'invalid_code': return 'product.err_invalid_code'
       case 'activation_invalid': return 'product.err_activation_invalid'
       case 'phone_mismatch': return 'product.err_phone_mismatch'
       case 'generic': return 'product.submit_failed'

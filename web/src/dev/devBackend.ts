@@ -5,7 +5,7 @@
 // It exists for one reason: so the P1-P13 screens can be clicked through on
 // this branch, where that backend is not present. It is not a design, and no
 // implementation detail in it should be carried into the real code.
-// See dev-docs-usdable/需求/2260906/开发期假后端说明.md.
+// See dev-docs-usdable/需求/2260906/技术方案/开发期假后端说明.md.
 // ============================================================================
 //
 // WHY IT IS NEEDED

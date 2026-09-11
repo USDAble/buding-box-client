@@ -11,7 +11,7 @@ import { installDevBackend } from './dev/devBackend'
 // all. This installs a local stand-in. The real backend replaces it — when it
 // lands, delete src/dev/devBackend.ts and these two lines (nothing else
 // references them). See
-// dev-docs-usdable/需求/2260906/开发期假后端说明.md.
+// dev-docs-usdable/需求/2260906/技术方案/开发期假后端说明.md.
 //
 // Scope: development only. A production build sets import.meta.env.DEV to
 // false, which drops the call and tree-shakes the module out of the bundle.

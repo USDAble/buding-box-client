@@ -5,7 +5,7 @@
 // It exists for one reason: so the P1-P13 screens can be clicked through on
 // this branch, where that backend is not present. It is not a design, and no
 // implementation detail in it should be carried into the real code.
-// See dev-docs-usdable/需求/2260906/开发期假后端说明.md.
+// See dev-docs-usdable/需求/2260906/技术方案/开发期假后端说明.md.
 // ============================================================================
 //
 // WHY IT IS NEEDED
@@ -224,7 +224,7 @@ export function installDevBackend(): void {
   const POST: Record<string, (b: any) => unknown> = {
     '/api/product/send-code': () => ({ cooldownSec: 60 }),
     '/api/product/login': (b) => {
-      if (String(b.code ?? '') !== DEMO_SMS_CODE) return json({ code: 'code_invalid' }, 400)
+      if (String(b.code ?? '') !== DEMO_SMS_CODE) return json({ code: 'invalid_code' }, 400)
       if (!loggedIn) {
         const given = String(b.activationCode ?? '').trim().toLowerCase()
         if (given !== DEMO_ACTIVATION_CODE.toLowerCase()) return json({ code: 'activation_invalid' }, 400)

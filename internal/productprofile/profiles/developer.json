@@ -6,7 +6,9 @@
     "allowDataRootOverride": true,
     "apiHost": "http://127.0.0.1:8788/v1",
     "gatewayHost": "http://127.0.0.1:8788/v1",
-    "trustedKeyIDs": {},
+    "trustedKeyIDs": {
+      "dev-policy-2026-a": "KP/trCGfSmkwfEv39GqO5WqqUDMMQELhl6YakhdE/90="
+    },
   "startup": {
     "channels": true,
     "tools": true,

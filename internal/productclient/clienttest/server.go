@@ -346,13 +346,29 @@ func (s *Server) handleBootstrap(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	activation := acct.activation
-	writeData(w, http.StatusOK, productclient.BootstrapData{
-		Account: productclient.Account{
-			ID: acct.id, PhoneMasked: acct.phoneMasked, Nickname: acct.nickname,
+	envelope, err := signedPolicy(s.now())
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, productclient.CodeInternalError, "")
+		return
+	}
+	writeData(w, http.StatusOK, bootstrapResponse{
+		BootstrapData: productclient.BootstrapData{
+			Account: productclient.Account{
+				ID: acct.id, PhoneMasked: acct.phoneMasked, Nickname: acct.nickname,
+			},
+			Activation: &activation,
+			Balance:    productclient.Balance{BalanceMicroCredits: fixtureBalanceMicroCredits},
 		},
-		Activation: &activation,
-		Balance:    productclient.Balance{BalanceMicroCredits: fixtureBalanceMicroCredits},
+		PolicyEnvelope: envelope,
 	})
+}
+
+// bootstrapResponse is the account summary plus the signed policy envelope, as
+// one `data` object (中台交付包 §4.3). Both embedded structs carry JSON tags, so
+// their fields are flattened side by side.
+type bootstrapResponse struct {
+	productclient.BootstrapData
+	productclient.PolicyEnvelope
 }
 
 func bearer(r *http.Request) string {

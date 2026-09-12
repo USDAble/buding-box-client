@@ -12,8 +12,10 @@ import {
   login,
   setProductLocale,
   ProductError,
+  noteSessionLost,
   WINDOW_TOKEN_HEADER,
 } from "./product";
+import type { ProductStateDTO } from "./product";
 
 // A fetch stand-in returning a JSON body at a fixed status. `body` is the raw
 // object, so callers assert on what the client does with it (loggedIn, etc.).
@@ -127,17 +129,60 @@ describe("refreshProductState", () => {
 describe("logout", () => {
   it("posts with the token and flips the phase to blocked", async () => {
     sessionStorage.setItem("octo_window_token", "tok");
-    const fetchMock = fetchReturning(200, {});
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, _init?: RequestInit) => ({
+      ok: true,
+      status: 200,
+      statusText: "",
+      json: async () =>
+        String(input).includes("/logout")
+          ? {}
+          : { schemaVersion: 1, loggedIn: false, activated: true, credits: { balance: 0, monthUsed: 0, monthKey: "" }, plan: { name: "" }, prefs: { locale: "", inputSensitiveCheck: false, defaultChatMode: "" } },
+    }));
     vi.stubGlobal("fetch", fetchMock);
 
     await logout();
 
     expect(get(productPhase)).toBe("blocked");
-    expect(get(productState)).toBeNull();
     expect(fetchMock).toHaveBeenCalledWith("/api/product/logout", {
       method: "POST",
       headers: { [WINDOW_TOKEN_HEADER]: "tok" },
     });
+  });
+
+  it("keeps the activation facts so the login page shows the short form", async () => {
+    // The bug this pins (V-22): clearing the store left `activated` false, so
+    // the blocked page rendered the ACTIVATION form after a logout. An
+    // activation code can only be used once, so a single tap on logout left the
+    // user with a form they could never satisfy.
+    sessionStorage.setItem("octo_window_token", "tok");
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: RequestInfo | URL, _init?: RequestInit) => ({
+        ok: true,
+        status: 200,
+        statusText: "",
+        json: async () =>
+          String(input).includes("/logout")
+            ? {}
+            : {
+                schemaVersion: 1,
+                loggedIn: false,
+                activated: true,
+                account: { phoneMasked: "138****1234", nickname: "tester", lastLoginAt: "" },
+                credits: { balance: 0, monthUsed: 0, monthKey: "" },
+                plan: { name: "" },
+                prefs: { locale: "", inputSensitiveCheck: false, defaultChatMode: "" },
+              },
+      })),
+    );
+
+    await logout();
+
+    const st = get(productState);
+    expect(st?.activated).toBe(true);
+    expect(st?.loggedIn).toBe(false);
+    // The bound number has to survive too: it is what prefills the short form.
+    expect(st?.account?.phoneMasked).toBe("138****1234");
   });
 
   it("posts without a token header under a plain browser", async () => {
@@ -150,6 +195,51 @@ describe("logout", () => {
       method: "POST",
       headers: {},
     });
+  });
+});
+
+describe("noteSessionLost", () => {
+  it("returns to the blocked page on 401 and keeps the activation facts", () => {
+    productPhase.set("ready");
+    productState.set({
+      schemaVersion: 1,
+      loggedIn: true,
+      activated: true,
+      account: { phoneMasked: "138****1234", nickname: "tester", lastLoginAt: "" },
+      credits: { balance: 0, monthUsed: 0, monthKey: "" },
+      plan: { name: "" },
+      prefs: { locale: "", inputSensitiveCheck: false, defaultChatMode: "" },
+      suppressOnboarding: true,
+    } as ProductStateDTO);
+
+    expect(noteSessionLost(401)).toBe(true);
+
+    expect(get(productPhase)).toBe("blocked");
+    const st = get(productState);
+    expect(st?.loggedIn).toBe(false);
+    // Same reason as the logout case: the second login is the short form.
+    expect(st?.activated).toBe(true);
+  });
+
+  it("ignores every status that is not 401", () => {
+    // Clearing on an outage would turn a flaky network into a forced re-login.
+    for (const status of [200, 403, 429, 500, 503]) {
+      productPhase.set("ready");
+      expect(noteSessionLost(status)).toBe(false);
+      expect(get(productPhase)).toBe("ready");
+    }
+  });
+
+  it("flips the phase when a product call is answered 401", async () => {
+    // The funnel, not the 401 handler: this is what makes the rule reach a call
+    // that nobody remembered to wire.
+    sessionStorage.setItem("octo_window_token", "tok");
+    productPhase.set("ready");
+    vi.stubGlobal("fetch", fetchReturning(401, { code: "unauthorized" }));
+
+    await refreshProductState();
+
+    expect(get(productPhase)).toBe("blocked");
   });
 });
 

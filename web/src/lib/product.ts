@@ -82,6 +82,42 @@ export function windowTokenQuery(): string {
   return token ? `?${WINDOW_TOKEN_QUERY}=${encodeURIComponent(token)}` : "";
 }
 
+/**
+ * noteSessionLost returns the UI to the login page when the server answers 401
+ * `unauthorized` — the platform refused our refresh token, so the session is
+ * gone and only re-logging in can restore it (需求基线 E12, P4-拦截页 §4).
+ *
+ * It exists as one function because it is one rule, and it is checked in one
+ * place (productFetch below, plus api.ts's request for the non-product calls):
+ * a 401 the user is left sitting on is a dead interface whose every following
+ * action fails the same way.
+ *
+ * Deliberately NOT "clear productState": the server keeps the activation record
+ * and the bound number (E7), and the blocked page reads exactly those two fields
+ * to show the short phone+code form instead of the activation form. Only
+ * `loggedIn` is corrected, so the store stops claiming a session that is gone.
+ *
+ * No re-fetch of /api/product/state either: that call goes through this same
+ * funnel, so fetching here would recurse.
+ */
+export function noteSessionLost(status: number): boolean {
+  if (status !== 401) return false;
+  productState.update((s) => (s ? { ...s, loggedIn: false } : s));
+  productPhase.set("blocked");
+  return true;
+}
+
+/**
+ * productFetch is the single funnel for this module's product calls, mirroring
+ * the server's failPlatform. Routing every call through it is what keeps the
+ * session-lost rule from being missed by the next call someone adds.
+ */
+async function productFetch(path: string, init?: RequestInit): Promise<Response> {
+  const res = await fetch(path, init);
+  noteSessionLost(res.status);
+  return res;
+}
+
 // refreshProductState loads the (de-identified) state and derives the phase.
 // Outside the desktop shell there is no gate, so the phase is ready outright.
 export async function refreshProductState(): Promise<void> {
@@ -89,12 +125,12 @@ export async function refreshProductState(): Promise<void> {
     productPhase.set("ready");
     return;
   }
-    try {
-      // The window token must ride this call too: the gate refuses an
-      // unauthenticated /api request, and a 403 here would send the UI to the
-      // login screen with no way through.
-      const res = await fetch("/api/product/state", { cache: "no-store", headers: windowTokenHeaders() });
-      if (!res.ok) throw new Error(`${res.status} ${res.statusText}`);
+  try {
+    // The window token must ride this call too: the gate refuses an
+    // unauthenticated /api request, and a 403 here would send the UI to the
+    // login screen with no way through.
+    const res = await productFetch("/api/product/state", { cache: "no-store", headers: windowTokenHeaders() });
+    if (!res.ok) throw new Error(`${res.status} ${res.statusText}`);
     const d = (await res.json()) as ProductStateDTO;
     productState.set(d);
     productPhase.set(d.loggedIn ? "ready" : "blocked");
@@ -110,10 +146,15 @@ export async function refreshProductState(): Promise<void> {
 // form can prefill and compare against them (需求 §5.3.4). The logout button
 // itself is P5's; this helper is wired there.
 export async function logout(): Promise<void> {
-  const res = await fetch("/api/product/logout", { method: "POST", headers: windowTokenHeaders() });
+  const res = await productFetch("/api/product/logout", { method: "POST", headers: windowTokenHeaders() });
   if (!res.ok) throw new Error(`${res.status} ${res.statusText}`);
-  productState.set(null);
-  productPhase.set("blocked");
+  // Re-read the state instead of blanking the store. Logging out is not an
+  // un-activation (E7): the box is still activated, and the blocked page reads
+  // `activated` to choose between the short phone+code form and the activation
+  // form. Blanking the store made it show the activation form - whose code is
+  // one-shot, so a single tap on logout stranded the user with nothing left to
+  // enter (V-22). The server owns the fact; this asks it again.
+  await refreshProductState();
 }
 
 // ─── P4 login form ──────────────────────────────────────────────────────────
@@ -172,7 +213,7 @@ export interface LoginInput {
  * a too-soon resend (429).
  */
 export async function sendCode(phone: string): Promise<number> {
-  const res = await fetch("/api/product/send-code", {
+  const res = await productFetch("/api/product/send-code", {
     method: "POST",
     headers: jsonHeaders(),
     body: JSON.stringify({ phone }),
@@ -194,7 +235,7 @@ export async function sendCode(phone: string): Promise<number> {
  * code + phoneMasked (round two).
  */
 export async function login(input: LoginInput): Promise<ProductStateDTO> {
-  const res = await fetch("/api/product/login", {
+  const res = await productFetch("/api/product/login", {
     method: "POST",
     headers: jsonHeaders(),
     body: JSON.stringify(input),
@@ -219,7 +260,7 @@ export async function login(input: LoginInput): Promise<ProductStateDTO> {
 
 /** Persists the UI language before login (PUT /api/product/locale). */
 export async function setProductLocale(locale: "zh" | "en"): Promise<void> {
-  const res = await fetch("/api/product/locale", {
+  const res = await productFetch("/api/product/locale", {
     method: "PUT",
     headers: jsonHeaders(),
     body: JSON.stringify({ locale }),
@@ -247,7 +288,7 @@ export interface AccountPrefs {
  * maps those straight to field errors, same machine codes as the login form.
  */
 export async function updateNickname(nickname: string): Promise<ProductStateDTO> {
-  const res = await fetch("/api/product/nickname", {
+  const res = await productFetch("/api/product/nickname", {
     method: "PUT",
     headers: jsonHeaders(),
     body: JSON.stringify({ nickname }),
@@ -268,7 +309,7 @@ export async function updateNickname(nickname: string): Promise<ProductStateDTO>
  * fieldErrors[field] = "invalid_value" on an unknown value.
  */
 export async function updatePrefs(prefs: AccountPrefs): Promise<ProductStateDTO> {
-  const res = await fetch("/api/product/prefs", {
+  const res = await productFetch("/api/product/prefs", {
     method: "PUT",
     headers: jsonHeaders(),
     body: JSON.stringify(prefs),

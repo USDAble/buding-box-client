@@ -1,5 +1,5 @@
 import type { Session, SessionGroup, Skill, Workflow, ScheduledTask, McpServer, McpServerDetail, Channel, Memory, RecallFile, TagStatus, GitDiffResponse, GitDiffSummaryResponse, GitDiffFile } from './types'
-import { windowToken, WINDOW_TOKEN_HEADER, productPhase } from './product'
+import { windowToken, WINDOW_TOKEN_HEADER, productPhase, noteSessionLost } from './product'
 
 // TaskResponse matches the Go server task struct.
 export interface TaskResponse {
@@ -61,6 +61,11 @@ export async function request<T>(path: string, init?: RequestInit): Promise<T> {
     } catch {
       // Not JSON (proxy error page, empty body, …) — keep the status line.
     }
+    // A 401 unauthorized means the platform refused our refresh token: the
+    // session is gone, so the UI goes back to the login page rather than
+    // reporting an error the user cannot act on (需求基线 E12, P4-拦截页 §4).
+    // Same rule as the product calls; noteSessionLost owns it (V-21).
+    noteSessionLost(res.status)
     throw new Error(message)
   }
   return res.json() as Promise<T>

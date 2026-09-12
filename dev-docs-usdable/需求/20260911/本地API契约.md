@@ -86,7 +86,7 @@
 | 5 | PUT | `/api/product/locale` | 否 | 否 | ✅ |
 | 6 | PUT | `/api/product/nickname` | 是 | `{state}` | ✅ |
 | 7 | PUT | `/api/product/prefs` | 是 | `{state}` | ✅ |
-| 8 | GET | `/api/product/chat-modes` | 否 | 否 | 🚧 去 `fallback`（`S-4`） |
+| 8 | GET | `/api/product/chat-modes` | 否 | 否 | ✅ 新形状已实现（`PR-4d`，2026-09-12） |
 | 9 | GET | `/api/product/sensitive/dict` | 否 | 否 | ✅ |
 | 10 | PUT | `/api/product/sensitive/dict` | 是 | 否 | ✅ |
 | 11 | POST | `/api/product/sensitive/dict/import` | 是 | 否 | ✅ |
@@ -198,7 +198,7 @@
 - **错误**：`400 {"field": "<字段名>", "code": "invalid_value"}`
 - **备注**：`defaultChatMode` 必须是 §2.8 目录里存在的 mode（`internal/chatmode` 是 mode 分组的唯一 owner，§3.8）。
 
-### 2.8 `GET /api/product/chat-modes` 🚧（去 `fallback`）
+### 2.8 `GET /api/product/chat-modes` ✅（新形状已实现，`PR-4d` 2026-09-12）
 
 模式与模型选择器的数据源。
 
@@ -217,14 +217,15 @@
     "policyVersion": "…"
   }
   ```
-- **🚧 与现状的差异**（`S-4`，必须一起改）：
+- **✅ 与旧形状的差异（`S-4`）—— 六条已全部落地（`PR-4d`，2026-09-12）**：
   1. **删掉 `fallback: boolean`**。现在的类型注释写「`chat-modes.json` 不可读时用内置默认」——这正是 `B1` 已作废的行为。**顺着旧形状实现，会把「内置名单」带回来**。
   2. **模型的 `displayName`**（中英双语）来自中台签名目录。**前端不得保留 id→名称映射表**（`B6`，§3.8）。
   3. `id` 保持**英文 ASCII、不做本地化**（它是数据键，等同 `buding-*` 那类固定标识）。
-  4. `catalogVersion` / `policyVersion` 是**本契约新拟的字段名**（🚧），取名的目的是让前端能判断「目录是否换了一版」而不必比对内容。**若中台的信封里已有版本字段，以中台为准并回改本行**（§3.8：同一个事实只有一个 owner）。
+  4. `catalogVersion` / `policyVersion` **两者都不是新拟字段，本行已按实际来源定稿**（原写"本契约新拟，若中台已有则以中台为准"）：`policyVersion` 取中台签名信封自己的 `policyVersion`，`catalogVersion` 取 `catalog.version`（`internal/productruntime/runtime.go` 的 DTO 逐字转发，`productclient.Policy` 里两个字段都在）。**前端只用于判断"目录是否换了一版"，不参与任何判定** —— 版本单调与降级判定都在 Go 侧（`§3.8` 一个 owner）。
   5. **`modes[]` 不带 `displayName`（2026-09-11 更正）。** 原第 5 条说它"来自模式分组"，方向错了：**模式的展示名是界面文案，不是数据**（`B5` 规则 1「展示名是界面文案、分组归属来自目录，两者不得互相推导」），而前端 i18n **已经拥有**这三个名字（`i18n.ts` 的 `mode.privacy` / `mode.smart` / `mode.default`，中英各一份）。让它同时出现在本应答里就是第二份真相（§3.8）—— 中台或后端改一处、前端显示另一处。**模式展示名一律由前端按 `mode.<id>` 渲染，本应答只给 `id`。**
   6. **`modes[].models` 是投影结果，其分组来源是模型自身的 `modeIds`**（见 [`中台交付包.md`](中台交付包.md) §4.3「`catalog.modes` 的形状」）—— 中台目录不在 `modes[]` 里再列一遍模型，本应答也不得据此再造一份分组事实。
-- **降级（§3.9）**：目录不可用时的行为是**显示「目录暂不可用 + 重试」，不给内置名单**，也就是 fail-closed。不许回落本地 provider（`A1`/`B1`）。
+- **降级（§3.9）**：目录不可用时的**目标行为**是**显示「目录暂不可用 + 重试」，不给内置名单**，也就是 fail-closed。不许回落本地 provider（`A1`/`B1`）。
+  - **现状（`PR-4d` 之后、`PR-4c` 之前）**：没做的是**文案**。`PR-4d` 保证的是"不给内置名单"这一半 —— 无缓存 / 缓存不可读 / 投影为空一律返回 `200` + **空 `modes`**，响应里**没有** `fallback` 字段（正反两条断言在 `chatmodes_route_test.go`），且前端 `loadChatModes()` 出错时**保留上一份列表**而不是清空（清空会把"过期"文案误配到一次网络抖动上）。三条降级文案与"不得开启新回合"归 `PR-4c`（`L-C2`）。
 - **落点**：`internal/productruntime` 投影中台目录 + `internal/chatmode` 做模式分组。
 
 ### 2.9 `GET /api/product/sensitive/dict` ✅
@@ -356,3 +357,4 @@
 | `v0.3` | 2026-09-12 | **全库核对发现本文件自身 4 处已过期（本轮只改文档，不动代码）。** ① **§5「未定项」重开了 6 个已关闭项** —— `S-1` / `S-3` / `S-5` / `S-6` / `S-7` / `N-2` 在 `需求基线` §5.1（标题即「已全部落规格」）与 §5.5 里**都已 ✅ 关闭**，本表却仍列为「未定」，会让读者去做已完成的事（§3.8：派生文档只引结论 + 链接）；已删去并改为一行落点索引，**只留 `N-5`**（本轮唯一真正未定项）。② **§0.1 说「`v1` 上还没有真后端」** —— `internal/productruntime` 已随 `PR-2b1` / `PR-2b2a` 落地并接进服务，12 条端点里**有 5 条真实存在**；已改为混合可信度，并把「已落地的 Go handler」列为**最高档**依据。③ **§2.3 说 `boxCode` 「后端尚无」** 并引用分支 `feat/activation-box-code` —— 后端已有（含 `TestFirstActivationReturnsWrappedStateWithServerBoxCode`），该分支已不存在且**无归档 tag**（内容已在 `v1`）；已改。④ **§1.4 给了一条已被推翻的实现指引**（「产品门按前缀白名单放行四条」）—— 已落地的门是**注册器的属性**、校验**窗口身份而非登录态**，没有白名单这回事（`开发计划` §4.1 第 12 行 / `D-006`）；已改为写明该层判据**本轮未实现**。⑤ 顺带收紧「标 `✅` ≠ 后端已验证」：只有那 5 条已实现端点算已验证。 |
 | `v0.2` | 2026-09-11 | 自查修订（发现 1 处**事实错误** + 4 处**未标来源**）:① **`send-code` 的手机号错误走业务级 `{"code":"invalid_phone"}`，不是 `fieldErrors.phone`** —— 前端 `product.ts:177` 读的是 `body.code` 再自己落到 `phone` 字段；原 `v0.1` 写错了信封，照它实现会导致「不报错但文案错」。§2.2 改正，§3 增列第 3 处「同名不同信封」差异。② 新增 §0.1「依据与可信度」，说明 `v1` 上**没有真后端**、本文件是**从正面前端整理**而非反向后端提取，并给出三档可信度。③ §2.4 `logout` 与 §2.5 `locale` 的应答形状标注「取自假后端 / 本契约新定」，不再伪装成已验证。④ §2.8 标明 `catalogVersion` / `policyVersion` 是本契约新拟名，若中台已有版本字段则以中台为准。⑤ §1.4 补「需登录列是设计约定」，并写明应由产品门按**白名单**放行未登录可达的四条路由。⑥ §3 补「未知 code 应视为契约违约并记日志」，不得静默落到 `product.submit_failed`。 |
 | `v0.1` | 2026-09-11 | 首版：登记 12 个本地端点、三类错误信封、错误码总表、产品相关 WS 事件；标出 `login` 加 `boxCode` 与 `chat-modes` 去 `fallback` 两处 🚧 |
+| `v0.2` | 2026-09-12 | **§2.8 由 🚧 转 ✅（`PR-4d` 落地）**：去 `fallback`、加 `displayName` / `catalogVersion` / `policyVersion` 六条全部实现。**第 4 条按实际来源定稿** —— 两个版本字段都不是新拟名（`policyVersion` 来自中台信封、`catalogVersion` 来自 `catalog.version`）。**降级一条补"现状"**：`PR-4d` 保证的是 fail-closed 不回落这一半（`200` + 空列表 + 无 `fallback` 字段），**文案归 `PR-4c`**。 |

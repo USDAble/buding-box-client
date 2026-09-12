@@ -34,6 +34,32 @@ const PLACEHOLDER = /\.invalid(\/|$)/
 
 const ALLOW_FLAGS = ['allowDevWebview', 'allowEnvironmentModelSource', 'allowDataRootOverride']
 
+// Only the control-plane host has a versioning requirement, and it is a real
+// one: internal/productclient concatenates its own paths onto apiHost, so a host
+// without /v1 sends every call to /v1/v1/… — that was V-13, a manual-integration
+// find that 175 green unit tests missed because both harnesses passed a bare
+// origin the profile never produces.
+//
+// The gateway host carries NO such requirement, and an earlier version of this
+// guard asserted one for both fields ("should be versioned (/v1)"). That rule
+// was V-37 — a false alarm raised while planning PR-5a, which read
+// internal/provider/openai's ChatCompletionsPath constant, concluded a /v1 on the
+// host would be appended to rather than normalised, and missed the normalisation
+// branch twenty lines below it. The provider trims a trailing /v1 and upstream's
+// own client_test.go pins that ("must not contain /v1/v1"), so BOTH gateway host
+// shapes are correct and neither can produce the double prefix.
+//
+// The rule is therefore dropped rather than inverted: a guard that demands a
+// particular shape for the gateway host would be enforcing a preference as if it
+// were a contract, and its advice is read by whoever cuts the release.
+export const VERSIONING_RULES = [
+  {
+    field: 'apiHost',
+    versioned: true,
+    why: 'internal/productclient concatenates its own paths onto this host, so the /v1 prefix belongs here',
+  },
+]
+
 // checkContent reports the problems in one production profile asset. Pure, so
 // a test can drive it with synthetic JSON.
 export function checkContent(rel, text) {
@@ -55,6 +81,7 @@ export function checkContent(rel, text) {
     }
   }
 
+  // Presence, reality and scheme apply to both hosts.
   for (const field of ['apiHost', 'gatewayHost']) {
     const value = profile[field]
     if (typeof value !== 'string' || value.trim() === '') {
@@ -70,8 +97,17 @@ export function checkContent(rel, text) {
     if (!value.startsWith('https://')) {
       problems.push(`${rel}: ${field} must use https (${value})`)
     }
-    if (!/\/v1\/?$/.test(value)) {
-      problems.push(`${rel}: ${field} should be versioned (/v1) (${value})`)
+  }
+
+  // Versioning applies only where a rule exists. Kept as a separate pass so that
+  // "no rule for this field" cannot silently take the shared checks with it -
+  // which is exactly what happened when these checks lived in one loop.
+  for (const { field, versioned, why } of VERSIONING_RULES) {
+    const value = profile[field]
+    if (typeof value !== 'string' || value.trim() === '') continue
+    const hasVersion = /\/v1\/?$/.test(value)
+    if (versioned && !hasVersion) {
+      problems.push(`${rel}: ${field} should be versioned (/v1) (${value}) — ${why}`)
     }
   }
 

@@ -485,6 +485,15 @@ func startHub(app *application.App, bridge *nativeBridge, settings desktopSettin
 	// long-running "desktop hub" instance the housekeeping is for.
 	server.StartUploadsHousekeeping()
 
+	// One assembly, two seams (PR-5a): the local product API's routes and the
+	// built-in gateway's sender factory. Built together because they must share
+	// one CredentialHolder — the gateway presents the token the platform client
+	// refreshed, so two holders would mean it kept presenting a stale one.
+	// Either can be nil, and that means "not wired in this build" to
+	// internal/server rather than "no gateway": see mountProductAPI's fail-closed
+	// branches.
+	mountProduct, gatewaySender := mountProductAPI()
+
 	srv, err := server.New(server.Config{
 		Tools: true,
 		// On: the version badge needs the latest-release lookup to know an update
@@ -499,18 +508,23 @@ func startHub(app *application.App, bridge *nativeBridge, settings desktopSettin
 		// dead backend. Omit the tool; the desktop shell owns its own update
 		// lifecycle (Check for Updates → installer).
 		DisableRestart: true,
-		MountAPI:       mountProductAPI(), // OCTO-FORK: our product routes
+		// OCTO-FORK: our product routes and the built-in gateway's sender, both
+		// from one assembly so they share one credential holder — see
+		// mountProductAPI and dev-docs-usdable/需求/20260911/开发计划.md §PR-5a.
+		MountAPI: mountProduct,
 		// OCTO-FORK: the product gate's window identity — see
 		// dev-docs-usdable/需求/20260911/开发计划.md §PR-2b2b. Generated here
 		// because this runs before the first window is shown, which is what lets
 		// shellURL carry the token into that window's very first URL.
 		WindowToken: windowToken(),
-		// OCTO-FORK: gateway-bound models may not ride the default sender — see
-		// dev-docs-usdable/需求/20260911/开发计划.md §PR-4c0. The picker binds
-		// sessions to catalog composite ids, and no sender can serve one until
-		// PR-5 wires the gateway; without this the upstream fallback would send
-		// the id to whatever data/config.yml points at (V-35).
+		// OCTO-FORK: gateway-bound models are served by the built-in gateway —
+		// see dev-docs-usdable/需求/20260911/开发计划.md §PR-5a. The prefix is
+		// what marks a model as the gateway's (PR-4c0); the factory is how a
+		// gateway-bound turn is actually served (PR-5a). With both injected,
+		// internal/server stops requiring a third-party endpoint at startup
+		// (V-36), because such a build has none by design (B4).
 		GatewayModelPrefix: productprofile.GatewayModelPrefix(),
+		GatewaySender:      gatewaySender,
 	})
 	if err != nil {
 		bridge.showError(L().errTitle, fmt.Sprintf(L().errStartFmt, err))

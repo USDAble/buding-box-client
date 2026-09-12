@@ -44,6 +44,16 @@ func (s *Server) handleBenchmark(w http.ResponseWriter, r *http.Request) {
 	// Resolve the model to benchmark: the session's current model if we can
 	// load it, otherwise the server's default.
 	defaultSender, defaultModel := s.defaultSenderAndModel()
+	// OCTO-FORK: V-36 — ensureSender above no longer guarantees a sender in a
+	// build that injected a gateway factory, because such a build has no
+	// third-party endpoint by design and its turns are refused per turn rather
+	// than at startup. This handler is not a turn path (it never goes through
+	// senderForSession), so it must say so itself instead of dereferencing nil.
+	if defaultSender == nil {
+		writeError(w, http.StatusServiceUnavailable,
+			"this build has no model provider for benchmarks: its turns run on the built-in gateway")
+		return
+	}
 	model := defaultModel
 	if sess, err := agent.LoadSession(sessionID); err == nil && sess.Model != "" {
 		model = sess.Model

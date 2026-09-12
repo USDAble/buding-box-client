@@ -92,11 +92,20 @@ func TestAGatewayModelNeverRidesTheDefaultSender(t *testing.T) {
 	if sender == srv.sender {
 		t.Fatal("a gateway-bound model rode the default sender — the request would reach config.yml's third party (B4)")
 	}
-	if model != "buding-gateway::buding-privacy-1" {
-		t.Errorf("model = %q, want the composite id verbatim so the refusal can name it", model)
+	// PR-5a changed what this model name must be, and the change is the point of
+	// the PR: the composite id names a LOCAL endpoint (C1) that the gateway has
+	// never heard of, so a turn routed to the gateway has to carry the BARE
+	// catalog id. The refusal below still names the composite id — that
+	// requirement did not move to the returned model, it moved into the message,
+	// where TestTheRefusalExplainsItself asserts it.
+	if model != "buding-privacy-1" {
+		t.Errorf("model = %q, want the bare catalog id: the composite id names a local endpoint the gateway does not know", model)
 	}
-	if _, err := sender.SendMessages(context.Background(), model, "", nil, 0); err == nil {
+	_, err := sender.SendMessages(context.Background(), model, "", nil, 0)
+	if err == nil {
 		t.Error("SendMessages returned nil for a model no configured endpoint can serve")
+	} else if !strings.Contains(err.Error(), "buding-gateway::buding-privacy-1") {
+		t.Errorf("refusal %q must still name the composite id the picker stored, so the user can tell which model it was", err.Error())
 	}
 	if counted.calls != 0 {
 		t.Errorf("the default sender was called %d time(s); nothing may leave the device for a model this build cannot serve", counted.calls)
@@ -120,7 +129,7 @@ func TestAnEndpointThatServesTheGatewayIsNotRefused(t *testing.T) {
 	sess := boundSession("buding-privacy-1", "buding-gateway::buding-privacy-1")
 	sender, model := srv.senderForSession(sess)
 
-	if _, refused := sender.(refusedGatewaySender); refused {
+	if _, refused := sender.(failingSender); refused {
 		t.Fatal("the guard refused a model whose gateway endpoint is configured and resolvable (PR-5 would hit this)")
 	}
 	if sender == srv.sender {

@@ -20,7 +20,11 @@ const ready = {
   allowEnvironmentModelSource: false,
   allowDataRootOverride: false,
   apiHost: 'https://api.example.com/v1',
-  gatewayHost: 'https://gateway.example.com/v1',
+  // The gateway host is written bare by convention (it matches the provider's
+  // DefaultBaseURL shape), but a trailing /v1 is equally valid — see the nail
+  // that asserts both are accepted. This fixture used to carry /v1 and the
+  // guard used to require it on both hosts (V-37, retracted).
+  gatewayHost: 'https://gateway.example.com',
   trustedKeyIDs: { 'policy-2026-a': 'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=' },
   startup: { channels: true, tools: true, mcp: true, backgroundTasks: true },
 }
@@ -42,9 +46,51 @@ test('reports a placeholder apiHost that Go would accept', () => {
 })
 
 test('reports a placeholder gatewayHost independently', () => {
-  const problems = checkContent(PRODUCTION_ASSET, json({ gatewayHost: 'https://gateway.invalid/v1' }))
+  const problems = checkContent(PRODUCTION_ASSET, json({ gatewayHost: 'https://gateway.invalid' }))
   assert.equal(problems.length, 1)
   assert.match(problems[0], /gatewayHost/)
+})
+
+// ─── the gateway host's suffix is NOT a rule (V-37, retracted) ──────────────
+//
+// One nail per direction was added here while V-37 was believed, and both were
+// wrong in the same way: they encoded a preference as a contract. What replaced
+// them is one nail asserting the property that is actually true and actually
+// matters — either gateway host shape is accepted, because
+// internal/provider/openai normalises a trailing /v1 before appending its path.
+//
+// The apiHost direction stays, because that one is a real requirement (V-13).
+
+test('reports an apiHost that lost its /v1', () => {
+  const problems = checkContent(PRODUCTION_ASSET, json({ apiHost: 'https://api.example.com' }))
+  assert.equal(problems.length, 1)
+  assert.match(problems[0], /apiHost should be versioned/)
+})
+
+test('accepts a gatewayHost with or without /v1', () => {
+  // Both are correct: the provider trims a trailing /v1 and appends
+  // "/v1/chat/completions" either way. A guard that demanded one of them would
+  // be telling whoever cuts the release to make a change the runtime does not
+  // need — and in the /v1-carrying case, the change this guard used to demand
+  // was in the *opposite* direction from the one it demanded first.
+  for (const host of ['https://gateway.example.com', 'https://gateway.example.com/v1']) {
+    assert.deepEqual(
+      checkContent(PRODUCTION_ASSET, json({ gatewayHost: host })),
+      [],
+      `gatewayHost ${host} should be accepted`,
+    )
+  }
+})
+
+test('still requires the gatewayHost to be a real https host', () => {
+  // Dropping the suffix rule must not drop the checks this guard exists for.
+  const placeholder = checkContent(PRODUCTION_ASSET, json({ gatewayHost: 'https://gateway.invalid/v1' }))
+  assert.equal(placeholder.length, 1)
+  assert.match(placeholder[0], /placeholder/)
+
+  const plaintext = checkContent(PRODUCTION_ASSET, json({ gatewayHost: 'http://gateway.example.com' }))
+  assert.equal(plaintext.length, 1)
+  assert.match(plaintext[0], /must use https/)
 })
 
 test('reports an empty trust store', () => {

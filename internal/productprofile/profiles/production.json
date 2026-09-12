@@ -5,7 +5,7 @@
   "allowEnvironmentModelSource": false,
   "allowDataRootOverride": false,
   "apiHost": "https://api.invalid/v1",
-  "gatewayHost": "https://gateway.invalid/v1",
+  "gatewayHost": "https://gateway.invalid",
   "trustedKeyIDs": {},
   "startup": {
     "channels": true,

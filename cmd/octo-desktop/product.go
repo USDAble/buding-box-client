@@ -15,6 +15,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/open-octo/octo-agent/internal/agent"
 	"github.com/open-octo/octo-agent/internal/brand"
 	"github.com/open-octo/octo-agent/internal/catalogstore"
 	"github.com/open-octo/octo-agent/internal/credentialstore"
@@ -45,7 +46,13 @@ import (
 // already-generated token, so a token born later than the first window show
 // would leave that window unable to identify itself. main.go builds the server
 // before it shows any window, so generating here is early enough.
-func mountProductAPI() func(api func(pattern string, h http.HandlerFunc)) {
+// It returns the two seams internal/server needs, both derived from one
+// assembly: the local product API's mount hook, and the built-in gateway's
+// sender factory (PR-5a). They are returned together, rather than by two
+// functions, because they must share one CredentialHolder - the gateway sender
+// is built from the token the platform client refreshed, so two holders would
+// mean the gateway kept presenting a stale one.
+func mountProductAPI() (mount func(api func(pattern string, h http.HandlerFunc)), gatewaySender func() (agent.Sender, error)) {
 	if windowToken() == "" {
 		// Fail closed. Without a token the gate cannot distinguish this window
 		// from any other loopback caller, so mounting the routes would publish
@@ -53,7 +60,7 @@ func mountProductAPI() func(api func(pattern string, h http.HandlerFunc)) {
 		// which the frontend already renders as "blocked" — the user is told,
 		// and never silently authorized (开发规范 §3.9).
 		slog.Error("product: window token unavailable, product routes not mounted")
-		return nil
+		return nil, nil
 	}
 
 	state, err := productstate.Open(productstate.Options{
@@ -66,7 +73,7 @@ func mountProductAPI() func(api func(pattern string, h http.HandlerFunc)) {
 	})
 	if err != nil {
 		slog.Error("product: state unavailable, product routes not mounted", "err", err)
-		return nil
+		return nil, nil
 	}
 	if state.Corrupt() {
 		// A damaged file degrades to "not logged in" and is left on disk for
@@ -77,7 +84,7 @@ func mountProductAPI() func(api func(pattern string, h http.HandlerFunc)) {
 	creds, err := credentialstore.Open(credentialstore.Options{})
 	if err != nil {
 		slog.Error("product: credential store unavailable, product routes not mounted", "err", err)
-		return nil
+		return nil, nil
 	}
 
 	// The catalog cache (PR-4b). A failure here does NOT unmount the routes:
@@ -131,7 +138,19 @@ func mountProductAPI() func(api func(pattern string, h http.HandlerFunc)) {
 			Skew:        catalogClockSkew,
 		},
 	})
-	return rt.Mount
+
+	// PR-5a's other half, built from the SAME holder as the platform client
+	// above. Sharing it is the point rather than an economy: a refresh makes the
+	// new token visible to the gateway sender with no notification step (C2 规则
+	// 2), and a second holder would be a second place a restored session has to
+	// land - which is exactly the defect V-32 was.
+	//
+	// The host comes from the profile. It is written bare, and either that shape
+	// or one carrying /v1 dials the same path — the provider's endpointURL
+	// normalises the suffix (see GatewayEndpoint.Host).
+	gateway := productruntime.GatewayEndpoint{Host: profile.GatewayHost, Tokens: tokens}
+
+	return rt.Mount, gateway.Sender
 }
 
 // catalogClockSkew tolerates drift between this machine's clock and the

@@ -1,6 +1,9 @@
 package productclient
 
-import "encoding/json"
+import (
+	"encoding/json"
+	"fmt"
+)
 
 // This file models the signed policy envelope the platform sends: the account
 // contract's dynamic half (中台交付包 §4.3). Field names live here and nowhere
@@ -122,4 +125,26 @@ func (e PolicyEnvelope) IsEmpty() bool {
 	default:
 		return false
 	}
+}
+
+// DecodePolicy parses the envelope's policy bytes WITHOUT verifying them.
+//
+// It exists for exactly one caller: the catalog projection, which reads back an
+// envelope that has already been verified. The cache stores the envelope verbatim
+// (需求基线 B2 规则 1) and holds no parsed policy, so re-reading one requires a
+// parse - and putting that parse here keeps the policy's field names in their one
+// owner (开发规范 §3.8) instead of having productruntime unmarshal a shape it
+// does not own.
+//
+// It must never be the path by which a policy off the wire is read. The trust
+// argument is the *caller's*, not this method's: the only bytes it is correct to
+// pass are ones that already came out of Verify or off a cache that only Verify
+// ever wrote. A caller with a fresh response wants Verify, which is also the one
+// place that can answer whether the bytes are genuine.
+func (e PolicyEnvelope) DecodePolicy() (Policy, error) {
+	var policy Policy
+	if err := json.Unmarshal(e.Policy, &policy); err != nil {
+		return Policy{}, fmt.Errorf("%w: %v", ErrPolicyMalformed, err)
+	}
+	return policy, nil
 }

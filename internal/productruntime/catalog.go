@@ -9,7 +9,9 @@ import (
 	"time"
 
 	"github.com/open-octo/octo-agent/internal/catalogstore"
+	"github.com/open-octo/octo-agent/internal/chatmode"
 	"github.com/open-octo/octo-agent/internal/productclient"
+	"github.com/open-octo/octo-agent/internal/productprofile"
 )
 
 // catalogOutcome says why the catalog is or is not usable.
@@ -165,3 +167,121 @@ func catalogExpiry(policy productclient.Policy, now time.Time) (time.Time, error
 func (rt *Runtime) logCatalogOutcome(outcome catalogOutcome, err error) {
 	slog.Warn("product: catalog unavailable", "outcome", string(outcome), "err", err)
 }
+
+// chatModeModel is one row the picker renders (本地API契约 §2.8).
+type chatModeModel struct {
+	ID          string
+	DisplayName productclient.DisplayName
+	// CompositeID is "<gateway endpoint>::<catalog id>", the form a session
+	// stores (需求基线 B8 规则 1). It is built here rather than accepted from the
+	// catalog because the endpoint half is a product constant - the platform
+	// supplies only the id.
+	CompositeID string
+}
+
+// chatModeGroup is one picker group: a product mode id and the models the
+// catalog put under it.
+type chatModeGroup struct {
+	ID string
+	// Models can be empty: the mode is a product constant, so "this group has
+	// nothing eligible right now" is a state the picker shows, not one that
+	// removes the group (PR-4c words it as 分组空).
+	Models []chatModeModel
+	// DefaultModel is a composite id, or empty when the catalog's
+	// defaultModelId did not name a member of this group.
+	DefaultModel string
+}
+
+// projectCatalog turns a verified catalog into the picker's groups.
+//
+// It is pure over the policy - no store, no clock, no network - which is what
+// lets every rule below be pinned by constructing a catalog rather than by
+// teaching the signing fixture to produce malformed ones.
+//
+// The rules, and where each comes from:
+//
+//   - Iterate the PRODUCT mode set (internal/chatmode), not the catalog's. A mode
+//     is offered because the product has it; a catalog naming an unknown one is
+//     reported and ignored, never invented (中台交付包 §4.3 catalog.modes.id).
+//   - Group by each model's own ModeIDs. `catalog.modes[]` deliberately carries no
+//     model list, because a second copy of the grouping fact drifts and the picker
+//     would then answer differently depending on which copy it read (同节).
+//   - Keep only eligible && transport == "gateway" models. Both halves matter:
+//     `eligible` is the account's entitlement, `transport` is the rule that keeps
+//     a shipped build from reaching a provider around the gateway (需求基线 C1).
+//   - A default is used only if it names a member of its own group; otherwise it
+//     is dropped and the group keeps its models. The group itself is never
+//     dropped - it is a product constant.
+//
+// It returns the ignored mode ids rather than logging them, so the caller owns
+// the logging and this stays a function of its input.
+func projectCatalog(policy productclient.Policy) ([]chatModeGroup, []string) {
+	catalog := policy.Catalog
+
+	// Models kept per mode id, in catalog order. Building this first means each
+	// rule below is applied once rather than inside the group loop.
+	byMode := map[string][]chatModeModel{}
+	var ignored []string
+	seenIgnored := map[string]bool{}
+	note := func(id string) {
+		if id == "" || chatmode.IsProductMode(id) || seenIgnored[id] {
+			return
+		}
+		seenIgnored[id] = true
+		ignored = append(ignored, id)
+	}
+
+	for _, m := range catalog.Models {
+		if !m.Eligible || m.Transport != transportGateway {
+			continue
+		}
+		row := chatModeModel{
+			ID:          m.ID,
+			DisplayName: m.DisplayName,
+			CompositeID: productprofile.GatewayEndpointID + "::" + m.ID,
+		}
+		for _, modeID := range m.ModeIDs {
+			if !chatmode.IsProductMode(modeID) {
+				note(modeID)
+				continue
+			}
+			byMode[modeID] = append(byMode[modeID], row)
+		}
+	}
+
+	// The catalog's mode entries supply defaults and nothing else; a mode id the
+	// product does not have is reported here too, because it can appear only here.
+	defaults := map[string]string{}
+	for _, m := range catalog.Modes {
+		if !chatmode.IsProductMode(m.ID) {
+			note(m.ID)
+			continue
+		}
+		defaults[m.ID] = m.DefaultModelID
+	}
+
+	groups := make([]chatModeGroup, 0, len(chatmode.IDs()))
+	for _, id := range chatmode.IDs() {
+		models := byMode[id]
+		group := chatModeGroup{ID: id, Models: models}
+		// Membership, not mere existence: a default that is not in this group is
+		// not this group's default (中台交付包 §4.3 `defaultModelId`).
+		if want := defaults[id]; want != "" {
+			for _, m := range models {
+				if m.ID == want {
+					group.DefaultModel = m.CompositeID
+					break
+				}
+			}
+		}
+		groups = append(groups, group)
+	}
+	return groups, ignored
+}
+
+// transportGateway is the only transport the catalog may name for a selectable
+// model (中台交付包 §4.3: "只有 eligible=true 且 transport=gateway"). Anything
+// else - including a provider-direct transport a future contract adds - is not
+// selectable from a shipped build, so the constant is the allow-list rather than
+// a deny-list of known-bad values.
+const transportGateway = "gateway"

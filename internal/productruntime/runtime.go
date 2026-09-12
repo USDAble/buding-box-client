@@ -125,10 +125,118 @@ func (rt *Runtime) Handler() http.Handler {
 func (rt *Runtime) Mount(api func(pattern string, h http.HandlerFunc)) {
 	api("GET /api/product/state", rt.handleState)
 	api("GET /api/product/control-plane", rt.handleControlPlane)
+	api("GET /api/product/chat-modes", rt.handleChatModes)
 	api("POST /api/product/send-code", rt.handleSendCode)
 	api("POST /api/product/login", rt.handleLogin)
 	api("POST /api/product/logout", rt.handleLogout)
 	api("PUT /api/product/locale", rt.handleLocale)
+}
+
+// chatModesDTO is the wire shape of 本地API契约 §2.8.
+//
+// There is deliberately no `fallback` field. The old shape carried one to
+// announce that the built-in list had been substituted for an unreadable
+// data/chat-modes.json, and 需求基线 B1 规则 4 retired both the file and the
+// behaviour; re-adding the field would be the built-in list coming back with a
+// flag on it. A type that cannot express the field is the cheapest way to keep
+// it out (the route test asserts its absence over the wire anyway, because the
+// JSON is a Go/JS boundary and this struct is not what the browser sees).
+//
+// The versions are always present and are empty strings when no catalog was
+// available - not omitted. The frontend compares them to notice that the catalog
+// changed, and "absent" and "empty" would be two spellings of one state.
+type chatModesDTO struct {
+	Modes          []chatModeGroupDTO `json:"modes"`
+	CatalogVersion string             `json:"catalogVersion"`
+	PolicyVersion  string             `json:"policyVersion"`
+}
+
+type chatModeGroupDTO struct {
+	ID string `json:"id"`
+	// Models is always a JSON array, never null: the picker iterates it, and a
+	// null would make an empty group a different shape from a populated one.
+	Models       []chatModeModelDTO `json:"models"`
+	DefaultModel string             `json:"defaultModel"`
+}
+
+type chatModeModelDTO struct {
+	ID          string                    `json:"id"`
+	DisplayName productclient.DisplayName `json:"displayName"`
+	CompositeID string                    `json:"compositeId"`
+}
+
+// handleChatModes is the picker's data source: the signed catalog, projected.
+//
+// It reads the cache and never the network. Fetching belongs to login (PR-4b's
+// single fetch point) and, from PR-4c, to an explicit refresh - so a picker that
+// is opened with no catalog answers "nothing" instead of starting a call behind
+// the user's back, which would also make the response's arrival time depend on
+// the network.
+//
+// No catalog, a damaged cache and a cache this build cannot read all produce the
+// same answer - an empty list - because the picker has exactly one thing to do
+// about all three, and 需求基线 B1 规则 1 forbids the alternative (a local
+// list). Telling them apart is PR-4c's job, and it does it on its own endpoint
+// reporting the cache's state, not by reading it out of this response.
+func (rt *Runtime) handleChatModes(w http.ResponseWriter, r *http.Request) {
+	empty := chatModesDTO{Modes: []chatModeGroupDTO{}}
+
+	if rt.deps.Catalog == nil {
+		writeJSON(w, http.StatusOK, empty)
+		return
+	}
+	entry, err := rt.deps.Catalog.Load()
+	if err != nil {
+		// Absence is the ordinary case on a fresh installation, so it is not
+		// worth a warning; a damaged or unreadable cache is, because the user
+		// sees an empty picker and nothing else would explain it.
+		if !errors.Is(err, catalogstore.ErrNoCache) {
+			slog.Warn("product: chat-modes served empty", "err", err)
+		}
+		writeJSON(w, http.StatusOK, empty)
+		return
+	}
+
+	// The cached envelope was verified before it was written (catalogstore only
+	// ever holds what fetchCatalog accepted), so this parses rather than
+	// re-verifies: a second signature check here would be a second opinion about
+	// a fact that already has one owner (开发规范 §3.8).
+	policy, err := entry.Envelope.DecodePolicy()
+	if err != nil {
+		slog.Warn("product: cached catalog could not be read back", "err", err, "catalogVersion", entry.CatalogVersion)
+		writeJSON(w, http.StatusOK, empty)
+		return
+	}
+
+	groups, ignored := projectCatalog(policy)
+	if len(ignored) > 0 {
+		// Reported, not acted on: the mode set is a product constant, so an
+		// unknown id is a platform contract drift an operator needs to see, while
+		// the picker carries on with the modes the product has.
+		slog.Warn("product: catalog names mode ids this build does not have", "modeIds", ignored)
+	}
+
+	out := chatModesDTO{
+		Modes:          make([]chatModeGroupDTO, 0, len(groups)),
+		CatalogVersion: entry.CatalogVersion,
+		PolicyVersion:  policy.PolicyVersion,
+	}
+	for _, g := range groups {
+		dto := chatModeGroupDTO{
+			ID:           g.ID,
+			Models:       make([]chatModeModelDTO, 0, len(g.Models)),
+			DefaultModel: g.DefaultModel,
+		}
+		for _, m := range g.Models {
+			dto.Models = append(dto.Models, chatModeModelDTO{
+				ID:          m.ID,
+				DisplayName: m.DisplayName,
+				CompositeID: m.CompositeID,
+			})
+		}
+		out.Modes = append(out.Modes, dto)
+	}
+	writeJSON(w, http.StatusOK, out)
 }
 
 // handleControlPlane reports whether this build can reach a control plane at

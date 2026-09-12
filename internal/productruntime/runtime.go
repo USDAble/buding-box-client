@@ -16,7 +16,9 @@ import (
 	"log/slog"
 	"net/http"
 	"strings"
+	"time"
 
+	"github.com/open-octo/octo-agent/internal/catalogstore"
 	"github.com/open-octo/octo-agent/internal/credentialstore"
 	"github.com/open-octo/octo-agent/internal/productclient"
 	"github.com/open-octo/octo-agent/internal/productstate"
@@ -50,6 +52,33 @@ type Deps struct {
 	// SendCodeCooldownSec is reported to the UI so it can count down. It is the
 	// local default; the platform's own value wins when it sends one.
 	SendCodeCooldownSec int
+	// Catalog owns data/catalog.json. nil means this build has nowhere to keep a
+	// catalog, in which case fetchCatalog does not start a fetch at all: a
+	// network call whose answer nothing can read is not a degradation, it is a
+	// waste (开发计划 PR-4b 第 2 步补充 ⑦).
+	Catalog *catalogstore.Store
+	// CatalogTrust is what verifying a fetched policy requires: the keys this
+	// build trusts and the audience it answers to. Both come from
+	// internal/productprofile and branding/brand.json, injected here for the
+	// same reason ControlPlane is - this package forwards the answer, it does
+	// not own the question.
+	CatalogTrust CatalogTrust
+}
+
+// CatalogTrust is the trust anchor a fetched policy is checked against.
+//
+// It is a value rather than a call into productprofile so that a test can pin an
+// explicit key and audience: a build-tag-selected profile would otherwise make
+// these tests fail for a reason unrelated to what they assert.
+type CatalogTrust struct {
+	// TrustedKeys maps keyId to a base64 ed25519 public key.
+	TrustedKeys map[string]string
+	// Audience is the build's brandId: a policy addressed to another product
+	// must not be accepted just because it is correctly signed.
+	Audience string
+	// Skew tolerates clock drift between this machine and the platform when the
+	// policy window is checked.
+	Skew time.Duration
 }
 
 // ControlPlaneStatus is the answer to "can this build reach a control plane at
@@ -234,6 +263,23 @@ func (rt *Runtime) handleLogin(w http.ResponseWriter, r *http.Request) {
 	}); err != nil {
 		writeCode(w, http.StatusInternalServerError, productclient.CodeInternalError, nil)
 		return
+	}
+
+	// The catalog is fetched after the session exists and before the response
+	// goes out, because the picker needs it immediately on the first render
+	// (需求基线 B1 规则 1: a catalog failure never blocks the login).
+	//
+	// One error is the exception, and it is not really a catalog failure: a
+	// refused session means the platform has already told us the token it just
+	// issued is not usable. That has to leave the user on the blocked page with
+	// no credential behind, exactly as any other refused call would (L-A6), so it
+	// goes through the same funnel instead of being logged as a catalog problem.
+	if outcome, err := rt.fetchCatalog(r.Context()); err != nil {
+		if IsSessionExpired(err) {
+			rt.failPlatform(w, err)
+			return
+		}
+		rt.logCatalogOutcome(outcome, err)
 	}
 
 	writeJSON(w, http.StatusOK, map[string]any{"state": rt.deps.State.PublicState()})

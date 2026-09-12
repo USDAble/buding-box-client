@@ -13,7 +13,10 @@ import (
 	"net/url"
 	"runtime"
 	"sync"
+	"time"
 
+	"github.com/open-octo/octo-agent/internal/brand"
+	"github.com/open-octo/octo-agent/internal/catalogstore"
 	"github.com/open-octo/octo-agent/internal/credentialstore"
 	"github.com/open-octo/octo-agent/internal/productclient"
 	"github.com/open-octo/octo-agent/internal/productprofile"
@@ -77,6 +80,16 @@ func mountProductAPI() func(api func(pattern string, h http.HandlerFunc)) {
 		return nil
 	}
 
+	// The catalog cache (PR-4b). A failure here does NOT unmount the routes:
+	// unlike product-state.json, the cache is not the user's data - it is a
+	// re-fetchable copy of something the platform hands out again on the next
+	// login. Refusing to serve the product because a cache file would not open
+	// would turn a recoverable condition into an outage.
+	catalog, err := catalogstore.Open(catalogstore.Options{})
+	if err != nil {
+		slog.Warn("product: catalog cache unavailable; the picker will have nothing to show until the next fetch", "err", err)
+	}
+
 	// The two facts the blocked page needs before the user types (L-B2). Read
 	// here, at assembly time, because the profile is immutable for the life of
 	// the process and the judgement belongs to internal/productprofile - the
@@ -92,9 +105,25 @@ func mountProductAPI() func(api func(pattern string, h http.HandlerFunc)) {
 			Configured:     profile.ControlPlaneConfigured(),
 			HasTrustedKeys: profile.HasTrustedKeys(),
 		},
+		Catalog: catalog,
+		// The trust anchor and the audience come from their own owners
+		// (productprofile and branding/brand.json) and are handed in as values:
+		// verification happens in internal/productclient, so this package must
+		// not grow an opinion about which keys count.
+		CatalogTrust: productruntime.CatalogTrust{
+			TrustedKeys: profile.TrustedKeyIDs,
+			Audience:    brand.Load().BrandID,
+			Skew:        catalogClockSkew,
+		},
 	})
 	return rt.Mount
 }
+
+// catalogClockSkew tolerates drift between this machine's clock and the
+// platform's when a signed catalog's validity window is checked. The window is
+// an hour wide, so a couple of minutes is generous without letting a genuinely
+// expired catalog through.
+const catalogClockSkew = 2 * time.Minute
 
 // newPlatformClient builds the Central Platform client, or returns nil when this
 // build names no control plane.

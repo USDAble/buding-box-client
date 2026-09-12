@@ -35,7 +35,7 @@
 // installs it behind `import.meta.env.DEV`, so a production build never runs it
 // and tree-shakes it out of the bundle (verified against the built output).
 
-import { chatModes, chatModesFallback } from '../lib/chatMode'
+import { chatModes } from '../lib/chatMode'
 import { productPhase, productState } from '../lib/product'
 import { accountPanelOpen, accountPanelPage, chatMode, frozen } from '../lib/stores'
 
@@ -67,9 +67,12 @@ function newSession() {
   }
 }
 
-// The configured endpoints. The mode menu needs the same models here as in
-// MODES below, because a row is only selectable once it resolves to a
-// composite "<endpoint>::<model>" id (P9 §3.2).
+// The configured endpoints. These are the Settings → Endpoints list; they no
+// longer have to agree with the mode menu below. Until PR-4d a row was only
+// selectable once it resolved to a composite "<endpoint>::<model>" id against
+// this list (P9 §3.2), and the menu's ids had to mirror it. The menu now reads
+// the catalog projection, whose composite ids carry the gateway prefix, so the
+// two lists answer different questions and are free to differ.
 const ENDPOINTS = [
   {
     id: 'cloud', name: 'Cloud', protocol: 'anthropic-messages', base_url: 'https://example.invalid',
@@ -82,33 +85,62 @@ const ENDPOINTS = [
 ]
 const DEFAULT_MODEL = 'cloud::buding-cloud-plus'
 
+// GATEWAY_ENDPOINT_ID mirrors internal/productprofile.GatewayEndpointID, which
+// the real projection prefixes every composite id with. It is duplicated rather
+// than imported because this file is a frontend stand-in for a backend that does
+// not exist in this build, so there is no Go value to import — and the whole
+// file is deleted by PR-3, which is also why the duplication is not worth a
+// shared constant.
+//
+// A stand-in that kept emitting "local::"/"cloud::" would demo the shape the real
+// backend no longer produces, which is what V-24 caught and this line prevents:
+// the point of the DEV backend is to show the contract, not a previous one.
+const GATEWAY_ENDPOINT_ID = 'buding-gateway'
+
 // 需求 §5.6.3: privacy holds only local models, smart only cloud ones.
+//
+// Shaped as the real endpoint answers (本地API契约 §2.8): displayName comes from
+// the catalog and there is no `fallback` field. The four names below used to be
+// i18n keys `model.<id>` (中英各一份); PR-4d deleted them because a local name
+// table shadows the server's copy (需求基线 B6) — so the names live here, in the
+// data, exactly where the platform's would.
+//
+// 需求 §5.6.3 的分组在这里是演示数据。真实分组由中台目录的
+// models[].modeIds 决定（中台交付包 §4.3），前端不再推导。
 const MODES = [
   {
     id: 'privacy',
     models: [
-      { id: 'buding-local-general', compositeId: 'local::buding-local-general' },
-      { id: 'buding-local-fast', compositeId: 'local::buding-local-fast' },
+      named('buding-local-general', '本地通用', 'Local General'),
+      named('buding-local-fast', '本地极速', 'Local Fast'),
     ],
-    defaultModel: 'local::buding-local-general',
+    defaultModel: `${GATEWAY_ENDPOINT_ID}::buding-local-general`,
   },
   {
     id: 'smart',
     models: [
-      { id: 'buding-cloud-plus', compositeId: 'cloud::buding-cloud-plus' },
-      { id: 'buding-cloud-pro', compositeId: 'cloud::buding-cloud-pro' },
+      named('buding-cloud-plus', '云端智能', 'Cloud Plus'),
+      named('buding-cloud-pro', '云端旗舰', 'Cloud Pro'),
     ],
-    defaultModel: DEFAULT_MODEL,
+    defaultModel: `${GATEWAY_ENDPOINT_ID}::buding-cloud-plus`,
   },
   {
     id: 'default',
     models: [
-      { id: 'buding-cloud-plus', compositeId: 'cloud::buding-cloud-plus' },
-      { id: 'buding-local-general', compositeId: 'local::buding-local-general' },
+      named('buding-cloud-plus', '云端智能', 'Cloud Plus'),
+      named('buding-local-general', '本地通用', 'Local General'),
     ],
-    defaultModel: DEFAULT_MODEL,
+    defaultModel: `${GATEWAY_ENDPOINT_ID}::buding-cloud-plus`,
   },
 ]
+
+/** One menu row in the shape the real projection produces. */
+function named(id: string, zh: string, en: string) {
+  return { id, displayName: { zh, en }, compositeId: `${GATEWAY_ENDPOINT_ID}::${id}` }
+}
+
+const CATALOG_VERSION = '2026-09-11.1'
+const POLICY_VERSION = '2026-09-11.1'
 
 // Seeded after MODES/DEFAULT_MODEL: newSession() reads DEFAULT_MODEL, so this
 // must not run earlier in module evaluation.
@@ -187,8 +219,7 @@ export function installDevBackend(): void {
 
   productState.set(state())
   productPhase.set('blocked')
-  chatModes.set(MODES as never)
-  chatModesFallback.set(false)
+  chatModes.set(MODES)
   chatMode.set({})
   accountPanelOpen.set(false)
   accountPanelPage.set('root')
@@ -202,7 +233,7 @@ export function installDevBackend(): void {
   // to "no data" instead of an unhandled rejection that blanks a pane.
   const GET: Record<string, () => unknown> = {
     '/api/product/state': state,
-    '/api/product/chat-modes': () => ({ modes: MODES, fallback: false }),
+    '/api/product/chat-modes': () => ({ modes: MODES, catalogVersion: CATALOG_VERSION, policyVersion: POLICY_VERSION }),
     '/api/product/sensitive/dict': () => dict,
     '/api/onboard/status': () => ({ needs_onboard: false, phase: '' }),
     '/api/config': () => ({

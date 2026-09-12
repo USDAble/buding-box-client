@@ -35,13 +35,17 @@
     return model.compositeId === currentModelId || model.id === currentModelId
   }
 
-  function pick(modeId: string, model: ChatModeModel) {
-    // A model with no composite id is listed but not configured (P9 §3.2 —
-    // the four buding-* models land in config.yml via P11). Don't let it be
-    // selected; it's shown only so the factory list is visible.
-    if (!model.compositeId) return
-    onPick(modeId, model)
-  }
+  // Picking needs no guard any more. Until PR-4d a row could be listed without a
+  // composite id (it came from chat-modes.json but was absent from config.yml),
+  // and such a row was drawn greyed and refused on click. Every row now comes
+  // from the signed catalog's projection, which builds the composite id itself,
+  // so "listed but not selectable" is a state this menu cannot reach — and a
+  // guard kept for it would be a rule about nothing, which the next reader would
+  // take as evidence the state still exists.
+  //
+  // What selecting one *does* is not settled here: binding a session to a
+  // catalog model needs the built-in gateway endpoint to exist (需求基线 C1),
+  // and that lands in PR-5.
 </script>
 
 <div class="menu mode-menu" role="menu" onclick={(e) => e.stopPropagation()}>
@@ -71,10 +75,9 @@
             <button
               class="menu-item"
               class:active={isActive(m)}
-              class:disabled={!m.compositeId}
-              onclick={() => pick(mode.id, m)}
+              onclick={() => onPick(mode.id, m)}
             >
-              <span class="mi-name">{modelDisplayName(m.id)}</span>
+              <span class="mi-name">{modelDisplayName(m)}</span>
             </button>
           {/each}
         {/if}
@@ -107,8 +110,6 @@
   }
   .menu-item:hover { background: var(--active-blue-bg); }
   .menu-item.active { background: var(--active-blue-bg); }
-  .menu-item.disabled { cursor: default; opacity: 0.5; }
-  .menu-item.disabled:hover { background: none; }
   .menu-divider { height: 1px; background: var(--border-secondary); margin: 4px 0; }
   .mi-name { font-size: 13px; color: var(--text); }
   .menu-empty { padding: 8px 10px 8px 20px; font-size: 12px; color: var(--text-tertiary); }

@@ -8,7 +8,7 @@
 // peers. A plain browser on `octo serve` never has a token, so the gate is
 // inert and the phase stays "ready".
 
-import { writable } from "svelte/store";
+import { get, writable } from "svelte/store";
 
 // The product gate distinguishes three frontend states: still deciding,
 // not logged in (show the login gate — the UI lands in P4), and logged in.
@@ -118,11 +118,108 @@ async function productFetch(path: string, init?: RequestInit): Promise<Response>
   return res;
 }
 
+// ─── blocked-page selection (L-B2) ──────────────────────────────────────────
+
+/**
+ * Which wall the blocked phase shows. `login` is the ordinary login/activation
+ * form; the other two are build defects the user cannot fix (P4-拦截页 §2).
+ */
+export type BlockedPage = "login" | "unconfigured" | "no_keys";
+
+export const blockedPage = writable<BlockedPage>("login");
+
+/**
+ * refreshControlPlane decides which blocked page the window shows, from the two
+ * compile-time facts the profile reports (本地API契约 §2.13, P4-拦截页 §2.2).
+ *
+ * The priority is fixed and not interchangeable: `configured` is checked first
+ * because the "no keys" page asserts "this build has an address but trusts no
+ * signing key", and on a build that satisfies neither that sentence is simply
+ * false. Reporting the later of the two failures would name a precondition whose
+ * own precondition was never met, and send the user to fix the second step of a
+ * build stuck on the first.
+ *
+ * Failing closed to the LOGIN FORM, not to a misconfiguration page: not knowing
+ * is not evidence that the package is broken. Accusing it would tell the user to
+ * replace a build that may be fine, and they have no way to find out (开发规范
+ * §3.9 - every degradation names its target, and this one's target is "let them
+ * retry the login").
+ */
+export async function refreshControlPlane(): Promise<void> {
+  // Computed into a local and written once. Writing "login" at the start and
+  // overwriting on success would leave the PREVIOUS answer in place whenever
+  // this read fails - a stale "no keys" page is a lie about the build in front
+  // of the user, and it would outlive the refresh that produced it.
+  let page: BlockedPage = "login";
+  try {
+    const res = await productFetch("/api/product/control-plane", {
+      cache: "no-store",
+      headers: windowTokenHeaders(),
+    });
+    // A non-200 (including 404 from a build without this endpoint) keeps the
+    // login form, for the same reason as the catch below.
+    if (res.ok) {
+      const d = (await res.json()) as { configured?: boolean; hasTrustedKeys?: boolean };
+      if (d.configured === false) page = "unconfigured";
+      else if (d.hasTrustedKeys === false) page = "no_keys";
+    }
+  } catch {
+    // Unreadable is the same case as unreachable: keep the login form.
+  }
+  blockedPage.set(page);
+}
+
+// ─── control-plane failure tiers (L-B3) ─────────────────────────────────────
+
+/** The four control-plane failure tiers. See 本地API契约 §3 and P4-拦截页 §3. */
+export type FailureTier =
+  | "network_unavailable"
+  | "upstream_unavailable"
+  | "unauthorized"
+  | "account_restricted";
+
+// The tier set and its retryability. One table, one owner: the four codes are
+// classified once on the server (internal/productclient, C12) and once here for
+// rendering, and the frontend must not re-derive the classification from the
+// HTTP status - a 503 covers two different tiers that read very differently to
+// the user (P4-拦截页 §3.2).
+const TIER_CODES: Record<string, true> = {
+  network_unavailable: true,
+  upstream_unavailable: true,
+  unauthorized: true,
+  account_restricted: true,
+};
+
+/** failureTier classifies a machine code, or null when it is not a tier. */
+export function failureTier(code?: string | null): FailureTier | null {
+  return code && code in TIER_CODES ? (code as FailureTier) : null;
+}
+
+/**
+ * tierRetryable answers "is trying again useful" - a different question from
+ * "does this clear the credential" (P4-拦截页 §3.1).
+ *
+ * A refused refresh token never heals by retrying, so `unauthorized` gets no
+ * retry button; a restricted account is not a lost session, so it keeps its
+ * credential. Offering a retry for either would promise the user something the
+ * system cannot deliver (开发规范 §3.9).
+ */
+export function tierRetryable(tier: FailureTier): boolean {
+  return tier === "network_unavailable" || tier === "upstream_unavailable";
+}
 // refreshProductState loads the (de-identified) state and derives the phase.
 // Outside the desktop shell there is no gate, so the phase is ready outright.
 export async function refreshProductState(): Promise<void> {
   if (!windowToken()) {
     productPhase.set("ready");
+    return;
+  }
+  // Which wall to show is decided first, because the two misconfiguration pages
+  // render no form and read no state - so on those builds the state round trip
+  // below would be a request whose answer is thrown away.
+  await refreshControlPlane();
+  if (get(blockedPage) !== "login") {
+    productPhase.set("blocked");
     return;
   }
   try {
@@ -223,7 +320,14 @@ export async function sendCode(phone: string): Promise<number> {
     if (res.status === 429) {
       throw new ProductError(res.status, {}, null, body.retryAfterSec as number | null);
     }
-    throw new ProductError(res.status, { phone: (body.code as string) ?? "invalid_phone" });
+    const code = (body.code as string) ?? "invalid_phone";
+    // A control-plane tier is not a phone problem. Filing a 503 under the phone
+    // field told the user their number was wrong, and the field-error switch has
+    // no case for it, so the message rendered as an empty paragraph (L-B3). It
+    // goes through the business channel instead, where the page can offer the
+    // retry that is actually the right next step.
+    if (failureTier(code)) throw new ProductError(res.status, {}, code);
+    throw new ProductError(res.status, { phone: code });
   }
   return body.cooldownSec as number;
 }

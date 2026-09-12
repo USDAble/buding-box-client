@@ -36,9 +36,27 @@ type Deps struct {
 	State    *productstate.Store
 	Creds    *credentialstore.Store
 	Platform *productclient.Client
+	// ControlPlane carries the two compile-time profile facts the blocked page
+	// needs before the user types anything: whether this build names a real
+	// control plane, and whether it trusts any signing key.
+	//
+	// They are facts about the BUILD, not about the user's data, which is why
+	// they arrive here instead of being read out of product-state.json (E6.1) -
+	// and why they are a field rather than a productprofile call: the owner is
+	// internal/productprofile, and this package only forwards its answer. A
+	// direct import would also make the four blocked-page cases untestable,
+	// since the embedded profile cannot be varied at run time.
+	ControlPlane ControlPlaneStatus
 	// SendCodeCooldownSec is reported to the UI so it can count down. It is the
 	// local default; the platform's own value wins when it sends one.
 	SendCodeCooldownSec int
+}
+
+// ControlPlaneStatus is the answer to "can this build reach a control plane at
+// all", as computed by internal/productprofile. See 本地API契约 §2.13.
+type ControlPlaneStatus struct {
+	Configured     bool
+	HasTrustedKeys bool
 }
 
 // Runtime serves the local product endpoints.
@@ -77,10 +95,35 @@ func (rt *Runtime) Handler() http.Handler {
 // a route cannot be added to one path and forgotten in the other.
 func (rt *Runtime) Mount(api func(pattern string, h http.HandlerFunc)) {
 	api("GET /api/product/state", rt.handleState)
+	api("GET /api/product/control-plane", rt.handleControlPlane)
 	api("POST /api/product/send-code", rt.handleSendCode)
 	api("POST /api/product/login", rt.handleLogin)
 	api("POST /api/product/logout", rt.handleLogout)
 	api("PUT /api/product/locale", rt.handleLocale)
+}
+
+// handleControlPlane reports whether this build can reach a control plane at
+// all, so the blocked page can say "this package is misconfigured" before the
+// user spends a round-trip finding out (本地API契约 §2.13, L-B2).
+//
+// It reads Deps rather than internal/productprofile because it must work in the
+// one case the profile cannot describe: a build whose config is fine on disk
+// but whose assembly failed. Forwarding a captured value also keeps the four
+// blocked-page cases testable, and keeps this package out of the decoding of
+// what "configured" means - that judgement has one owner.
+func (rt *Runtime) handleControlPlane(w http.ResponseWriter, r *http.Request) {
+	writeJSON(w, http.StatusOK, controlPlaneDTO{
+		Configured:     rt.deps.ControlPlane.Configured,
+		HasTrustedKeys: rt.deps.ControlPlane.HasTrustedKeys,
+	})
+}
+
+// controlPlaneDTO is the wire shape of 本地API契约 §2.13. Both fields are always
+// present: the frontend distinguishes the four blocked-page outcomes by their
+// values, not by their absence, so omitting a false would collapse two of them.
+type controlPlaneDTO struct {
+	Configured     bool `json:"configured"`
+	HasTrustedKeys bool `json:"hasTrustedKeys"`
 }
 
 // handleState is the first call the UI makes: it decides whether the window

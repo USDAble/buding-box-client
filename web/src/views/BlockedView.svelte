@@ -1,7 +1,7 @@
 <script lang="ts">
   import { onMount } from 'svelte'
   import { t, locale, setLocale } from '../lib/i18n'
-  import { productState, sendCode, login, setProductLocale, ProductError } from '../lib/product'
+  import { productState, blockedPage, sendCode, login, setProductLocale, ProductError, failureTier, tierRetryable } from '../lib/product'
   import { normalizePhone } from '../lib/phone'
   import { randomNickname, validateNickname } from '../lib/nickname'
   import { brandName, brandTagline, brandTermsTitle, brandPrivacyTitle, brandText } from '../lib/brand'
@@ -32,6 +32,23 @@
   // First activation vs second login comes from the server's activation flag,
   // never guessed client-side (需求 §5.3.4).
   const activated = $derived($productState?.activated ?? false)
+
+  // L-B2: the two misconfiguration pages. They are not variants of the login
+  // form - on a build with no control plane there is no request to make, so the
+  // form is not rendered at all rather than rendered dead (P4-拦截页 §2.1).
+  const misconfigured = $derived($blockedPage !== 'login')
+
+  // L-B3: which control-plane failure tier the banner shows. `unauthorized` is
+  // deliberately absent: that tier is L-A6's path - the credential is already
+  // gone and returning to the login form IS the recovery - so a banner on top of
+  // it would narrate a state the user has already left (P4-拦截页 §3.4).
+  const tier = $derived(failureTier(formError))
+  const tierNotice = $derived(tier === 'unauthorized' ? null : tier)
+
+  // Which action the retry button repeats. Without it, "retry" after a failed
+  // send-code would submit the whole form, i.e. do something the user did not
+  // ask for and which fails differently.
+  let lastFailed = $state<'login' | 'sendCode' | null>(null)
 
   onMount(() => {
     // Open in the persisted (or system-derived) language; the state handler
@@ -76,6 +93,12 @@
     } catch (e) {
       if (e instanceof ProductError && e.retryAfterSec != null) {
         startCountdown(e.retryAfterSec)
+      } else if (e instanceof ProductError && failureTier(e.code)) {
+        // A control-plane tier is not a phone problem. Filing it under the field
+        // showed an empty message under a number that was never wrong, because
+        // the field-error switch has no case for it (L-B3).
+        formError = e.code
+        lastFailed = 'sendCode'
       } else if (e instanceof ProductError && e.fieldErrors.phone) {
         fieldErrors = { ...fieldErrors, phone: e.fieldErrors.phone }
       } else {
@@ -86,8 +109,19 @@
     }
   }
 
+  /** Repeats the action that just failed, not a generic resubmit (L-B3). */
+  async function onRetry() {
+    formError = null
+    if (lastFailed === 'sendCode') await onSendCode()
+    else await doSubmit()
+  }
+
   async function onSubmit(e: SubmitEvent) {
     e.preventDefault()
+    await doSubmit()
+  }
+
+  async function doSubmit() {
     // Round one — format. Every failure is collected and shown at once.
     const errs: Record<string, string> = {}
     if (!normalizePhone(phone).ok) errs.phone = 'invalid_phone'
@@ -115,7 +149,13 @@
     } catch (e) {
       if (e instanceof ProductError) {
         if (Object.keys(e.fieldErrors).length > 0) fieldErrors = e.fieldErrors
-        else { formError = e.code; phoneMasked = e.phoneMasked }
+        else {
+          formError = e.code
+          phoneMasked = e.phoneMasked
+          // Only a retryable tier is worth re-running; for the others the
+          // button is not rendered at all.
+          lastFailed = failureTier(e.code) ? 'login' : null
+        }
       } else {
         formError = 'generic'
       }
@@ -135,6 +175,16 @@
       case 'invalid_activation': return 'product.err_activation'
       case 'invalid_box_code': return 'product.err_box_code'
       default: return ''
+    }
+  }
+
+  // Machine code -> copy for the three tiers that get a banner. `unauthorized`
+  // has no case on purpose: it renders nothing (see tierNotice above).
+  function tierNoticeKey(t: 'network_unavailable' | 'upstream_unavailable' | 'account_restricted'): string {
+    switch (t) {
+      case 'network_unavailable': return 'product.tier.network_unavailable'
+      case 'upstream_unavailable': return 'product.tier.upstream_unavailable'
+      case 'account_restricted': return 'product.tier.account_restricted'
     }
   }
 
@@ -167,14 +217,41 @@
     <div class="brand">
       <BrandMark size={56} />
       <h1 class="brand-name">{brandName($locale)}</h1>
-      <p class="tagline">{brandTagline($locale)}</p>
+      {#if !misconfigured}<p class="tagline">{brandTagline($locale)}</p>{/if}
     </div>
 
-    {#if formError}
-      <div class="form-err">
-        {$t(businessErrorKey()).replaceAll('{masked}', phoneMasked ?? '')}
-      </div>
-    {/if}
+    {#if misconfigured}
+      <!-- L-B2. No form, no host, no file name: neither page offers an action
+           the user could take on this machine, so the copy's job is to name
+           which package is wrong and who to ask (P4-拦截页 §2.1). -->
+      <h2 class="notice-title">{$t($blockedPage === 'no_keys' ? 'product.blocked.no_keys_title' : 'product.blocked.unconfigured_title')}</h2>
+      <p class="notice-body">{$t($blockedPage === 'no_keys' ? 'product.blocked.no_keys_body' : 'product.blocked.unconfigured_body')}</p>
+    {:else}
+      {#if tierNotice}
+        <!-- L-B3. The tier's own copy, and a retry only where retrying can
+             actually succeed - an outage heals, a refused session does not. -->
+        <div class="form-err tier">
+          <p class="tier-msg">{$t(tierNoticeKey(tierNotice))}</p>
+          {#if tierRetryable(tierNotice)}
+            <button type="button" class="retry-btn" data-testid="tier-retry" onclick={onRetry}>
+              {$t('product.tier.retry')}
+            </button>
+          {:else}
+            <!-- P4-拦截页 §3.3: every tier must end in something the user can
+                 actually do. This one is not retryable and must not clear the
+                 credential, and the customer-service channel is still undecided
+                 (V-4 / TODO-06) - so the action is to dismiss the banner, and
+                 the copy never names a channel that does not exist. -->
+            <button type="button" class="retry-btn" data-testid="tier-dismiss" onclick={() => (formError = null)}>
+              {$t('product.tier.dismiss')}
+            </button>
+          {/if}
+        </div>
+      {:else if formError}
+        <div class="form-err">
+          {$t(businessErrorKey()).replaceAll('{masked}', phoneMasked ?? '')}
+        </div>
+      {/if}
 
     <form class="form" onsubmit={onSubmit} novalidate>
       <div class="field">
@@ -224,6 +301,7 @@
           : (activated ? $t('product.submit_login') : $t('product.submit_activate'))}
       </button>
     </form>
+    {/if}
 
     <footer class="footer">
       <button class="link" onclick={() => (legalModal = 'terms')}>{brandTermsTitle($locale)}</button>
@@ -275,6 +353,23 @@
   background: var(--error-bg, rgba(255,59,48,0.08)); color: var(--error);
   font-size: 13px; line-height: 1.5;
 }
+/* The tier banner is a message plus, where it applies, the one action that can
+   help. Laid out as a column so the button does not wrap beside long copy. */
+.form-err.tier { display: flex; flex-direction: column; gap: 10px; align-items: flex-start; }
+.tier-msg { margin: 0; }
+.retry-btn {
+  height: 30px; padding: 0 14px;
+  border: 1px solid currentColor; border-radius: 6px;
+  background: transparent; color: inherit;
+  font-size: 13px; font-weight: 500; font-family: inherit; cursor: pointer;
+}
+.retry-btn:hover { background: rgba(255,59,48,0.10); }
+
+/* The two misconfiguration pages (L-B2). Deliberately plain: a heading that
+   names the problem and a paragraph that names who to ask, and nothing that
+   looks like a setting the user could change. */
+.notice-title { margin: 0; font-size: 16px; font-weight: 600; color: var(--text-heading); text-align: center; }
+.notice-body { margin: 0; font-size: 13px; line-height: 1.7; color: var(--text-secondary); text-align: center; }
 
 .form { display: flex; flex-direction: column; gap: 16px; }
 .field { display: flex; flex-direction: column; gap: 6px; }

@@ -129,7 +129,7 @@ func openStoreSeeded(t *testing.T, body string) (*catalogstore.Store, string) {
 			t.Fatalf("seed catalog.json: %v", err)
 		}
 	}
-	s, err := catalogstore.Open(catalogstore.Options{})
+	s, err := catalogstore.Open()
 	if err != nil {
 		t.Fatalf("Open: %v", err)
 	}
@@ -316,6 +316,11 @@ func TestCorruptFileIsReportedAndPreserved(t *testing.T) {
 
 	if _, err := s.Load(); !errors.Is(err, catalogstore.ErrCorrupt) {
 		t.Fatalf("Load error = %v, want ErrCorrupt", err)
+	}
+	// The assembly logs this at startup, so it has to be answerable without a
+	// Load: a user whose model list came back empty needs a line to point at.
+	if !s.Corrupt() {
+		t.Error("Corrupt() is false after a parse failure; the startup warning would never fire")
 	}
 	if string(readRaw(t, cachePath(root))) != string(garbage) {
 		t.Error("the corrupt file was modified; a parse bug must not be able to delete the user's data")

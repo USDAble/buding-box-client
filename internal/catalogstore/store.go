@@ -58,12 +58,6 @@ var (
 	ErrNotByteExact = errors.New("catalogstore: policy bytes would not survive a round trip")
 )
 
-// Options configure Open.
-type Options struct {
-	// Now overrides the clock, for tests.
-	Now func() time.Time
-}
-
 // Entry is one cached catalog: the signed envelope plus the metadata the
 // platform sent with it (需求基线 B2 规则 1).
 type Entry struct {
@@ -96,24 +90,23 @@ type Store struct {
 	// lastErr records why the file could not be loaded, so Load can report a
 	// parse failure distinctly from absence (E6.2 规则 5).
 	lastErr error
-
-	now func() time.Time
 }
 
 // Open loads the cache. It never writes: absence means "no cache yet", not
 // "materialise an empty one" (开发规范 §3.9.1). A file that cannot be read is
 // reported through Load rather than here, so a caller that only wants to serve
 // a request is not forced to handle a storage failure it does not need yet.
-func Open(opts Options) (*Store, error) {
+//
+// There is no Options: unlike internal/credentialstore, this store stamps no
+// times of its own - the caller passes fetchedAt and expiresAt in the Entry,
+// because it is the caller that knows when the platform answered. A clock here
+// would be a second opinion about the same fact.
+func Open() (*Store, error) {
 	path, err := datapath.Join(cacheFile)
 	if err != nil {
 		return nil, fmt.Errorf("catalogstore: resolve path: %w", err)
 	}
-	now := opts.Now
-	if now == nil {
-		now = time.Now
-	}
-	s := &Store{path: path, now: now}
+	s := &Store{path: path}
 	s.load()
 	return s, nil
 }
@@ -157,13 +150,18 @@ func (s *Store) Put(entry Entry) error {
 	// 第 2 步补充 ④). The corruption is not a reason to prefer an attacker's
 	// replay - there is simply nothing to compare against.
 	// The comparison below is a version ordering, not a string ordering, and the
-	// distinction is not academic: see compareCatalogVersions.
-	switch {
-	case s.lastErr == nil && compareCatalogVersions(entry.CatalogVersion, s.current.CatalogVersion) == 0:
-		s.clearError()
-		return nil
-	case s.lastErr == nil && compareCatalogVersions(entry.CatalogVersion, s.current.CatalogVersion) < 0:
-		return fmt.Errorf("%w: cached %q, offered %q", ErrRolledBack, s.current.CatalogVersion, entry.CatalogVersion)
+	// distinction is not academic: see compareCatalogVersions. Only its SIGN is
+	// read: the magnitude is a difference of whole days, not 0/±1.
+	if s.lastErr == nil {
+		// A corrupt or newer-schema file carries no version, so it is no baseline:
+		// comparing against it would compare against nothing.
+		switch cmp := compareCatalogVersions(entry.CatalogVersion, s.current.CatalogVersion); {
+		case cmp == 0:
+			s.clearError()
+			return nil
+		case cmp < 0:
+			return fmt.Errorf("%w: cached %q, offered %q", ErrRolledBack, s.current.CatalogVersion, entry.CatalogVersion)
+		}
 	}
 
 	if err := atomicfile.WriteFile(s.path, raw, 0o600); err != nil {
@@ -174,10 +172,10 @@ func (s *Store) Put(entry Entry) error {
 	return nil
 }
 
-// Path is the file this store owns, for diagnostics and tests.
-func (s *Store) Path() string { return s.path }
-
-// Corrupt reports whether the file on disk was unparseable and preserved.
+// Corrupt reports whether the file on disk was unparseable and preserved. The
+// assembly logs it once at startup: a damaged cache is not fatal (the next
+// verified catalog replaces it) but a user should not have to guess why their
+// model list came back empty.
 func (s *Store) Corrupt() bool {
 	s.mu.Lock()
 	defer s.mu.Unlock()

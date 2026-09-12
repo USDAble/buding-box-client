@@ -56,7 +56,7 @@ func newHarnessWithControlPlane(t *testing.T, status productruntime.ControlPlane
 	if err != nil {
 		t.Fatalf("credentialstore.Open: %v", err)
 	}
-	catalog, err := catalogstore.Open(catalogstore.Options{})
+	catalog, err := catalogstore.Open()
 	if err != nil {
 		t.Fatalf("catalogstore.Open: %v", err)
 	}

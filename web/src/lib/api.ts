@@ -348,9 +348,10 @@ export interface ChatModeDTO {
 }
 export interface ChatModesResponse {
   modes: ChatModeDTO[]
-  /** Versions of the signed policy this projection came from, so the selector can
-   *  tell "the catalog changed" from "the menu re-rendered" without diffing rows
-   *  (本地API契约 §2.8). Empty when no catalog was available. */
+  /** Versions of the signed policy this projection came from. Emitted because
+   *  本地API契约 §2.8 requires them, and consumed by PR-4c's refresh decision
+   *  ("has the catalog changed?") — nothing in the picker reads them today, so
+   *  they must not be treated as a signal that already works. */
   catalogVersion: string
   policyVersion: string
 }

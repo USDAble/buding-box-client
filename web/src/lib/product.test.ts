@@ -13,6 +13,9 @@ import {
   setProductLocale,
   ProductError,
   noteSessionLost,
+  blockedPage,
+  failureTier,
+  tierRetryable,
   WINDOW_TOKEN_HEADER,
 } from "./product";
 import type { ProductStateDTO } from "./product";
@@ -34,6 +37,7 @@ beforeEach(() => {
   sessionStorage.clear();
   productPhase.set("unknown");
   productState.set(null);
+  blockedPage.set("login");
   window.history.replaceState({}, "", "/");
   vi.unstubAllGlobals();
 });
@@ -91,8 +95,10 @@ describe("refreshProductState", () => {
     // The gate refuses an unauthenticated window, so this call must carry the
     // token exactly like login/logout do. Without it the shell would 403 on its
     // own first request and sit on the login screen with no way forward.
-    const init = fetchMock.mock.calls[0][1];
-    expect(new Headers(init?.headers).get(WINDOW_TOKEN_HEADER)).toBe("tok");
+    // Named by URL, not by index: the control-plane probe is also a product call
+    // and an index would silently start asserting on the wrong one.
+    const call = fetchMock.mock.calls.find((c) => c[0] === "/api/product/state");
+    expect(new Headers(call?.[1]?.headers).get(WINDOW_TOKEN_HEADER)).toBe("tok");
   });
 
   it("sets ready when the window is logged in", async () => {
@@ -347,5 +353,202 @@ describe("setProductLocale", () => {
       "/api/product/locale",
       expect.objectContaining({ method: "PUT", body: JSON.stringify({ locale: "zh" }) }),
     );
+  });
+});
+
+describe("blocked-page selection (L-B2)", () => {
+  // The two misconfiguration pages exist so the user is told "this package is
+  // wrong" BEFORE typing, instead of after a failed round trip. The four
+  // outcomes and their priority are P4-拦截页 §2.2; the order is not decorative:
+  // hasTrustedKeys answers before configured because "has an address but trusts
+  // no key" has already passed the configuration check, so it is the later
+  // failure of the two.
+  function stubSequence(responses: Array<{ status: number; body: unknown }>) {
+    let i = 0;
+    const mock = vi.fn(async (_input: RequestInfo | URL, _init?: RequestInit) => {
+      const r = responses[Math.min(i++, responses.length - 1)];
+      return {
+        ok: r.status >= 200 && r.status < 300,
+        status: r.status,
+        statusText: "",
+        json: async () => r.body,
+      };
+    });
+    vi.stubGlobal("fetch", mock);
+    return mock;
+  }
+
+  const stateBody = {
+    schemaVersion: 1, loggedIn: false, activated: false,
+    credits: { balance: 0, monthUsed: 0, monthKey: "" }, plan: { name: "" },
+    prefs: { locale: "", inputSensitiveCheck: false, defaultChatMode: "" },
+  };
+
+  it("selects the unconfigured page when the build names no control plane", async () => {
+    sessionStorage.setItem("octo_window_token", "tok");
+    stubSequence([
+      { status: 200, body: { configured: false, hasTrustedKeys: false } },
+      { status: 200, body: stateBody },
+    ]);
+
+    await refreshProductState();
+
+    expect(get(blockedPage)).toBe("unconfigured");
+  });
+
+  it("selects the no-keys page when a host exists but no key is trusted", async () => {
+    sessionStorage.setItem("octo_window_token", "tok");
+    stubSequence([
+      { status: 200, body: { configured: true, hasTrustedKeys: false } },
+      { status: 200, body: stateBody },
+    ]);
+
+    await refreshProductState();
+
+    expect(get(blockedPage)).toBe("no_keys");
+  });
+
+  it("reports the unconfigured page when neither fact holds", async () => {
+    // The correction TDD surfaced: the first draft checked hasTrustedKeys first
+    // and so showed 「无公钥」 here. That page's claim is "this build has an
+    // address but trusts no key" - false on a build that has no address. With
+    // both missing, the address is the unmet precondition, so it is the one to
+    // name: the key is the second step of a build stuck on the first.
+    sessionStorage.setItem("octo_window_token", "tok");
+    stubSequence([
+      { status: 200, body: { configured: false, hasTrustedKeys: false } },
+      { status: 200, body: stateBody },
+    ]);
+
+    await refreshProductState();
+
+    expect(get(blockedPage)).toBe("unconfigured");
+  });
+
+  it("falls back to the login form when the control-plane read fails", async () => {
+    // Bounded degradation (开发规范 §3.9): not knowing must NOT be reported as
+    // "unconfigured" - that would accuse the package of a defect we have no
+    // evidence for, and the user has nothing to fix.
+    sessionStorage.setItem("octo_window_token", "tok");
+    stubSequence([
+      { status: 500, body: {} },
+      { status: 200, body: stateBody },
+    ]);
+
+    await refreshProductState();
+
+    expect(get(blockedPage)).toBe("login");
+    expect(get(productPhase)).toBe("blocked");
+  });
+
+  it("falls back to the login form when the reply omits the facts", async () => {
+    // A reply we cannot read is the same case as a reply we cannot get.
+    sessionStorage.setItem("octo_window_token", "tok");
+    stubSequence([
+      { status: 200, body: { somethingElse: true } },
+      { status: 200, body: stateBody },
+    ]);
+
+    await refreshProductState();
+
+    expect(get(blockedPage)).toBe("login");
+  });
+
+  it("keeps the login form for a healthy build", async () => {
+    sessionStorage.setItem("octo_window_token", "tok");
+    stubSequence([
+      { status: 200, body: { configured: true, hasTrustedKeys: true } },
+      { status: 200, body: stateBody },
+    ]);
+
+    await refreshProductState();
+
+    expect(get(blockedPage)).toBe("login");
+  });
+
+  it("skips the state read on a misconfigured build", async () => {
+    // Nothing on those two pages reads productState, so the read would be a
+    // round trip whose result is discarded.
+    sessionStorage.setItem("octo_window_token", "tok");
+    const mock = stubSequence([
+      { status: 200, body: { configured: false, hasTrustedKeys: false } },
+      { status: 200, body: stateBody },
+    ]);
+
+    await refreshProductState();
+
+    expect(mock).toHaveBeenCalledTimes(1);
+    expect(get(productPhase)).toBe("blocked");
+  });
+
+  it("does not probe the control plane outside the desktop shell", async () => {
+    // A plain browser on `octo serve` has no window identity, so the product
+    // gate does not exist for it and neither does this question.
+    const mock = stubSequence([{ status: 200, body: {} }]);
+
+    await refreshProductState();
+
+    expect(mock).not.toHaveBeenCalled();
+    expect(get(productPhase)).toBe("ready");
+  });
+
+  it("stamps the control-plane read with the window token", async () => {
+    sessionStorage.setItem("octo_window_token", "tok");
+    const mock = stubSequence([
+      { status: 200, body: { configured: true, hasTrustedKeys: true } },
+      { status: 200, body: stateBody },
+    ]);
+
+    await refreshProductState();
+
+    const call = mock.mock.calls.find((c) => c[0] === "/api/product/control-plane");
+    expect(call).toBeTruthy();
+    expect(new Headers(call?.[1]?.headers).get(WINDOW_TOKEN_HEADER)).toBe("tok");
+  });
+});
+
+describe("control-plane failure tiers (L-B3)", () => {
+  it("recognises the four tiers and nothing else", () => {
+    expect(failureTier("network_unavailable")).toBe("network_unavailable");
+    expect(failureTier("upstream_unavailable")).toBe("upstream_unavailable");
+    expect(failureTier("unauthorized")).toBe("unauthorized");
+    expect(failureTier("account_restricted")).toBe("account_restricted");
+    // Business and field codes are not tiers: the page renders them under an
+    // input or in the banner, and calling them tiers would offer a pointless
+    // retry for something the user can actually fix.
+    expect(failureTier("invalid_code")).toBeNull();
+    expect(failureTier("activation_invalid")).toBeNull();
+    expect(failureTier(null)).toBeNull();
+    expect(failureTier(undefined)).toBeNull();
+  });
+
+  it("marks only the outage tiers as retryable", () => {
+    // The column that matters (P4-拦截页 §3.1): "can retry" and "clear the
+    // credential" are different questions. A refused refresh token does not heal
+    // by retrying, and a restricted account is not a lost session.
+    expect(tierRetryable("network_unavailable")).toBe(true);
+    expect(tierRetryable("upstream_unavailable")).toBe(true);
+    expect(tierRetryable("unauthorized")).toBe(false);
+    expect(tierRetryable("account_restricted")).toBe(false);
+  });
+
+  it("reports a refused send-code as a tier, not as a bad phone number", async () => {
+    // The bug this pins: a 503 from the platform used to be filed under
+    // fieldErrors.phone, so the user was told their number was wrong (and the
+    // field-error switch had no case for it, rendering an EMPTY message).
+    vi.stubGlobal("fetch", fetchReturning(503, { code: "network_unavailable" }));
+
+    const err = await sendCode("13800001234").catch((e) => e);
+    expect(err).toBeInstanceOf(ProductError);
+    expect(err.code).toBe("network_unavailable");
+    expect(err.fieldErrors.phone).toBeUndefined();
+  });
+
+  it("still files a genuinely bad phone number under the field", async () => {
+    vi.stubGlobal("fetch", fetchReturning(400, { field: "phone", code: "invalid_phone" }));
+
+    const err = await sendCode("123").catch((e) => e);
+    expect(err.fieldErrors.phone).toBe("invalid_phone");
+    expect(err.code).toBeNull();
   });
 });

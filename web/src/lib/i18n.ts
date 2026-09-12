@@ -999,6 +999,29 @@ export const en: Record<string, string> = {
   "product.submit_failed": "Login failed, please try again",
   "product.legal_close": "Close",
   "product.plan_trial": "Trial",
+  // OCTO-FORK: L-B2 / L-B3 blocked pages — see
+  // dev-docs-usdable/需求/2260906/技术方案/P4-拦截页.md §2/§3.
+  //
+  // Neither misconfiguration page names a host, a config file or a key format:
+  // the user cannot change any of them, and naming one suggests a setting that
+  // does not exist. What they can do is ask for the right package, so that is
+  // what the copies say.
+  "product.blocked.unconfigured_title": "This build has no service address yet",
+  "product.blocked.unconfigured_body": "The app has nowhere to connect, so signing in cannot work. Ask whoever gave you this program folder for a configured build.",
+  "product.blocked.no_keys_title": "This build cannot verify what the service sends",
+  "product.blocked.no_keys_body": "The signing key is missing, so data from the service cannot be trusted and no model list can be used. Ask whoever gave you this program folder for a complete build.",
+  // The four control-plane failure tiers. network and upstream are both
+  // retryable but must not read alike: one is the user's connection, the other
+  // is ours to wait out. account_restricted is neither an outage nor a lost
+  // session, so it keeps the credential and offers no retry.
+  "product.tier.network_unavailable": "Cannot reach the network. Check your connection and try again",
+  "product.tier.upstream_unavailable": "The service is temporarily unavailable. Please try again later",
+  "product.tier.account_restricted": "This account is restricted and cannot sign in for now. Please check back later",
+  "product.tier.retry": "Retry",
+  // The non-retryable tier still needs one definite action (P4 §3.3), and it
+  // must not be "contact support": that channel is undecided (V-4), and naming
+  // it without a way to reach it is the dead end this page exists to avoid.
+  "product.tier.dismiss": "Got it",
   // OCTO-FORK: P5 account panel — see
   // dev-docs-usdable/需求/2260906/技术方案/P5-个人中心.md.
   "product.mode.privacy": "Privacy",
@@ -2083,6 +2106,17 @@ export const zh: Record<string, string> = {
   "product.submit_failed": "登录失败，请重试",
   "product.legal_close": "关闭",
   "product.plan_trial": "体验版",
+  // OCTO-FORK: L-B2 / L-B3 拦截页 —— 见
+  // dev-docs-usdable/需求/2260906/技术方案/P4-拦截页.md §2/§3
+  "product.blocked.unconfigured_title": "这个版本还没有配置服务地址",
+  "product.blocked.unconfigured_body": "程序没有可连接的服务地址，登录无法完成。请向提供此程序目录的人索取已配置好的版本。",
+  "product.blocked.no_keys_title": "当前版本无法验证服务下发的数据",
+  "product.blocked.no_keys_body": "缺少签名公钥，无法确认服务返回的内容是否可信，模型列表也无法使用。请向提供此程序目录的人索取完整版本。",
+  "product.tier.network_unavailable": "网络连不上，请检查网络后重试",
+  "product.tier.upstream_unavailable": "服务暂时不可用，请稍后重试",
+  "product.tier.account_restricted": "账号已被限制，暂时无法登录，请稍后再试",
+  "product.tier.retry": "重试",
+  "product.tier.dismiss": "知道了",
   // OCTO-FORK: P5 account panel — see
   // dev-docs-usdable/需求/2260906/技术方案/P5-个人中心.md.
   "product.mode.privacy": "隐私",

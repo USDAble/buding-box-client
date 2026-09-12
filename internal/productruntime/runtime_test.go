@@ -28,6 +28,16 @@ type harness struct {
 }
 
 func newHarness(t *testing.T) *harness {
+	return newHarnessWithControlPlane(t, productruntime.ControlPlaneStatus{Configured: true, HasTrustedKeys: true})
+}
+
+// newHarnessWithControlPlane is newHarness with the two compile-time profile
+// facts overridden. The default matches the stand-in platform this harness
+// serves (a build that CAN reach a control plane), and the override exists so
+// the four blocked-page outcomes can be driven from a test at all - the embedded
+// profile is a compile-time constant, so there is no other way to reach the
+// "unconfigured" and "no keys" cases (本地API契约 §2.13).
+func newHarnessWithControlPlane(t *testing.T, status productruntime.ControlPlaneStatus) *harness {
 	t.Helper()
 	root := t.TempDir()
 	t.Setenv("OCTO_DATA_ROOT", root)
@@ -56,9 +66,10 @@ func newHarness(t *testing.T) *harness {
 	}, &productclient.CredentialHolder{})
 
 	rt := productruntime.New(productruntime.Deps{
-		State:    state,
-		Creds:    creds,
-		Platform: client,
+		State:        state,
+		Creds:        creds,
+		Platform:     client,
+		ControlPlane: status,
 	})
 	local := httptest.NewServer(rt.Handler())
 	t.Cleanup(local.Close)

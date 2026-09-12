@@ -1,6 +1,6 @@
 # 本地 API 契约（`/api/product/*`）
 
-> **状态**：`v0.4`（2026-09-12 `PR-2c` 落地 `L-A6`，**待确认**）
+> **状态**：`v0.5`（2026-09-12 `PR-2c`：`L-A6` + 新增第 13 条端点 `GET /api/product/control-plane`）
 > **本批次第二份契约**，解决 [`需求基线.md`](需求基线.md) §5.1 `S-1` 与 §5.2 `PQ24`。
 > **权威实现落点**：`internal/productruntime`（[`需求基线.md`](需求基线.md) `G1`）。**不继续加进 `internal/server`**——`internal/server/product_*.go` 是 20260909 线上的旧落点，只作参考。
 > **与《中台交付包》的分工**：本文件管「Web UI ↔ 本地 Go 服务」；[`中台交付包.md`](中台交付包.md) 管「本地 Go 服务 ↔ 中台」。两份契约**不互相复制字段定义**，只引用结论。
@@ -18,11 +18,11 @@
 
 ### 0.1 本文件的依据与可信度（重要）
 
-`v1` 上**后端的落地是部分的**（2026-09-12 更正，原文说"还没有真后端"已过期）：[`internal/productruntime`](../../../internal/productruntime) 已随 `PR-2b1` / `PR-2b2a` 落地并接进服务，**§1.4 的 12 条端点里有 5 条**（`state` / `send-code` / `login` / `logout` / `locale`）**是真实实现、可反向核对**；其余 7 条仍是正向整理。所以本文件的可信度是**混合**的：
+`v1` 上**后端的落地是部分的**（2026-09-12 更正，原文说"还没有真后端"已过期）：[`internal/productruntime`](../../../internal/productruntime) 已随 `PR-2b1` / `PR-2b2a` 落地并接进服务，**§1.4 的 13 条端点里有 6 条**（`state` / `send-code` / `login` / `logout` / `locale` / `control-plane`）**是真实实现、可反向核对**；其余 7 条仍是正向整理。所以本文件的可信度是**混合**的：
 
 | 依据 | 位置 | 可信度 |
 | --- | --- | --- |
-| **已落地的 Go handler**（**最高**） | `internal/productruntime/`（`state` / `send-code` / `login` / `logout` / `locale` 五条）+ `internal/productclient/dto.go` | **高** —— 已实现且经测试，与它不一致的是本文件而不是代码 |
+| **已落地的 Go handler**（**最高**） | `internal/productruntime/`（`state` / `send-code` / `login` / `logout` / `locale` / `control-plane` 六条）+ `internal/productclient/dto.go` | **高** —— 已实现且经测试，与它不一致的是本文件而不是代码 |
 | 前端调用与解析逻辑 | `web/src/lib/product.ts`、`api.ts`、`sensitive.ts`、`sensitiveDict.ts` | **高** —— 前端必须这样解析才能工作，字段名与信封形状是硬事实 |
 | 临时假后端 | [`../2260906/技术方案/开发期假后端说明.md`](../2260906/技术方案/开发期假后端说明.md) + `web/src/dev/devBackend.ts` | **中** —— 它是替身，形状可被真后端改动 |
 | 本文档的设计决定 | 本文件新定 | **待实现** —— 一律标 🚧 |
@@ -91,6 +91,7 @@
 | 10 | PUT | `/api/product/sensitive/dict` | 是 | 否 | ✅ |
 | 11 | POST | `/api/product/sensitive/dict/import` | 是 | 否 | ✅ |
 | 12 | POST | `/api/product/sensitive/check` | 否 | 否 | ✅ |
+| 13 | GET | `/api/product/control-plane` | 否 | 否 | ✅ 新增（`PR-2c`，见 §2.13） |
 
 > **「需登录」列是设计约定，不是观测事实。** 前端对 `/api/product/*` 一律带 window token（`api.ts` 的 `withWindowToken`），**产品门是否拦某条路由由服务端决定**，前端不区分。本列表达的是**应有的门策略**：凡读写账号数据或改词库的都要登录；`state` / `locale` / `send-code` / `login` 必须在未登录时可达，否则登录页根本渲染不出来。
 >
@@ -255,6 +256,24 @@
 - **应答 `200`**：`{"hit": true|false, "masked": "<命中词被替换为 * 的文本>"}`
 - **备注**：这是**给输入框做替换 + 提示**用的，不是权威。**服务端在聊天链路上必须再检一次**（前端可被绕过）——见 `P8-敏感词接入.md`。
 
+### 2.13 `GET /api/product/control-plane` ✅ 新增（`PR-2c`，2026-09-12）
+
+**这是第 13 条端点**，为 `L-B2` 的两页服务：让拦截页在**用户输入之前**就能分辨"这包不对"，而不是让用户先撞一次失败。
+
+- **请求**：无体。
+- **应答 `200`**：`{"configured": <bool>, "hasTrustedKeys": <bool>}`
+- **判定位置**：**`internal/productprofile`** —— 两个判据的唯一 owner（`ControlPlaneConfigured()` / `HasTrustedKeys()`）。`internal/productruntime` **只转发**，不自己判断；`cmd/octo-desktop/product.go` 在装配期读一次 Profile 填入 `Deps`。
+- **需登录：否。** 未登录时正是要显示它（本列的判据见 §1.4 的注：它表达应有策略；当前产品的门校验的是窗口身份，不是登录态，所以本端点与其余产品路由一样需要 window token）。
+- **为什么不用 `GET /api/product/state`**（`P4-拦截页.md` §2.2）：`ProductStateDTO` 是**状态文件 `product-state.json` 的投影**（`E6.1`），而这两个值是**编译期 Profile 的事实**，与用户数据无关。塞进 state 会让"state = 磁盘状态"这条映射失效，也把两个 owner 混进一个 DTO。
+- **前端消费规则（优先级从上到下，不可交换）**（`P4-拦截页.md` §2.2）：
+  1. `configured == false` ⇒ 「未配置」页；
+  2. `hasTrustedKeys == false` ⇒ 「无公钥」页；
+  3. 两者都正常 ⇒ 登录表单；
+  4. 本端点**读取失败** ⇒ 登录表单（保守：不因读不到而谎报"未配置"）。
+  **顺序不可交换，且 `configured` 在前**：`configured == false` 时「无公钥」页的文案（"有地址但不信任密钥"）不成立 —— 这个包没有地址。「地址」是「公钥」的前置。落地时经测试纠正，初稿顺序写反，理由见 `P4-拦截页.md` §2.2。
+- **文案约束（`A1` 规则 6）**：两页**都不出现 URL、不出现技术名词**。用户看不到 `apiHost`、`"production.json"`、`trustedKeyIDs` —— **这不是用户可以修的东西**，出现地址只会让人以为"是不是填错了"，而他们没有任何地方可填。
+- **i18n 键**：`product.blocked.unconfigured_title` / `_body`、`product.blocked.no_keys_title` / `_body`（中英各一份，两页文案**必须能看出是两回事**）。
+
 ---
 
 ## 3. 错误码总表
@@ -332,7 +351,8 @@
 
 | 版本 | 日期 | 变更 |
 | --- | --- | --- |
-| `v0.1` | 2026-09-11 | 首版：登记 12 个本地端点、三类错误信封、错误码总表、产品相关 WS 事件；标出 `login` 加 `boxCode` 与 `chat-modes` 去 `fallback` 两处 🚧 |
-| `v0.2` | 2026-09-11 | 自查修订（发现 1 处**事实错误** + 4 处**未标来源**）:① **`send-code` 的手机号错误走业务级 `{"code":"invalid_phone"}`，不是 `fieldErrors.phone`** —— 前端 `product.ts:177` 读的是 `body.code` 再自己落到 `phone` 字段；原 `v0.1` 写错了信封，照它实现会导致「不报错但文案错」。§2.2 改正，§3 增列第 3 处「同名不同信封」差异。② 新增 §0.1「依据与可信度」，说明 `v1` 上**没有真后端**、本文件是**从正面前端整理**而非反向后端提取，并给出三档可信度。③ §2.4 `logout` 与 §2.5 `locale` 的应答形状标注「取自假后端 / 本契约新定」，不再伪装成已验证。④ §2.8 标明 `catalogVersion` / `policyVersion` 是本契约新拟名，若中台已有版本字段则以中台为准。⑤ §1.4 补「需登录列是设计约定」，并写明应由产品门按**白名单**放行未登录可达的四条路由。⑥ §3 补「未知 code 应视为契约违约并记日志」，不得静默落到 `product.submit_failed`。 |
+| `v0.5` | 2026-09-12 | **新增第 13 条端点 `GET /api/product/control-plane`（`PR-2c`，服务 `L-B2`）—— 本轮改代码的同时改本文档。** ① §1.4 端点总表加第 13 行；② §2.13 写全：`{"configured","hasTrustedKeys"}`、判定位置仍是 `internal/productprofile`（唯一 owner，`productruntime` 只经 `Deps.ControlPlane` 转发）、**需登录＝否**、为什么不塞进 `ProductStateDTO`、四条前端消费规则（**`configured` 先判**，落地时经测试纠正）、文案约束、i18n 键名；③ §0.1 的「5 条已落地」改为「6 条」，并把 `README.md` / `需求基线.md` 的「12 个端点」改为 13。**注意**：本端点没有错误码、不写盘、不吃中台 —— 它是编译期事实的纯转发，因此 §3 错误码总表**无需**新增行。 |
 | `v0.4` | 2026-09-12 | **`PR-2c` 落地 `L-A6`：补登 `unauthorized` 一行，并解释它为什么是全表唯一的异形码。** `V-21`：`ErrSessionExpired` 是**哨兵错误**、不含 `*productclient.Error`，`writePlatformError` 的 `errors.As` 落空后把它归成 `503 network_unavailable` —— 会话失效被报成「网络不通」，前端因此给一个**永远不可能成功**的重试按钮（被拒的 refresh token 不自愈）。本表此前**根本没有这一行**，正是该误分类无人发现的原因：契约没登记，就没有人核对。现已补登（业务级、**刻意不配 i18n 键**、本地应答 **401**，由前端 `noteSessionLost` 直接回拦截页），并注明**它的触发点在今天只有一处**（`PR-4b` 的目录拉取，`client.Bootstrap` 是首个走 `doAuthorized` 的调用），在此之前端到端到不了。§3 另加一段说明其形状差异**是有意的、不要在"统一信封"时抹平**。 |
 | `v0.3` | 2026-09-12 | **全库核对发现本文件自身 4 处已过期（本轮只改文档，不动代码）。** ① **§5「未定项」重开了 6 个已关闭项** —— `S-1` / `S-3` / `S-5` / `S-6` / `S-7` / `N-2` 在 `需求基线` §5.1（标题即「已全部落规格」）与 §5.5 里**都已 ✅ 关闭**，本表却仍列为「未定」，会让读者去做已完成的事（§3.8：派生文档只引结论 + 链接）；已删去并改为一行落点索引，**只留 `N-5`**（本轮唯一真正未定项）。② **§0.1 说「`v1` 上还没有真后端」** —— `internal/productruntime` 已随 `PR-2b1` / `PR-2b2a` 落地并接进服务，12 条端点里**有 5 条真实存在**；已改为混合可信度，并把「已落地的 Go handler」列为**最高档**依据。③ **§2.3 说 `boxCode` 「后端尚无」** 并引用分支 `feat/activation-box-code` —— 后端已有（含 `TestFirstActivationReturnsWrappedStateWithServerBoxCode`），该分支已不存在且**无归档 tag**（内容已在 `v1`）；已改。④ **§1.4 给了一条已被推翻的实现指引**（「产品门按前缀白名单放行四条」）—— 已落地的门是**注册器的属性**、校验**窗口身份而非登录态**，没有白名单这回事（`开发计划` §4.1 第 12 行 / `D-006`）；已改为写明该层判据**本轮未实现**。⑤ 顺带收紧「标 `✅` ≠ 后端已验证」：只有那 5 条已实现端点算已验证。 |
+| `v0.2` | 2026-09-11 | 自查修订（发现 1 处**事实错误** + 4 处**未标来源**）:① **`send-code` 的手机号错误走业务级 `{"code":"invalid_phone"}`，不是 `fieldErrors.phone`** —— 前端 `product.ts:177` 读的是 `body.code` 再自己落到 `phone` 字段；原 `v0.1` 写错了信封，照它实现会导致「不报错但文案错」。§2.2 改正，§3 增列第 3 处「同名不同信封」差异。② 新增 §0.1「依据与可信度」，说明 `v1` 上**没有真后端**、本文件是**从正面前端整理**而非反向后端提取，并给出三档可信度。③ §2.4 `logout` 与 §2.5 `locale` 的应答形状标注「取自假后端 / 本契约新定」，不再伪装成已验证。④ §2.8 标明 `catalogVersion` / `policyVersion` 是本契约新拟名，若中台已有版本字段则以中台为准。⑤ §1.4 补「需登录列是设计约定」，并写明应由产品门按**白名单**放行未登录可达的四条路由。⑥ §3 补「未知 code 应视为契约违约并记日志」，不得静默落到 `product.submit_failed`。 |
+| `v0.1` | 2026-09-11 | 首版：登记 12 个本地端点、三类错误信封、错误码总表、产品相关 WS 事件；标出 `login` 加 `boxCode` 与 `chat-modes` 去 `fallback` 两处 🚧 |

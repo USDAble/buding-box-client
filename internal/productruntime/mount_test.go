@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/open-octo/octo-agent/internal/productclient/clienttest"
+	"github.com/open-octo/octo-agent/internal/productruntime"
 	"github.com/open-octo/octo-agent/internal/server"
 )
 
@@ -50,6 +51,20 @@ func newMountedHarness(t *testing.T) *mountedHarness {
 func newMountedHarnessWithToken(t *testing.T, windowToken string) *mountedHarness {
 	t.Helper()
 	h := newHarness(t)
+	return mountHarness(t, h, windowToken)
+}
+
+// newMountedHarnessWithControlPlane serves a runtime whose compile-time profile
+// facts are chosen by the test, so the "unconfigured" and "no keys" blocked
+// pages can be reached over the real road rather than only in a handler unit
+// test. See newHarnessWithControlPlane for why the default is "configured".
+func newMountedHarnessWithControlPlane(t *testing.T, status productruntime.ControlPlaneStatus) *mountedHarness {
+	t.Helper()
+	return mountHarness(t, newHarnessWithControlPlane(t, status), "")
+}
+
+func mountHarness(t *testing.T, h *harness, windowToken string) *mountedHarness {
+	t.Helper()
 
 	// The harness's own bare-handler server is redundant here; the point is to
 	// exercise the mounted road, not the handler in isolation.

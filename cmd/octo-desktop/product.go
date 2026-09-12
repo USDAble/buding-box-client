@@ -77,10 +77,21 @@ func mountProductAPI() func(api func(pattern string, h http.HandlerFunc)) {
 		return nil
 	}
 
+	// The two facts the blocked page needs before the user types (L-B2). Read
+	// here, at assembly time, because the profile is immutable for the life of
+	// the process and the judgement belongs to internal/productprofile - the
+	// runtime forwards it rather than re-deciding what "configured" means
+	// (本地API契约 §2.13).
+	profile := productprofile.Current()
+
 	rt := productruntime.New(productruntime.Deps{
 		State:    state,
 		Creds:    creds,
 		Platform: newPlatformClient(state.InstallID()),
+		ControlPlane: productruntime.ControlPlaneStatus{
+			Configured:     profile.ControlPlaneConfigured(),
+			HasTrustedKeys: profile.HasTrustedKeys(),
+		},
 	})
 	return rt.Mount
 }

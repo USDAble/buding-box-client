@@ -9,7 +9,9 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
+	"github.com/open-octo/octo-agent/internal/catalogstore"
 	"github.com/open-octo/octo-agent/internal/credentialstore"
 	"github.com/open-octo/octo-agent/internal/productclient"
 	"github.com/open-octo/octo-agent/internal/productclient/clienttest"
@@ -54,6 +56,10 @@ func newHarnessWithControlPlane(t *testing.T, status productruntime.ControlPlane
 	if err != nil {
 		t.Fatalf("credentialstore.Open: %v", err)
 	}
+	catalog, err := catalogstore.Open(catalogstore.Options{})
+	if err != nil {
+		t.Fatalf("catalogstore.Open: %v", err)
+	}
 	// Versioned base URL, matching the only shape a control-plane host has
 	// (production.json: https://api.invalid/v1). The client's paths are relative
 	// to the version segment, so an unversioned base would silently test a
@@ -70,6 +76,15 @@ func newHarnessWithControlPlane(t *testing.T, status productruntime.ControlPlane
 		Creds:        creds,
 		Platform:     client,
 		ControlPlane: status,
+		Catalog:      catalog,
+		// Explicit fixture facts rather than productprofile.Current(): the
+		// profile is chosen by a build tag, and a production-tagged run would
+		// make these tests fail for a reason that has nothing to do with them.
+		CatalogTrust: productruntime.CatalogTrust{
+			TrustedKeys: map[string]string{clienttest.FixtureSigningKeyID: clienttest.FixtureSigningPublicKey()},
+			Audience:    clienttest.FixturePolicyAudience,
+			Skew:        time.Minute,
+		},
 	})
 	local := httptest.NewServer(rt.Handler())
 	t.Cleanup(local.Close)

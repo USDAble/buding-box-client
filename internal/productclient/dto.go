@@ -196,6 +196,13 @@ type BootstrapData struct {
 	Account    Account     `json:"account"`
 	Activation *Activation `json:"activation,omitempty"`
 	Balance    Balance     `json:"balance"`
+	// The policy envelope rides beside the account summary in the same `data`
+	// object (中台交付包 §4.3), so it is embedded rather than nested: the wire
+	// shape has the signature at the top level, and a named field would need a
+	// custom decoder to flatten it. `Policy` is empty when the platform sends no
+	// envelope at all, which is how "no catalog in this build" is spelled
+	// (需求基线 B4).
+	PolicyEnvelope
 }
 
 // Balance is a read-only projection of the platform ledger. The client never

@@ -14,6 +14,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/open-octo/octo-agent/internal/brand"
+	"github.com/open-octo/octo-agent/internal/productclient"
 	"github.com/open-octo/octo-agent/internal/productclient/clienttest"
 	"github.com/open-octo/octo-agent/internal/productruntime"
 	"github.com/open-octo/octo-agent/internal/server"
@@ -381,4 +383,308 @@ func sortedKeys(m map[string]any) []string {
 	}
 	sort.Strings(out)
 	return out
+}
+
+// ---------------------------------------------------------------------------
+// PR-4b: the catalog, and the three end-to-end loops V-29 said were missing.
+//
+// Everything here travels the road the window's fetch takes: real mux, real
+// auth middleware, real socket. The catalog half has to, because the failure
+// mode PR-4b can produce is not "the wrong boolean" but "nothing ever fetched
+// it" - and a handler unit test cannot see that.
+// ---------------------------------------------------------------------------
+
+// post issues a JSON request over the real socket and decodes the body.
+func (m *mountedHarness) post(t *testing.T, path string, body any) (int, map[string]any) {
+	t.Helper()
+	status, raw := m.request(t, http.MethodPost, path, body, nil)
+	var decoded map[string]any
+	if len(raw) > 0 {
+		if err := json.Unmarshal(raw, &decoded); err != nil {
+			t.Fatalf("decode %s (%d): %v (body: %.200s)", path, status, err, raw)
+		}
+	}
+	return status, decoded
+}
+
+// firstActivation runs the five-field first activation through the mounted road
+// and fails if it did not succeed.
+func (m *mountedHarness) firstActivation(t *testing.T) {
+	t.Helper()
+	if status, body := m.post(t, "/api/product/send-code", map[string]any{"phone": "13800001234"}); status != http.StatusOK {
+		t.Fatalf("send-code = %d (%v), want 200", status, body)
+	}
+	status, body := m.post(t, "/api/product/login", map[string]any{
+		"phone":          "13800001234",
+		"code":           clienttest.FixtureSMSCode,
+		"nickname":       "tester",
+		"activationCode": clienttest.FixtureActivationCode,
+		"boxCode":        clienttest.FixtureBoxCode,
+	})
+	if status != http.StatusOK {
+		t.Fatalf("first activation = %d (%v), want 200", status, body)
+	}
+}
+
+// laterLogin is the second login (需求基线 E2): the account is already
+// activated, so no activation credential is sent - but phone, code AND nickname
+// still are. Nickname is not optional on any login: the second-login form
+// prefills the last one and 本地API契约 §2.3 lists it as a request field, so
+// omitting it is a field-level error, not a mode switch.
+func (m *mountedHarness) laterLogin(t *testing.T, phone string) (int, map[string]any) {
+	t.Helper()
+	if status, body := m.post(t, "/api/product/send-code", map[string]any{"phone": phone}); status != http.StatusOK {
+		t.Fatalf("send-code = %d (%v), want 200", status, body)
+	}
+	return m.post(t, "/api/product/login", map[string]any{
+		"phone":    phone,
+		"code":     clienttest.FixtureSMSCode,
+		"nickname": "tester",
+	})
+}
+
+// cachedCatalog is the on-disk shape 需求基线 B2 规则 1 describes, parsed the way
+// a reader with no network would parse it.
+type cachedCatalog struct {
+	SchemaVersion  int                          `json:"schemaVersion"`
+	CatalogVersion string                       `json:"catalogVersion"`
+	FetchedAt      string                       `json:"fetchedAt"`
+	ExpiresAt      string                       `json:"expiresAt"`
+	KeyID          string                       `json:"keyId"`
+	Audience       string                       `json:"audience"`
+	Envelope       productclient.PolicyEnvelope `json:"envelope"`
+}
+
+func (m *mountedHarness) cachedCatalog(t *testing.T) cachedCatalog {
+	t.Helper()
+	raw := readFile(t, filepath.Join(m.root, "catalog.json"))
+	var cached cachedCatalog
+	if err := json.Unmarshal([]byte(raw), &cached); err != nil {
+		t.Fatalf("catalog.json is not JSON (%v): %.300s", err, raw)
+	}
+	return cached
+}
+
+func (m *mountedHarness) hasCatalog() bool {
+	_, err := os.Stat(filepath.Join(m.root, "catalog.json"))
+	return err == nil
+}
+
+// TestCatalogIsCachedAndVerifiesOfflineAfterLogin is L-C1a's judgement: after a
+// login, the signed catalog is on the drive, and it can be verified there
+// without asking anybody.
+//
+// "Offline" is asserted, not assumed: the platform's call count is sampled
+// around the verification, so a future implementation that quietly refetches
+// instead of trusting the file fails here. That property is the whole reason
+// B2 says to keep the original envelope - a cache that needs the network to be
+// read is not a cache.
+func TestCatalogIsCachedAndVerifiesOfflineAfterLogin(t *testing.T) {
+	m := newMountedHarness(t)
+	m.firstActivation(t)
+
+	cached := m.cachedCatalog(t)
+	if cached.SchemaVersion != 1 {
+		t.Errorf("schemaVersion = %d, want 1", cached.SchemaVersion)
+	}
+	if cached.CatalogVersion != clienttest.FixturePolicyVersion {
+		t.Errorf("catalogVersion = %q, want the platform's %q", cached.CatalogVersion, clienttest.FixturePolicyVersion)
+	}
+	if cached.KeyID != clienttest.FixtureSigningKeyID {
+		t.Errorf("keyId = %q, want %q", cached.KeyID, clienttest.FixtureSigningKeyID)
+	}
+	// The audience is the value this build answers to, read from its single
+	// owner - not a literal repeated here, which is how a rebrand silently makes
+	// every catalog unverifiable.
+	if cached.Audience != brand.Load().BrandID {
+		t.Errorf("audience = %q, want the build's brandId %q", cached.Audience, brand.Load().BrandID)
+	}
+	expires, err := time.Parse(time.RFC3339, cached.ExpiresAt)
+	if err != nil {
+		t.Fatalf("expiresAt %q: %v", cached.ExpiresAt, err)
+	}
+	if !expires.After(time.Now()) {
+		t.Errorf("expiresAt = %s is already in the past", cached.ExpiresAt)
+	}
+
+	before := m.platform.BootstrapCount()
+	policy, err := cached.Envelope.Verify(productclient.VerifyOptions{
+		TrustedKeys: map[string]string{clienttest.FixtureSigningKeyID: clienttest.FixtureSigningPublicKey()},
+		Audience:    brand.Load().BrandID,
+		Now:         time.Now(),
+		Skew:        time.Minute,
+	})
+	if err != nil {
+		t.Fatalf("the cached catalog does not verify: %v", err)
+	}
+	if len(policy.Catalog.Models) == 0 {
+		t.Error("the cached catalog has no models; there is nothing for the picker to show")
+	}
+	if after := m.platform.BootstrapCount(); after != before {
+		t.Errorf("verifying the cache cost %d extra platform call(s); it must be readable offline", after-before)
+	}
+}
+
+// TestACatalogFailureDoesNotBlockTheLogin is 需求基线 B1 规则 1's shape: a
+// catalog that cannot be fetched leaves the picker to PR-4c's wording, but the
+// user is signed in either way. Failing the login instead would lock a paying
+// customer out over a catalog they are not using yet.
+func TestACatalogFailureDoesNotBlockTheLogin(t *testing.T) {
+	cases := map[string]func(m *mountedHarness){
+		"the catalog cannot be fetched": func(m *mountedHarness) {
+			m.platform.FailBootstrap(502, productclient.CodeUpstreamUnavailable)
+		},
+		"the signature does not cover what arrived": func(m *mountedHarness) {
+			m.platform.TamperPolicy()
+		},
+	}
+	for name, inject := range cases {
+		t.Run(name, func(t *testing.T) {
+			m := newMountedHarness(t)
+			inject(m)
+			m.firstActivation(t)
+
+			if m.hasCatalog() {
+				t.Error("a catalog was cached from a fetch that did not produce a usable one")
+			}
+			state := m.readStateFile()
+			if loggedIn, _ := state["loggedIn"].(bool); !loggedIn {
+				t.Errorf("the user was not signed in (%v); a missing catalog is not a failed login", state)
+			}
+			// The trade-off is visible in the return value, not swallowed: this
+			// PR logs the reason and PR-4c turns it into the three degradation
+			// behaviours and their wording (需求基线 B4).
+		})
+	}
+}
+
+// TestARolledBackCatalogDoesNotReplaceTheCache walks the downgrade defence over
+// the real road. A validly signed but older catalog is exactly what an attacker
+// who can answer for the platform would replay, and the cache - not the
+// verifier - is where that has to be caught (开发计划 PR-4b 缺口 ③).
+func TestARolledBackCatalogDoesNotReplaceTheCache(t *testing.T) {
+	m := newMountedHarness(t)
+	m.firstActivation(t)
+	before := readFile(t, filepath.Join(m.root, "catalog.json"))
+
+	m.platform.SetCatalogVersion("2026-09-01.0")
+	if status, body := m.laterLogin(t, "13800001234"); status != http.StatusOK {
+		t.Fatalf("second login = %d (%v), want 200 - a rolled-back catalog is not a login failure", status, body)
+	}
+
+	if after := readFile(t, filepath.Join(m.root, "catalog.json")); after != before {
+		t.Error("the cache was replaced by an older catalog")
+	}
+}
+
+// TestSessionExpiryIsReachableThroughBootstrap is L-A6 end to end, and it is
+// the first test that can exist: bootstrap is the first authorised platform call
+// any production code makes, so before PR-4b the "refresh refused -> clear the
+// credential -> back to the blocked page" path had no way to run (V-29).
+//
+// The fault is a platform that hands out tokens it will not honour, which is
+// what a revoked session looks like from here: the login succeeds, and the very
+// first authorised call is refused, with the refresh refused too. The activation
+// code is consumed by the platform before it refuses - that is inherent to the
+// fault, and not something the client can undo.
+func TestSessionExpiryIsReachableThroughBootstrap(t *testing.T) {
+	m := newMountedHarness(t)
+	m.platform.RefuseSessionsAfterLogin()
+
+	if status, body := m.post(t, "/api/product/send-code", map[string]any{"phone": "13800001234"}); status != http.StatusOK {
+		t.Fatalf("send-code = %d (%v), want 200", status, body)
+	}
+	status, body := m.post(t, "/api/product/login", map[string]any{
+		"phone":          "13800001234",
+		"code":           clienttest.FixtureSMSCode,
+		"nickname":       "tester",
+		"activationCode": clienttest.FixtureActivationCode,
+		"boxCode":        clienttest.FixtureBoxCode,
+	})
+	if status != http.StatusUnauthorized {
+		t.Fatalf("login = %d (%v), want 401: the session the platform issues is already refused", status, body)
+	}
+	if got := codeOf(t, body); got != productclient.CodeUnauthorized {
+		t.Errorf("code = %q, want %q", got, productclient.CodeUnauthorized)
+	}
+
+	if m.credentialFileExists() {
+		if credRaw := readFile(t, filepath.Join(m.root, "credential.json")); strings.Contains(credRaw, "refreshToken") {
+			t.Error("the refusal left a refresh token on disk; the next startup would read it as a live session")
+		}
+	}
+	state := m.readStateFile()
+	if loggedIn, _ := state["loggedIn"].(bool); loggedIn {
+		t.Error("loggedIn survived a refused session")
+	}
+	// E7: an expired session is not an un-activation. The activation record and
+	// the bound number stay, which is what makes the second login ask for only
+	// phone and code - and matters here more than anywhere, because the
+	// activation code has just been consumed.
+	if activated, _ := state["activated"].(bool); !activated {
+		t.Errorf("activated was cleared by a refused session: %v", state)
+	}
+	if m.hasCatalog() {
+		t.Error("a catalog was cached for a session the platform had already refused")
+	}
+}
+
+// TestSecondLoginEndToEnd is L-A2 over the real road: an installation that has
+// already activated signs in again with phone and code alone, and the box code
+// it never typed this time still reaches the license page.
+func TestSecondLoginEndToEnd(t *testing.T) {
+	m := newMountedHarness(t)
+	m.firstActivation(t)
+
+	status, body := m.laterLogin(t, "13800001234")
+	if status != http.StatusOK {
+		t.Fatalf("second login = %d (%v), want 200", status, body)
+	}
+	state, ok := body["state"].(map[string]any)
+	if !ok {
+		t.Fatalf("login body has no state object: %v", body)
+	}
+	activation, _ := state["activation"].(map[string]any)
+	if activation == nil || activation["boxCode"] != clienttest.FixtureBoxCode {
+		t.Errorf("activation = %v, want the platform's box code %q", activation, clienttest.FixtureBoxCode)
+	}
+}
+
+// TestLogoutThenReloginEndToEnd is L-A3, and it carries a specific scar: the
+// logout path once cleared the activation flag, so the blocked page came back
+// asking for the U-disk activation code - which can be used exactly once, so a
+// single click on 登出 locked the user out for good (V-22).
+//
+// The assertion that catches a regression is the last one: signing in again with
+// phone and code only must succeed. If the flag were cleared again, this login
+// would be a first activation and the platform would refuse it.
+func TestLogoutThenReloginEndToEnd(t *testing.T) {
+	m := newMountedHarness(t)
+	m.firstActivation(t)
+	if !m.credentialFileExists() {
+		t.Fatal("no credential after activation; the logout assertions below would pass vacuously")
+	}
+
+	if status, body := m.post(t, "/api/product/logout", nil); status != http.StatusOK {
+		t.Fatalf("logout = %d (%v), want 200", status, body)
+	}
+	state := m.readStateFile()
+	if loggedIn, _ := state["loggedIn"].(bool); loggedIn {
+		t.Error("loggedIn survived a logout")
+	}
+	if activated, _ := state["activated"].(bool); !activated {
+		t.Error("logout cleared the activation flag; E7 says logging out is not un-activating")
+	}
+	if m.credentialFileExists() {
+		t.Error("the credential file survived a logout; deleting it is what ends the session")
+	}
+
+	status, body := m.laterLogin(t, "13800001234")
+	if status != http.StatusOK {
+		t.Fatalf("login after logout = %d (%v), want 200 - the form must not be asking for a used-up activation code", status, body)
+	}
+	state, _ = body["state"].(map[string]any)
+	if loggedIn, _ := state["loggedIn"].(bool); !loggedIn {
+		t.Errorf("loggedIn = false after signing back in: %v", state)
+	}
 }

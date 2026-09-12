@@ -32,7 +32,19 @@ const FixtureSigningKeySeed = "v8zF/jeDm1+T+6S85E2jRhppX9tzXLHijUaa7sKpMZI="
 // FixturePolicyAudience is the audience the fixture policy is addressed to.
 // The platform's real value is contract data owned by the caller of Verify;
 // this constant exists so the stand-in and its tests agree on one spelling.
+//
+// It must equal the audience this build answers to,
+// brand.Load().BrandID - sign_test.go asserts it, because the two values are
+// edited in different files and a drift between them rejects every catalog.
 const FixturePolicyAudience = "puddingbox"
+
+// FixturePolicyVersion is the catalog version the fixture policy carries.
+//
+// It is a fixed ASCII data key rather than a date computed at run time: the
+// monotonicity rule is about a version moving forward, so a test has to be able
+// to name a version and then serve an older one
+// (Server.SetCatalogVersion).
+const FixturePolicyVersion = "2026-09-11.1"
 
 // fixtureSigningKey decodes the seed once. A malformed compile-time constant is
 // a programming error, not a runtime condition, so it panics at init exactly
@@ -67,17 +79,25 @@ func FixtureSigningPublicKey() string {
 // (every eligibility and degradation state) belongs with the catalog projection
 // work, not with signature verification.
 func FixturePolicy(now time.Time) productclient.Policy {
+	return fixturePolicy(now, FixturePolicyVersion, FixturePolicyAudience)
+}
+
+// fixturePolicy is FixturePolicy with the two identity fields a fault injection
+// moves: the catalog version (a rollback) and the audience (a policy addressed
+// to another product). Everything else stays fixed so a failure can only come
+// from the field the test moved.
+func fixturePolicy(now time.Time, version, audience string) productclient.Policy {
 	issued := now.UTC().Add(-time.Minute).Format(time.RFC3339)
 	expires := now.UTC().Add(time.Hour).Format(time.RFC3339)
 
 	return productclient.Policy{
-		PolicyVersion: "2026-09-11.1",
+		PolicyVersion: version,
 		IssuedAt:      issued,
 		ExpiresAt:     expires,
-		Audience:      FixturePolicyAudience,
+		Audience:      audience,
 		KeyID:         FixtureSigningKeyID,
 		Catalog: productclient.Catalog{
-			Version: "2026-09-11.1",
+			Version: version,
 			TTLSec:  3600,
 			Models: []productclient.CatalogModel{
 				{
@@ -131,7 +151,13 @@ func FixturePolicy(now time.Time) productclient.Policy {
 // receives. Marshalling once matters — signing one encoding and sending another
 // is the failure this whole scheme is designed to avoid.
 func signedPolicy(now time.Time) (productclient.PolicyEnvelope, error) {
-	raw, err := json.Marshal(FixturePolicy(now))
+	return signedPolicyFor(now, FixturePolicyVersion, FixturePolicyAudience, false)
+}
+
+// signedPolicyFor signs a policy with the given identity fields, optionally
+// tampering with the payload afterwards (Server.TamperPolicy).
+func signedPolicyFor(now time.Time, version, audience string, tamper bool) (productclient.PolicyEnvelope, error) {
+	raw, err := json.Marshal(fixturePolicy(now, version, audience))
 	if err != nil {
 		return productclient.PolicyEnvelope{}, fmt.Errorf("clienttest: marshal fixture policy: %w", err)
 	}
@@ -139,5 +165,21 @@ func signedPolicy(now time.Time) (productclient.PolicyEnvelope, error) {
 	if err != nil {
 		return productclient.PolicyEnvelope{}, fmt.Errorf("clienttest: sign fixture policy: %w", err)
 	}
+	if tamper {
+		upperFirstLetter(raw)
+	}
 	return productclient.PolicyEnvelope{Policy: raw, Signature: sig}, nil
+}
+
+// upperFirstLetter changes exactly one byte inside an otherwise valid policy.
+// Uppercasing a letter is enough: the payload still parses, so the only thing
+// that can reject it is the signature - which is the distinction between "an
+// intermediary rewrote this" and "the signature itself is corrupt".
+func upperFirstLetter(raw []byte) {
+	for i, b := range raw {
+		if b >= 'a' && b <= 'z' {
+			raw[i] = b - ('a' - 'A')
+			return
+		}
+	}
 }

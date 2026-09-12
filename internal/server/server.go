@@ -149,6 +149,32 @@ type Config struct {
 	// Empty means "no gate" — that is the CLI path (octo serve), where there is
 	// no window to identify and behavior must stay exactly as upstream.
 	WindowToken string
+
+	// OCTO-FORK: gateway-bound model guard — see
+	// dev-docs-usdable/需求/20260911/开发计划.md §PR-4c0
+	//
+	// GatewayModelPrefix, when non-empty, is the composite-id prefix
+	// (productprofile.GatewayModelPrefix()) of the models this build serves from
+	// the built-in gateway. A turn whose resolved model name carries it may only
+	// run on a sender that actually speaks the gateway protocol; while this build
+	// has none, the turn is refused with an explanation instead of riding the
+	// default sender.
+	//
+	// The default sender is whatever data/config.yml points at, so handing it a
+	// gateway id both fails (no configured provider knows that model — the
+	// incident is V-35) and transmits the conversation to a third party. That
+	// second half is the one degradation 需求基线 B4 forbids in every profile: a
+	// developer build may use config.yml as its model source, but not for a model
+	// it cannot serve.
+	//
+	// This is deliberately NOT the production-only RequiresControlPlane rule (that
+	// one is PR-5's): it keys on the model id, so it holds wherever the id appears,
+	// in any profile, and it lets go by itself as soon as a sender can serve the
+	// id — nothing to remember when PR-5 wires the real gateway.
+	//
+	// Empty means unchanged upstream behavior: `octo serve`, the CLI and the tests
+	// never set it.
+	GatewayModelPrefix string
 }
 
 // Server is the HTTP server skeleton. It owns the mux, the agent factory,
@@ -1719,22 +1745,75 @@ func (s *Server) effectiveCoauthor(cfg config.Config) bool {
 // missing entry (deleted since binding), or a build failure — falls back to
 // the server's default sender so a stale binding degrades instead of
 // breaking the turn.
+//
+// OCTO-FORK: 网关绑定模型的前置拦截 — see
+// dev-docs-usdable/需求/20260911/开发计划.md §PR-4c0
+//
+// One case must NOT degrade, and it is not a refinement of the rule above but
+// the one exception to it: a model the catalog serves from the built-in gateway
+// (Config.GatewayModelPrefix). The default sender is whatever data/config.yml
+// points at, and while this build has no gateway sender such a model resolves to
+// no endpoint at all — so the fallback would send the string
+// "buding-gateway::<model>" to a third party, which both fails and hands it the
+// conversation (V-35). B4 forbids that in every profile, so the turn is refused
+// instead.
+//
+// The refusal is a sender rather than an error return because the signature is
+// upstream's (§4.5) and because this is the single resolution point every turn
+// path shares (buildAgent's four callers: REST, WS×2, scheduled tasks) — an
+// explicit check at each caller would state the rule four times and miss the
+// fifth path someone adds later (§3.8).
 func (s *Server) senderForSession(sess *agent.Session) (agent.Sender, string) {
+	sender, model, degraded := s.resolveSenderForSession(sess)
+	if degraded && s.gatewayBound(sess, model) {
+		return refusedGatewaySender{model: model}, model
+	}
+	return sender, model
+}
+
+// gatewayBound reports whether a turn on this session would be served by the
+// built-in gateway. Both halves are checked, because the id reaches a session
+// two ways and only one of them was in the incident:
+//
+//   - As the model NAME. The picker sends the composite id, config.yml has no
+//     such endpoint, so handleUpdateSessionModel's raw-string branch stores it
+//     as the model name with an empty binding — the V-35 shape, and the reason
+//     this guard exists.
+//   - As the BINDING ref. The endpoint existed when the session was bound and
+//     was deleted afterwards, so resolution fails with a bare model name that no
+//     configured endpoint can serve either. Same conclusion, different branch.
+//
+// Checking only the name would let the second shape reach the default sender, so
+// the two are deliberately not collapsed. An empty prefix (every non-product
+// build) short-circuits before either test.
+func (s *Server) gatewayBound(sess *agent.Session, model string) bool {
+	prefix := s.cfg.GatewayModelPrefix
+	if prefix == "" {
+		return false
+	}
+	return strings.HasPrefix(model, prefix) || strings.HasPrefix(sess.ModelConfig, prefix)
+}
+
+// resolveSenderForSession is senderForSession's resolution with upstream's logic
+// verbatim, reporting whether it ended in the default-sender fallback. The guard
+// lives on that flag rather than on each return, so every way resolution can fail
+// is covered by one condition and a new one cannot be added without it.
+func (s *Server) resolveSenderForSession(sess *agent.Session) (agent.Sender, string, bool) {
 	defaultSender, model := s.defaultSenderAndModel()
 	if sess.Model != "" {
 		model = sess.Model
 	}
 	if sess.ModelConfig == "" {
-		return defaultSender, model
+		return defaultSender, model, true
 	}
 
 	cfg, err := config.LoadCached()
 	if err != nil {
-		return defaultSender, model
+		return defaultSender, model, true
 	}
 	entry, ok := cfg.EntryByModel(sess.ModelConfig)
 	if !ok {
-		return defaultSender, model
+		return defaultSender, model, true
 	}
 	if entry.Model != "" {
 		model = entry.Model
@@ -1742,9 +1821,30 @@ func (s *Server) senderForSession(sess *agent.Session) (agent.Sender, string) {
 
 	sender, err := s.cachedSenderForEntry(sess.ModelConfig, entry)
 	if err != nil {
-		return defaultSender, model
+		return defaultSender, model, true
 	}
-	return sender, model
+	return sender, model, false
+}
+
+// refusedGatewaySender is the sender a gateway-bound turn gets while no gateway
+// sender exists. It implements only agent.Sender on purpose: it has no streaming
+// capability to offer (the agent falls back to the buffered call), and the single
+// thing it can honestly do is fail the turn before anything leaves the device.
+//
+// The message is what turns the incident's opaque third-party 400 into an
+// explanation the user can act on. The agent loop prefixes it ("agent: loop[0]: ")
+// and UserFacingError strips that back off, so it reads as one complete sentence
+// and must not start with a provider prefix.
+//
+// It is English like every other server-side turn error on this path; localising
+// the picker/turn copy is PR-4c's job (开发规范 §3.8 — interface copy lives in the
+// frontend's i18n, and there is no code channel on turn_error yet).
+type refusedGatewaySender struct{ model string }
+
+func (r refusedGatewaySender) SendMessages(_ context.Context, _, _ string, _ []agent.Message, _ int) (agent.Reply, error) {
+	return agent.Reply{}, fmt.Errorf(
+		"model %q is served by the built-in gateway, which this build does not have yet — the turn was not started and nothing was sent",
+		r.model)
 }
 
 // cachedSenderForEntry returns the entry's sender from the cache, building

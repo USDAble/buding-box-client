@@ -33,6 +33,7 @@ import (
 	"github.com/open-octo/octo-agent/internal/crashlog"
 	"github.com/open-octo/octo-agent/internal/datapath"
 	"github.com/open-octo/octo-agent/internal/logfile"
+	"github.com/open-octo/octo-agent/internal/productprofile" // OCTO-FORK: gateway model prefix (§PR-4c0)
 	"github.com/open-octo/octo-agent/internal/serveenv"
 	"github.com/open-octo/octo-agent/internal/serveproc"
 	"github.com/open-octo/octo-agent/internal/server"
@@ -504,6 +505,12 @@ func startHub(app *application.App, bridge *nativeBridge, settings desktopSettin
 		// because this runs before the first window is shown, which is what lets
 		// shellURL carry the token into that window's very first URL.
 		WindowToken: windowToken(),
+		// OCTO-FORK: gateway-bound models may not ride the default sender — see
+		// dev-docs-usdable/需求/20260911/开发计划.md §PR-4c0. The picker binds
+		// sessions to catalog composite ids, and no sender can serve one until
+		// PR-5 wires the gateway; without this the upstream fallback would send
+		// the id to whatever data/config.yml points at (V-35).
+		GatewayModelPrefix: productprofile.GatewayModelPrefix(),
 	})
 	if err != nil {
 		bridge.showError(L().errTitle, fmt.Sprintf(L().errStartFmt, err))

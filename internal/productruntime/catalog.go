@@ -238,7 +238,7 @@ func projectCatalog(policy productclient.Policy) ([]chatModeGroup, []string) {
 		row := chatModeModel{
 			ID:          m.ID,
 			DisplayName: m.DisplayName,
-			CompositeID: productprofile.GatewayEndpointID + "::" + m.ID,
+			CompositeID: productprofile.GatewayModelPrefix() + m.ID,
 		}
 		for _, modeID := range m.ModeIDs {
 			if !chatmode.IsProductMode(modeID) {

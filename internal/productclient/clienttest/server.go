@@ -6,9 +6,14 @@
 // frontend's development backend (web/src/dev/devBackend.ts) replaces the
 // latter; the two are not interchangeable.
 //
-// It is a library, not a command: callers wrap Handler with httptest. A runnable
-// binary is deliberately not provided yet - it is only needed once the frontend
-// has to be driven end to end, which is a later step.
+// It is a library, not a command: callers wrap Handler with httptest. The
+// runnable binary that drives it by hand is cmd/productstub, which serves
+// Handler and prints the fixtures it accepts.
+//
+// It serves both halves of what the desktop build talks to: the control plane
+// (auth + bootstrap) and, since PR-5a, the built-in gateway's completions
+// endpoint (handleCompletions). They share one process because the developer
+// profile points both hosts at it.
 package clienttest
 
 import (
@@ -86,6 +91,7 @@ type Server struct {
 	// the test that needs one - a platform broken by default would make every
 	// other test depend on the fault it is not testing.
 	bootstrapCount   int
+	completionCount  int    // turns the stand-in gateway served (see handleCompletions)
 	bootstrapStatus  int    // non-zero: bootstrap fails with this status and code
 	bootstrapCode    string // the code that failure carries
 	tamperPolicy     bool   // sign correctly, then change a byte of the payload
@@ -213,7 +219,24 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("POST "+"/v1/auth/login", s.handleLogin)
 	mux.HandleFunc("POST "+"/v1/auth/refresh", s.handleRefresh)
 	mux.HandleFunc("GET "+"/v1/client/bootstrap", s.handleBootstrap)
+	// The built-in gateway half (需求基线 C1). It lives on the same stand-in as
+	// the control plane because the developer profile points both hosts at this
+	// one process (internal/productprofile/profiles/developer.json), and a
+	// manual walkthrough needs the same single process to answer the turn it
+	// just authorized. Before PR-5a this route did not exist, so the desktop
+	// build could be signed in and still have nothing to talk to.
+	mux.HandleFunc("POST "+"/v1/chat/completions", s.handleCompletions)
 	return mux
+}
+
+// CompletionCount reports how many turns the stand-in gateway served. It counts
+// attempts, including refused ones, so a test can tell "the turn was refused
+// before dialing" from "the turn dialed and was refused here" - which is the
+// distinction 需求基线 B4 rests on.
+func (s *Server) CompletionCount() int {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.completionCount
 }
 
 // RefreshCount reports how many refresh calls the stand-in served. A test uses
@@ -471,6 +494,115 @@ func (s *Server) handleBootstrap(w http.ResponseWriter, r *http.Request) {
 		data.PolicyEnvelope = envelope
 	}
 	writeData(w, http.StatusOK, data)
+}
+
+// handleCompletions is the stand-in gateway: an OpenAI-protocol chat endpoint
+// that streams, so the whole turn path can be walked by hand.
+//
+// WHY THE STAND-IN SERVES IT. The gateway is reached through the same host as
+// the control plane in the developer profile, so "the gateway" and "the
+// platform" are one process during development. Making the fixture answer turns
+// is what turns PR-5a from a set of unit assertions into something a person can
+// click: sign in, pick a model, send a message.
+//
+// WHY IT REQUIRES THE TOKEN. C2 keeps the access token in memory and rebuilds
+// the sender from it each turn. A fixture that accepted anonymous turns would
+// pass even if the sender never presented the token, so the fixture refuses -
+// the same reason the control plane does. The token is validated against the
+// live session table, so an expired or rotated-away token is refused here too.
+//
+// WHY THE REPLY NAMES THE MODEL. The session binds a selection to a composite
+// id (`buding-gateway::buding-privacy-1`) while the gateway is handed the bare
+// catalog id. That difference is invisible on screen unless something says it
+// out loud, and it is exactly what PR-4c0 and PR-4d had to get right - so a
+// hand test should be able to read it back rather than trust it.
+func (s *Server) handleCompletions(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		Model    string `json:"model"`
+		Stream   bool   `json:"stream"`
+		Messages []struct {
+			Role    string `json:"role"`
+			Content string `json:"content"`
+		} `json:"messages"`
+	}
+	// Decoded before the token check so a malformed body is reported as such
+	// rather than as an auth failure: a hand test chasing the wrong error is
+	// worse than a slightly lenient order.
+	if !decode(w, r, &req) {
+		return
+	}
+
+	s.mu.Lock()
+	s.completionCount++
+	_, authorised := s.access[bearer(r)]
+	s.mu.Unlock()
+	if !authorised {
+		writeError(w, http.StatusUnauthorized, productclient.CodeUnauthorized, "")
+		return
+	}
+
+	reply := fmt.Sprintf("[stand-in gateway] model=%s, %d message(s) received", req.Model, len(req.Messages))
+	if !req.Stream {
+		w.Header().Set("Content-Type", "application/json; charset=utf-8")
+		w.WriteHeader(http.StatusOK)
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"id":      "chatcmpl-standin",
+			"object":  "chat.completion",
+			"created": s.now().Unix(),
+			"model":   req.Model,
+			"choices": []any{map[string]any{
+				"index":         0,
+				"message":       map[string]any{"role": "assistant", "content": reply},
+				"finish_reason": "stop",
+			}},
+		})
+		return
+	}
+
+	w.Header().Set("Content-Type", "text/event-stream; charset=utf-8")
+	w.Header().Set("Cache-Control", "no-cache")
+	w.WriteHeader(http.StatusOK)
+	flusher, _ := w.(http.Flusher)
+
+	chunk := func(delta map[string]any, finish any) {
+		body, err := json.Marshal(map[string]any{
+			"id":      "chatcmpl-standin",
+			"object":  "chat.completion.chunk",
+			"created": s.now().Unix(),
+			"model":   req.Model,
+			"choices": []any{map[string]any{
+				"index":         0,
+				"delta":         delta,
+				"finish_reason": finish,
+			}},
+		})
+		if err != nil {
+			return
+		}
+		fmt.Fprintf(w, "data: %s\n\n", body)
+		if flusher != nil {
+			flusher.Flush()
+		}
+	}
+
+	chunk(map[string]any{"role": "assistant", "content": ""}, nil)
+	// Deliberately framed in several chunks: concatenating chunked content is
+	// part of the provider's aggregator, and a single-chunk reply would leave
+	// that path unexercised in the one place a person can see it working.
+	const chunkRunes = 8
+	runes := []rune(reply)
+	for i := 0; i < len(runes); i += chunkRunes {
+		end := i + chunkRunes
+		if end > len(runes) {
+			end = len(runes)
+		}
+		chunk(map[string]any{"content": string(runes[i:end])}, nil)
+	}
+	chunk(map[string]any{}, "stop")
+	fmt.Fprint(w, "data: [DONE]\n\n")
+	if flusher != nil {
+		flusher.Flush()
+	}
 }
 
 // policyEnvelope signs the fixture policy with the current fault switches

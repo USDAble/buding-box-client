@@ -175,6 +175,27 @@ type Config struct {
 	// Empty means unchanged upstream behavior: `octo serve`, the CLI and the tests
 	// never set it.
 	GatewayModelPrefix string
+	// GatewaySender, when non-nil, builds the sender for one gateway-bound turn
+	// (需求基线 C1/C2). It is a factory rather than a sender because the
+	// credential rotates: C2 规则 1 keeps the access token in memory and never on
+	// disk, and 规则 2 assembles the sender from the current one, so a sender
+	// built once would freeze a token that expires.
+	//
+	// It is injected for the same reason GatewayModelPrefix is: internal/server
+	// does not import fork packages, so the product supplies the capability and
+	// this package only decides when to use it. cmd/octo-desktop wires it to
+	// productruntime.GatewayEndpoint, which reuses internal/provider/openai
+	// (C3) — no wire-format code lives on either side of that seam.
+	//
+	// The error is a turn error, not a startup one: with a factory wired,
+	// ensureSender stops requiring a default sender (V-36), so a missing
+	// third-party endpoint is no longer a reason to refuse to serve — the
+	// refusal happens per turn, for the turns that actually need one.
+	//
+	// Empty means unchanged upstream behavior, exactly like the prefix above:
+	// `octo serve`, the CLI and every existing test leave it nil, and a
+	// gateway-bound model is then refused (PR-4c0) rather than routed.
+	GatewaySender func() (agent.Sender, error)
 }
 
 // Server is the HTTP server skeleton. It owns the mux, the agent factory,
@@ -688,6 +709,17 @@ func (s *Server) enableSubAgentTools() {
 		return
 	}
 	defaultSender, model := s.defaultSenderAndModel()
+	// OCTO-FORK: V-36 — the template carries the default sender, and a product
+	// build deliberately has none (B4: the built-in gateway is its only model
+	// source). agent.New tolerates a nil sender, so without this the failure
+	// would surface later as a nil dereference inside a spawned sub-agent,
+	// which is strictly worse than not offering the capability: a sub-agent that
+	// cannot send cannot run, so declining to register the tools states that
+	// once, here, instead of at send time.
+	if defaultSender == nil {
+		slog.Warn("sub-agent tools not registered: this build has no default sender")
+		return
+	}
 	template := agent.New(defaultSender, model)
 	// Refresh before reading MemoryBackendGuidance() below — enableSubAgentTools
 	// runs at server startup (before any turn has ever called this) and once
@@ -1763,12 +1795,72 @@ func (s *Server) effectiveCoauthor(cfg config.Config) bool {
 // path shares (buildAgent's four callers: REST, WS×2, scheduled tasks) — an
 // explicit check at each caller would state the rule four times and miss the
 // fifth path someone adds later (§3.8).
+// OCTO-FORK: 网关绑定的回合交给内置网关 — see
+// dev-docs-usdable/需求/20260911/开发计划.md §PR-5a
+//
+// PR-4c0 left the decision here and nothing else, so this is where PR-5a plugs
+// the gateway in: the same gatewayBound test that used to refuse now asks the
+// injected factory for a sender, and the refusal remains as the answer for a
+// build that knows a model is the gateway's but has no way to reach it.
+//
+// Three outcomes, and no fourth:
+//
+//   - gateway-bound + factory present ⇒ the factory's sender, and the model
+//     name is the BARE catalog id: the gateway is told "buding-privacy-1", not
+//     the composite id the picker stores, because the composite id names a
+//     local endpoint (C1) that the gateway has never heard of.
+//   - gateway-bound + no factory ⇒ refuse. This is the PR-4c0 behavior, kept
+//     deliberately: a build can know the prefix without having a gateway, and
+//     the one thing it must not do is hand the id to the default sender.
+//   - a factory error (signed out, no host) ⇒ refuse with that reason. C9
+//     forbids falling back, so a turn that cannot be served must fail here.
+//
+// The bare id is computed with TrimPrefix rather than by branching on which
+// half matched: in the stale-binding shape the model name is already bare, and
+// TrimPrefix is a no-op there.
 func (s *Server) senderForSession(sess *agent.Session) (agent.Sender, string) {
 	sender, model, degraded := s.resolveSenderForSession(sess)
 	if degraded && s.gatewayBound(sess, model) {
-		return refusedGatewaySender{model: model}, model
+		bare := strings.TrimPrefix(model, s.cfg.GatewayModelPrefix)
+		if s.cfg.GatewaySender == nil {
+			return failingSender{err: errNoGatewaySender(model)}, bare
+		}
+		gw, err := s.cfg.GatewaySender()
+		if err != nil {
+			return failingSender{err: err}, bare
+		}
+		return gw, bare
+	}
+	// OCTO-FORK: V-36 — a product build has no third-party endpoint by design,
+	// so "no default sender" is its normal state rather than a misconfiguration,
+	// and ensureSender no longer refuses to start such a build. The requirement
+	// it used to enforce is enforced here instead, on the turn that actually
+	// needs one: every turn path funnels through this function, so a nil sender
+	// cannot reach the agent loop. Failing closed matters more than the message
+	// being early — the alternative was a nil dereference at send time.
+	if sender == nil {
+		return failingSender{err: errDefaultSenderMissing(model)}, model
 	}
 	return sender, model
+}
+
+// errNoGatewaySender is the PR-4c0 refusal, unchanged: the build knows this
+// model belongs to the gateway but cannot reach it.
+func errNoGatewaySender(model string) error {
+	return fmt.Errorf(
+		"model %q is served by the built-in gateway, which this build does not have yet — the turn was not started and nothing was sent",
+		model)
+}
+
+// errDefaultSenderMissing keeps upstream's onboarding wording: the user asked
+// for a turn no configured provider can serve, and the Web UI's setup is still
+// the way to give this build a third-party model source (a product build is not
+// supposed to need one, which is why this is now a turn error and not a
+// startup error — V-36).
+func errDefaultSenderMissing(model string) error {
+	return fmt.Errorf(
+		"server not configured: complete setup via the Web UI (no provider can serve model %q; the turn was not started and nothing was sent)",
+		model)
 }
 
 // gatewayBound reports whether a turn on this session would be served by the
@@ -1826,25 +1918,35 @@ func (s *Server) resolveSenderForSession(sess *agent.Session) (agent.Sender, str
 	return sender, model, false
 }
 
-// refusedGatewaySender is the sender a gateway-bound turn gets while no gateway
-// sender exists. It implements only agent.Sender on purpose: it has no streaming
-// capability to offer (the agent falls back to the buffered call), and the single
-// thing it can honestly do is fail the turn before anything leaves the device.
+// failingSender is what a turn gets when it must not be sent. It implements only
+// agent.Sender on purpose: it has no streaming capability to offer (the agent
+// falls back to the buffered call), and the single thing it can honestly do is
+// fail before anything leaves the device.
 //
-// The message is what turns the incident's opaque third-party 400 into an
-// explanation the user can act on. The agent loop prefixes it ("agent: loop[0]: ")
-// and UserFacingError strips that back off, so it reads as one complete sentence
-// and must not start with a provider prefix.
+// It carries the reason rather than building it, because PR-5a brought three of
+// them (no gateway wired, a factory that refused, no sender for the model at
+// all) and they want different words while sharing this one behavior. Refusing
+// by returning an error from a sender looks unusual, and it is: 开发规范 §4.5
+// keeps upstream's (Sender, string) signature without an error, so the refusal
+// has to travel as a sender.
 //
-// It is English like every other server-side turn error on this path; localising
-// the picker/turn copy is PR-4c's job (开发规范 §3.8 — interface copy lives in the
-// frontend's i18n, and there is no code channel on turn_error yet).
-type refusedGatewaySender struct{ model string }
+// The agent loop prefixes the message ("agent: loop[0]: ") and UserFacingError
+// strips that back off, so each reason reads as one complete sentence and must
+// not start with a provider prefix.
+//
+// Messages are English like every other server-side turn error on this path;
+// localising the picker/turn copy is PR-4c's job (开发规范 §3.8 — interface copy
+// lives in the frontend's i18n, and there is no code channel on turn_error yet).
+type failingSender struct{ err error }
 
-func (r refusedGatewaySender) SendMessages(_ context.Context, _, _ string, _ []agent.Message, _ int) (agent.Reply, error) {
-	return agent.Reply{}, fmt.Errorf(
-		"model %q is served by the built-in gateway, which this build does not have yet — the turn was not started and nothing was sent",
-		r.model)
+func (f failingSender) SendMessages(_ context.Context, _, _ string, _ []agent.Message, _ int) (agent.Reply, error) {
+	if f.err == nil {
+		// A failingSender with no reason would silently succeed as an empty
+		// reply, which is worse than a wrong error: the turn would look like it
+		// completed. This is unreachable today and is here so it stays that way.
+		return agent.Reply{}, fmt.Errorf("internal: refusing sender without a reason")
+	}
+	return agent.Reply{}, f.err
 }
 
 // cachedSenderForEntry returns the entry's sender from the cache, building
@@ -2246,6 +2348,22 @@ func (s *Server) ensureSender() error {
 	}
 	if sender == nil {
 		s.senderMu.Unlock()
+		// OCTO-FORK: V-36 — a product build is SUPPOSED to have no third-party
+		// endpoint: B4 makes the built-in gateway its only model source, so
+		// "no default sender" is that build's normal state and not a
+		// misconfiguration to be reported at every chat attempt.
+		//
+		// The requirement is not dropped, it moves to where it can be judged:
+		// senderForSession refuses any turn that resolves to no sender, and every
+		// turn path funnels through it. Enforcing it here instead would mean a
+		// product user cannot even open a session before signing in to a gateway
+		// this build is not supposed to need.
+		//
+		// Scoped to builds that injected a factory, so `octo serve` and the CLI
+		// keep upstream's onboarding error verbatim.
+		if s.cfg.GatewaySender != nil {
+			return nil
+		}
 		return fmt.Errorf("server not configured: complete setup via the Web UI")
 	}
 	s.sender = sender

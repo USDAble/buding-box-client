@@ -178,7 +178,21 @@ func TestShippedProductionAssetIsStructurallyValid(t *testing.T) {
 	if !p.IsProduction() {
 		t.Fatalf("production.json names profile %q", p.Name)
 	}
-	if !strings.HasSuffix(p.APIHost, "/v1") || !strings.HasSuffix(p.GatewayHost, "/v1") {
-		t.Errorf("control-plane hosts must be versioned (/v1): apiHost=%q gatewayHost=%q", p.APIHost, p.GatewayHost)
+	// The control-plane host carries /v1 and the gateway host need not, but the
+	// asymmetry is NOT a rule the code enforces — that was the V-37 mistake.
+	//
+	// Who owns the prefix is a fact about the CLIENT: internal/productclient
+	// concatenates caller-supplied paths, so its host carries /v1 (V-13 — a
+	// gateway-shaped host there is a real 404, which is why the assertion below
+	// stays); internal/provider/openai appends ChatCompletionsPath itself AND
+	// normalises a trailing /v1 on the base, so its host may carry either shape
+	// and both dial /v1/chat/completions. Pinning the stricter rule here is what
+	// made a non-defect look like a defect, so this file no longer asserts
+	// anything about the gateway host's suffix.
+	if !strings.HasSuffix(p.APIHost, "/v1") {
+		t.Errorf("apiHost must be versioned (/v1): productclient concatenates its own paths onto it, got %q", p.APIHost)
+	}
+	if strings.Contains(p.GatewayHost, "/v1/v1") {
+		t.Errorf("gatewayHost contains /v1/v1, which no client produces: got %q", p.GatewayHost)
 	}
 }

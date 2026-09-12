@@ -22,8 +22,15 @@
 //	go run ./cmd/productstub            # 127.0.0.1:8788
 //	go run ./cmd/productstub :9123      # a different port
 //
-// Then set internal/productprofile/profiles/developer.json's apiHost and
-// gatewayHost to http://127.0.0.1:<port>/v1 and launch the desktop build.
+// Then set internal/productprofile/profiles/developer.json's apiHost to
+// http://127.0.0.1:<port>/v1 and its gatewayHost to http://127.0.0.1:<port> and
+// launch the desktop build.
+//
+// The two hosts take different shapes, but only the apiHost's is a requirement:
+// the control-plane client concatenates its own paths onto apiHost, so /v1 must
+// be there, while the gateway client appends and normalises the path itself, so
+// either gatewayHost shape works. This banner used to print /v1 for both and
+// called the difference mandatory (V-37, retracted).
 package main
 
 import (
@@ -63,10 +70,11 @@ func main() {
 // they are the same ones the fake frontend backend used, so they may already
 // look familiar.
 func printFixtures(addr string) {
-	base := "http://" + addr + "/v1"
+	base := "http://" + addr
 	fmt.Printf(`productstub: Central Platform stand-in listening on %s
 
-  apiHost / gatewayHost  http://%s/v1
+  apiHost      %s/v1
+  gatewayHost  %s        (either shape works; this one matches the client default)
 
   Accepted inputs (fixed by internal/productclient/clienttest):
     phone              any 11 digits starting with 1, e.g. 13800001234
@@ -77,17 +85,19 @@ func printFixtures(addr string) {
     box code           %s
     nickname           1-20 characters
 
-  Endpoints: POST %s/auth/sms/send, /auth/login, /auth/refresh
-             GET  %s/client/bootstrap
+  Endpoints: POST %s/v1/auth/sms/send, /auth/login, /auth/refresh
+             GET  %s/v1/client/bootstrap
+             POST %s/v1/chat/completions     (the built-in gateway: streams,
+                                              needs a Bearer access token)
 
   State is in memory: restarting this process resets every consumed code,
   which is what makes the single-use activation path repeatable.
 `,
-		addr, addr,
+		addr, base, base,
 		clienttest.FixtureSMSCode,
 		clienttest.FixtureActivationCode, clienttest.FixtureBoxCode,
 		clienttest.FixtureSecondActivationCode,
 		clienttest.FixtureBoundPhoneActivationCode, clienttest.FixtureBoundPhone,
 		clienttest.FixtureBoxCode,
-		base, base)
+		base, base, base)
 }

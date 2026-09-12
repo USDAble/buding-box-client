@@ -25,8 +25,28 @@ const (
 // sending product traffic somewhere unintended. Replace both (and populate
 // TrustedKeyIDs) before shipping — the packaging preflight reports them.
 const (
-	UnsetAPIHost     = "https://api.invalid/v1"
-	UnsetGatewayHost = "https://gateway.invalid/v1"
+	// UnsetAPIHost carries /v1 because internal/productclient concatenates
+	// caller-supplied paths onto the host, so the prefix is theirs to supply.
+	UnsetAPIHost = "https://api.invalid/v1"
+	// UnsetGatewayHost is deliberately the bare host, with no /v1 — and unlike
+	// the apiHost line above, this is a CONVENTION rather than a requirement.
+	//
+	// internal/provider/openai does not care: endpointURL normalises a trailing
+	// /v1 before appending "/v1/chat/completions" (client.go, and its own
+	// client_test.go pins it), because OpenAI-compatible gateways disagree about
+	// which side owns the prefix — Bailian bakes /v1 into the documented base,
+	// DeepSeek ships a bare host. So a gateway host carrying /v1 would NOT be
+	// dialed at /v1/v1/chat/completions.
+	//
+	// This was asserted as the opposite for a while (V-37, retracted): the
+	// plan read the ChatCompletionsPath constant's own comment ("BaseURL is the
+	// host + protocol-prefix only"), concluded the suffix was appended blindly,
+	// and missed the normalisation branch twenty lines below it. The bare shape
+	// is kept because it matches DefaultBaseURL and reads as what it is, not
+	// because the other shape breaks. The control-plane host is genuinely the
+	// other way round (V-13): productclient concatenates its own paths, so a
+	// bare apiHost really does 404.
+	UnsetGatewayHost = "https://gateway.invalid"
 )
 
 // GatewayEndpointID is the id of the built-in gateway endpoint (需求基线 C1).

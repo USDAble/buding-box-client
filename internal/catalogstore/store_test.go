@@ -414,6 +414,37 @@ func TestVersionOrderingIsNotStringOrdering(t *testing.T) {
 	}
 }
 
+// TestARollbackOfMoreThanOneDayIsStillARollback covers the half of the ordering
+// the .9/.10 case above cannot reach, and it is the half a wrong guard hides in.
+//
+// compareCatalogVersions returns the *difference* between the first parts that
+// differ - 3 for three days, 86400 for the same version seen a day apart in a
+// coarser unit - not a -1/0/1 verdict. A guard written as `case -1` therefore
+// refuses a rollback of exactly one day and accepts one of three. The counter
+// case above happened to differ by exactly one, which is why it passed while
+// that guard was wrong.
+//
+// The replay a signature cannot distinguish from a merely stale platform is not
+// the neighbouring catalog; it is last week's. So this is the case that has to
+// hold: a multi-day rollback is refused and leaves the file untouched.
+func TestARollbackOfMoreThanOneDayIsStillARollback(t *testing.T) {
+	s, root := openStore(t)
+	priv, _ := signingPair(t)
+
+	if err := s.Put(entry(t, priv, policyBytes(t, "2026-09-12.1"), "2026-09-12.1")); err != nil {
+		t.Fatalf("Put the newest catalog: %v", err)
+	}
+	before := readRaw(t, cachePath(root))
+
+	err := s.Put(entry(t, priv, policyBytes(t, "2026-09-09.1"), "2026-09-09.1"))
+	if !errors.Is(err, catalogstore.ErrRolledBack) {
+		t.Errorf("Put a catalog three days older = %v, want ErrRolledBack", err)
+	}
+	if string(readRaw(t, cachePath(root))) != string(before) {
+		t.Error("the older catalog was written over the newer one")
+	}
+}
+
 // TestTheCacheHoldsNoCredential is the same nail product-state.json carries
 // (需求基线 E6 规则 3): the cache travels on a USB stick, so it must be safe to
 // copy. The envelope is published data, and the metadata around it is public.

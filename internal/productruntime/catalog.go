@@ -144,6 +144,15 @@ func catalogExpiry(policy productclient.Policy, now time.Time) (time.Time, error
 		// No freshness claim: the signature window is the only bound there is.
 		return windowEnd, nil
 	}
+	// A platform that sends an absurd ttlSec must not be able to wrap the
+	// multiplication into a negative duration, which would read as "this catalog
+	// expired before it was issued" and send PR-4c down the stale path for a
+	// catalog that is actually fine. Anything beyond the signature window's own
+	// span cannot be the earlier of the two anyway, so it is simply ignored.
+	const maxTTL = int64(100 * 365 * 24 * time.Hour / time.Second)
+	if ttl := int64(policy.Catalog.TTLSec); ttl > maxTTL {
+		return windowEnd, nil
+	}
 	if ttlEnd := issued.Add(time.Duration(policy.Catalog.TTLSec) * time.Second); ttlEnd.Before(windowEnd) {
 		return ttlEnd, nil
 	}

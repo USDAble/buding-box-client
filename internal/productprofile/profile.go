@@ -55,6 +55,23 @@ const (
 // session has been written with it, it is not.
 const GatewayEndpointID = "buding-gateway"
 
+// GatewayModelPrefix is the leading half of every composite id bound to the
+// built-in gateway — "<gateway id><separator>", i.e. the part of the id that
+// says *where* the model is served (需求基线 C1).
+//
+// It exists so the separator is written down once. Two sides need to agree on
+// it: this package builds the ids the picker shows (internal/productruntime),
+// and internal/server has to recognise one without being able to import the
+// config package's splitter (unexported). Serving the prefix instead of the bare
+// id leaves the separator's definition here, in the package that already owns
+// the id it belongs to.
+//
+// The trailing separator is load-bearing: matching it means "buding-gateway-x"
+// is an ordinary model name, and only "buding-gateway::x" is the gateway's.
+func GatewayModelPrefix() string {
+	return GatewayEndpointID + "::"
+}
+
 // Startup records whether an existing runtime capability is available to the
 // desktop build. It is not a visibility or authorization policy: P0 keeps the
 // existing channel, tool, MCP, and background implementations intact, while

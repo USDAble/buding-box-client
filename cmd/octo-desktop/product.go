@@ -102,10 +102,20 @@ func mountProductAPI() func(api func(pattern string, h http.HandlerFunc)) {
 	// (本地API契约 §2.13).
 	profile := productprofile.Current()
 
+	// A restarted process has no access token and no refresh token in memory -
+	// the holder starts empty by design (令牌只驻内存，E6 规则 2). Without the
+	// credential handed to it, the first authorised call would be refused, the
+	// refused refresh would clear the credential (L-A6), and the user would be
+	// back on the login screen after every launch (V-32). The holder is built
+	// here and used exactly once, right below, so it cannot be handed to the
+	// client un-restored by accident.
+	tokens := &productclient.CredentialHolder{}
+	productruntime.RestoreSession(state, creds, tokens)
+
 	rt := productruntime.New(productruntime.Deps{
 		State:    state,
 		Creds:    creds,
-		Platform: newPlatformClient(state.InstallID()),
+		Platform: newPlatformClient(state.InstallID(), tokens),
 		ControlPlane: productruntime.ControlPlaneStatus{
 			Configured:     profile.ControlPlaneConfigured(),
 			HasTrustedKeys: profile.HasTrustedKeys(),
@@ -133,12 +143,16 @@ const catalogClockSkew = 2 * time.Minute
 // newPlatformClient builds the Central Platform client, or returns nil when this
 // build names no control plane.
 //
+// tokens is the holder the client keeps its session in. It is a parameter so the
+// restore step has already run by the time the client exists (V-32): the client
+// itself never touches a file, which is what keeps it usable in tests.
+//
 // nil is not "no client" to the runtime: it is the signal that produces the
 // control_plane_unconfigured error, which is how a developer build without a
 // Sandbox host reports itself instead of reaching for a default (A1 rule 6,
 // S-6/S-7). Never substitute a fallback host here — degrading to an unconfigured
 // source is exactly what the fail-closed rule forbids.
-func newPlatformClient(installID string) *productclient.Client {
+func newPlatformClient(installID string, tokens *productclient.CredentialHolder) *productclient.Client {
 	profile := productprofile.Current()
 	if !profile.ControlPlaneConfigured() {
 		slog.Info("product: no control plane configured for this build", "profile", profile.Name)
@@ -149,7 +163,7 @@ func newPlatformClient(installID string) *productclient.Client {
 		Platform:  runtime.GOOS,
 		Arch:      runtime.GOARCH,
 		InstallID: installID,
-	}, &productclient.CredentialHolder{})
+	}, tokens)
 }
 
 // windowTokenQuery is the URL parameter the shell uses to hand the token to the

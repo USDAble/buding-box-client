@@ -85,9 +85,14 @@ func mountProductAPI() func(api func(pattern string, h http.HandlerFunc)) {
 	// re-fetchable copy of something the platform hands out again on the next
 	// login. Refusing to serve the product because a cache file would not open
 	// would turn a recoverable condition into an outage.
-	catalog, err := catalogstore.Open(catalogstore.Options{})
+	catalog, err := catalogstore.Open()
 	if err != nil {
 		slog.Warn("product: catalog cache unavailable; the picker will have nothing to show until the next fetch", "err", err)
+	} else if catalog.Corrupt() {
+		// Not fatal and not silent: the file is preserved for recovery and the
+		// next verified catalog replaces it, but a user whose model list came
+		// back empty should have a line in the log to point at (E6.2 rule 5).
+		slog.Warn("product: catalog cache is damaged; continuing without it, file preserved")
 	}
 
 	// The two facts the blocked page needs before the user types (L-B2). Read

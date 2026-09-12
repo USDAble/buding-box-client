@@ -92,6 +92,7 @@ type Server struct {
 	omitPolicy       bool   // answer bootstrap with no envelope at all
 	catalogVersion   string // "" means FixturePolicyVersion
 	policyAudience   string // "" means FixturePolicyAudience
+	catalogTTLSec    int    // 0 means FixtureCatalogTTLSec
 	refuseSessionsAt bool   // hand out tokens the server will not recognise
 }
 
@@ -154,6 +155,16 @@ func (s *Server) SetPolicyAudience(audience string) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.policyAudience = audience
+}
+
+// SetCatalogTTL makes the fixture policy claim a freshness window of ttlSec
+// seconds. It exists to reach the absurd end of the range: a platform that sends
+// a value large enough to overflow the client's arithmetic must not make a
+// perfectly good catalog read as long expired.
+func (s *Server) SetCatalogTTL(ttlSec int) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.catalogTTLSec = ttlSec
 }
 
 // BootstrapCount reports how many bootstrap attempts the stand-in has seen,
@@ -473,7 +484,7 @@ func (s *Server) policyEnvelope() (productclient.PolicyEnvelope, error) {
 	if audience == "" {
 		audience = FixturePolicyAudience
 	}
-	return signedPolicyFor(s.now(), version, audience, s.tamperPolicy)
+	return signedPolicyFor(s.now(), version, audience, s.tamperPolicy, s.catalogTTLSec)
 }
 
 // bootstrapResponse is the account summary plus the signed policy envelope, as

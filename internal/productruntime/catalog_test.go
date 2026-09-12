@@ -3,6 +3,7 @@ package productruntime
 import (
 	"context"
 	"errors"
+	"math"
 	"net/http/httptest"
 	"os"
 	"os/exec"
@@ -10,6 +11,7 @@ import (
 	"regexp"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/open-octo/octo-agent/internal/brand"
 	"github.com/open-octo/octo-agent/internal/catalogstore"
@@ -55,7 +57,7 @@ func newCatalogFixture(t *testing.T) *catalogFixture {
 	if err != nil {
 		t.Fatalf("credentialstore.Open: %v", err)
 	}
-	store, err := catalogstore.Open(catalogstore.Options{})
+	store, err := catalogstore.Open()
 	if err != nil {
 		t.Fatalf("catalogstore.Open: %v", err)
 	}
@@ -300,6 +302,62 @@ func TestOnlyOnePlaceFetchesTheCatalog(t *testing.T) {
 	}
 	if !call.Match(raw) {
 		t.Error("internal/productruntime/catalog.go no longer fetches the catalog; this nail is not testing anything")
+	}
+}
+
+// TestAnAbsurdTTLDoesNotMakeAGoodCatalogLookExpired guards the arithmetic in
+// catalogExpiry against the platform's own input.
+//
+// The expiry is min(policy.expiresAt, issuedAt + ttlSec) (需求基线 B2 rule 1),
+// and that sum is computed in a time.Duration. A ttlSec large enough to overflow
+// it wraps into a negative duration, which lands the expiry in the past - so a
+// catalog with an hour of life left would be stored as long expired, and PR-4c
+// would degrade a perfectly good catalog with nothing to point at. The fix
+// ignores a TTL that cannot be the earlier of the two anyway; this pins it.
+func TestAnAbsurdTTLDoesNotMakeAGoodCatalogLookExpired(t *testing.T) {
+	f := newCatalogFixture(t)
+	f.signIn()
+	// ~292 years per int64 nanosecond; comfortably past any signature window.
+	f.platform.SetCatalogTTL(math.MaxInt64)
+
+	if outcome, err := f.fetch(); outcome != catalogReady {
+		t.Fatalf("fetch = %q (err %v), want %q", outcome, err, catalogReady)
+	}
+
+	loaded, err := f.store.Load()
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	// The signature window is the only bound left, so the expiry must sit at the
+	// window's end - in the future, not wrapped into the past.
+	if !loaded.ExpiresAt.After(time.Now()) {
+		t.Errorf("expiresAt = %s, which is already past; the TTL arithmetic wrapped", loaded.ExpiresAt)
+	}
+	if loaded.ExpiresAt.After(time.Now().Add(90 * time.Minute)) {
+		t.Errorf("expiresAt = %s, beyond the policy window; the absurd TTL was not ignored", loaded.ExpiresAt)
+	}
+}
+
+// TestTheEarlierOfTheTwoClocksWins is the other half of the same rule, and the
+// half that is easy to get backwards: the catalog's own ttlSec can only *shorten*
+// the window, never extend it.
+func TestTheEarlierOfTheTwoClocksWins(t *testing.T) {
+	f := newCatalogFixture(t)
+	f.signIn()
+	f.platform.SetCatalogTTL(60) // one minute, well inside the hour-long window
+
+	if outcome, err := f.fetch(); outcome != catalogReady {
+		t.Fatalf("fetch = %q (err %v), want %q", outcome, err, catalogReady)
+	}
+	loaded, err := f.store.Load()
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	// issuedAt is a minute in the past, so a 60s TTL expires now-ish: certainly
+	// far inside the policy window, and that is the one that must be stored.
+	if loaded.ExpiresAt.After(time.Now().Add(2 * time.Minute)) {
+		t.Errorf("expiresAt = %s, want the ttlSec bound (~now), not the policy window",
+			loaded.ExpiresAt)
 	}
 }
 

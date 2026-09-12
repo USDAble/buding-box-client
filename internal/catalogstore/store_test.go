@@ -129,7 +129,7 @@ func openStoreSeeded(t *testing.T, body string) (*catalogstore.Store, string) {
 			t.Fatalf("seed catalog.json: %v", err)
 		}
 	}
-	s, err := catalogstore.Open(catalogstore.Options{})
+	s, err := catalogstore.Open()
 	if err != nil {
 		t.Fatalf("Open: %v", err)
 	}
@@ -317,6 +317,11 @@ func TestCorruptFileIsReportedAndPreserved(t *testing.T) {
 	if _, err := s.Load(); !errors.Is(err, catalogstore.ErrCorrupt) {
 		t.Fatalf("Load error = %v, want ErrCorrupt", err)
 	}
+	// The assembly logs this at startup, so it has to be answerable without a
+	// Load: a user whose model list came back empty needs a line to point at.
+	if !s.Corrupt() {
+		t.Error("Corrupt() is false after a parse failure; the startup warning would never fire")
+	}
 	if string(readRaw(t, cachePath(root))) != string(garbage) {
 		t.Error("the corrupt file was modified; a parse bug must not be able to delete the user's data")
 	}
@@ -406,6 +411,37 @@ func TestVersionOrderingIsNotStringOrdering(t *testing.T) {
 	}
 	if string(readRaw(t, cachePath(root))) != string(before) {
 		t.Error("`2026-9-9.10` was not recognised as the same version as `2026-09-09.10`")
+	}
+}
+
+// TestARollbackOfMoreThanOneDayIsStillARollback covers the half of the ordering
+// the .9/.10 case above cannot reach, and it is the half a wrong guard hides in.
+//
+// compareCatalogVersions returns the *difference* between the first parts that
+// differ - 3 for three days, 86400 for the same version seen a day apart in a
+// coarser unit - not a -1/0/1 verdict. A guard written as `case -1` therefore
+// refuses a rollback of exactly one day and accepts one of three. The counter
+// case above happened to differ by exactly one, which is why it passed while
+// that guard was wrong.
+//
+// The replay a signature cannot distinguish from a merely stale platform is not
+// the neighbouring catalog; it is last week's. So this is the case that has to
+// hold: a multi-day rollback is refused and leaves the file untouched.
+func TestARollbackOfMoreThanOneDayIsStillARollback(t *testing.T) {
+	s, root := openStore(t)
+	priv, _ := signingPair(t)
+
+	if err := s.Put(entry(t, priv, policyBytes(t, "2026-09-12.1"), "2026-09-12.1")); err != nil {
+		t.Fatalf("Put the newest catalog: %v", err)
+	}
+	before := readRaw(t, cachePath(root))
+
+	err := s.Put(entry(t, priv, policyBytes(t, "2026-09-09.1"), "2026-09-09.1"))
+	if !errors.Is(err, catalogstore.ErrRolledBack) {
+		t.Errorf("Put a catalog three days older = %v, want ErrRolledBack", err)
+	}
+	if string(readRaw(t, cachePath(root))) != string(before) {
+		t.Error("the older catalog was written over the newer one")
 	}
 }
 

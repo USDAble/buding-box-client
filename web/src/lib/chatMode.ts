@@ -1,36 +1,37 @@
 // P9 chat-mode client: the mode→model grouping the selector renders, and the
 // per-session mode attribute. OCTO-FORK: P9 模式与模型选择器 — see
 // dev-docs-usdable/需求/2260906/技术方案/P9-模式与模型.md §4.
-import { writable } from 'svelte/store'
-import { tr } from './i18n'
-import { getChatModes, setSessionChatMode, updateSessionModel, type ChatModeDTO } from './api'
+// 数据源自 PR-4d 起是中台签名目录；分组与模型名都来自它（需求基线 B5/B6）.
+import { writable, get } from 'svelte/store'
+import { tr, locale } from './i18n'
+import { getChatModes, setSessionChatMode, updateSessionModel, type ChatModeDTO, type ChatModeModel } from './api'
 import { chatMode, chatModel, sessions } from './stores'
 
 export type ChatMode = 'privacy' | 'smart' | 'default'
 
 // Shared by P10's composer/sidebar affordances so every surface follows the
-// same exact mode check. OCTO-FORK: P10 隐私模式与 PII 处理 — see
+// same exact mode check. OCTO-FORK: P10 隐私模式与PII 处理 — see
 // dev-docs-usdable/需求/2260906/技术方案/P10-隐私模式与PII.md.
 export function isPrivacyMode(mode: string | null | undefined): boolean {
   return mode === 'privacy'
 }
 
-// The loaded mode list (chat-modes.json grouping, resolved against config.yml).
+// The loaded mode list: the signed catalog, grouped by the product's modes.
 export const chatModes = writable<ChatModeDTO[]>([])
-// True when the last load served the built-in default because the user's
-// chat-modes.json was unreadable (需求 §9: hint once).
-export const chatModesFallback = writable(false)
 
-// loadChatModes refreshes the grouping. Called when the mode menu opens (the
-// same "refetch on open" discipline the old model list used), so a user edit
-// to data/chat-modes.json takes effect without a reload.
+// loadChatModes refreshes the grouping. Called when the mode menu opens, so the
+// user sees a catalog refresh without a reload.
+//
+// There is nothing to "fall back" to and no flag saying we did: 需求基线 B1 规则 4
+// retired the local chat-modes.json and the built-in list with it, so a目录 that
+// cannot be read leaves the previous list in place rather than replacing it with
+// an invented one. The user-visible wording for that state is PR-4c's.
 export async function loadChatModes(): Promise<void> {
   try {
     const d = await getChatModes()
     chatModes.set(d.modes ?? [])
-    chatModesFallback.set(d.fallback)
   } catch {
-    // Keep the previous list on error (the menu still opens with stale rows).
+    // Keep the previous list on error (the menu still opens).
   }
 }
 
@@ -54,18 +55,41 @@ export async function setSessionMode(sid: string, mode: ChatMode, modelId?: stri
   }
 }
 
-// modeDisplayName localises a mode id (falls back to the raw id for an unknown
-// group the user typed into chat-modes.json).
+// modeDisplayName localises a mode id. The mode's own name is interface copy, not
+// catalog data (需求基线 B5 规则 1), so it stays in i18n and comes from here.
+// An id with no copy falls back to the raw id rather than to another mode's name.
 export function modeDisplayName(id: string): string {
   const key = `mode.${id}`
   const v = tr(key)
   return v === key ? id : v
 }
 
-// modelDisplayName localises a model id. Factory models buding-* have i18n
-// keys; anything else falls back to the raw id (a real endpoint's model name).
-export function modelDisplayName(id: string): string {
-  const key = `model.${id}`
-  const v = tr(key)
-  return v === key ? id : v
+// modelDisplayName renders the catalog's name for a model (需求基线 B6 规则 2):
+// the current interface language, then English, then the raw id.
+//
+// The three tiers are the whole of the fallback, and there is deliberately no
+// fourth one into a local table. A table would shadow the server's value - the
+// platform renames a model and the interface keeps showing the old name - which
+// is why the catalog is the only source and PR-4d deleted the eight `model.*`
+// i18n keys that used to be it.
+//
+// Falling back to the id is for a catalog that ships only one language, and for
+// debug/test output. It is not a licence to render ids in the normal path: the
+// catalog always carries both languages, so a missing one is contract drift.
+export function modelDisplayName(model: ChatModeModel | string): string {
+  // The string form is the debug/test shim: callers with only an id get the id
+  // back. It is not a path the production render takes.
+  if (typeof model === 'string') return model
+  const current = get(locale)
+  const inCurrentLanguage = dictLocaleIsChinese(current) ? model.displayName.zh : model.displayName.en
+  return inCurrentLanguage || model.displayName.en || model.id
+}
+
+// dictLocaleIsChinese mirrors i18n.dictFor's rule: any zh-* interface language is
+// served by the Simplified dictionary, so it must also pick the zh model name.
+// Keeping the two in step matters more than the branch being clever: an interface
+// rendering Chinese copy beside English model names is the visible half of a
+// mismatch whose other half is in i18n.ts.
+function dictLocaleIsChinese(l: string): boolean {
+  return l === 'zh' || l.startsWith('zh')
 }

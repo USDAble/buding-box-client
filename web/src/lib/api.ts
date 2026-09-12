@@ -321,11 +321,25 @@ export async function updateSessionPermissionMode(id: string, mode: string): Pro
 // ── P9 chat modes (mode→model selector) ────────────────────────────────────
 // OCTO-FORK: P9 模式与模型选择器 — see
 // dev-docs-usdable/需求/2260906/技术方案/P9-模式与模型.md §4.
+// PR-4d 起，本类型的数据源是**中台签名目录**（`GET /api/product/chat-modes`），
+// 不再是 data/chat-modes.json —— see dev-docs-usdable/需求/20260911/开发计划.md.
+
+/** The catalog's name for a model, in every language it ships. */
+export interface ModelDisplayName {
+  zh: string
+  en: string
+}
+
 export interface ChatModeModel {
   id: string
-  /** Composite "<endpoint>::<model>" id; empty when the model is listed in
-   *  chat-modes.json but not present in config.yml (not selectable yet). */
-  compositeId?: string
+  /** The catalog's own name for this model (需求基线 B6). Render it through
+   *  modelDisplayName(); never keep an id→name table — a local table shadows the
+   *  server's copy and keeps showing the old name after a platform rename. */
+  displayName: ModelDisplayName
+  /** Composite "<endpoint>::<model>" id, the form a session stores (需求基线 B8
+   *  规则 1). Built by the projection, so it is always present: the endpoint half
+   *  is a product constant and the catalog supplies the other half. */
+  compositeId: string
 }
 export interface ChatModeDTO {
   id: 'privacy' | 'smart' | 'default' | string
@@ -334,9 +348,11 @@ export interface ChatModeDTO {
 }
 export interface ChatModesResponse {
   modes: ChatModeDTO[]
-  /** True when chat-modes.json was unreadable and the built-in default is
-   *  being served (需求 §9: hint once). */
-  fallback: boolean
+  /** Versions of the signed policy this projection came from, so the selector can
+   *  tell "the catalog changed" from "the menu re-rendered" without diffing rows
+   *  (本地API契约 §2.8). Empty when no catalog was available. */
+  catalogVersion: string
+  policyVersion: string
 }
 export async function getChatModes(): Promise<ChatModesResponse> {
   return request<ChatModesResponse>('/api/product/chat-modes')

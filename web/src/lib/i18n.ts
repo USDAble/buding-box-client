@@ -1106,10 +1106,6 @@ export const en: Record<string, string> = {
   "privacy.notice_detail": "Only content subsequently sent to the model is processed; the chat still shows your original text. This release demonstrates 11-digit phone numbers.",
   "privacy.expand": "Show privacy details",
   "privacy.collapse": "Hide privacy details",
-  "model.buding-local-general": "Local General",
-  "model.buding-local-fast": "Local Fast",
-  "model.buding-cloud-plus": "Cloud Plus",
-  "model.buding-cloud-pro": "Cloud Pro",
 };
 
 export const zh: Record<string, string> = {
@@ -2201,10 +2197,6 @@ export const zh: Record<string, string> = {
   "privacy.notice_detail": "只处理随后发给模型的内容；你在对话框里看到的仍是原文。本期演示 11 位手机号。",
   "privacy.expand": "展开隐私说明",
   "privacy.collapse": "收起隐私说明",
-  "model.buding-local-general": "本地通用",
-  "model.buding-local-fast": "本地极速",
-  "model.buding-cloud-plus": "云端智能",
-  "model.buding-cloud-pro": "云端旗舰",
 };
 
 const dictionaries: Record<string, Record<string, string>> = { en, zh };

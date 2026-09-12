@@ -29,6 +29,32 @@ const (
 	UnsetGatewayHost = "https://gateway.invalid/v1"
 )
 
+// GatewayEndpointID is the id of the built-in gateway endpoint (需求基线 C1).
+//
+// It lives here, next to GatewayHost, because the two name the same thing from
+// two sides: the id is the half that appears in a session's composite model id
+// and the host is the half a turn dials. Neither is build-varying - unlike the
+// profile's other fields, this constant must be identical in the developer and
+// production profiles, because a session written by one build has to resolve in
+// the other. That is also why it is a constant rather than a Deps field: there
+// is nothing for a test to vary, and a field would only create a way to wire it
+// up wrong.
+//
+// The value is a fixed ASCII data key, not the English brand name: it is
+// persisted inside session files and compared against config.yml's endpoints, so
+// a rebrand must not move it (开发规范 §3.1 规则 2, the annotated `buding-*`
+// exception for data keys).
+//
+// It must not collide with an id a user can create in config.yml. C1 规则 3 says
+// a same-named config.yml endpoint must not override the built-in one, and the
+// upstream resolution path (config.EntryByModel) scans user endpoints first —
+// so the name is deliberately specific rather than the bare `gateway`.
+//
+// Its shape is provisional until C1 lands the endpoint itself (PR-5): nothing
+// can bind to a composite id yet, so the value is still free to change. Once a
+// session has been written with it, it is not.
+const GatewayEndpointID = "buding-gateway"
+
 // Startup records whether an existing runtime capability is available to the
 // desktop build. It is not a visibility or authorization policy: P0 keeps the
 // existing channel, tool, MCP, and background implementations intact, while

@@ -36,6 +36,13 @@ type catalogFixture struct {
 	platform *clienttest.Server
 	store    *catalogstore.Store
 	root     string
+	// baseURL is kept so a test can build a second client against the same
+	// stand-in - the restart path (session_test.go) needs one whose holder
+	// starts empty while the platform still remembers the session.
+	baseURL string
+	// login is the platform's answer to signIn, which is what carries the
+	// refresh token the credential file is supposed to hold.
+	login *productclient.LoginData
 }
 
 const catalogTestPhone = "13800001234"
@@ -62,7 +69,8 @@ func newCatalogFixture(t *testing.T) *catalogFixture {
 		t.Fatalf("catalogstore.Open: %v", err)
 	}
 
-	client := productclient.New(srv.URL+"/v1", productclient.ClientMeta{
+	baseURL := srv.URL + "/v1"
+	client := productclient.New(baseURL, productclient.ClientMeta{
 		Version:   "test",
 		Platform:  "test",
 		Arch:      "test",
@@ -86,7 +94,7 @@ func newCatalogFixture(t *testing.T) *catalogFixture {
 		ControlPlane: ControlPlaneStatus{Configured: true, HasTrustedKeys: true},
 	})
 
-	return &catalogFixture{t: t, rt: rt, platform: platform, store: store, root: root}
+	return &catalogFixture{t: t, rt: rt, platform: platform, store: store, root: root, baseURL: baseURL}
 }
 
 // signIn performs the platform half of a login, which is what leaves the client
@@ -98,14 +106,16 @@ func (f *catalogFixture) signIn() {
 	if _, err := f.rt.deps.Platform.SendSMS(ctx, productclient.SendSMSRequest{Phone: catalogTestPhone}); err != nil {
 		f.t.Fatalf("SendSMS: %v", err)
 	}
-	if _, err := f.rt.deps.Platform.Login(ctx, productclient.LoginRequest{
+	data, err := f.rt.deps.Platform.Login(ctx, productclient.LoginRequest{
 		Phone:          catalogTestPhone,
 		Code:           clienttest.FixtureSMSCode,
 		ActivationCode: clienttest.FixtureActivationCode,
 		BoxCode:        clienttest.FixtureBoxCode,
-	}); err != nil {
+	})
+	if err != nil {
 		f.t.Fatalf("Login: %v", err)
 	}
+	f.login = data
 }
 
 func (f *catalogFixture) fetch() (catalogOutcome, error) {

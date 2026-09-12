@@ -71,8 +71,19 @@ all: test
 
 # Build the Vite + Svelte web UI into internal/server/webdist/.
 # Requires Node.js and npm installed.
-web-build:
+#
+# OCTO-FORK: clears webdist first, except the tracked .gitkeep — see
+# scripts/webdist-clean.mjs and V-34. Upstream only ever runs vite here, and
+# vite is configured not to empty the directory (that config protects the
+# .gitkeep), so a deleted asset used to stay on disk and get embedded.
+web-build: web-dist-clean
 	cd web && npm install && npm run build
+
+# Empty webdist of everything the build does not just produce. Named as its own
+# target so it can be run and tested on its own (scripts/webdist-clean.test.mjs
+# asserts web-build actually depends on it).
+web-dist-clean:
+	node scripts/webdist-clean.mjs internal/server/webdist
 
 # Start both the Go server and Vite dev server simultaneously.
 # Ctrl-C stops both. Access the hot-reload UI at http://localhost:5173.
@@ -148,7 +159,7 @@ desktop-portable-all: web-build brand-check desktop-app desktop-portable
 # Node unit tests for the packaging pipeline (self-check predicates, the
 # zero-dependency ZIP writer, the PE reader) — same pattern as brand-check.
 portable-check:
-	node --test scripts/package-portable.test.mjs scripts/pe-info.test.mjs
+	node --test scripts/package-portable.test.mjs scripts/pe-info.test.mjs scripts/webdist-clean.test.mjs
 
 install: web-build rg-embed
 	go install $(GOFLAGS) -tags='$(GOTAGS) $(RG_TAGS)' -ldflags='$(LDFLAGS)' ./cmd/octo

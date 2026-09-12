@@ -10,6 +10,13 @@ export default defineConfig({
     // .gitkeep and leaves the git tree dirty — goreleaser refuses to release
     // from a dirty tree (broke the v1.12.22 tag build). Stale hashed assets
     // left behind are inert: index.html only references the fresh ones.
+    //
+    // The inert half of that reasoning only covers hashed names. A fixed-name
+    // file stays addressable and keeps getting embedded, and nothing here could
+    // delete it — see V-34, where two deleted favicon.svg files stayed in the
+    // binary. `make web-build` therefore runs scripts/webdist-clean.mjs first,
+    // which empties the dir except .gitkeep. This setting still must not become
+    // true: that script is what preserves the sentinel, and vite would not.
     emptyOutDir: false,
     // The UI ships as one embedded bundle served from localhost; code-splitting buys nothing here.
     chunkSizeWarningLimit: 1000,

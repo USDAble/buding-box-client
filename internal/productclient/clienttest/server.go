@@ -80,6 +80,90 @@ type Server struct {
 	seq          int
 	refreshCount int
 	now          func() time.Time
+
+	// Fault injection. Every switch is off by default, so a Server built with
+	// New() behaves like a healthy platform and the switches only ever appear in
+	// the test that needs one - a platform broken by default would make every
+	// other test depend on the fault it is not testing.
+	bootstrapCount   int
+	bootstrapStatus  int    // non-zero: bootstrap fails with this status and code
+	bootstrapCode    string // the code that failure carries
+	tamperPolicy     bool   // sign correctly, then change a byte of the payload
+	omitPolicy       bool   // answer bootstrap with no envelope at all
+	catalogVersion   string // "" means FixturePolicyVersion
+	policyAudience   string // "" means FixturePolicyAudience
+	refuseSessionsAt bool   // hand out tokens the server will not recognise
+}
+
+// RefuseSessionsAfterLogin makes the stand-in issue tokens it does not record,
+// so the very next authorised call is refused and the refresh that follows is
+// refused too.
+//
+// This is what a revoked session looks like from the client's side, and it is
+// the only way to reach L-A6 end to end: a session that dies *between* the login
+// and the first authorised call. Without it the expiry path can only be reached
+// by deleting credential.json mid-test, which tests the deletion rather than the
+// server's refusal.
+func (s *Server) RefuseSessionsAfterLogin() {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.refuseSessionsAt = true
+}
+
+// FailBootstrap makes every bootstrap attempt fail with the given status and
+// business code, which is how the transport and upstream failure tiers are
+// produced (本地API契约 §2.13 的四档失败面).
+func (s *Server) FailBootstrap(status int, code string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.bootstrapCount = 0 // start counting from the injection
+	s.bootstrapStatus = status
+	s.bootstrapCode = code
+}
+
+// TamperPolicy changes one byte of the signed policy after signing it, leaving
+// the signature over the original. It is an intermediary rewriting the payload,
+// not a corrupt signature: the arrival is parseable, and only the signature says
+// anything is wrong.
+func (s *Server) TamperPolicy() {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.tamperPolicy = true
+}
+
+// OmitPolicy answers bootstrap without a policy envelope, which is how the
+// "no catalog in this build" degradation is produced without breaking the
+// account half of the response.
+func (s *Server) OmitPolicy() {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.omitPolicy = true
+}
+
+// SetCatalogVersion changes the version the next fetch carries. Serving an older
+// one after a newer has been cached is the downgrade attack (中台交付包 §4.3 末表).
+func (s *Server) SetCatalogVersion(version string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.catalogVersion = version
+}
+
+// SetPolicyAudience addresses the next policy to another product's audience,
+// which is what a policy for the wrong build looks like.
+func (s *Server) SetPolicyAudience(audience string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.policyAudience = audience
+}
+
+// BootstrapCount reports how many bootstrap attempts the stand-in has seen,
+// including the ones it failed. Tests assert on this to prove that a refusal did
+// not quietly turn into a second fetch (or that a cache read did not turn into
+// one at all).
+func (s *Server) BootstrapCount() int {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.bootstrapCount
 }
 
 // New builds a stand-in seeded with the fixture codes above.
@@ -299,6 +383,12 @@ func (s *Server) createAccount(req productclient.LoginRequest) *accountState {
 func (s *Server) issueToken(prefix, phone string) string {
 	s.seq++
 	token := fmt.Sprintf("%s_%d", prefix, s.seq)
+	if s.refuseSessionsAt {
+		// Handed out but not recorded: the client gets a token that looks valid
+		// and every authorised call - including the refresh - is refused. See
+		// Server.RefuseSessionsAfterLogin.
+		return token
+	}
 	if prefix == "at" {
 		s.access[token] = phone
 	} else {
@@ -335,6 +425,12 @@ func (s *Server) handleBootstrap(w http.ResponseWriter, r *http.Request) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
+	s.bootstrapCount++
+	if s.bootstrapCode != "" {
+		writeError(w, s.bootstrapStatus, s.bootstrapCode, "")
+		return
+	}
+
 	phone, ok := s.access[token]
 	if !ok {
 		writeError(w, http.StatusUnauthorized, productclient.CodeUnauthorized, "")
@@ -346,12 +442,7 @@ func (s *Server) handleBootstrap(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	activation := acct.activation
-	envelope, err := signedPolicy(s.now())
-	if err != nil {
-		writeError(w, http.StatusInternalServerError, productclient.CodeInternalError, "")
-		return
-	}
-	writeData(w, http.StatusOK, bootstrapResponse{
+	data := bootstrapResponse{
 		BootstrapData: productclient.BootstrapData{
 			Account: productclient.Account{
 				ID: acct.id, PhoneMasked: acct.phoneMasked, Nickname: acct.nickname,
@@ -359,8 +450,30 @@ func (s *Server) handleBootstrap(w http.ResponseWriter, r *http.Request) {
 			Activation: &activation,
 			Balance:    productclient.Balance{BalanceMicroCredits: fixtureBalanceMicroCredits},
 		},
-		PolicyEnvelope: envelope,
-	})
+	}
+	if !s.omitPolicy {
+		envelope, err := s.policyEnvelope()
+		if err != nil {
+			writeError(w, http.StatusInternalServerError, productclient.CodeInternalError, "")
+			return
+		}
+		data.PolicyEnvelope = envelope
+	}
+	writeData(w, http.StatusOK, data)
+}
+
+// policyEnvelope signs the fixture policy with the current fault switches
+// applied. The caller holds s.mu.
+func (s *Server) policyEnvelope() (productclient.PolicyEnvelope, error) {
+	version := s.catalogVersion
+	if version == "" {
+		version = FixturePolicyVersion
+	}
+	audience := s.policyAudience
+	if audience == "" {
+		audience = FixturePolicyAudience
+	}
+	return signedPolicyFor(s.now(), version, audience, s.tamperPolicy)
 }
 
 // bootstrapResponse is the account summary plus the signed policy envelope, as
@@ -412,7 +525,14 @@ func decode(w http.ResponseWriter, r *http.Request, into any) bool {
 func writeData(w http.ResponseWriter, status int, data any) {
 	w.Header().Set("Content-Type", "application/json; charset=utf-8")
 	w.WriteHeader(status)
-	_ = json.NewEncoder(w).Encode(map[string]any{
+	enc := json.NewEncoder(w)
+	// The signed policy travels in `data`, and the signature covers the exact
+	// byte sequence the platform serialised. encoding/json escapes `&`, `<` and
+	// `>` by default, which rewrites those bytes and breaks the signature for
+	// any policy that contains one - a model named "Tools & Agents" is enough.
+	// See 中台交付包 §4.3: serialise once, sign those bytes, embed those bytes.
+	enc.SetEscapeHTML(false)
+	_ = enc.Encode(map[string]any{
 		"data":       data,
 		"requestId":  "req_standin",
 		"serverTime": time.Now().UTC().Format(time.RFC3339),

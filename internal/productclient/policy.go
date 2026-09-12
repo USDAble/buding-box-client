@@ -106,3 +106,20 @@ type PolicyEnvelope struct {
 	Policy    json.RawMessage `json:"policy"`
 	Signature PolicySignature `json:"policySignature"`
 }
+
+// IsEmpty reports whether the response carried no envelope at all.
+//
+// Absence has to be one predicate rather than a length check scattered across
+// callers, because `policy` is typed json.RawMessage and Go's decoder stores the
+// four bytes of a JSON `null` in it rather than leaving it nil: a response that
+// omits the policy and one that sends `"policy": null` would otherwise need two
+// different tests, and a caller that knew only one of them would treat "no
+// catalog" as a catalog of four bytes.
+func (e PolicyEnvelope) IsEmpty() bool {
+	switch string(e.Policy) {
+	case "", "null":
+		return true
+	default:
+		return false
+	}
+}

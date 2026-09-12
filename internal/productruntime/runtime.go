@@ -13,6 +13,7 @@ package productruntime
 import (
 	"encoding/json"
 	"errors"
+	"log/slog"
 	"net/http"
 	"strings"
 
@@ -117,7 +118,7 @@ func (rt *Runtime) handleSendCode(w http.ResponseWriter, r *http.Request) {
 		Purpose: productclient.PurposeLogin,
 	})
 	if err != nil {
-		writePlatformError(w, err)
+		rt.failPlatform(w, err)
 		return
 	}
 	cooldown := data.CooldownSec
@@ -160,7 +161,7 @@ func (rt *Runtime) handleLogin(w http.ResponseWriter, r *http.Request) {
 		InstallID:      rt.deps.State.InstallID(),
 	})
 	if err != nil {
-		writePlatformError(w, err)
+		rt.failPlatform(w, err)
 		return
 	}
 
@@ -332,4 +333,48 @@ var errSessionExpired = productclient.ErrSessionExpired
 // refused - the case that returns the user to the blocked screen (需求基线 E12).
 func IsSessionExpired(err error) bool {
 	return errors.Is(err, errSessionExpired)
+}
+
+// failPlatform is the single funnel every platform failure passes through.
+//
+// It exists so L-A6 has exactly one enforcement point: a caller cannot reach the
+// platform and forget the session-expiry rule, because writing the response any
+// other way would mean not using the mapping at all. The first authorised call
+// (the catalog fetch) is what makes the expiry branch reachable end to end; the
+// rule is wired here ahead of it so that landing that call cannot silently skip
+// it.
+func (rt *Runtime) failPlatform(w http.ResponseWriter, err error) {
+	if IsSessionExpired(err) {
+		rt.forgetSession(err)
+	}
+	writePlatformError(w, err)
+}
+
+// forgetSession drops the local half of a session the platform has revoked
+// (需求基线 E12, L-A6).
+//
+// Order is load-bearing: the credential leaves the disk *before* the caller
+// answers "unauthorized". The frontend reacts to that answer by rendering the
+// login page, and a credential still on disk would make the next startup read
+// "logged in" again - an interface that quietly disagrees with the file, and one
+// the user cannot escape because every request would re-fail the same way.
+//
+// The activation record and the bound number stay (E7): an expired session is
+// not an un-activation. Keeping them is also what makes the second login ask for
+// only phone and code - and matters more here than anywhere else, because an
+// activation code can be used exactly once and could not be re-entered.
+//
+// A failure to clear is reported and does not stop the logout; see
+// P4-拦截页.md §4.4 for why the in-memory phase must still reach the login page.
+func (rt *Runtime) forgetSession(cause error) {
+	if err := rt.deps.Creds.Delete(); err != nil {
+		// Not fatal: State.Logout below still returns the interface to the login
+		// page, which is the part the user depends on. Reported rather than
+		// swallowed so a read-only or unplugged data root is visible.
+		slog.Error("product: session expired but the credential could not be removed",
+			"err", err, "cause", cause)
+	}
+	if err := rt.deps.State.Logout(); err != nil {
+		slog.Error("product: session expired but the login flag could not be cleared", "err", err)
+	}
 }

@@ -64,6 +64,20 @@ func writeProductGate(w http.ResponseWriter) {
 // are caught by local validation before a request leaves, so a code arriving from
 // the platform is by definition the business case, except for the handful below.
 func writePlatformError(w http.ResponseWriter, err error) {
+	// A refused refresh arrives as a sentinel error, not as an envelope: the
+	// client decides it after two trips to the platform (the call, then the
+	// refresh), so no single response can carry the code.
+	//
+	// Without this branch it would fall through to the transport case below and
+	// the user would be told their network is down - with a retry button that can
+	// never succeed, because a refresh token the platform refused does not heal
+	// by retrying (需求基线 E12). The local contract never registered this code,
+	// which is how the misattribution went unnoticed; see 本地API契约 §3 and V-21.
+	if errors.Is(err, productclient.ErrSessionExpired) {
+		writeCode(w, http.StatusUnauthorized, productclient.CodeUnauthorized, nil)
+		return
+	}
+
 	var pe *productclient.Error
 	if !errors.As(err, &pe) {
 		// Not a platform envelope at all: a transport failure or a local fault.

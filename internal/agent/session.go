@@ -97,6 +97,16 @@ type Session struct {
 	// modes. Set via the Web UI's PATCH …/permission_mode and persisted so a
 	// resumed session keeps the mode it was left in.
 	PermissionMode string `json:"permission_mode,omitempty"`
+	// OCTO-FORK: ChatMode is this session's own chat mode ("privacy" | "smart" |
+	// "default"), one of B5 rule 6's two independent session attributes — the
+	// other being the model binding above. Set via PATCH …/chat_mode and
+	// persisted so a resumed session (or a copy of data/ on another machine)
+	// keeps the mode it was left in. Empty means "no per-session pick yet": the
+	// effective default is the account's prefs.defaultChatMode, which lives in
+	// the fork's product state — deliberately NOT resolved here, because this
+	// package must not learn about product state. See
+	// dev-docs-usdable/需求/20260911/本地API契约.md §1.5.
+	ChatMode string `json:"chat_mode,omitempty"`
 	// LastContextTokens is the real input-token count of the most recent model
 	// request in this session — how full the context window was as of the last
 	// turn. Persisted so an idle or resumed session (no live Agent in memory)
@@ -457,6 +467,11 @@ func BranchFrom(s *Session, count int) *Session {
 	branch := NewSession(s.Model, s.System)
 	branch.WorkingDir = s.WorkingDir
 	branch.PermissionMode = s.PermissionMode
+	// OCTO-FORK: a branch is the same conversation continued elsewhere, so it
+	// inherits the mode too — otherwise branching a privacy-mode session would
+	// silently start sending through the non-privacy model. See session.go's
+	// ChatMode field.
+	branch.ChatMode = s.ChatMode
 	branch.ModelConfig = s.ModelConfig
 	branch.AgentID = s.AgentID
 	branch.BranchedFrom = s.ID
@@ -575,7 +590,7 @@ func (s *Session) ChunkDir() (string, error) {
 // type as authoritative; rewriteAll folds them back into the meta header when
 // compacting.
 type sessionRecord struct {
-	Type                  string    `json:"type"` // "meta" | "message" | "title" | "model_config" | "agent_id" | "working_dir" | "permission_mode" | "context_tokens" | "content_updated_at" | "composed_system" | "lease" | "goal"
+	Type                  string    `json:"type"` // "meta" | "message" | "title" | "model_config" | "agent_id" | "working_dir" | "permission_mode" | "chat_mode" | "context_tokens" | "content_updated_at" | "composed_system" | "lease" | "goal"
 	ID                    string    `json:"id,omitempty"`
 	CreatedAt             time.Time `json:"created_at,omitempty"`
 	Model                 string    `json:"model,omitempty"`
@@ -591,16 +606,20 @@ type sessionRecord struct {
 	AgentID               string    `json:"agent_id,omitempty"`
 	WorkingDir            string    `json:"working_dir,omitempty"`
 	PermissionMode        string    `json:"permission_mode,omitempty"`
-	BoundEntry            string    `json:"bound_entry,omitempty"`
-	BoundAt               time.Time `json:"bound_at,omitempty"`
-	LeaseEntry            string    `json:"lease_entry,omitempty"`
-	LeaseExpires          time.Time `json:"lease_expires,omitempty"`
-	HookStarted           bool      `json:"hook_started,omitempty"`
-	BranchedFrom          string    `json:"branched_from,omitempty"`
-	LastContextTokens     int       `json:"last_context_tokens,omitempty"`
-	ContentUpdatedAt      time.Time `json:"content_updated_at,omitempty"`
-	Message               *Message  `json:"message,omitempty"`
-	Goal                  *Goal     `json:"goal,omitempty"`
+	// OCTO-FORK: the session's chat mode (see Session.ChatMode). Carried in the
+	// meta header on rewrite and appended as its own record otherwise, exactly
+	// like permission_mode above.
+	ChatMode          string    `json:"chat_mode,omitempty"`
+	BoundEntry        string    `json:"bound_entry,omitempty"`
+	BoundAt           time.Time `json:"bound_at,omitempty"`
+	LeaseEntry        string    `json:"lease_entry,omitempty"`
+	LeaseExpires      time.Time `json:"lease_expires,omitempty"`
+	HookStarted       bool      `json:"hook_started,omitempty"`
+	BranchedFrom      string    `json:"branched_from,omitempty"`
+	LastContextTokens int       `json:"last_context_tokens,omitempty"`
+	ContentUpdatedAt  time.Time `json:"content_updated_at,omitempty"`
+	Message           *Message  `json:"message,omitempty"`
+	Goal              *Goal     `json:"goal,omitempty"`
 }
 
 func (s *Session) metaRecord() sessionRecord {
@@ -615,7 +634,7 @@ func (s *Session) metaRecord() sessionRecord {
 		goal = &g
 	}
 	s.mu.Unlock()
-	return sessionRecord{Type: "meta", ID: s.ID, CreatedAt: s.CreatedAt, Model: s.Model, System: s.System, ComposedSystem: s.ComposedSystem, ComposedLeanSystem: s.ComposedLeanSystem, ComposedForModel: s.ComposedForModel, ComposedForCWD: s.ComposedForCWD, ComposedForSourceDirs: s.ComposedForSourceDirs, Title: s.Title, Source: s.Source, ModelConfig: s.ModelConfig, AgentID: s.AgentID, WorkingDir: s.WorkingDir, PermissionMode: s.PermissionMode, LastContextTokens: s.LastContextTokens, ContentUpdatedAt: s.ContentUpdatedAt, BoundEntry: s.BoundEntry, BoundAt: s.BoundAt, HookStarted: s.HookStarted, BranchedFrom: s.BranchedFrom, Goal: goal}
+	return sessionRecord{Type: "meta", ID: s.ID, CreatedAt: s.CreatedAt, Model: s.Model, System: s.System, ComposedSystem: s.ComposedSystem, ComposedLeanSystem: s.ComposedLeanSystem, ComposedForModel: s.ComposedForModel, ComposedForCWD: s.ComposedForCWD, ComposedForSourceDirs: s.ComposedForSourceDirs, Title: s.Title, Source: s.Source, ModelConfig: s.ModelConfig, AgentID: s.AgentID, WorkingDir: s.WorkingDir, PermissionMode: s.PermissionMode, ChatMode: s.ChatMode, LastContextTokens: s.LastContextTokens, ContentUpdatedAt: s.ContentUpdatedAt, BoundEntry: s.BoundEntry, BoundAt: s.BoundAt, HookStarted: s.HookStarted, BranchedFrom: s.BranchedFrom, Goal: goal}
 }
 
 // MarkHookStarted records that SessionStart has fired for this session, so a
@@ -961,6 +980,49 @@ func (s *Session) SetPermissionMode(mode string) error {
 	defer f.Close()
 	if err := json.NewEncoder(f).Encode(sessionRecord{Type: "permission_mode", PermissionMode: mode}); err != nil {
 		return fmt.Errorf("session: append permission_mode: %w", err)
+	}
+	return nil
+}
+
+// SetChatMode records the session's own chat mode. Same append-or-rewrite
+// persistence mechanics as SetPermissionMode (no O_CREATE, same-value no-op,
+// in-memory carry for a session with no file yet) — one attribute per record
+// type, so the two never overwrite each other.
+//
+// OCTO-FORK: 需求基线 B5 规则 6 — the session-level mode is persisted on the
+// session (and therefore travels with data/). See
+// dev-docs-usdable/需求/20260911/本地API契约.md §1.5.
+func (s *Session) SetChatMode(mode string) error {
+	if mode == s.ChatMode {
+		return nil
+	}
+	s.ChatMode = mode
+	if s.persisted == 0 {
+		// See SetWorkingDir: a meta-only transcript must be rewritten now, since
+		// the load-modify-discard handler won't get a "next Save"; a session with
+		// no file yet just carries the value until its first Save.
+		if path, perr := s.SavePath(); perr == nil {
+			if _, statErr := os.Stat(path); statErr == nil {
+				return s.rewriteAll()
+			}
+		}
+		return nil
+	}
+	if s.forceRewrite {
+		return s.rewriteAll()
+	}
+	path, err := s.SavePath()
+	if err != nil {
+		return err
+	}
+	// No O_CREATE — see SetTitle: never materialise an orphan transcript.
+	f, err := os.OpenFile(path, os.O_WRONLY|os.O_APPEND, 0o600)
+	if err != nil {
+		return fmt.Errorf("session: open %s: %w", path, err)
+	}
+	defer f.Close()
+	if err := json.NewEncoder(f).Encode(sessionRecord{Type: "chat_mode", ChatMode: mode}); err != nil {
+		return fmt.Errorf("session: append chat_mode: %w", err)
 	}
 	return nil
 }
@@ -1416,6 +1478,9 @@ func LoadSession(id string) (*Session, error) {
 			s.AgentID = rec.AgentID
 			s.WorkingDir = rec.WorkingDir
 			s.PermissionMode = rec.PermissionMode
+			// OCTO-FORK: a rewritten/compacted file carries the chat mode in its
+			// meta header too. See Session.ChatMode.
+			s.ChatMode = rec.ChatMode
 			s.LastContextTokens = rec.LastContextTokens // a rewritten file carries it in its meta header
 			s.ContentUpdatedAt = rec.ContentUpdatedAt   // a rewritten file carries it in its meta header
 			s.BoundEntry = rec.BoundEntry
@@ -1437,6 +1502,10 @@ func LoadSession(id string) (*Session, error) {
 			s.WorkingDir = rec.WorkingDir // last one wins, like title
 		case "permission_mode":
 			s.PermissionMode = rec.PermissionMode // last one wins, like title
+		case "chat_mode":
+			// OCTO-FORK: see Session.ChatMode. A record of its own, so setting
+			// the mode never rewrites (or races) the permission mode.
+			s.ChatMode = rec.ChatMode // last one wins, like title
 		case "context_tokens":
 			s.LastContextTokens = rec.LastContextTokens // last one wins, like title
 		case "content_updated_at":

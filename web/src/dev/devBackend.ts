@@ -321,8 +321,8 @@ export function installDevBackend(): void {
     } else if (method === 'PUT' && path === '/api/product/sensitive/dict') {
       dict = { ...dict, user: body.user ?? [] }
       hit = { user: dict.user }
-    } else if (path.endsWith('/chat-mode')) {
-      hit = { ok: true, chat_mode: String(body.mode ?? '') }
+    } else if (path.endsWith('/chat_mode')) {
+      hit = { ok: true, chat_mode: String(body.chat_mode ?? body.mode ?? '') }
     } else if (path.endsWith('/model')) {
       const id = String(body.model_id ?? body.model ?? '')
       hit = { model: id, model_id: id }

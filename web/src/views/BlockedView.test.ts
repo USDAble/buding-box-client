@@ -213,7 +213,7 @@ describe('BlockedView first activation', () => {
     type('phone', '13800002222')
     type('code', '123456')
     submit()
-    await vi.waitFor(() => expect(target.textContent).toContain('该手机号尚未激活'))
+    await vi.waitFor(() => expect(target.textContent).toContain('该手机号尚未注册和激活'))
 
     // Still the short form - the user reads why, then chooses.
     expect(input_('activationCode')).toBeNull()

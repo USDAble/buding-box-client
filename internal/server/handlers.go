@@ -43,27 +43,32 @@ type turnRequest struct {
 // sessionItem is the shape the Web UI expects for each session in listings
 // and after creation. It is a superset of the raw agent.Session fields.
 type sessionItem struct {
-	ID                  string    `json:"id"`
-	Name                string    `json:"name"`
-	Title               string    `json:"title"`
-	CreatedAt           time.Time `json:"created_at"`
-	UpdatedAt           time.Time `json:"updated_at"`
-	Model               string    `json:"model"`
-	ModelID             string    `json:"model_id,omitempty"`
-	Status              string    `json:"status"`
-	Source              string    `json:"source"`
-	AgentProfile        string    `json:"agent_profile"`
-	Pinned              bool      `json:"pinned"`
-	TotalTasks          int       `json:"total_tasks"`
-	TurnCount           int       `json:"turn_count"`
-	WorkingDir          string    `json:"working_dir,omitempty"`
-	PermissionMode      string    `json:"permission_mode,omitempty"`
-	ReasoningEffort     string    `json:"reasoning_effort,omitempty"`
-	ShowReasoning       *bool     `json:"show_reasoning,omitempty"`
-	ContextUsage        int       `json:"context_usage,omitempty"`
-	PendingQuestion     bool      `json:"pending_question,omitempty"`
-	PendingConfirmation bool      `json:"pending_confirmation,omitempty"`
-	BranchedFrom        string    `json:"branched_from,omitempty"`
+	ID             string    `json:"id"`
+	Name           string    `json:"name"`
+	Title          string    `json:"title"`
+	CreatedAt      time.Time `json:"created_at"`
+	UpdatedAt      time.Time `json:"updated_at"`
+	Model          string    `json:"model"`
+	ModelID        string    `json:"model_id,omitempty"`
+	Status         string    `json:"status"`
+	Source         string    `json:"source"`
+	AgentProfile   string    `json:"agent_profile"`
+	Pinned         bool      `json:"pinned"`
+	TotalTasks     int       `json:"total_tasks"`
+	TurnCount      int       `json:"turn_count"`
+	WorkingDir     string    `json:"working_dir,omitempty"`
+	PermissionMode string    `json:"permission_mode,omitempty"`
+	// OCTO-FORK: the session-level chat mode (see Session.ChatMode and
+	// 本地API契约 §1.5). Sent verbatim; when empty the client falls back to the
+	// account default (prefs.defaultChatMode) on its own, because that value
+	// lives in the fork's product state and internal/server must not read it.
+	ChatMode            string `json:"chat_mode,omitempty"`
+	ReasoningEffort     string `json:"reasoning_effort,omitempty"`
+	ShowReasoning       *bool  `json:"show_reasoning,omitempty"`
+	ContextUsage        int    `json:"context_usage,omitempty"`
+	PendingQuestion     bool   `json:"pending_question,omitempty"`
+	PendingConfirmation bool   `json:"pending_confirmation,omitempty"`
+	BranchedFrom        string `json:"branched_from,omitempty"`
 }
 
 type sessionDetail struct {
@@ -128,21 +133,24 @@ func (srv *Server) toSessionItem(s *agent.Session, source, agentProfile string) 
 	}
 	_, pm, re, sr, ctxUsage := srv.sessionStatusFields(s)
 	return sessionItem{
-		ID:                  s.ID,
-		Name:                name,
-		Title:               title,
-		CreatedAt:           s.CreatedAt,
-		UpdatedAt:           updated,
-		Model:               s.Model,
-		ModelID:             s.ModelConfig,
-		Status:              srv.sessionStatus(s.ID),
-		Source:              source,
-		AgentProfile:        agentProfile,
-		Pinned:              false,
-		TotalTasks:          0,
-		TurnCount:           s.TurnCount(),
-		WorkingDir:          srv.sessionCwd(s),
-		PermissionMode:      pm,
+		ID:             s.ID,
+		Name:           name,
+		Title:          title,
+		CreatedAt:      s.CreatedAt,
+		UpdatedAt:      updated,
+		Model:          s.Model,
+		ModelID:        s.ModelConfig,
+		Status:         srv.sessionStatus(s.ID),
+		Source:         source,
+		AgentProfile:   agentProfile,
+		Pinned:         false,
+		TotalTasks:     0,
+		TurnCount:      s.TurnCount(),
+		WorkingDir:     srv.sessionCwd(s),
+		PermissionMode: pm,
+		// OCTO-FORK: verbatim — no "effective value" resolution here. See
+		// sessionItem.ChatMode.
+		ChatMode:            s.ChatMode,
 		ReasoningEffort:     re,
 		ShowReasoning:       sr,
 		ContextUsage:        ctxUsage,

@@ -1037,6 +1037,13 @@ func (s *Server) registerRoutes() {
 	s.api("PATCH /api/sessions/{id}/reasoning_effort", s.handleUpdateSessionReasoningEffort)
 	s.api("PATCH /api/sessions/{id}/show_reasoning", s.handleUpdateSessionShowReasoning)
 	s.api("PATCH /api/sessions/{id}/permission_mode", s.handleUpdateSessionPermissionMode)
+	// OCTO-FORK: PATCH /api/sessions/{id}/chat_mode — the session-level chat mode
+	// (需求基线 B5 规则 6). Path spelled with an underscore like its five
+	// siblings above; the picker used to PUT a `chat-mode` (hyphen) path that no
+	// server ever registered, which is why a real build answered 404 to the
+	// first of a model switch's two requests (V-46). See
+	// dev-docs-usdable/需求/20260911/本地API契约.md §1.5.
+	s.api("PATCH /api/sessions/{id}/chat_mode", s.handleUpdateSessionChatMode)
 	s.api("PATCH /api/sessions/{id}/working_dir", s.handleUpdateSessionWorkingDir)
 	s.api("PATCH /api/sessions/{id}/agent_profile", s.handleUpdateSessionAgentProfile)
 	s.api("GET /api/sessions/{id}/goal", s.handleGetSessionGoal)

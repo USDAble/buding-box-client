@@ -57,7 +57,7 @@ export const API_PRODUCT_BASELINE = 161
 //
 // `convergence` names the work package that is supposed to shrink it.
 //
-// One raise has happened so far, and it is the bar to judge the next one by:
+// Two raises have happened. The first is the bar to judge the next one by:
 // server.go 484 → 543 for the host SenderFactory port (P0-01 B1, P0-01A §3.1).
 // It was raised rather than avoided because the port is an explicitly approved
 // architectural change, no smaller form exists (the `Config` field is the only
@@ -65,8 +65,25 @@ export const API_PRODUCT_BASELINE = 161
 // setter read by the server — is hidden global state, which is a real
 // regression, not a smaller diff), and the reason for the *policy* lines was
 // moved out of the file into the fork-owned package first (−23 lines before the
-// ceiling was touched). A raise that cannot answer those three points should be
-// a fold instead.
+// ceiling was touched).
+//
+// The second: handlers.go 83 → 91 for `sessionItem.ChatMode` (PR-4d1, V-46).
+//   (a) what the 8 lines are: one field on the session descriptor the WebUI
+//       reads plus the assignment in its builder. Without them the session
+//       list cannot report the mode, and the "reload still shows it" half of
+//       L-C8 is unreachable (web/src/components/chat/Composer.svelte reads
+//       currentSession?.chat_mode).
+//   (b) no smaller form: sessionItem is declared in handlers.go and
+//       toSessionItem is its only builder. There is no seam for "add a field to
+//       a response struct" — the alternative, a fork-side wrapper re-emitting
+//       the session JSON, would be a second place defining the same shape
+//       (开发规范 §3.8) and strictly more code.
+//   (c) the bulk was moved out first: the ~85-line handler lives in the
+//       fork-owned internal/server/chatmode_handlers.go — a file this guard
+//       already registers — which is what turned "grew by 87" into "grew by 8".
+//       The remaining 8 fold with P0-01A D, when the descriptor moves too.
+//
+// A raise that cannot answer those three points should be a fold instead.
 export const DEBT_CEILINGS = [
   {
     file: 'internal/server/server.go',
@@ -76,9 +93,9 @@ export const DEBT_CEILINGS = [
   },
   {
     file: 'internal/server/handlers.go',
-    ceiling: 83,
-    why: 'product-gate and credit call sites in upstream turn handlers',
-    convergence: 'P0-01A D + P0-05 (credit deletion)',
+    ceiling: 91,
+    why: 'product-gate and credit call sites in upstream turn handlers; +8 for sessionItem.ChatMode (PR-4d1, V-46 — see the raise note above)',
+    convergence: 'P0-01A D (+8 folds when the session descriptor moves) + P0-05 (credit deletion)',
   },
   {
     file: 'internal/server/ws_handlers.go',

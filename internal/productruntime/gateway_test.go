@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -11,6 +12,7 @@ import (
 	"testing"
 
 	"github.com/open-octo/octo-agent/internal/agent"
+	"github.com/open-octo/octo-agent/internal/app"
 	"github.com/open-octo/octo-agent/internal/productclient"
 	"github.com/open-octo/octo-agent/internal/productclient/clienttest"
 )
@@ -32,7 +34,11 @@ type gatewayStub struct {
 	method string
 	auth   string
 	accept string
+	body   string
 	hits   int
+	// stream overrides the default body for event-stream requests, so a nail can
+	// make the gateway reason without a second stub type.
+	stream string
 }
 
 // stubCompletion is the smallest valid completion the OpenAI client accepts, so
@@ -47,16 +53,24 @@ const stubStream = "data: {\"choices\":[{\"delta\":{\"content\":\"ok\"}}]}\n\n" 
 func (g *gatewayStub) start(t *testing.T) string {
 	t.Helper()
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// Read first: the body has to be recorded before the response is written,
+		// and several nails assert on the request rather than the reply.
+		raw, _ := io.ReadAll(r.Body)
 		g.mu.Lock()
 		g.path, g.method = r.URL.Path, r.Method
 		g.auth, g.accept = r.Header.Get("Authorization"), r.Header.Get("Accept")
+		g.body = string(raw)
 		g.hits++
+		streamBody := g.stream
 		g.mu.Unlock()
 		// Answer in whichever shape the caller asked for, so one stub serves both
 		// paths and the Accept header is observable rather than assumed.
 		if r.Header.Get("Accept") == "text/event-stream" {
 			w.Header().Set("Content-Type", "text/event-stream")
-			_, _ = w.Write([]byte(stubStream))
+			if streamBody == "" {
+				streamBody = stubStream
+			}
+			_, _ = w.Write([]byte(streamBody))
 			return
 		}
 		w.Header().Set("Content-Type", "application/json")
@@ -64,6 +78,14 @@ func (g *gatewayStub) start(t *testing.T) string {
 	}))
 	t.Cleanup(srv.Close)
 	return srv.URL
+}
+
+// requestBody is the last request's body, for nails about what the client sent
+// rather than how it dialled.
+func (g *gatewayStub) requestBody() string {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	return g.body
 }
 
 func (g *gatewayStub) seen() (path, method, auth, accept string, hits int) {
@@ -78,10 +100,19 @@ func signedIn(token string) *productclient.CredentialHolder {
 	return h
 }
 
+// reasoningOff is the tuning these dial-shape nails pass.
+//
+// It is the zero value on purpose: it matches what the factory did before
+// PR-5b1 wired the preferences in (no effort requested, no trace surfaced), so
+// these nails keep asserting only the thing they are about — which URL is
+// dialed, which token is presented — while the reasoning half is nailed in
+// gateway_reasoning_test.go.
+var reasoningOff = app.ReasoningTuning{}
+
 // run dials the gateway once through the sender the factory builds.
 func run(t *testing.T, g GatewayEndpoint) error {
 	t.Helper()
-	sender, err := g.Sender()
+	sender, err := g.Sender(reasoningOff)
 	if err != nil {
 		return err
 	}
@@ -131,7 +162,7 @@ func TestTheGatewayPresentsTheInMemoryToken(t *testing.T) {
 // for StreamMessages whenever the sender offers it.
 func runStream(t *testing.T, g GatewayEndpoint) error {
 	t.Helper()
-	sender, err := g.Sender()
+	sender, err := g.Sender(reasoningOff)
 	if err != nil {
 		return err
 	}
@@ -259,7 +290,7 @@ func TestAnEmptyHostIsRefused(t *testing.T) {
 // assistant text.
 func streamText(t *testing.T, g GatewayEndpoint) (string, error) {
 	t.Helper()
-	sender, err := g.Sender()
+	sender, err := g.Sender(reasoningOff)
 	if err != nil {
 		return "", err
 	}

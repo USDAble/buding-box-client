@@ -63,6 +63,35 @@ type SenderOptions struct {
 	ShowReasoning bool
 }
 
+// ReasoningTuning is the pair of reasoning preferences a caller hands to a
+// sender factory, in a form that can cross an injection seam.
+//
+// WHY IT IS A TYPE OF ITS OWN. A sender for an endpoint whose inputs change at
+// run time cannot be built once: internal/server asks the gateway factory per
+// turn so a rotated token is picked up (C2 规则 2), and the reasoning
+// preferences change per turn for exactly the same reason (PATCH
+// /api/config/show_reasoning and PATCH /api/sessions/{id}/reasoning_effort).
+// Handing over SenderOptions itself would pass the caller the provider, the
+// protocol and the dialect too — three facts it has no business deciding — so
+// only the two fields that ARE the caller's to know are named here.
+//
+// WHY IT LIVES IN THIS FILE. These are the same two facts as
+// SenderOptions.ReasoningEffort and SenderOptions.ShowReasoning, so keeping it
+// beside them is what makes it a projection of that struct rather than a second
+// definition of the same thing (开发规范 §3.8). internal/productruntime assigns
+// it straight into SenderOptions, which is the whole conversion.
+type ReasoningTuning struct {
+	// ReasoningEffort mirrors SenderOptions.ReasoningEffort: "" (off) or
+	// "low"|"medium"|"high"|"xhigh"|"max". Empty is meaningful and must stay
+	// empty — the provider omits the field on the wire in that case, and the UI's
+	// default level is "off".
+	ReasoningEffort string
+	// ShowReasoning mirrors SenderOptions.ShowReasoning: whether a trace the
+	// backend returns reaches the agent's event stream. It gates DISPLAY only;
+	// whether reasoning is requested at all is ReasoningEffort's job.
+	ShowReasoning bool
+}
+
 // AnthropicThinkingBudget maps a unified reasoning-effort level to an Anthropic
 // thinking-token figure. "" (off) yields 0, which disables thinking. On modern
 // Claude models (adaptive thinking + output_config.effort) the provider uses

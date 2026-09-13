@@ -185,7 +185,7 @@ func TestTheThirdPartyStandInIsAWorkingModelSource(t *testing.T) {
 func TestASessionWithNoCatalogModelIsNotServedElsewhere(t *testing.T) {
 	stand := newCountingStandIn(t, http.StatusOK)
 	srv := productionBuild(t, Config{
-		GatewaySender: func() (agent.Sender, error) { return &countingSender{}, nil },
+		GatewaySender: func(app.ReasoningTuning) (agent.Sender, error) { return &countingSender{}, nil },
 	})
 	srv.sender = defaultSenderFromEntry(t, thirdPartySeed(stand.url, "sk-third-party"))
 
@@ -217,7 +217,7 @@ func TestAGatewayThatFailsDoesNotFallBack(t *testing.T) {
 			gateway := newCountingStandIn(t, tc.status)
 
 			srv := productionBuild(t, Config{
-				GatewaySender: func() (agent.Sender, error) {
+				GatewaySender: func(app.ReasoningTuning) (agent.Sender, error) {
 					return app.NewSender(app.SenderOptions{
 						Provider: app.ProviderCustom, Protocol: "openai",
 						APIKey: "session-token", BaseURL: gateway.url,
@@ -247,7 +247,7 @@ func TestAnUnconfiguredControlPlaneIsRefusedAndNeverDialed(t *testing.T) {
 	stand := newCountingStandIn(t, http.StatusOK)
 	asked := 0
 	srv := buildWithoutAService(t, Config{
-		GatewaySender: func() (agent.Sender, error) {
+		GatewaySender: func(app.ReasoningTuning) (agent.Sender, error) {
 			asked++
 			return &countingSender{}, nil
 		},
@@ -281,7 +281,7 @@ func TestAnUnconfiguredControlPlaneIsRefusedAndNeverDialed(t *testing.T) {
 func TestAUsableConfigYMLIsNotAModelSourceInAProductBuild(t *testing.T) {
 	stand := newCountingStandIn(t, http.StatusOK)
 	srv := productionBuild(t, Config{
-		GatewaySender: func() (agent.Sender, error) { return nil, errors.New("no gateway in this fixture") },
+		GatewaySender: func(app.ReasoningTuning) (agent.Sender, error) { return nil, errors.New("no gateway in this fixture") },
 	})
 	srv.sender = defaultSenderFromEntry(t, thirdPartySeed(stand.url, "sk-third-party"))
 
@@ -308,7 +308,7 @@ func TestAnEnvironmentKeyIsNotAModelSourceInAProductBuild(t *testing.T) {
 		t.Fatal("fixture: this face is about the environment, so the file must carry no key")
 	}
 	srv := productionBuild(t, Config{
-		GatewaySender: func() (agent.Sender, error) { return nil, errors.New("no gateway in this fixture") },
+		GatewaySender: func(app.ReasoningTuning) (agent.Sender, error) { return nil, errors.New("no gateway in this fixture") },
 	})
 	srv.sender = defaultSenderFromEntry(t, seed)
 

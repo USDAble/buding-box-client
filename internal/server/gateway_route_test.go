@@ -63,7 +63,7 @@ func TestAGatewayBoundTurnRunsOnTheInjectedSender(t *testing.T) {
 	srv := emptyProfileServer(t, Config{
 		Addr:               "127.0.0.1:0",
 		GatewayModelPrefix: testGatewayPrefix,
-		GatewaySender:      func() (agent.Sender, error) { return injected, nil },
+		GatewaySender:      func(app.ReasoningTuning) (agent.Sender, error) { return injected, nil },
 	})
 
 	sess := boundSession("buding-gateway::buding-privacy-1", "")
@@ -92,7 +92,7 @@ func TestTheFactoryIsAskedAgainForEachTurn(t *testing.T) {
 	srv := emptyProfileServer(t, Config{
 		Addr:               "127.0.0.1:0",
 		GatewayModelPrefix: testGatewayPrefix,
-		GatewaySender: func() (agent.Sender, error) {
+		GatewaySender: func(app.ReasoningTuning) (agent.Sender, error) {
 			asked++
 			return &countingSender{}, nil
 		},
@@ -117,7 +117,7 @@ func TestAFactoryRefusalBecomesTheTurnError(t *testing.T) {
 	srv := emptyProfileServer(t, Config{
 		Addr:               "127.0.0.1:0",
 		GatewayModelPrefix: testGatewayPrefix,
-		GatewaySender:      func() (agent.Sender, error) { return nil, refused },
+		GatewaySender:      func(app.ReasoningTuning) (agent.Sender, error) { return nil, refused },
 	})
 	srv.sender = defaultSender
 
@@ -149,7 +149,7 @@ func TestAnUnservableTurnIsRefusedNotDereferenced(t *testing.T) {
 	srv := withoutADefaultSender(t, Config{
 		Addr:               "127.0.0.1:0",
 		GatewayModelPrefix: testGatewayPrefix,
-		GatewaySender:      func() (agent.Sender, error) { return &countingSender{}, nil },
+		GatewaySender:      func(app.ReasoningTuning) (agent.Sender, error) { return &countingSender{}, nil },
 	})
 	if err := srv.ensureSender(); err != nil {
 		t.Fatalf("ensureSender must not refuse a build that has a gateway: %v", err)

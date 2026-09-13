@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/open-octo/octo-agent/internal/agent"
+	"github.com/open-octo/octo-agent/internal/app"
 	"github.com/open-octo/octo-agent/internal/brand"
 	"github.com/open-octo/octo-agent/internal/catalogstore"
 	"github.com/open-octo/octo-agent/internal/credentialstore"
@@ -52,7 +53,7 @@ import (
 // functions, because they must share one CredentialHolder - the gateway sender
 // is built from the token the platform client refreshed, so two holders would
 // mean the gateway kept presenting a stale one.
-func mountProductAPI() (mount func(api func(pattern string, h http.HandlerFunc)), gatewaySender func() (agent.Sender, error)) {
+func mountProductAPI() (mount func(api func(pattern string, h http.HandlerFunc)), gatewaySender func(app.ReasoningTuning) (agent.Sender, error)) {
 	if windowToken() == "" {
 		// Fail closed. Without a token the gate cannot distinguish this window
 		// from any other loopback caller, so mounting the routes would publish

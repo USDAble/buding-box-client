@@ -263,8 +263,16 @@ export function installDevBackend(): void {
         // the real server's code split so every failure branch stays walkable:
         // a wrong activation code, an unknown box code, a code/box mismatch,
         // and a code that was already spent (POLICY-1).
+        //
+        // An attempt that offers NEITHER is a sign-in, not an activation
+        // (V-45): this fake has no persistent account, so a fresh session
+        // genuinely holds no authorization and the registered answer for that
+        // is activation_required (中台交付包 §4.2). Answering activation_invalid
+        // here - as this fake did - is what made the wall tell a user on the
+        // short form to correct an activation code it was not showing.
         const code = String(b.activationCode ?? '').trim().toLowerCase()
         const box = String(b.boxCode ?? '').trim().toLowerCase()
+        if (code === '' && box === '') return json({ code: 'activation_required' }, 403)
         if (code !== DEMO_ACTIVATION_CODE.toLowerCase()) return json({ code: 'activation_invalid' }, 400)
         if (box !== DEMO_BOX_CODE.toLowerCase()) {
           if (box === 'box-demo-mismatch') return json({ code: 'box_code_mismatch' }, 400)

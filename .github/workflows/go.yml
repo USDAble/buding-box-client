@@ -170,6 +170,19 @@ jobs:
         working-directory: cmd/octo-desktop
         run: go mod tidy -diff
 
+      # The nested module is excluded from the root `go build ./...` above, and
+      # desktop.yml only runs when a PR touches one of its listed paths — which
+      # does not cover every root package this module imports (internal/app,
+      # internal/productruntime, internal/productclient, ...). A root-only
+      # change could therefore break the fork's main deliverable's compile with
+      # every job here green (V-41). Windows targets need no CGO (WebView2 is
+      # pure Go), so this type-check is cheap and runs on one platform; the
+      # five-platform build matrix still lives in desktop.yml.
+      - name: go build (cmd/octo-desktop, nested module)
+        if: matrix.os == 'ubuntu-latest'
+        working-directory: cmd/octo-desktop
+        run: GOOS=windows GOARCH=amd64 CGO_ENABLED=0 go build ./...
+
       # Data races are OS-independent, so the detector only runs on ubuntu (where
       # it's cheapest). Windows/macOS run a plain `go test` — fast, and still
       # catches platform-specific failures (path handling, process spawning, the

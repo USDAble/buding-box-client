@@ -82,6 +82,19 @@ function submit() {
   flushSync()
 }
 
+/** The link between the two halves of the wall (V-45). */
+function switchLink(): HTMLButtonElement | null {
+  return target.querySelector<HTMLButtonElement>('.switch-link')
+}
+
+/** Takes the switch link, as a user would: one tap, no typing. */
+async function switchTo() {
+  const link = switchLink()
+  if (!link) throw new Error('no switch link on this form')
+  link.click()
+  flushSync()
+}
+
 describe('BlockedView first activation', () => {
   it('orders the five fields as the requirement pins them', () => {
     render()
@@ -171,11 +184,12 @@ describe('BlockedView first activation', () => {
     }
   })
 
-  // V-44. The wall's shape is the server's answer, and a refusal can change it:
-  // when the platform denies the activation for a sign-in that offered no
-  // credential, the server lowers the local claim, and the two-field form would
-  // otherwise keep showing "incorrect activation code" with no field to fix it.
-  it('switches back to the activation form when the platform denies the activation', async () => {
+  // V-45. The wall's shape is the server's answer, and a refusal can change it -
+  // but the user is TOLD and given a button rather than having the form swapped
+  // under their hands (the decision recorded in 开发计划 PR-2e). The message is
+  // the registered activation_required copy; before this it rendered as an empty
+  // banner, because businessErrorKey had no case for the code.
+  it('stays on the sign-in form and offers the activation half when the platform denies the activation', async () => {
     // The desktop shell adopts the gate token before the first window shows; the
     // state read below is a gated call, so the test has to provide one.
     sessionStorage.setItem('octo_window_token', 'tok')
@@ -188,29 +202,88 @@ describe('BlockedView first activation', () => {
     vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL) => {
       const url = String(input)
       if (url.includes('/api/product/login')) {
-        return { ok: false, status: 400, json: async () => ({ code: 'activation_invalid' }) }
+        return { ok: false, status: 403, json: async () => ({ code: 'activation_required' }) }
       }
-      // What the server answers after the refusal: the claim is gone, the record
-      // it last received is not.
-      return {
-        ok: true,
-        status: 200,
-        json: async () => ({ ...firstActivationState(), activated: false, account: { phoneMasked: '138****1234' } }),
-      }
+      return { ok: true, status: 200, json: async () => ({ ...firstActivationState(), activated: false }) }
     }))
     render()
 
-    // Two fields only, which is what makes the refusal a dead end today.
     expect(input_('activationCode')).toBeNull()
 
     type('phone', '13800002222')
     type('code', '123456')
     submit()
-    await vi.waitFor(() => expect(target.textContent).toContain('激活码不正确'))
+    await vi.waitFor(() => expect(target.textContent).toContain('该手机号尚未激活'))
 
-    // The message now sits above a form that can act on it.
+    // Still the short form - the user reads why, then chooses.
+    expect(input_('activationCode')).toBeNull()
+    expect(switchLink()).toBeTruthy()
+    sessionStorage.clear()
+  })
+
+  it('opens the activation form when the user takes the switch', async () => {
+    productState.set({ ...firstActivationState(), activated: true } as never)
+    render()
+
+    expect(input_('activationCode')).toBeNull()
+    await switchTo()
     expect(input_('activationCode')).toBeTruthy()
     expect(input_('boxCode')).toBeTruthy()
+  })
+
+  // The other direction. A fresh data/ belongs to an installation the platform has
+  // never seen - but the phone may well hold an account already activated
+  // elsewhere, and signing in there is the recovery path for a lost data/
+  // (E1 rule 2 / PQ28), so the link has to exist on this side too.
+  it('offers the sign-in half on a fresh installation and sends no activation credential', async () => {
+    const fetchMock = vi.fn(async (_input: RequestInfo | URL, _init?: RequestInit) => ({
+      ok: true,
+      status: 200,
+      json: async () => ({ state: { ...firstActivationState(), loggedIn: true, activated: true } }),
+    }))
+    vi.stubGlobal('fetch', fetchMock)
+    productState.set(firstActivationState() as never)
+    render()
+
+    expect(input_('activationCode')).toBeTruthy()
+    await switchTo()
+
+    expect(input_('activationCode')).toBeNull()
+    type('phone', '13800001234')
+    type('code', '123456')
+    type('nickname', 'tester')
+    submit()
+    await vi.waitFor(() => expect(fetchMock).toHaveBeenCalled())
+
+    const call = fetchMock.mock.calls.find((c) => String(c[0]).includes('/api/product/login'))
+    const body = JSON.parse(String(call?.[1]?.body ?? '{}')) as Record<string, unknown>
+    expect(body.activationCode).toBeUndefined()
+    expect(body.boxCode).toBeUndefined()
+  })
+
+  // An unmapped code used to render an empty banner: the user saw no error at all
+  // (本地API契约 §3 forbids falling to the generic copy SILENTLY; rendering
+  // nothing is worse). It now shows the generic copy and says so once.
+  it('shows the generic copy for a code it has no case for, and reports it', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+    vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input)
+      if (url.includes('/api/product/login')) {
+        return { ok: false, status: 400, json: async () => ({ code: 'a_code_from_the_future' }) }
+      }
+      return { ok: true, status: 200, json: async () => ({ ...firstActivationState(), activated: true }) }
+    }))
+    sessionStorage.setItem('octo_window_token', 'tok')
+    productState.set({ ...firstActivationState(), activated: true } as never)
+    render()
+
+    type('phone', '13800001234')
+    type('code', '123456')
+    submit()
+    await vi.waitFor(() => expect(target.textContent).toContain('登录失败，请重试'))
+
+    expect(warn).toHaveBeenCalled()
+    warn.mockRestore()
     sessionStorage.clear()
   })
 })

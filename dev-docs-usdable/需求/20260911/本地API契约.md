@@ -139,6 +139,7 @@
   }
   ```
   首启传 **五个字段**；二次登录只传 `phone` / `code` / `nickname`（`activationCode`、`boxCode` 省略）。
+- **两个凭证是一对，可选**（2026-09-13 更正，`V-45` / `PQ28`）：**要么都给、要么都不给**，本地只查这个**形状**；"这次是不是首启"**不由客户端判定**（`开发规范` §3.8）—— 用本地 `activated` 推断首启，正是把丢 `data/` 的用户（激活码已一次性用掉）逼到"只能联系客服"的那条规则。半填仍然本地拒绝（`invalid_activation` / `invalid_box_code`），所以用户不必为了"少填一个"跑一趟中台。**无凭证的登录是否被接受，由中台答**：若该手机号已有可用授权，就签发令牌并回带激活记录（客户端据此回填 `boxCode`，见 `E1` 规则 2 / `PQ28`）；若没有，回 `activation_required`。
 - **应答 `200`**：`{"state": ProductStateDTO}`
 - **错误**：
   - 字段级 `400 {"fieldErrors": {...}}`：
@@ -150,7 +151,7 @@
     | `nickname_sensitive` | `nickname` | 昵称命中敏感词 |
     | `invalid_activation` | `activationCode` | **空或格式**不合法（客户端也预校验） |
     | `invalid_box_code` | `boxCode` | **空或格式**不合法（客户端也预校验，`BlockedView.svelte`） |
-  - 业务级 `400 {"code": "<code>"}`：
+  - 业务级（状态码取自 `中台交付包` §3.2，**不是一律 400**）：
     | code | 含义 | 用户要做的事 |
     | --- | --- | --- |
     | `code_not_sent` | 还没获取验证码 | 点「获取验证码」 |
@@ -159,13 +160,16 @@
     | `activation_code_used` | **该激活码已被使用过**（一码一用） | **联系客服**——这是唯一出路 |
     | `box_code_unknown` | 盒子编号不认识 | 核对编号 |
     | `box_code_mismatch` | 激活码与盒子编号不匹配 | **联系客服** |
+    | `activation_required` | **该手机号没有可用授权**（`403`；`中台交付包` §4.2 的登录必备码） | **去激活** —— 客户端渲染「该手机号尚未激活，请在下面填写激活码与盒子编号完成激活」，并给出跳到激活表单的链接。**必带 `200`/`403` 之分**：它是业务级，不挂 `field`（问题在账号，不在某一个字段） |
     | `phone_mismatch` | 本目录已绑定另一手机号 | 随响应带 `phoneMasked` |
 - **落点**：`internal/productruntime` → 中台 `POST /v1/auth/login`。
 - **规则**（`E1`）：
   - `activationCode` 与 `boxCode` 是**两个独立凭证**：前者答「这份授权买过没」，后者答「属于哪台盒子」。服务端**分别校验**，因此错误码也必须分开——用户错一个字符要能看出错在哪一个。
   - **一个盒子编号可对应多个激活码**（一对多），所以**不存在** `box_code_already_bound`；实现时不要发明这个码。
   - **一个 `U盘激活码` 只能使用一次**。用掉即废，换机/重装一概不能复用，唯一补救是走客服。
-  - **一次「没带激活凭证」的登录若被平台以上面四个激活类码拒绝，本地 `activated` 随之降为 `false`（`GET /api/product/state` 可见），应答码、信封与状态码不变（`V-44` / `PR-2d`）。** 判据两条**同时**成立才降：① 该次请求的 `activationCode` 与 `boxCode` 去空白后都为空；② 平台码属于 `activation_invalid` / `activation_code_used` / `box_code_unknown` / `box_code_mismatch`。**理由**：`activated` 的 owner 是平台（`E1` 规则 6），本地那份只是它上次的答复；而拦截页只有在 `activated:false` 时才渲染那两口凭证输入框（`BlockedView.svelte:34/276`），不跟随就会让用户在**没有该字段的表单**上读到「激活码不正确」。**反面同样成立**：传输失败、5xx、`invalid_code`、`code_not_sent`、`phone_mismatch` 一律**不降**（本地故障不是平台的答复）；`account` 与 `activation` 记录**保留**（`E7`）。判定在**服务端**（`internal/productruntime`），前端不在失败后自行推断形状，而是重读状态（与 `V-22` 同一原则）。
+  - **表单形态**：登录表单与激活表单**可以互跳**（两个跳转链接常驻，各在对面表单底部）。默认形状由 `/state` 的 `activated` 在**拦截页出现时取一次**决定，此后只由用户改变 —— **不在用户读消息时把手底下的表单换掉**（`V-44` / `V-45`，`P4-拦截页.md` §4.6）。链接**不按错误码出现**：按码显示就得在前端维护一份"哪些码露出按钮"的清单，即第二份激活家族分类（§3.8）。
+  - **一次「没带激活凭证」的登录若被平台以激活类码拒绝，本地 `activated` 随之降为 `false`（`GET /api/product/state` 可见），应答码、信封与状态码不变（`V-44` / `PR-2d`）。** 判据两条**同时**成立才降：① 该次请求的 `activationCode` 与 `boxCode` 去空白后都为空；② 平台码属于 `activation_invalid` / `activation_code_used` / `box_code_unknown` / `box_code_mismatch` / **`activation_required`**（2026-09-13 补第五个：它比那四个更直接地说"这份授权不成立"，且正是"没带凭证"时会收到的那个码 —— `V-45` 之前替身错发 `activation_invalid`）。**理由**：`activated` 的 owner 是平台（`E1` 规则 6），本地那份只是它上次的答复。**反面同样成立**：传输失败、5xx、`invalid_code`、`code_not_sent`、`phone_mismatch` 一律**不降**（本地故障不是平台的答复）；`account` 与 `activation` 记录**保留**（`E7`）。判定在**服务端**（`internal/productruntime`）。
+  - **2026-09-13 更正上面这条的用户可见半边（`V-45` / `PR-2e`）**：降 `activated` 是**数据**半边，那时前端还跟着重读、于是**自动**把表单切回激活表单 —— 现在不再自动切。表单形状在拦截页出现时从 `/state` 取一次初值，此后只由用户用两个跳转链接改变；用户看到的是**消息 + 「去激活」按钮**（详见 `P4-拦截页.md` §4.6）。所以："服务端纠正数据、前端不偷偷换表单" —— 前端仍会在业务级失败后重读状态（让 `productState` 与平台一致，授权页等消费者读它），但**重读不再决定形状**。
 - **✅ 与本分支现状的关系**（2026-09-12 更正，原文写「后端尚无」且引用了分支 `feat/activation-box-code`，两者都已过期）：前端与**后端**都已有 `boxCode` 全链路 —— 后端见 `internal/productruntime` 的登录处理与 `TestFirstActivationReturnsWrappedStateWithServerBoxCode`（`boxCode` **取自服务端应答，不是表单值**）。原引用的分支 `feat/activation-box-code` **已不存在且无归档 tag**（内容已进 `v1`，见 `web/src/views/BlockedView.svelte` 的 `boxCode` 字段与 Go 侧同名 DTO），故不再作为落点引用。
 
 ### 2.4 `POST /api/product/logout` ✅
@@ -300,6 +304,7 @@
 | `box_code_unknown` | 业务 | 盒子编号不认识 | `product.err_box_code_unknown` |
 | `box_code_mismatch` | 业务 | 激活码与盒子编号不匹配 | `product.err_box_code_mismatch` |
 | `phone_mismatch` | 业务 | 目录已绑其他手机号（带 `phoneMasked`） | `product.err_phone_mismatch` |
+| `activation_required` | 业务 | **该手机号没有可用授权**（`403`；`中台交付包` §4.2 登录必备码） | `product.err_activation_required` |
 | `control_plane_unconfigured` | 业务 | 本构建没有配置中台地址（`developer` 构建未填 Sandbox / 正式构建漏配） | —（S-6/S-7 未定，暂由前端兜底文案） |
 | `unauthorized` | 业务 | **会话失效**：中台**明确拒绝**了 refresh token（`productclient.ErrSessionExpired`）。本地应答 **401** | —（**刻意不渲染文案**：前端 `noteSessionLost` 收到 401 即回拦截页，见 `P4-拦截页.md` §4） |
 
@@ -308,7 +313,9 @@
 2. `invalid_code` 同时出现在两个层级，靠**信封类型**区分（有 `fieldErrors` 就是字段级）。
 3. `invalid_phone` 在 `login` 里是字段级、在 `send-code` 里是业务级（前端自己落回 `phone` 字段）。**同一个 code 名、两种信封**，实现者"顺手统一"会造成不报错但文案错的结果（§2.2）。
 
-**前端本地兜底（不是服务端契约）**：`BlockedView` 的 `businessErrorKey()` 有一个 `default` 分支渲染 `product.submit_failed`（「登录失败，请重试」）。这是**收到未知 code 时的兜底文案**，不代表服务端可以返回未登记的 code——**未知 code 应当视为契约违约并记日志**，而不是静默落到通用文案。
+**前端本地兜底（不是服务端契约）**：`BlockedView` 的 `businessErrorKey()` 对未知 code 渲染 `product.submit_failed`（「登录失败，请重试」）并 `console.warn` 一次（每个 code 只报一次）。这是**收到未知 code 时的兜底文案**，不代表服务端可以返回未登记的 code——**未知 code 应当视为契约违约并记日志**，而不是静默落到通用文案。
+
+> **2026-09-13 更正（`V-45`）：这段话此前描述的是一个不存在的兜底。** 实现里那个分支写的是 `default: return ''` —— 未知码渲染成**空串**，用户看到的是「没有错误」，比静默落到通用文案更糟。之所以长期没被察觉，是因为**唯一会走到那里的码（`activation_required`）没有任何测试**。现在两者都改了：兜底真的落到 `product.submit_failed`，且 `activation_required` 上了表（见上一行）。这条差异值得记住：**规范里写的行为不是行为，代码里的才是**。
 
 **信封层级由本表决定，不由中台决定（2026-09-11，`PR-2b` 实施时明确）。** 中台会在它的错误体里带 `field`（例如它把 `activation_invalid` 标成 `activationCode` 的错），但**本地该走字段级还是业务级，是本契约的决定** —— 上表把 `activation_invalid` / `box_code_unknown` / `box_code_mismatch` / `phone_mismatch` 都定为**业务级**，所以实现必须**忽略中台那个 `field`**，把它们送到顶部横幅而不是输入框下面。理由：用户改不动这些值（`activation_code_used` 只能找客服），落在输入框下面会误导成"改一下就能过"。
 - **实现落点：`internal/productruntime/envelope.go` 的 `fieldLevelCodes` 表**（只有 3 个 code 是字段级：`invalid_code` / `nickname_format` / `nickname_sensitive`）。**本表与那张表必须同步改** —— 这与 §2.10 前端 `normalizeWord` 的同步约束是同一类要求：规范在文档，执行在代码，两处一起动。
@@ -354,6 +361,7 @@
 
 | 版本 | 日期 | 变更 |
 | --- | --- | --- |
+| `v0.7` | 2026-09-13 | **`PR-2e` 落地 `V-45`（`v0.6` 那条规则的更正与扩展）。** ① **§2.3 请求形状**：两个激活凭证从"首启必填/二次登录省略"改为**可选的一对**（要么都给、要么都不给），本地只查形状、是否首启由中台判（`V-45` / `PQ28`）—— 这条同时把"丢 `data/` 只能走客服"变成"只凭手机号+验证码登进已有账号"；② **业务级码表补 `activation_required` 一行**（`403`、不挂 `field`、动作＝**去激活**）：它按 `中台交付包` §4.2 是登录必备码，但客户端此前**没有 case、没有 i18n 键**，兜底又返回空串 ⇒ 平台真发它时横幅是**空白**；③ **§2.3 规则**改写 `V-44` 那条的用户可见半边：降 `activated` 仍在（数据），但前端**不再自动换表单**，改为"消息 + 「去激活」按钮"；④ 撤回国判据补第五个码 `activation_required`；⑤ 顺带把"业务级一律 400"改成"状态码取自 `中台交付包` §3.2"（`activation_required` 是 403，原文那句话会误导实现）|
 | `v0.6` | 2026-09-13 | **`PR-2d` 落地 `V-44`：§2.3 补一条规则 —— 一次「没带激活凭证」的登录被平台以四个激活类码拒绝时，本地 `activated` 随之降为 `false`，应答码/信封/状态码不变。** 起因是用户手工验收 `PR-4c1` 时提问「退出登录后登录提示激活码不正确」：本地 `activated:true` ⇒ 表单只发两个字段 ⇒ 平台按激活失败答复（`activation_invalid`）⇒ 文案落在**没有该字段的表单**上（`BlockedView.svelte:34/144-145/276/198`），界面内的唯一出路不存在。**规则的两半都写进 §2.3**：降的两个条件（未带凭证 **且** 平台码属那四个）与**不降的清单**（传输失败/5xx/`invalid_code`/`code_not_sent`/`phone_mismatch`）；并写明判定在服务端、前端只重读状态（与 `V-22` 同源）。**§1.4 / §3 无新增**：不新端点、不新错误码。 |
 | `v0.5` | 2026-09-12 | **新增第 13 条端点 `GET /api/product/control-plane`（`PR-2c`，服务 `L-B2`）—— 本轮改代码的同时改本文档。** ① §1.4 端点总表加第 13 行；② §2.13 写全：`{"configured","hasTrustedKeys"}`、判定位置仍是 `internal/productprofile`（唯一 owner，`productruntime` 只经 `Deps.ControlPlane` 转发）、**需登录＝否**、为什么不塞进 `ProductStateDTO`、四条前端消费规则（**`configured` 先判**，落地时经测试纠正）、文案约束、i18n 键名；③ §0.1 的「5 条已落地」改为「6 条」，并把 `README.md` / `需求基线.md` 的「12 个端点」改为 13。**注意**：本端点没有错误码、不写盘、不吃中台 —— 它是编译期事实的纯转发，因此 §3 错误码总表**无需**新增行。 |
 | `v0.4` | 2026-09-12 | **`PR-2c` 落地 `L-A6`：补登 `unauthorized` 一行，并解释它为什么是全表唯一的异形码。** `V-21`：`ErrSessionExpired` 是**哨兵错误**、不含 `*productclient.Error`，`writePlatformError` 的 `errors.As` 落空后把它归成 `503 network_unavailable` —— 会话失效被报成「网络不通」，前端因此给一个**永远不可能成功**的重试按钮（被拒的 refresh token 不自愈）。本表此前**根本没有这一行**，正是该误分类无人发现的原因：契约没登记，就没有人核对。现已补登（业务级、**刻意不配 i18n 键**、本地应答 **401**，由前端 `noteSessionLost` 直接回拦截页），并注明**它的触发点在今天只有一处**（`PR-4b` 的目录拉取，`client.Bootstrap` 是首个走 `doAuthorized` 的调用），在此之前端到端到不了。§3 另加一段说明其形状差异**是有意的、不要在"统一信封"时抹平**。 |

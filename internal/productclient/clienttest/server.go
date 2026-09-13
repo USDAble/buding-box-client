@@ -341,9 +341,17 @@ func (s *Server) handleLogin(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	case acct == nil:
-		// Nothing to sign in as, and no activation offered. The registry does not
-		// name this case, so it is reported as the activation failure it is.
-		writeError(w, http.StatusBadRequest, productclient.CodeActivationInvalid, "activationCode")
+		// Nothing to sign in as, and no activation offered. 中台交付包 §4.2 lists
+		// activation_required among the codes a login must expect, and this is that
+		// case: the phone holds no usable authorization. It used to answer
+		// activation_invalid on the belief that the registry did not name this
+		// case - it does, and the difference is user-visible: the client renders
+		// "go activate" for this code instead of pointing at a field of an
+		// activation form it is not even showing (V-45).
+		//
+		// No field: the answer is about the account, not about one of the two
+		// credentials, which is why 本地API契约 §3 keeps it business-level.
+		writeError(w, http.StatusForbidden, productclient.CodeActivationRequired, "")
 		return
 	}
 

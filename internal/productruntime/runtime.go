@@ -451,12 +451,19 @@ func (rt *Runtime) validateLogin(w http.ResponseWriter, phone, code, nickname, a
 		fields["nickname"] = "nickname_format"
 	}
 
-	// A first activation is any attempt that carries either credential, plus any
-	// attempt on an installation that has never activated. Both credentials are
-	// then required, so a half-filled form is reported against the empty one
-	// rather than sent to the platform.
-	activationAttempt := activationCode != "" || boxCode != "" || !rt.deps.State.State().Activated
-	if activationAttempt {
+	// The activation credentials are an optional PAIR: offer both, or neither.
+	//
+	// Which of the two the user is making is no longer the client's call. The old
+	// rule let a local flag decide ("this installation has never activated, so both
+	// fields are mandatory"), and that stranded the very user E1 rule 2 warns
+	// about: one whose data/ is gone, whose activation code is spent (one-shot),
+	// and who only needed to sign in to an account the platform already holds.
+	// Whether this installation needs an activation is the platform's answer, so
+	// the client checks the SHAPE and the platform checks the FACT (开发规范 §3.8,
+	// PQ28). A half-filled pair is still refused here, so the user is told which
+	// of the two is missing without a round trip.
+	offeredActivation := activationCode != "" || boxCode != ""
+	if offeredActivation {
 		if strings.TrimSpace(activationCode) == "" {
 			fields["activationCode"] = "invalid_activation"
 		}
@@ -591,15 +598,21 @@ func (rt *Runtime) followActivationRefusal(activationCode, boxCode string, err e
 	}
 }
 
-// refusesActivation reports whether a platform code is one of the four that mean
-// "this authorization is not usable" (需求基线 E1 规则 2, L-A4). The four come
-// from internal/productclient, which owns the vocabulary.
+// refusesActivation reports whether a platform code means "this authorization is
+// not usable" (需求基线 E1 规则 2, L-A4). The codes come from
+// internal/productclient, which owns the vocabulary.
+//
+// activation_required belongs here even though it is not one of the four: it is
+// the more direct statement of the same thing ("this phone holds no usable
+// activation"), and it is what the platform answers when the attempt offered no
+// credential at all - the exact shape this withdrawal is for.
 func refusesActivation(code string) bool {
 	switch code {
 	case productclient.CodeActivationInvalid,
 		productclient.CodeActivationCodeUsed,
 		productclient.CodeBoxCodeUnknown,
-		productclient.CodeBoxCodeMismatch:
+		productclient.CodeBoxCodeMismatch,
+		productclient.CodeActivationRequired:
 		return true
 	}
 	return false

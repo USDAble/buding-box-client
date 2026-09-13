@@ -120,7 +120,18 @@ func (f *catalogFixture) signIn() {
 
 func (f *catalogFixture) fetch() (catalogOutcome, error) {
 	f.t.Helper()
-	return f.rt.fetchCatalog(context.Background())
+	return f.rt.fetchCatalog(context.Background(), "")
+}
+
+// prime leaves a verified catalog in the cache, which every test about a
+// *degradation* needs first: "expired", "refused" and "stale" are all statements
+// about a cache that exists, and a fixture without one would be testing a
+// different state than the one it names.
+func (f *catalogFixture) prime() {
+	f.t.Helper()
+	if outcome, err := f.rt.refreshCatalog(context.Background(), true); outcome != catalogReady {
+		f.t.Fatalf("priming refresh = %q (err %v), want a cached catalog", outcome, err)
+	}
 }
 
 func (f *catalogFixture) cachePath() string { return filepath.Join(f.root, "catalog.json") }

@@ -1,7 +1,7 @@
 <script lang="ts">
   import { t } from '../../lib/i18n'
   import { untrack } from 'svelte'
-  import { chatModes, modeDisplayName, modelDisplayName } from '../../lib/chatMode'
+  import { chatModes, modeDisplayName, modelDisplayName, catalogNoticeKey } from '../../lib/chatMode'
   import { settingsModalOpen } from '../../lib/stores'
   import type { ChatModeModel } from '../../lib/api'
   import PrivacyMark from '../ui/PrivacyMark.svelte'
@@ -50,7 +50,7 @@
 
 <div class="menu mode-menu" role="menu" onclick={(e) => e.stopPropagation()}>
   {#if $chatModes.length === 0}
-    <div class="menu-empty">{$t('mode.no_models')}</div>
+    <div class="menu-empty">{$t(catalogNoticeKey())}</div>
   {:else}
     {#each $chatModes as mode (mode.id)}
       <button class="mode-header" onclick={() => toggleGroup(mode.id)}>
@@ -69,7 +69,7 @@
       </button>
       {#if openGroups.includes(mode.id)}
         {#if mode.models.length === 0}
-          <div class="menu-empty">{$t('mode.no_models')}</div>
+          <div class="menu-empty">{$t(catalogNoticeKey())}</div>
         {:else}
           {#each mode.models as m (m.id)}
             <button

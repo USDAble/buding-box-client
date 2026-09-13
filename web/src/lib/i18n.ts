@@ -1102,6 +1102,9 @@ export const en: Record<string, string> = {
   "mode.smart": "Smart",
   "mode.default": "Default",
   "mode.no_models": "No models available in this mode",
+  "catalog.absent": "The model list has not been downloaded yet. Check your connection and try again.",
+  "catalog.stale": "The model list needs an online update before you can send a message.",
+  "catalog.unverifiable": "The model list could not be verified, so it is not being used. It will recover after the platform is updated.",
   // OCTO-FORK: P10 隐私模式与 PII 处理 — see
   // dev-docs-usdable/需求/2260906/技术方案/P10-隐私模式与PII.md.
   "privacy.mode_label": "Privacy mode",
@@ -2196,6 +2199,9 @@ export const zh: Record<string, string> = {
   "mode.smart": "智能",
   "mode.default": "默认",
   "mode.no_models": "该模式下暂无可用模型",
+  "catalog.absent": "模型列表尚未下载，请检查网络后重试。",
+  "catalog.stale": "模型列表需要联网更新后才能发送消息。",
+  "catalog.unverifiable": "模型列表未通过校验，已停止使用；平台更新后会自动恢复。",
   // OCTO-FORK: P10 隐私模式与 PII 处理 — see
   // dev-docs-usdable/需求/2260906/技术方案/P10-隐私模式与PII.md.
   "privacy.mode_label": "隐私模式",

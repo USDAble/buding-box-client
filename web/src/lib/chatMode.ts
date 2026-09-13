@@ -5,6 +5,7 @@
 import { writable, get } from 'svelte/store'
 import { tr, locale } from './i18n'
 import { getChatModes, setSessionChatMode, updateSessionModel, type ChatModeDTO, type ChatModeModel } from './api'
+import { catalogState, refreshCatalogState } from './product'
 import { chatMode, chatModel, sessions } from './stores'
 
 export type ChatMode = 'privacy' | 'smart' | 'default'
@@ -26,13 +27,39 @@ export const chatModes = writable<ChatModeDTO[]>([])
 // retired the local chat-modes.json and the built-in list with it, so a目录 that
 // cannot be read leaves the previous list in place rather than replacing it with
 // an invented one. The user-visible wording for that state is PR-4c's.
+//
+// PR-4c's half is the two reads the menu now performs together, and the order is
+// load-bearing: the availability read is what renews a lapsed catalog (B3), so it
+// goes first and the list below it is the one that was just renewed. Reading the
+// list first would show the user the pre-refresh list and then explain, from a
+// fresh state, why it is empty.
 export async function loadChatModes(): Promise<void> {
+  await refreshCatalogState()
   try {
     const d = await getChatModes()
     chatModes.set(d.modes ?? [])
   } catch {
     // Keep the previous list on error (the menu still opens).
   }
+}
+
+// catalogNoticeKey is the ONE place "why is there nothing to pick / why can I not
+// send" becomes a sentence (开发规范 §3.8, 需求基线 B9).
+//
+// B9 wants four distinct sentences, and it also says the two families must not
+// share one: an unavailable catalog is a network or trust problem the user may be
+// able to act on, while an empty group is simply a group with no models in it.
+// The split is by judgement source, not by which component renders it — three of
+// the four are decided by catalogState alone (server-side, one owner) and the
+// fourth only when the catalog is fine and the projection still came up empty.
+// Deciding it inside each component is how the picker ends up saying "the catalog
+// is broken" while the banner says "this group is empty".
+export function catalogNoticeKey(): string {
+  const state = get(catalogState)
+  if (state === 'absent') return 'catalog.absent'
+  if (state === 'stale') return 'catalog.stale'
+  if (state === 'unverifiable') return 'catalog.unverifiable'
+  return 'mode.no_models'
 }
 
 // setSessionMode persists the session's mode and, when a concrete model is

@@ -103,6 +103,9 @@ type Server struct {
 	policyAudience   string  // "" means FixturePolicyAudience
 	catalogTTLSec    int     // 0 means FixtureCatalogTTLSec
 	refuseSessionsAt bool    // hand out tokens the server will not recognise
+
+	catalogRefreshCount int  // refresh endpoint hits, so "exactly once" is checkable
+	unchangedInBody     bool // spell "nothing new" as {"unchanged":true} instead of 304
 }
 
 // LastReasoningEffort reports the reasoning_effort the stand-in last received,
@@ -202,6 +205,29 @@ func (s *Server) BootstrapCount() int {
 	return s.bootstrapCount
 }
 
+// CatalogRefreshCount reports how many conditional-refresh attempts arrived.
+// Unlike BootstrapCount it is not reset by a fault injection: the assertions it
+// serves are "exactly one refresh happened" and "no refresh happened", and both
+// need the count to survive the switch that caused them.
+func (s *Server) CatalogRefreshCount() int {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.catalogRefreshCount
+}
+
+// SpellUnchangedInBody makes the refresh endpoint say "nothing new" with
+// `{"unchanged": true}` instead of a bare 304.
+//
+// Both spellings are legal in the contract (中台交付包 §4.3) and the client has
+// to recognise either, which is only testable if the fixture can produce either.
+// A fixture with one spelling would let a client that only understood that one
+// pass, and the contract explicitly lets the platform pick.
+func (s *Server) SpellUnchangedInBody() {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.unchangedInBody = true
+}
+
 // New builds a stand-in seeded with the fixture codes above.
 func New(opts ...Option) *Server {
 	s := &Server{
@@ -238,6 +264,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("POST "+"/v1/auth/login", s.handleLogin)
 	mux.HandleFunc("POST "+"/v1/auth/refresh", s.handleRefresh)
 	mux.HandleFunc("GET "+"/v1/client/bootstrap", s.handleBootstrap)
+	mux.HandleFunc("GET "+"/v1/catalog/models", s.handleCatalogModels)
 	// The built-in gateway half (需求基线 C1). It lives on the same stand-in as
 	// the control plane because the developer profile points both hosts at this
 	// one process (internal/productprofile/profiles/developer.json), and a
@@ -523,6 +550,43 @@ func (s *Server) handleBootstrap(w http.ResponseWriter, r *http.Request) {
 	writeData(w, http.StatusOK, data)
 }
 
+// handleCatalogModels serves the conditional catalog refresh (中台交付包 §4.1 第 6
+// 条, §4.3).
+//
+// It answers "nothing new" in whichever spelling the test selected, because the
+// contract lets the platform choose and the client owes both. A 304 has no body
+// at all, which is why the count and the branch both live here rather than in a
+// shared helper: the two spellings differ in exactly this one place.
+func (s *Server) handleCatalogModels(w http.ResponseWriter, r *http.Request) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	s.catalogRefreshCount++
+	if _, ok := s.access[bearer(r)]; !ok {
+		writeError(w, http.StatusUnauthorized, productclient.CodeUnauthorized, "")
+		return
+	}
+	if known := r.URL.Query().Get("knownVersion"); known != "" && known == s.version() {
+		if s.unchangedInBody {
+			writeData(w, http.StatusOK, map[string]any{"unchanged": true})
+			return
+		}
+		w.WriteHeader(http.StatusNotModified)
+		return
+	}
+	envelope, err := s.policyEnvelope()
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, productclient.CodeInternalError, "")
+		return
+	}
+	// The same flattened shape bootstrap uses, so a signed catalog has one
+	// spelling on the wire (中台交付包 §4.3).
+	writeData(w, http.StatusOK, struct {
+		productclient.PolicyEnvelope
+		Unchanged bool `json:"unchanged"`
+	}{PolicyEnvelope: envelope})
+}
+
 // handleCompletions is the stand-in gateway: an OpenAI-protocol chat endpoint
 // that streams, so the whole turn path can be walked by hand.
 //
@@ -659,15 +723,24 @@ func (s *Server) handleCompletions(w http.ResponseWriter, r *http.Request) {
 // policyEnvelope signs the fixture policy with the current fault switches
 // applied. The caller holds s.mu.
 func (s *Server) policyEnvelope() (productclient.PolicyEnvelope, error) {
-	version := s.catalogVersion
-	if version == "" {
-		version = FixturePolicyVersion
-	}
 	audience := s.policyAudience
 	if audience == "" {
 		audience = FixturePolicyAudience
 	}
-	return signedPolicyFor(s.now(), version, audience, s.tamperPolicy, s.catalogTTLSec)
+	return signedPolicyFor(s.now(), s.version(), audience, s.tamperPolicy, s.catalogTTLSec)
+}
+
+// version is the catalog version the next answer carries. The caller holds s.mu.
+//
+// It exists as its own method because two callers need to agree on it — the
+// envelope's contents and the conditional comparison in handleCatalogModels — and
+// a second copy of the default is how a conditional request starts comparing
+// against a version the platform never signed.
+func (s *Server) version() string {
+	if s.catalogVersion != "" {
+		return s.catalogVersion
+	}
+	return FixturePolicyVersion
 }
 
 // bootstrapResponse is the account summary plus the signed policy envelope, as

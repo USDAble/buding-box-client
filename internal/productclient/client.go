@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"sync"
 	"time"
 )
@@ -159,6 +160,37 @@ func (c *Client) Refresh(ctx context.Context, refreshToken string) (*RefreshData
 func (c *Client) Bootstrap(ctx context.Context) (*BootstrapData, error) {
 	var out BootstrapData
 	if err := c.doAuthorized(ctx, http.MethodGet, pathBootstrap, nil, &out); err != nil {
+		return nil, err
+	}
+	return &out, nil
+}
+
+// CatalogModels refreshes the catalog without a re-login, conditionally on the
+// version the caller already holds (中台交付包 §4.3).
+//
+// knownVersion is the cache's catalogVersion, and it is what makes this a
+// conditional request: the platform compares it and may answer "nothing new".
+// Both spellings of that answer are folded into Unchanged here, because the
+// contract lets the platform pick either one and the caller must not have to
+// know which — the alternative is the same fact tested twice at every call site.
+//
+// An empty knownVersion asks for an unconditional snapshot, which is the correct
+// request for a build with no cache: there is no version to compare against.
+func (c *Client) CatalogModels(ctx context.Context, knownVersion string) (*CatalogModelsData, error) {
+	path := pathCatalogModels
+	if knownVersion != "" {
+		path += "?knownVersion=" + url.QueryEscape(knownVersion)
+	}
+	var out CatalogModelsData
+	err := c.doAuthorized(ctx, http.MethodGet, path, nil, &out)
+	if errors.Is(err, ErrNotModified) {
+		// A 304 carries no body, so there is nothing to decode. Reporting it as
+		// an unchanged answer rather than an error is the whole point: B3's
+		// acceptance is that the cache file is left alone, which only happens if
+		// the caller can tell "no news" from "failed to find out".
+		return &CatalogModelsData{Unchanged: true}, nil
+	}
+	if err != nil {
 		return nil, err
 	}
 	return &out, nil
@@ -322,6 +354,12 @@ func (c *Client) do(ctx context.Context, method, path string, body, out any, bea
 	raw, err := io.ReadAll(io.LimitReader(resp.Body, maxBody))
 	if err != nil {
 		return &Error{Code: CodeNetworkUnavailable, Message: err.Error()}
+	}
+	if resp.StatusCode == http.StatusNotModified {
+		// Before the 2xx check: a 304 is neither a success nor a failure, and
+		// letting it fall into decodeError would report the platform's "your
+		// copy is current" as an error with a status the caller cannot act on.
+		return ErrNotModified
 	}
 	if resp.StatusCode < 200 || resp.StatusCode > 299 {
 		return decodeError(resp.StatusCode, raw)

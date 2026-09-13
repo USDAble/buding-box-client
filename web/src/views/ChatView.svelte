@@ -70,6 +70,8 @@
   } from '../lib/stores'
   import { ws, wsState, wsReconnect } from '../lib/ws'
   import * as api from '../lib/api'
+  import { canStartTurn } from '../lib/product'
+  import { catalogNoticeKey } from '../lib/chatMode'
   import { observeArtifact, resetArtifacts } from '../lib/artifacts'
   import { renderMarkdown, escapeHtml, setupCopyButtons } from '../lib/markdown'
   import { applyToolToggle, buildExportConversation, exportConversationStyles, hasRenderableTurn, TOOL_RESULT_CHARS } from '../lib/exportTranscript'
@@ -2324,6 +2326,21 @@ import QuestionModal from '../components/overlays/QuestionModal.svelte'
   // the panel the user is currently looking at rather than into the scrollback.
   async function send(text: string, files?: any[], queued = false, pin = true) {
     if (!text.trim() && !(files && files.length)) return
+    // 需求基线 B4 rule 1: with an unusable catalogue no new turn may start.
+    //
+    // The check is here, before anything is created or sent, because every path
+    // below ends in ws.sendMessage: a refusal after ensureActiveSession would
+    // leave an empty session behind for a message that was never sent, and one
+    // after the optimistic bubble would leave it spinning for good.
+    //
+    // The message is handed back to the composer rather than dropped. The user
+    // typed it to send it; discarding it to make a refusal look tidy is the same
+    // loss the `!active` branch above refuses to accept.
+    if (!canStartTurn()) {
+      composer?.restore(text, files)
+      showToast(tr(catalogNoticeKey()), 'error')
+      return
+    }
     const active = await ensureActiveSession()
     if (!active) {
       // The composer cleared its input before calling us, so without this the

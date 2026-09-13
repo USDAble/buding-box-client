@@ -55,6 +55,19 @@ func (e *Error) Error() string {
 // not retry, because a rejected refresh token does not heal (需求基线 E12).
 var ErrSessionExpired = errors.New("productclient: session expired")
 
+// ErrNotModified reports a 304 on a conditional request: "the copy you hold is
+// current". HTTP classes that as a redirection and this client would otherwise
+// file it as a failure, which is the opposite of what it says.
+//
+// It is a sentinel rather than a per-call flag because only one caller sends a
+// conditional request, and a sentinel keeps the authentication, the single
+// refresh and the one-replay rule in the one place they already live — a second
+// request path for the 304 case would be a second thing to keep in step
+// (开发规范 §3.5). A 304 to a request that was not conditional is a protocol
+// violation and stays an error, which is the correct outcome for every other
+// caller.
+var ErrNotModified = errors.New("productclient: not modified")
+
 // Business error codes. Values come from the platform's registry
 // (中台交付包 §3.2) - add a new value there before using it here, so the
 // spelling has one owner.
@@ -111,6 +124,10 @@ const (
 	pathLogin     = "/auth/login"
 	pathRefresh   = "/auth/refresh"
 	pathBootstrap = "/client/bootstrap"
+	// pathCatalogModels refreshes the catalog without a re-login (中台交付包 §4.1
+	// 第 6 条). It is the one endpoint that answers a conditional request, which
+	// is why the refresh path goes through it rather than through bootstrap.
+	pathCatalogModels = "/catalog/models"
 )
 
 // PurposeLogin is the only code purpose this build requests.
@@ -209,4 +226,23 @@ type BootstrapData struct {
 // computes credits locally (需求基线 E9).
 type Balance struct {
 	BalanceMicroCredits int64 `json:"balanceMicroCredits"`
+}
+
+// CatalogModelsData is the answer to a catalog refresh (中台交付包 §4.3).
+//
+// The envelope is embedded rather than nested because the unsigned shape is the
+// same one bootstrap carries — "a signed catalog" has exactly one spelling, and
+// a second one would be the same fact defined twice (开发规范 §3.8).
+type CatalogModelsData struct {
+	PolicyEnvelope
+	// Unchanged is the body spelling of "your copy is still current". The
+	// platform may answer that way OR with a bare 304 (中台交付包 §4.3), and the
+	// client has to recognise both, so both land on this field: the 304 is
+	// translated in the client method rather than by a second code path.
+	//
+	// It is deliberately separate from an empty envelope. `IsEmpty()` means the
+	// platform sent no catalog at all, which is the "this build has none"
+	// outcome; Unchanged means it sent none *because ours is current*. Two
+	// different facts, so they get two different tests.
+	Unchanged bool `json:"unchanged"`
 }

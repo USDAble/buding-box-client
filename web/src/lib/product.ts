@@ -169,9 +169,7 @@ export async function refreshControlPlane(): Promise<void> {
   blockedPage.set(page);
 }
 
-// ─── control-plane failure tiers (L-B3) ─────────────────────────────────────
-
-/** The four control-plane failure tiers. See 本地API契约 §3 and P4-拦截页 §3. */
+// ─── control-plane failure tiers (L-B3) ─────────────────────────────────────/** The four control-plane failure tiers. See 本地API契约 §3 and P4-拦截页 §3. */
 export type FailureTier =
   | "network_unavailable"
   | "upstream_unavailable"
@@ -207,6 +205,91 @@ export function failureTier(code?: string | null): FailureTier | null {
 export function tierRetryable(tier: FailureTier): boolean {
   return tier === "network_unavailable" || tier === "upstream_unavailable";
 }
+
+// ─── catalogue availability (L-C2 / 需求基线 B4, B9) ────────────────────────
+
+/**
+ * The four availability states of the signed catalogue, mirroring
+ * internal/productruntime's `catalogState` (本地API契约 §2.14).
+ *
+ * Three of them mean "no usable model list" for three different reasons, and
+ * 需求基线 B9 requires a distinct sentence for each: a user who is told "check
+ * your connection" when the real problem is a rejected signature will keep
+ * checking their connection.
+ */
+export type CatalogState = "ready" | "absent" | "stale" | "unverifiable";
+
+// Default "ready", not "absent". Before the first read we do not know, and not
+// knowing is not evidence that the build is broken — the same rule
+// refreshControlPlane follows when it fails closed to the login form rather than
+// to a misconfiguration page. Outside the desktop shell there is no product layer
+// at all, so it stays ready and nothing is blocked.
+export const catalogState = writable<CatalogState>("ready");
+/** Whether pressing "retry" is worth offering, straight from the server. */
+export const catalogRetryable = writable<boolean>(false);
+
+/**
+ * refreshCatalogState reads the catalogue's availability.
+ *
+ * The read is also what renews a lapsed catalogue (需求基线 B3: "TTL 到期后下一次
+ * 开选择器触发刷新"), so this is called when the picker opens and once at startup
+ * for the composer's sake. It is deliberately NOT called before every send: a
+ * round trip per message to re-learn a fact we just read would be a cost with no
+ * answer attached, and the server is the one that must refuse a turn anyway
+ * (that half lands with PR-5, reading this same state).
+ *
+ * A failed read keeps the previous value. Inventing "absent" would block a user
+ * whose catalogue is fine, and inventing "ready" would be a promise about a
+ * response we never got; keeping the last known answer is the only option that
+ * claims nothing new (开发规范 §3.9).
+ */
+export async function refreshCatalogState(): Promise<void> {
+  if (!windowToken()) {
+    // No shell, no product layer: nothing decides a turn here.
+    catalogState.set("ready");
+    return;
+  }
+  try {
+    const res = await productFetch("/api/product/catalog", {
+      cache: "no-store",
+      headers: windowTokenHeaders(),
+    });
+    // A non-200 (including 404 from a build without this endpoint) keeps the
+    // previous answer, for the reason above.
+    if (!res.ok) return;
+    const d = (await res.json()) as { state?: string; retryable?: boolean };
+    if (isCatalogState(d.state)) catalogState.set(d.state);
+    catalogRetryable.set(d.retryable === true);
+  } catch {
+    // Unreadable is the same case as unreachable: keep what we had.
+  }
+}
+
+/** isCatalogState narrows the wire string, so an unrecognised value cannot
+ *  become a state the rest of the app has to defend against. */
+export function isCatalogState(value?: string | null): value is CatalogState {
+  return value === "ready" || value === "absent" || value === "stale" || value === "unverifiable";
+}
+
+/**
+ * canStartTurn answers 需求基线 B4 rule 1: with an unusable catalogue a new turn
+ * must not start.
+ *
+ * The rule is stated for the expired case, and it is applied to every non-ready
+ * state on purpose. The three states all mean "there is no model list we may use"
+ * (B9's own words), and a turn is a request to run a model: starting one would
+ * have to name a model source, and the only legitimate one — the signed
+ * catalogue — is exactly what is missing. Allowing it would be the quiet
+ * degradation to something else that §3.9 forbids, and B1 规则 1 rules out the
+ * "something else" by name.
+ *
+ * What is NOT blocked: reading. B4's "老会话可读、可改标题" is the other half of
+ * this rule, and nothing here touches history.
+ */
+export function canStartTurn(): boolean {
+  return get(catalogState) === "ready";
+}
+
 // refreshProductState loads the (de-identified) state and derives the phase.
 // Outside the desktop shell there is no gate, so the phase is ready outright.
 export async function refreshProductState(): Promise<void> {
@@ -231,6 +314,13 @@ export async function refreshProductState(): Promise<void> {
     const d = (await res.json()) as ProductStateDTO;
     productState.set(d);
     productPhase.set(d.loggedIn ? "ready" : "blocked");
+    if (d.loggedIn) {
+      // Only once the workspace is reachable. On the login screen there is no
+      // session, so the read would go out, be refused, and teach us nothing — and
+      // the picker refreshes it again when it opens anyway (B3's "下一次开选择器
+      // 触发刷新"), which is what keeps a send from having to ask synchronously.
+      await refreshCatalogState();
+    }
   } catch {
     // A state read failure must not brick the shell: fall back to "blocked"
     // so the user can retry the login flow rather than staring at a spinner.

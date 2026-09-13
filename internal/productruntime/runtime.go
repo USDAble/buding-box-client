@@ -16,6 +16,7 @@ import (
 	"log/slog"
 	"net/http"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/open-octo/octo-agent/internal/catalogstore"
@@ -91,6 +92,17 @@ type ControlPlaneStatus struct {
 // Runtime serves the local product endpoints.
 type Runtime struct {
 	deps Deps
+
+	// catalogMu guards lastCatalogOutcome. It is a plain mutex rather than an
+	// atomic because the field is read and written by request handlers, and the
+	// critical section has no I/O in it.
+	catalogMu sync.Mutex
+	// lastCatalogOutcome is the verdict of the most recent refresh. It has to
+	// live in memory: the cache records what was ACCEPTED and never what was
+	// refused, so "the platform offered us something we could not verify" is
+	// unanswerable from the disk and would otherwise degrade to "no cache"
+	// (开发计划 PR-4c 缺口 ①).
+	lastCatalogOutcome catalogOutcome
 }
 
 // New builds a Runtime.
@@ -125,6 +137,7 @@ func (rt *Runtime) Handler() http.Handler {
 func (rt *Runtime) Mount(api func(pattern string, h http.HandlerFunc)) {
 	api("GET /api/product/state", rt.handleState)
 	api("GET /api/product/control-plane", rt.handleControlPlane)
+	api("GET /api/product/catalog", rt.handleCatalog)
 	api("GET /api/product/chat-modes", rt.handleChatModes)
 	api("POST /api/product/send-code", rt.handleSendCode)
 	api("POST /api/product/login", rt.handleLogin)
@@ -263,6 +276,22 @@ type controlPlaneDTO struct {
 	HasTrustedKeys bool `json:"hasTrustedKeys"`
 }
 
+// handleCatalog reports whether the catalog is usable, and if not why
+// (本地API契约 §2.14, 需求基线 B4/B9).
+//
+// It is a separate endpoint rather than a field on /chat-modes or /state, and
+// the reason is an ownership one (开发规范 §3.8): usability is a run-time fact
+// about the cache plus the last refresh, while /state mirrors a file on disk and
+// /chat-modes answers "what should the picker show". Only the composer needs the
+// answer without opening the picker ("must not start a turn"), and a fact with
+// three readers gets one owner or it gets three drifting copies.
+//
+// The read performs B3's on-demand refresh, so opening the picker is what renews
+// a lapsed catalog; refreshCatalogOnDemand owns how often that can happen.
+func (rt *Runtime) handleCatalog(w http.ResponseWriter, r *http.Request) {
+	writeJSON(w, http.StatusOK, rt.refreshCatalogOnDemand(r.Context()).toDTO())
+}
+
 // handleState is the first call the UI makes: it decides whether the window
 // shows the login screen or the workspace (本地API契约 §2.1).
 //
@@ -383,7 +412,7 @@ func (rt *Runtime) handleLogin(w http.ResponseWriter, r *http.Request) {
 	// issued is not usable. That has to leave the user on the blocked page with
 	// no credential behind, exactly as any other refused call would (L-A6), so it
 	// goes through the same funnel instead of being logged as a catalog problem.
-	if outcome, err := rt.fetchCatalog(r.Context()); err != nil {
+	if outcome, err := rt.refreshCatalog(r.Context(), true); err != nil {
 		if IsSessionExpired(err) {
 			rt.failPlatform(w, err)
 			return

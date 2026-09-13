@@ -1,6 +1,6 @@
 # 本地 API 契约（`/api/product/*`）
 
-> **状态**：`v0.5`（2026-09-12 `PR-2c`：`L-A6` + 新增第 13 条端点 `GET /api/product/control-plane`）
+> **状态**：`v0.10`（2026-09-13 `PR-4c`：新增第 14 条端点 `GET /api/product/catalog` + 三条降级文案 + 目录条件刷新）
 > **本批次第二份契约**，解决 [`需求基线.md`](需求基线.md) §5.1 `S-1` 与 §5.2 `PQ24`。
 > **权威实现落点**：`internal/productruntime`（[`需求基线.md`](需求基线.md) `G1`）。**不继续加进 `internal/server`**——`internal/server/product_*.go` 是 20260909 线上的旧落点，只作参考。
 > **与《中台交付包》的分工**：本文件管「Web UI ↔ 本地 Go 服务」；[`中台交付包.md`](中台交付包.md) 管「本地 Go 服务 ↔ 中台」。两份契约**不互相复制字段定义**，只引用结论。
@@ -18,18 +18,18 @@
 
 ### 0.1 本文件的依据与可信度（重要）
 
-`v1` 上**后端的落地是部分的**（2026-09-12 更正，原文说"还没有真后端"已过期）：[`internal/productruntime`](../../../internal/productruntime) 已随 `PR-2b1` / `PR-2b2a` 落地并接进服务，**§1.4 的 13 条端点里有 6 条**（`state` / `send-code` / `login` / `logout` / `locale` / `control-plane`）**是真实实现、可反向核对**；其余 7 条仍是正向整理。所以本文件的可信度是**混合**的：
+`v1` 上**后端的落地是部分的**（2026-09-12 更正，原文说"还没有真后端"已过期）：[`internal/productruntime`](../../../internal/productruntime) 已随 `PR-2b1` / `PR-2b2a` 落地并接进服务，**§1.4 的 14 条端点里有 7 条**（`state` / `send-code` / `login` / `logout` / `locale` / `control-plane` / `catalog`）**是真实实现、可反向核对**；其余 7 条仍是正向整理。所以本文件的可信度是**混合**的：
 
 | 依据 | 位置 | 可信度 |
 | --- | --- | --- |
-| 已落地的 Go handler（**最高**） | `internal/productruntime/`（`state` / `send-code` / `login` / `logout` / `locale` / `control-plane` 六条）+ `internal/productclient/dto.go` | **高** —— 已实现且经测试，与它不一致的是本文件而不是代码 |
+| 已落地的 Go handler（**最高**） | `internal/productruntime/`（`state` / `send-code` / `login` / `logout` / `locale` / `control-plane` / `catalog` 七条）+ `internal/productclient/dto.go` | **高** —— 已实现且经测试，与它不一致的是本文件而不是代码 |
 | 前端调用与解析逻辑 | `web/src/lib/product.ts`、`api.ts`、`sensitive.ts`、`sensitiveDict.ts` | **高** —— 前端必须这样解析才能工作，字段名与信封形状是硬事实 |
 | ~~临时假后端~~ | **已拆除（`PR-3`，2026-09-13）** —— 原 `web/src/dev/devBackend.ts`。它曾是一处"中等"可信度来源（替身形状），也因此让 `V-24`/`V-46` 两条"路由根本没注册"的缺口在界面上不可见 | **无** —— `rg devBackend web/src` 已无命中；凡此前只标"取自假后端"的行，形状以 `internal/productruntime` 的实现为准（见各行的 2026-09-13 更正） |
 | 本文档的设计决定 | 本文件新定 | **待实现** —— 一律标 🚧 |
 
 因此每行的状态要这样读：`✅ 现状` = **前端已依赖此形状**（改它要动前端，不是纯后端改动）；`🚧 修订` = 本契约新定，代码尚未实现。
 
-**标 `✅` 不等于「后端已验证」**（2026-09-12 收紧）。上一句只保证"前端依赖它"。要算**后端已验证**，还须该行落在上表第一行的五条已实现端点里 —— 即 `state` / `send-code` / `login` / `logout` / `locale`。**其余 7 条即使标 `✅` 也没有后端**，它们的权威校验（去重、归一化、限流边界）仍未验证。
+**标 `✅` 不等于「后端已验证」**（2026-09-12 收紧）。上一句只保证"前端依赖它"。要算**后端已验证**，还须该行落在上表第一行的七条已实现端点里 —— 即 `state` / `send-code` / `login` / `logout` / `locale` / `control-plane` / `catalog`。**其余 7 条即使标 `✅` 也没有后端**，它们的权威校验（去重、归一化、限流边界）仍未验证。
 
 ---
 
@@ -92,6 +92,7 @@
 | 11 | POST | `/api/product/sensitive/dict/import` | 是 | 否 | ✅ |
 | 12 | POST | `/api/product/sensitive/check` | 否 | 否 | ✅ |
 | 13 | GET | `/api/product/control-plane` | 否 | 否 | ✅ 新增（`PR-2c`，见 §2.13） |
+| 14 | GET | `/api/product/catalog` | 否 | 否 | ✅ 新增（`PR-4c`，见 §2.14） |
 
 > **「需登录」列是设计约定，不是观测事实。** 前端对 `/api/product/*` 一律带 window token（`api.ts` 的 `withWindowToken`），**产品门是否拦某条路由由服务端决定**，前端不区分。本列表达的是**应有的门策略**：凡读写账号数据或改词库的都要登录；`state` / `locale` / `send-code` / `login` 必须在未登录时可达，否则登录页根本渲染不出来。
 >
@@ -301,6 +302,33 @@
 
 ---
 
+### 2.14 `GET /api/product/catalog` ✅ 新增（`PR-4c`，2026-09-13）
+
+**这是第 14 条端点**，为 `L-C2` 服务：回答「目录能不能用、为什么不能」，让**发消息前**（`B4` 规则 1"不得开启新回合"）和**选择器为空时**（`B9` 四条文案）都有可上屏的判据。
+
+- **请求**：无体。
+- **应答 `200`**：
+  ```json
+  {"state": "ready|absent|stale|unverifiable", "retryable": <bool>, "catalogVersion": "<string>", "expiresAt": "<RFC3339 | \"\">"}
+  ```
+  **四个字段始终出现**（`absent` 时后两项为空串 / `false`）—— 前端靠**取值**分辨四态，靠"字段缺失"表达不了。
+
+| `state` | 含义 | `retryable` | `B9` 文案键 |
+| --- | --- | --- | --- |
+| `ready` | 有验签通过且未过期的缓存 | `false` | （不出现；分组空才是文案） |
+| `absent` | 从来没有缓存 | `true` | `catalog.absent` |
+| `stale` | 有缓存但已过期，且刷新未成功 | `true` | `catalog.stale` |
+| `unverifiable` | 收到过信封但**验签失败** | `false` | `catalog.unverifiable` |
+
+- **判定的唯一 owner**：**`internal/productruntime`**（`assessCatalog`，三个输入：缓存有无 / 是否过期 / 最近一次刷新的结局）。前端**只做 i18n 取值**，不重新判断 —— 状态→文案的映射在 `web/src/lib/chatMode.ts` 的 `catalogNoticeKey()` 一处（`开发规范` §3.8）。
+- **`retryable` 是服务端给的，不是前端推导的**：`unverifiable` 为 `false`，因为它的恢复途径是**平台换签名/密钥**，用户按键按不出来 —— 给一个按不动的重试按钮就是承诺做不到的事（§3.9）。
+- **本端点是一次读，也是一次刷新**（`B3`"TTL 到期后下一次开选择器触发刷新"）：命中 `absent` / `stale` 时它**恰好发起一次**条件刷新（带 `knownVersion`），然后报告刷新后的状态。`unverifiable` **不刷新** —— `B4`"不自动重试同一份响应"。
+- **需登录：否**（与其余产品路由同规矩，见 §1.4 的注：门的判据是窗口身份）。但**未登录时它大概率答 `absent`**，因为刷新需要会话。
+- **为什么单开一条，而不是加进 `state` 或 `chat-modes`**：可用性是**运行时**事实（缓存 + 最近一次拉取），而 `ProductStateDTO` 是**磁盘文件 `product-state.json` 的投影**（`E6.1`）；只挂在 `chat-modes` 上则 composer 要为了"能不能发"先拉一次模型列表。三处都能各自造一份意见的地方，就要定一个 owner（§3.8）。形状照抄 §2.13（同样是"运行时装配事实 + 唯一 owner"）。
+- **`expiresAt` 为空串而不是零值时间戳**：Go 的零值 `time.Time` 会序列化成公元 1 年，读起来像一个远比真实更早的过期时间。
+
+---
+
 ## 3. 错误码总表
 
 **machine code 是契约；用户可见文案不在本文件**（唯一来源 `web/src/lib/i18n.ts`）。
@@ -379,6 +407,7 @@
 
 | 版本 | 日期 | 变更 |
 | --- | --- | --- |
+| `v0.10` | 2026-09-13 | **`PR-4c` 落地，新增第 14 条端点 `GET /api/product/catalog`（§2.14）**：四值 `state`（`ready` / `absent` / `stale` / `unverifiable`）+ `retryable` + 缓存元数据（`catalogVersion` / `expiresAt`）。判定唯一 owner 在 `internal/productruntime` 的 `assessCatalog`，三输入＝缓存有无 / 是否过期 / 最近一次刷新的结局；优先级是**验签失败压过可用缓存**（不再"列表说一套、横幅说另一套"），其次无缓存，再次过期，最后 `ready`。前端只在 `chatMode.ts` 的 `catalogNoticeKey()` 一处做状态→文案映射。**四条 `B9` 文案新增三个 i18n 键**（`catalog.absent` / `catalog.stale` / `catalog.unverifiable`），第四条（分组空）沿用既有的 `mode.no_models`。**§1.4 增第 14 行。** 顺带把「能不能开新回合」（`canStartTurn()`，`ChatView.send()` 的第一道闸）的判据写清：只认 `state === "ready"`；**服务端侧强制归 `PR-5`**，读同一个判据、不新建第二个。**目录刷新改条件请求**：客户端带已有的 `catalogVersion` 作 `knownVersion`，`304` 与 `{"unchanged":true}` 两种"没变"都认、都不重写缓存；**已过 TTL 时中台不得回"没变"**（`中台交付包` §4.3 已写明，否则客户端会被永久卡在"需要联网更新"）。**周期性刷新仍为 `TODO`**（当前只有登录后强制 + 开选择器按需两条触发路径），已登记在 `开发计划`。 |
 | `v0.9` | 2026-09-13 | **`PR-3`：前端假后端（`web/src/dev/devBackend.ts`）已拆除，§0.1 的「临时假后端」可信度来源随之作废。** ① §0.1 该行改为「已拆除，可信度＝无」，并写明**凡此前只标「形状取自假后端」的行，形状自本版起以 `internal/productruntime` 的实现为准**；② §2.4 `logout` 与 §2.5 `locale` 的 `{"ok": true}` 已**对 Go 实现逐字核对**（`runtime.go:411` / `:431`）并标注行号 —— 这两处此前是靠假后端「自称」的，属本文件里可信度最低的一类；③ 记下该替身为何危险（对**未注册路径回 `{}` + `200`**，`V-24` / `V-46` 因此长期不可见），性质属 §3.9 静默降级。 |
 | `v0.8` | 2026-09-13 | **新增 §1.5「会话级路由」并登记 `PATCH /api/sessions/{id}/chat_mode`（`PR-4d1`，修 `V-46`）。** 起因是用户手工验收 `PR-4d` 时问"切换模型提示 404 Not Found"：前端 `setSessionMode` **先**发的 `PUT /api/sessions/{id}/chat-mode` 是**从未注册**的路由（只被 `devBackend.ts` 的 DEV 假后端接住），真机下第一步就 404，且**把后面的模型请求与两处本地 store 一起吃掉**。新节写清四件事：① 路径取**下划线**（与五个兄弟一致）且改为 `PATCH`；② **不过产品门**（不经 `MountAPI` 缝注册，只走 `requireAuth`）；③ 校验的 owner 是 `internal/chatmode`；④ 请求/应答/错误/副作用与"字段名四处逐字一致"的约束。**为什么不并进 §1.4 / §2**：那两处的编号是产品端点的编号，已被 `开发计划` §1.1 与闭环判据引用，插入会连带改号。 |
 | `v0.7` | 2026-09-13 | **`PR-2e` 落地 `V-45`（`v0.6` 那条规则的更正与扩展）。** ① **§2.3 请求形状**：两个激活凭证从"首启必填/二次登录省略"改为**可选的一对**（要么都给、要么都不给），本地只查形状、是否首启由中台判（`V-45` / `PQ28`）—— 这条同时把"丢 `data/` 只能走客服"变成"只凭手机号+验证码登进已有账号"；② **业务级码表补 `activation_required` 一行**（`403`、不挂 `field`、动作＝**去激活**）：它按 `中台交付包` §4.2 是登录必备码，但客户端此前**没有 case、没有 i18n 键**，兜底又返回空串 ⇒ 平台真发它时横幅是**空白**；③ **§2.3 规则**改写 `V-44` 那条的用户可见半边：降 `activated` 仍在（数据），但前端**不再自动换表单**，改为"消息 + 「去激活」按钮"；④ 撤回国判据补第五个码 `activation_required`；⑤ 顺带把"业务级一律 400"改成"状态码取自 `中台交付包` §3.2"（`activation_required` 是 403，原文那句话会误导实现）|

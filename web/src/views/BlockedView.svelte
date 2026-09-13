@@ -29,9 +29,34 @@
   let legalModal = $state<null | 'terms' | 'privacy'>(null)
   let timer: ReturnType<typeof setInterval> | null = null
 
-  // First activation vs second login comes from the server's activation flag,
-  // never guessed client-side (需求 §5.3.4).
-  const activated = $derived($productState?.activated ?? false)
+  // Business codes already reported as unmapped. The render path calls
+  // businessErrorKey() on every render, so the warning has to be once per code
+  // (module-level so a remount does not repeat it).
+  const warnedCodes = new Set<string>()
+
+  // Which of the two forms is on screen. The server's answer decides the STARTING
+  // point (an activated installation shows the short phone+code login); from then
+  // on only the user moves between the two, with the links at the bottom of
+  // either form.
+  //
+  // Read once, when the wall appears, and deliberately NOT re-derived on every
+  // state read (V-44 / V-45):
+  //
+  //   1. Either half is legitimate at any time. An activated user may hold a fresh
+  //      U-disk to activate; a fresh data/ may belong to an account the platform
+  //      already has - signing in there is the recovery path for a lost data/
+  //      (E1 rule 2, PQ28), not an error.
+  //   2. PR-2d lowers the server-side claim when the platform denies it. Deriving
+  //      the form from that swapped it under the user's hands as they read the
+  //      message explaining why, which is the wrong answer to "there is nothing on
+  //      this form I can fix": they now get told, and get a button.
+  //
+  // The switch is a VIEW choice living only in this page. The fact keeps exactly
+  // one owner - the platform, projected through /state - so this is not the client
+  // inventing state (V-22's rule: it may choose which form to fill in, it may not
+  // invent whether it is activated).
+  let shape = $state<'login' | 'activation'>($productState?.activated === false ? 'activation' : 'login')
+  const activationForm = $derived(shape === 'activation')
 
   // L-B2: the two misconfiguration pages. They are not variants of the login
   // form - on a build with no control plane there is no request to make, so the
@@ -127,10 +152,10 @@
     if (!normalizePhone(phone).ok) errs.phone = 'invalid_phone'
     if (!/^\d{6}$/.test(code)) errs.code = 'invalid_code'
     if (validateNickname(nickname) !== 'ok') errs.nickname = 'nickname_format'
-    if (!activated && !activationCode.trim()) errs.activationCode = 'invalid_activation'
+    if (activationForm && !activationCode.trim()) errs.activationCode = 'invalid_activation'
     // Box code: non-empty only. Its length/charset are the server's call
     // (需求基线 E1 rule 4) — the client must not pre-judge validity.
-    if (!activated && !boxCode.trim()) errs.boxCode = 'invalid_box_code'
+    if (activationForm && !boxCode.trim()) errs.boxCode = 'invalid_box_code'
     if (Object.keys(errs).length > 0) { fieldErrors = errs; return }
     fieldErrors = {}
     formError = null
@@ -141,8 +166,8 @@
         phone,
         code,
         nickname,
-        activationCode: activated ? undefined : activationCode.trim(),
-        boxCode: activated ? undefined : boxCode.trim(),
+        activationCode: activationForm ? activationCode.trim() : undefined,
+        boxCode: activationForm ? boxCode.trim() : undefined,
       })
       // On success login() flips productPhase to 'ready', so App.svelte boots
       // the main UI and this view unmounts.
@@ -209,9 +234,24 @@
       case 'box_code_unknown': return 'product.err_box_code_unknown'
       case 'box_code_mismatch': return 'product.err_box_code_mismatch'
       case 'phone_mismatch': return 'product.err_phone_mismatch'
+      // The platform says this phone holds no usable activation. Registered in
+      // 中台交付包 §4.2 as one of the codes a login must expect, but it had no
+      // case here: the banner rendered as an EMPTY string and the user saw no
+      // error at all (V-45).
+      case 'activation_required': return 'product.err_activation_required'
       case 'generic': return 'product.submit_failed'
-      default: return ''
+      default: break
     }
+    if (!formError) return ''
+    // An unmapped code is a contract violation (本地API契约 §3), and falling
+    // silently to the generic copy is exactly what that section forbids - but the
+    // old empty-string default was worse than either: it rendered nothing. Say it
+    // once per code in the console, and show the generic copy.
+    if (!warnedCodes.has(formError)) {
+      warnedCodes.add(formError)
+      console.warn(`product: no copy for business code "${formError}"`)
+    }
+    return 'product.submit_failed'
   }
 </script>
 
@@ -282,7 +322,7 @@
         {#if fieldErrors.code}<p class="field-err">{$t(fieldErrorKey('code'))}</p>{/if}
       </div>
 
-      {#if !activated}
+      {#if activationForm}
         <div class="field">
           <label for="activationCode">{$t('product.activation_label')}</label>
           <input id="activationCode" type="text" bind:value={activationCode} placeholder={$t('product.activation_placeholder')} />
@@ -307,8 +347,24 @@
       <button type="submit" class="submit-btn" disabled={submitting}>
         {submitting
           ? $t('product.submitting')
-          : (activated ? $t('product.submit_login') : $t('product.submit_activate'))}
+          : (activationForm ? $t('product.submit_activate') : $t('product.submit_login'))}
       </button>
+
+      <!-- The two halves are reachable on purpose (V-45): an activated user can
+           hold a fresh U-disk, and a fresh data/ can belong to an account the
+           platform already has. Always present rather than shown only after a
+           particular refusal code, because a list of "codes that reveal the link"
+           would be a second copy of the activation family in the frontend
+           (开发规范 §3.8). -->
+      {#if activationForm}
+        <button type="button" class="switch-link" onclick={() => (shape = 'login')}>
+          {$t('product.switch_to_login')}
+        </button>
+      {:else}
+        <button type="button" class="switch-link" onclick={() => (shape = 'activation')}>
+          {$t('product.switch_to_activate')}
+        </button>
+      {/if}
     </form>
     {/if}
 
@@ -415,6 +471,16 @@
 }
 .submit-btn:hover:not(:disabled) { background: var(--blue-5); }
 .submit-btn:disabled { opacity: 0.6; cursor: not-allowed; }
+
+/* The link between the two halves of the wall (V-45). Styled as a link rather
+   than a second button so it does not compete with the submit action. */
+.switch-link {
+  border: none; background: transparent; padding: 2px 0;
+  font-family: inherit; font-size: 12px;
+  color: var(--text-tertiary); cursor: pointer;
+  align-self: center;
+}
+.switch-link:hover { color: var(--blue-6); }
 
 .footer { display: flex; align-items: center; justify-content: center; gap: 8px; }
 .footer .link {

@@ -321,6 +321,33 @@ func (s *Store) Logout() error {
 	return s.mutate(func(st *State) { st.LoggedIn = false })
 }
 
+// WithdrawActivationClaim lowers the local activation flag after the platform
+// refused a sign-in that offered no activation credential (V-44).
+//
+// WHY THE LOCAL FLAG FOLLOWS. `activated` answers "is this installation
+// authorized", and the platform is the only owner of that answer (E1 rule 6:
+// the record lives server-side). What this file holds is the last answer it
+// gave, so when it says "no" the copy has to move or the two disagree - and the
+// disagreement is not cosmetic: the blocked page renders the five-field
+// activation form only for `activated: false` (BlockedView.svelte:34/276), so a
+// stale `true` leaves the user reading "incorrect activation code" above a form
+// with no activation-code field, with no way back except editing this file from
+// outside the product. The same principle as V-22's fix: the wall's shape comes
+// from the server's answer, not from a value the client makes up.
+//
+// WHAT SURVIVES, AND WHY. The account and the activation record stay: they are
+// what the platform last said, E7 keeps them across a session ending, the
+// second-sign-in form compares against the masked number, and the licence page
+// shows the box code. Dropping them would lose the only local memory of an
+// authorization whose code can never be re-submitted (E1 rule 2) - and the next
+// successful activation overwrites both anyway.
+//
+// It is deliberately separate from Logout: a refused sign-in is not a session
+// ending, and the two must not be written as one (开发规范 §3.8).
+func (s *Store) WithdrawActivationClaim() error {
+	return s.mutate(func(st *State) { st.Activated = false })
+}
+
 // mutate applies fn under the lock and persists the result.
 func (s *Store) mutate(fn func(*State)) error {
 	s.mu.Lock()

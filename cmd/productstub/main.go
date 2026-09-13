@@ -39,6 +39,8 @@ import (
 	"net"
 	"net/http"
 	"os"
+	"strings"
+	"time"
 
 	"github.com/open-octo/octo-agent/internal/productclient/clienttest"
 )
@@ -60,9 +62,53 @@ func main() {
 
 	printFixtures(ln.Addr().String())
 
-	if err := http.Serve(ln, clienttest.New().Handler()); err != nil {
+	if err := http.Serve(ln, withRequestLog(clienttest.New().Handler())); err != nil {
 		log.Fatalf("productstub: serve: %v", err)
 	}
+}
+
+// withRequestLog prints one line per request the stand-in answers.
+//
+// WHY IT LIVES HERE AND NOT IN clienttest. The library is also used by in-process
+// tests, where a line per request is noise, and the question this answers only
+// exists for a hand-run process: "is the desktop build really talking to this
+// stand-in, or is something else answering?" Until this existed the stand-in was
+// silent, so "the flow works" and "the stand-in was reached" were
+// indistinguishable — which is exactly how the frontend's development stand-in
+// (web/src/dev/devBackend.ts) could answer every /api call while looking like a
+// working backend (需求基线 V-9). A silent substitute is indistinguishable from
+// no substitute.
+//
+// The completions line is marked because that is the one that proves a model turn
+// crossed the platform boundary rather than reaching a third-party endpoint —
+// 需求基线 B4's whole point, and what V-35 violated. The log prints after the
+// response, so its duration is the turn's.
+func withRequestLog(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// Default 200: a streaming handler that never calls WriteHeader is
+		// answering 200 implicitly, and reporting a misleading 0 would be worse
+		// than reporting nothing.
+		rec := &statusRecorder{ResponseWriter: w, status: http.StatusOK}
+		start := time.Now()
+		next.ServeHTTP(rec, r)
+		mark := ""
+		if strings.HasSuffix(r.URL.Path, "/chat/completions") {
+			mark = "   <-- a model turn through the platform boundary"
+		}
+		log.Printf("%s %s -> %d (%s)%s",
+			r.Method, r.URL.Path, rec.status, time.Since(start).Round(time.Millisecond), mark)
+	})
+}
+
+// statusRecorder remembers the status so the log line can report it.
+type statusRecorder struct {
+	http.ResponseWriter
+	status int
+}
+
+func (r *statusRecorder) WriteHeader(code int) {
+	r.status = code
+	r.ResponseWriter.WriteHeader(code)
 }
 
 // printFixtures states what the stand-in accepts. Without this the walkthrough

@@ -32,8 +32,12 @@
 //   walkable.
 //
 // SCOPE (开发规范 §3.10): DEVELOPMENT, browser-side, run-time only. main.ts
-// installs it behind `import.meta.env.DEV`, so a production build never runs it
-// and tree-shakes it out of the bundle (verified against the built output).
+// installs it from inside a dead `import.meta.env.DEV` branch, and the import
+// there is **dynamic** — that is what keeps this module out of the production
+// graph, not tree-shaking. A static import left the module's top-level
+// statements in the shipped bundle (a `MODES` array, a demo session, a `bind`)
+// and the claim that they were shaken out was never checked against an
+// artifact until V-47. Keep the import dynamic.
 
 import { chatModes } from '../lib/chatMode'
 import { productPhase, productState } from '../lib/product'

@@ -3,8 +3,9 @@
 // productclient, so the account lifecycle can be exercised without a network.
 //
 // It replaces the platform boundary, NOT the local service boundary. The
-// frontend's development backend (web/src/dev/devBackend.ts) replaces the
-// latter; the two are not interchangeable.
+// frontend once carried its own stand-in for the latter (web/src/dev, removed
+// by PR-3 on 2026-09-13); the two were never interchangeable, and the local
+// boundary now has no substitute at all - /api/* always reaches the Go service.
 //
 // It is a library, not a command: callers wrap Handler with httptest. The
 // runnable binary that drives it by hand is cmd/productstub, which serves
@@ -28,8 +29,9 @@ import (
 )
 
 // Fixture values. The BUDING-DEMO-* and BOX-DEMO-* strings are fixed ASCII data
-// keys, not brand copy - they must match the frontend's development backend so
-// the two layers describe the same test account (开发规范 §3.1 规则 2).
+// keys, not brand copy (开发规范 §3.1 规则 2). They used to be shared with a
+// frontend stand-in that described the same test account; that stand-in is gone
+// (PR-3), so this is now the only definition of them.
 const (
 	// FixtureActivationCode is the ordinary first-activation code.
 	FixtureActivationCode = "BUDING-DEMO-0001"

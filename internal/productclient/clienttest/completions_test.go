@@ -173,3 +173,123 @@ func TestARotatedAwayTokenStopsWorkingAtTheGateway(t *testing.T) {
 		t.Fatalf("status = %d, want 401 for a token the platform no longer knows; body = %s", resp.StatusCode, body)
 	}
 }
+
+// toolCallFrames reads the tool_calls fragments out of a stream the way an
+// OpenAI-protocol client must: concatenated by `index`, not by delta order.
+//
+// It deliberately does NOT reuse streamedContent: that helper reads one field
+// (delta.content) and would report "no tool calls" for a stream that is full of
+// them, which is the failure mode this test exists to prevent.
+func toolCallFrames(t *testing.T, body string) (arguments string, ids, names []string, finish string, indices []int) {
+	t.Helper()
+	scanner := bufio.NewScanner(strings.NewReader(body))
+	for scanner.Scan() {
+		payload, ok := strings.CutPrefix(scanner.Text(), "data: ")
+		if !ok || payload == "[DONE]" {
+			continue
+		}
+		var frame struct {
+			Choices []struct {
+				Delta struct {
+					ToolCalls []struct {
+						Index    int    `json:"index"`
+						ID       string `json:"id"`
+						Type     string `json:"type"`
+						Function struct {
+							Name      string `json:"name"`
+							Arguments string `json:"arguments"`
+						} `json:"function"`
+					} `json:"tool_calls"`
+				} `json:"delta"`
+				FinishReason string `json:"finish_reason"`
+			} `json:"choices"`
+		}
+		if err := json.Unmarshal([]byte(payload), &frame); err != nil {
+			t.Fatalf("frame is not OpenAI-shaped JSON: %v (%s)", err, payload)
+		}
+		if len(frame.Choices) == 0 {
+			continue
+		}
+		if frame.Choices[0].FinishReason != "" {
+			finish = frame.Choices[0].FinishReason
+		}
+		for _, c := range frame.Choices[0].Delta.ToolCalls {
+			if c.Type != "" && c.Type != "function" {
+				t.Errorf("tool_calls[].type = %q, want function", c.Type)
+			}
+			arguments += c.Function.Arguments
+			indices = append(indices, c.Index)
+			if c.ID != "" {
+				ids = append(ids, c.ID)
+			}
+			if c.Function.Name != "" {
+				names = append(names, c.Function.Name)
+			}
+		}
+	}
+	if err := scanner.Err(); err != nil {
+		t.Fatalf("scan stream: %v", err)
+	}
+	return arguments, ids, names, finish, indices
+}
+
+// TestTheToolCallSwitchEmitsOpenAIShapedFragments pins the PLATFORM half of the
+// tool-call contract (中台交付包 §5.2): the gateway streams function arguments as
+// JSON fragments keyed by index, names the function once, and closes the turn
+// with finish_reason "tool_calls".
+//
+// WHY THIS IS NOT REDUNDANT WITH internal/productruntime's nail. That one
+// proves the product can consume what this fixture emits; it cannot notice a
+// fixture that emits something no real platform would - the provider is
+// tolerant, so a single-chunk call, a missing index or a finish_reason of
+// "stop" would all still pass it. The stand-in is the written-down shape of the
+// platform (that is its whole job), so its own shape needs its own nail.
+func TestTheToolCallSwitchEmitsOpenAIShapedFragments(t *testing.T) {
+	const (
+		model = "buding-privacy-1"
+		tool  = "terminal"
+		args  = `{"command":"hostname"}`
+	)
+	standin := New()
+	ts := httptest.NewServer(standin.Handler())
+	defer ts.Close()
+	token := loginForBootstrap(t, ts.URL)
+
+	// Off: the healthy shape, and the one every other hand walkthrough gets.
+	_, offBody := postTurn(t, ts.URL, token,
+		`{"model":"`+model+`","stream":true,"messages":[{"role":"user","content":"hi"}]}`)
+	if offArguments, _, _, _, _ := toolCallFrames(t, offBody); offArguments != "" {
+		t.Fatalf("the fixture streamed tool-call arguments with the switch off: %q", offArguments)
+	}
+
+	standin.RequestToolCall(tool, args)
+	_, body := postTurn(t, ts.URL, token,
+		`{"model":"`+model+`","stream":true,"messages":[{"role":"user","content":"run it"}],
+		  "tools":[{"type":"function","function":{"name":"`+tool+`"}}]}`)
+
+	arguments, ids, names, finish, indices := toolCallFrames(t, body)
+
+	if arguments != args {
+		t.Errorf("reassembled arguments = %q, want %q - the fragments must concatenate to the exact JSON the platform intended", arguments, args)
+	}
+	if len(names) != 1 || names[0] != tool {
+		t.Errorf("function names seen = %v, want exactly one %q (the name rides the first fragment only)", names, tool)
+	}
+	if len(ids) != 1 || ids[0] != standin.LastToolCallID() {
+		t.Errorf("ids seen = %v, want exactly one %q - every later fragment must be linkable to it by index alone", ids, standin.LastToolCallID())
+	}
+	if finish != "tool_calls" {
+		t.Errorf("finish_reason = %q, want tool_calls (the OpenAI spelling the provider normalises to tool_use)", finish)
+	}
+	if len(indices) < 2 {
+		t.Fatalf("the call arrived in %d fragment(s); fragments are what exercises the client's index-based reassembly", len(indices))
+	}
+	for _, i := range indices {
+		if i != 0 {
+			t.Errorf("tool_calls[].index = %d, want 0 - fragments of one call share an index", i)
+		}
+	}
+	if got := standin.ToolCallCount(); got != 1 {
+		t.Errorf("ToolCallCount = %d, want 1", got)
+	}
+}

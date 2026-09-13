@@ -23,6 +23,12 @@
 //	go run ./cmd/productstub :9123               # a different port
 //	go run ./cmd/productstub -tool=terminal      # make the gateway ask for a tool
 //
+//	go run ./cmd/productstub \
+//	  -upstream=https://api.deepseek.com/v1 -model=deepseek-chat
+//	# ^ model turns go to a REAL provider instead of the canned reply.
+//	#   Pass the key with -key or OCTO_UPSTREAM_KEY; the platform token is
+//	#   replaced on the way out and never forwarded.
+//
 // Then set internal/productprofile/profiles/developer.json's apiHost to
 // http://127.0.0.1:<port>/v1 and its gatewayHost to http://127.0.0.1:<port> and
 // launch the desktop build.
@@ -40,6 +46,7 @@ import (
 	"log"
 	"net"
 	"net/http"
+	"os"
 	"strings"
 	"time"
 
@@ -47,6 +54,11 @@ import (
 )
 
 const defaultAddr = "127.0.0.1:8788"
+
+// upstreamKeyEnv is where -key falls back to. A flag one can see in the shell
+// history is better than one typed on the command line, so the env var is the
+// documented form and the flag is for one-off runs.
+const upstreamKeyEnv = "OCTO_UPSTREAM_KEY"
 
 // toolArguments maps -tool values to what the stand-in will ask the client to
 // run. Only tools whose arguments can be written down in advance appear here:
@@ -68,6 +80,9 @@ var toolArguments = map[string]string{
 
 func main() {
 	toolName := flag.String("tool", "", "make the stand-in ask for this tool (terminal | read_file); empty means the healthy shape, no tool call")
+	upstream := flag.String("upstream", "", "forward model turns to a real OpenAI-compatible provider at this base URL instead of answering from the fixture, e.g. https://api.deepseek.com/v1")
+	upstreamKey := flag.String("key", "", "the provider's API key (defaults to $"+upstreamKeyEnv+"); required with -upstream and never forwarded to the control plane")
+	upstreamModel := flag.String("model", "", "send this model id upstream instead of the catalog id; a real provider rejects the fixture ids, so this is required in practice")
 	flag.Parse()
 	addr := defaultAddr
 	if rest := flag.Args(); len(rest) > 1 {
@@ -86,6 +101,20 @@ func main() {
 			log.Fatalf("productstub: -tool=%s has no pre-scripted arguments; known: %v", *toolName, knownTools())
 		}
 	}
+	if err := validateFlags(*toolName, *upstream); err != nil {
+		log.Fatalf("productstub: %v", err)
+	}
+
+	key := *upstreamKey
+	if key == "" {
+		key = os.Getenv(upstreamKeyEnv)
+	}
+	gateway := gatewayFlags{baseURL: *upstream, apiKey: key, model: *upstreamModel}
+	if gateway.enabled() && gateway.apiKey == "" {
+		// Refused rather than dialled and 401'd: the provider's own answer for a
+		// missing key is unhelpful about where the key should come from.
+		log.Fatalf("productstub: -upstream needs a provider key; pass -key=... or set $%s", upstreamKeyEnv)
+	}
 
 	// Loopback only. Binding wider would put a fake platform — one that hands out
 	// tokens for a fixed SMS code — on the network.
@@ -99,9 +128,9 @@ func main() {
 		stub.RequestToolCall(*toolName, toolArguments[*toolName])
 	}
 
-	printFixtures(ln.Addr().String(), *toolName)
+	printFixtures(ln.Addr().String(), *toolName, gateway)
 
-	if err := http.Serve(ln, withRequestLog(stub.Handler())); err != nil {
+	if err := http.Serve(ln, withRequestLog(withUpstreamGateway(stub.Handler(), stub, gateway))); err != nil {
 		log.Fatalf("productstub: serve: %v", err)
 	}
 }
@@ -167,7 +196,7 @@ func (r *statusRecorder) WriteHeader(code int) {
 // walkthrough that does not say whether the gateway will ask for a tool is a
 // walkthrough that cannot tell "the tool loop is broken" from "the switch is
 // off" - and an unexplained approval prompt is worse than a missing one.
-func printFixtures(addr, toolName string) {
+func printFixtures(addr, toolName string, gateway gatewayFlags) {
 	base := "http://" + addr
 	toolLine := "  tool calls   OFF - the gateway will not ask for any tool (the healthy shape)"
 	if toolName != "" {
@@ -179,6 +208,8 @@ func printFixtures(addr, toolName string) {
 
   apiHost      %s/v1
   gatewayHost  %s        (either shape works; this one matches the client default)
+
+%s
 
   Accepted inputs (fixed by internal/productclient/clienttest):
     phone              any 11 digits starting with 1, e.g. 13800001234
@@ -203,6 +234,7 @@ func printFixtures(addr, toolName string) {
     when you restart this process to test from a fresh install (V-51).
 `,
 		addr, base, base,
+		describeGateway(gateway),
 		clienttest.FixtureSMSCode,
 		clienttest.FixtureActivationCode, clienttest.FixtureBoxCode,
 		clienttest.FixtureSecondActivationCode,

@@ -560,6 +560,23 @@ func (s *Server) createAccount(req productclient.LoginRequest) *accountState {
 	return acct
 }
 
+// Authorised reports whether the request carries an access token this stand-in
+// issued.
+//
+// WHY AN ACCESSOR. The hand-run process (cmd/productstub) gained an optional
+// upstream that forwards a model turn to a real provider, and it must refuse an
+// unauthenticated turn before dialling anything - otherwise the process is an
+// open proxy on loopback that spends the operator's credits. The token table is
+// the fixture's, so the predicate belongs here rather than being re-derived
+// from the bearer format in the dev tool. It exposes an existing fact; it adds
+// no platform behaviour.
+func (s *Server) Authorised(r *http.Request) bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	_, ok := s.access[bearer(r)]
+	return ok
+}
+
 func (s *Server) issueToken(prefix, phone string) string {
 	s.seq++
 	token := fmt.Sprintf("%s_%d", prefix, s.seq)

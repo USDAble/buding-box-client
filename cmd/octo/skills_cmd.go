@@ -37,6 +37,7 @@ func runSkills(args []string, stdout, stderr io.Writer) int {
 }
 
 // skillsAdd installs a skill from a public GitHub repository into the
+// OCTO-FORK: 数据根：`~/.octo` → `<exe dir>/data`（硬规则 1） — see dev-docs-usdable/需求/2260906/技术方案/P1-便携数据根.md
 // user-level root (data/skills). The skill's content is fetched directly
 // from the source repository onto this machine — octo redistributes nothing,
 // so source-available skills (e.g. the document skills in anthropics/skills)

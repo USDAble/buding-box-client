@@ -61,6 +61,7 @@ func parseStdioCommand(name, line string, allowArbitrary bool) (string, []string
 	return base, fields[1:], nil
 }
 
+// OCTO-FORK: 数据根：`~/.octo` → `<exe dir>/data`（硬规则 1） — see dev-docs-usdable/需求/2260906/技术方案/P1-便携数据根.md
 // MCP server management API. Reads and writes both go to data/mcp.json
 // (internal/mcp.LoadManaged). Mutations apply to the live registry
 // incrementally (connect/disconnect just the touched server), so a change is

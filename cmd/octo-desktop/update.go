@@ -47,6 +47,7 @@ func desktopAssetName() string {
 		// One universal (amd64+arm64) bundle serves both architectures.
 		return "Octo-darwin-universal.zip"
 	case "windows":
+		// OCTO-FORK: 品牌：产品名改为插值 {brand}（硬规则 2） — see dev-docs-usdable/开发规范.md §3.2
 		return "PuddingBox-windows-" + runtime.GOARCH + ".exe"
 	}
 	return ""

@@ -25,6 +25,7 @@ import (
 //     funnel through before calling ReplayRecording.
 //
 // Resolution order for a missing secret param: session cache →
+// OCTO-FORK: 数据根：`~/.octo` → `<exe dir>/data`（硬规则 1） — see dev-docs-usdable/需求/2260906/技术方案/P1-便携数据根.md
 // OCTO_BROWSER_SECRET_<NAME> env (process env or data/serve.env, which the
 // existing serveenv loader injects) → masked ask. Explicit caller params
 // always win by virtue of never being "missing". Non-secret missing params

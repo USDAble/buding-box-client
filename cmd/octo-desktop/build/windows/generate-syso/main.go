@@ -1,4 +1,5 @@
 // generate-syso builds Windows resource objects (rsrc_windows_*.syso) that
+// OCTO-FORK: 桌面壳的打包与品牌资产（图标/清单/启动器） — see dev-docs-usdable/需求/2260906/技术方案/P12-便携打包.md
 // embed the application icon, manifest, and Windows VERSIONINFO into the
 // desktop exe. It is invoked by CI before each Windows go build; the .syso
 // files are build artifacts and are gitignored.

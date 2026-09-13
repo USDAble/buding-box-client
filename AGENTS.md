@@ -31,6 +31,7 @@ The canonical project guidance for contributors and AI coding agents. Keep this 
 
 `octo-agent` is a Go AI agent CLI (Go 1.25+, single binary). Module path `github.com/open-octo/octo-agent`. Ships as CLI + embedded Web UI + IM bridges (see `octo serve`).
 
+<!-- OCTO-FORK: 本 fork 的规范正文：重写上游规则（三条硬规则 + 五条纪律） — see dev-docs-usdable/开发规范.md §3.6 -->
 **This repository is a downstream fork** shipping the 布丁盒子 / Pudding Box portable desktop product. **The fork-specific rules in `dev-docs-usdable/开发规范.md` are binding, not reference material**, and `.octorules` + `CLAUDE.md` are the binding upstream norms of equal standing (开发规范 §3.6). Upstream merge policy: `dev-docs-usdable/上游合并策略.md`. `scripts/norms-guard.mjs` enforces that every AI-tool entry point (`AGENTS.md`, `.cursor/rules/dev-norms.mdc`, `.github/copilot-instructions.md`, `CLAUDE.md`, this file) points at that spec. The three hard rules under "Fork rules" below override anything here that conflicts.
 
 ## Commands
@@ -83,7 +84,7 @@ Beyond those three, the fork spec adds five discipline rules (`开发规范.md` 
 7. **Stop and ask (§3.7).** Reuse-avoidance, breaking an architectural convention, touching auth/credential/data-root/brand/billing/permission/routing, unconventional logic (an extra layer to dodge a rule, one concept stored twice, silent fallback), upstream core files, and using a capability outside its design intent all need explicit human confirmation recorded in the PR: which row, the facts, the choice, who confirmed.
 8. **Write the scope (§3.10).** Every rule says which domain it governs — production vs developer, build-time vs run-time, local vs remote. A rule without a scope gets cited in both directions.
 
-These are ratcheted by `norms-guard`, `datapath-guard`, `brand-guard`, `reuse-guard`, `server-diff-guard`, and `release-profile-guard` — all wired into `make *-check`, CI, and the packaging preflight.
+These are ratcheted by `norms-guard`, `datapath-guard`, `brand-guard`, `reuse-guard`, `server-diff-guard`, `release-profile-guard`, and `fork-marker-guard` — all wired into `make *-check`, CI, and the packaging preflight.
 
 Upstream merges use `merge`, never `rebase`, and land as their own PR with no functional changes riding along.
 

@@ -105,6 +105,7 @@ type Options struct {
 	Args string
 
 	// JournalDir is the directory for workflow journal files. When empty,
+	// OCTO-FORK: 数据根：`~/.octo` → `<exe dir>/data`（硬规则 1） — see dev-docs-usdable/需求/2260906/技术方案/P1-便携数据根.md
 	// Run uses data/workflow-journals/. Pass a temp dir in tests.
 	JournalDir string
 	// ResumeFrom, when non-empty, is the RunID of a prior run whose journal

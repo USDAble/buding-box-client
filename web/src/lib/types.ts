@@ -28,6 +28,7 @@ export interface Session {
   turn_count: number
   working_dir: string
   permission_mode: 'interactive' | 'auto' | 'strict' | string
+  // OCTO-FORK: 前端适配（webview 路由/构建/入口隐藏） — see dev-docs-usdable/需求/2260906/技术方案/P6-入口隐藏与积分.md
   chat_mode: 'privacy' | 'smart' | 'default' | string
   reasoning_effort: 'low' | 'medium' | 'high' | string
   show_reasoning?: boolean

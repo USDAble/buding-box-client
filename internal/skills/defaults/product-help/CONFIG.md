@@ -1,5 +1,6 @@
 # octo Configuration Reference
 
+<!-- OCTO-FORK: 技能文档改为数据根语义：用户级数据根改用 <data root>  — see dev-docs-usdable/需求/2260906/技术方案/P1-便携数据根.md -->
 Path: `<data root>/config.yml`. Every field is optional — a missing file or field falls back to the built-in default. Manage with `octo config` rather than hand-editing where possible. (A pre-rename `<data root>/config.yaml` is read as a fallback if `config.yml` is absent, and migrates automatically on first save — old file parked as `config.yaml.bak`. A flat top-level `models:` list from before the two-level schema is likewise rewritten into `endpoints:` on first save, each entry becoming a `legacy-<host>-<n>` endpoint.)
 
 ## Top-level keys

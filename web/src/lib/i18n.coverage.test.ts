@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import { readFileSync, readdirSync, statSync } from 'node:fs'
 import { join, extname } from 'node:path'
+// OCTO-FORK: 前端适配（webview 路由/构建/入口隐藏） — see dev-docs-usdable/需求/2260906/技术方案/P6-入口隐藏与积分.md
 import { get } from 'svelte/store'
 import { en, zh, t, setLocale } from './i18n'
 import { brandName, brandShortName } from './brand'

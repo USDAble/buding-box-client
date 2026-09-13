@@ -101,7 +101,10 @@ func parseFile(path string) (*Profile, error) {
 //
 //   - enable_own_skill let an expert add skills to its own profile; removed
 //     when experts became configurable only by the Default agent. Its own
-//     forks (data/agents overrides) are exactly the files that carry it.
+//
+// OCTO-FORK: 数据根：`~/.octo` → `<exe dir>/data`（硬规则 1） — see dev-docs-usdable/需求/2260906/技术方案/P1-便携数据根.md
+//
+//	forks (data/agents overrides) are exactly the files that carry it.
 var retiredTools = map[string]bool{
 	"enable_own_skill": true,
 }

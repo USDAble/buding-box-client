@@ -27,6 +27,7 @@ var releaseAssets = []ghprovider.ReleaseAsset{
 	{Name: "Octo-x86_64.AppImage"},
 	{Name: "Octo-aarch64.AppImage"},
 	{Name: "Octo-darwin-universal.zip"},
+	// OCTO-FORK: 品牌：产品名改为插值 {brand}（硬规则 2） — see dev-docs-usdable/开发规范.md §3.2
 	{Name: "PuddingBox-windows-amd64.exe"},
 	{Name: "PuddingBox-windows-arm64.exe"},
 }

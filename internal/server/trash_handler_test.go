@@ -40,6 +40,7 @@ func TestRestoreTrash_ConflictAbortThenBackup(t *testing.T) {
 	// leak entries between trash tests.
 	home := t.TempDir()
 	t.Setenv("HOME", home)
+	// OCTO-FORK: 数据根：`~/.octo` → `<exe dir>/data`（硬规则 1） — see dev-docs-usdable/需求/2260906/技术方案/P1-便携数据根.md
 	t.Setenv("OCTO_DATA_ROOT", home)
 	t.Setenv("USERPROFILE", home)
 	srv := mustServer(t, Config{Addr: "127.0.0.1:0", Tools: false})

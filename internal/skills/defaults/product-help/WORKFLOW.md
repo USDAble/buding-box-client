@@ -31,6 +31,7 @@ Dependency direction is one-way: `provider → agent`, `tools → agent`, never 
 
 - **New provider** — implement `provider.Provider` (required) and optionally the streaming/tool variants, under `internal/provider/<name>/`.
 - **New tool** — implement `agent.ToolExecutor` under `internal/tools/<name>.go`, register in `tools.DefaultRegistry`.
+<!-- OCTO-FORK: 技能文档改为数据根语义：用户级数据根改用 <data root>  — see dev-docs-usdable/需求/2260906/技术方案/P1-便携数据根.md -->
 - **New skill** — `<data root>/skills/<name>/SKILL.md`, or `internal/skills/defaults/<name>/SKILL.md` to ship it as a default.
 
 ## Before opening a PR

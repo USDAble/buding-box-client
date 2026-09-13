@@ -4,6 +4,8 @@ system: true
 description: Configure and connect MCP (Model Context Protocol) servers through guided conversation — find the right server package or endpoint, build the config entry, write it to <data root>/mcp.json, and verify the connection. Use when the user wants to add, set up, or connect an MCP server, e.g. "add an MCP server", "connect X via MCP", "set up the filesystem MCP", "添加 MCP", "接入 MCP 服务".
 ---
 
+<!-- OCTO-FORK: 技能文档改为数据根语义：用户级数据根改用 <data root>  — see dev-docs-usdable/需求/2260906/技术方案/P1-便携数据根.md -->
+
 # Configure an MCP server
 
 octo connects to MCP servers declared in `<data root>/mcp.json`, using the

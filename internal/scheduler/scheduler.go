@@ -1,5 +1,6 @@
 // Package scheduler provides a simple cron-based task scheduler for octo.
 //
+// OCTO-FORK: 数据根：`~/.octo` → `<exe dir>/data`（硬规则 1） — see dev-docs-usdable/需求/2260906/技术方案/P1-便携数据根.md
 // Tasks are stored as JSON files in data/tasks/. The scheduler runs in
 // a goroutine, checking for due tasks every minute and spawning agent
 // sessions to execute them.

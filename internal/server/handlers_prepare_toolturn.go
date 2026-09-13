@@ -113,6 +113,7 @@ func (s *Server) prepareToolTurn(ctx context.Context, a *agent.Agent, sess *agen
 		// self-heals task sessions created before write_file/edit_file stopped
 		// blanket-allowing $CWD: CreateSession used to persist whatever the
 		// global default resolved to at creation time (often "interactive"),
+		// OCTO-FORK: 数据根：`~/.octo` → `<exe dir>/data`（硬规则 1） — see dev-docs-usdable/需求/2260906/技术方案/P1-便携数据根.md
 		// and that value lives on in data/sessions/*.json across upgrades —
 		// tasks_handlers.go's CreateSession only sets PermissionMode for a
 		// session it creates, never for one it reuses, so an old task would

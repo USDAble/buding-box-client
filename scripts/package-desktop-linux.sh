@@ -29,6 +29,7 @@ VERSION="${1:-$(git -C "$ROOT" describe --tags --always 2>/dev/null || echo 0.1.
 VERSION="${VERSION#v}"
 COMMIT="$(git -C "$ROOT" rev-parse --short HEAD 2>/dev/null || echo unknown)"
 
+# OCTO-FORK: 便携交付物：打包脚本适配 — see dev-docs-usdable/需求/2260906/技术方案/P12-便携打包.md
 # Refuse to build a shipped artifact the fork guards reject (same preflight as
 # the macOS and portable packagers — see scripts/preflight.mjs).
 node "$ROOT/scripts/preflight.mjs"

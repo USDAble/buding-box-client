@@ -27,6 +27,7 @@ func TestChannelPerTurnGate(t *testing.T) {
 	if err != nil {
 		t.Fatalf("permission engine: %v", err)
 	}
+	// OCTO-FORK: 数据根：`~/.octo` → `<exe dir>/data`（硬规则 1） — see dev-docs-usdable/需求/2260906/技术方案/P1-便携数据根.md
 	// No-op audit logger: test checks must not land in the real data/audit.log.
 	gate := app.NewPermissionGate(engine, srv.channelPermissionAsk(sess, ad, ev), audit.NewAt(""))
 

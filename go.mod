@@ -17,6 +17,7 @@ require (
 	github.com/muesli/termenv v0.16.0
 	github.com/rivo/uniseg v0.4.7
 	github.com/robfig/cron/v3 v3.0.1
+	// OCTO-FORK: 依赖新增：品牌资产生成需要 SVG 光栅化（oksvg/rasterx） — see branding/brand.json
 	github.com/srwiley/oksvg v0.0.0-20221011165216-be6e8873101c
 	github.com/srwiley/rasterx v0.0.0-20220730225603-2ab79fcdd4ef
 	github.com/tetratelabs/wazero v1.12.0

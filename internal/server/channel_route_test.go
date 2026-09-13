@@ -322,6 +322,7 @@ func pngDataURL() string {
 // the bug where such an answer arrived as the bare placeholder and the image
 // bytes were silently dropped.
 func TestRouteChannelEvent_ImageAnswersPendingAsk(t *testing.T) {
+	// OCTO-FORK: 数据根：`~/.octo` → `<exe dir>/data`（硬规则 1） — see dev-docs-usdable/需求/2260906/技术方案/P1-便携数据根.md
 	tmp := t.TempDir() // uploads land in data/uploads — isolate HOME
 	t.Setenv("HOME", tmp)
 	t.Setenv("OCTO_DATA_ROOT", tmp)

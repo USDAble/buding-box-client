@@ -4,6 +4,7 @@ Guidance for Claude Code working in this repository. The octo-agent equivalent i
 
 ## Project
 
+<!-- OCTO-FORK: 本 fork 的规范正文：重写上游规则（三条硬规则 + 五条纪律） — see dev-docs-usdable/开发规范.md §3.6 -->
 `octo-agent` — a Go 1.25+ AI agent CLI distributed as a single binary (`go.mod` declares `go 1.25.0`). Module path: `github.com/open-octo/octo-agent`. Ships as CLI + embedded Web UI + IM bridges via `octo serve`. Per-feature design notes live under `dev-docs/`.
 
 **This repository is a downstream fork.** It ships the 布丁盒子 / Pudding Box portable desktop product on top of upstream octo-agent. **The fork-specific rules in `dev-docs-usdable/开发规范.md` are binding, not reference material**, and `.octorules` + this file are the binding upstream norms of equal standing (see 开发规范 §3.6). Upstream merge policy: `dev-docs-usdable/上游合并策略.md`. The current requirement batch is `dev-docs-usdable/需求/2260906/`. The three hard rules below (§Fork rules) override the general conventions when they conflict. `scripts/norms-guard.mjs` (CI `norms-guard` job / `make norms-check` / packaging preflight) fails the build if any AI-tool entry point (`AGENTS.md`, `.cursor/rules/dev-norms.mdc`, `.github/copilot-instructions.md`, this file, `.octorules`) stops pointing at `开发规范.md`.
@@ -80,7 +81,7 @@ The fork spec (`开发规范.md` §3.4–§3.10) adds five discipline rules of e
 | **Stop and ask** (§3.7) | "I judged it fine" | Explicit human confirmation, recorded in the PR as *which row + facts + choice + who confirmed*, for: reuse-avoidance; breaking a layered/dependency/single-entry/SSOT convention; touching auth, credentials, data root, brand copy, credits/billing, permission, or routing; unconventional logic (an extra layer to dodge a constraint, one concept stored in two places, silent fallback, startup writes); upstream core files; and using a capability outside its design intent (provider channel as a general HTTP client, `productstate` as a credential store). |
 | **Write the scope** (§3.10) | A rule stated without saying which domain it governs | State production vs developer, build-time vs run-time, local vs remote. Scope is the usual silent bug: `config.yml` *may* carry URLs/keys and be used in developer builds; the correct constraint is "the production **session** must not use `config.yml` as its model source" — the stronger-sounding "config.yml must not hold keys" breaks local development. |
 
-These are ratcheted by `norms-guard`, `datapath-guard`, `brand-guard`, `reuse-guard`, `server-diff-guard`, and `release-profile-guard` — wired into `make *-check`, CI (`go.yml`), and the packaging preflight.
+These are ratcheted by `norms-guard`, `datapath-guard`, `brand-guard`, `reuse-guard`, `server-diff-guard`, `release-profile-guard`, and `fork-marker-guard` — wired into `make *-check`, CI (`go.yml`), and the packaging preflight.
 
 Upstream merges: `merge`, never `rebase`; see `dev-docs-usdable/上游合并策略.md`.
 

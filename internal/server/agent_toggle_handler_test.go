@@ -8,6 +8,7 @@ import (
 	"testing"
 )
 
+// OCTO-FORK: 数据根：`~/.octo` → `<exe dir>/data`（硬规则 1） — see dev-docs-usdable/需求/2260906/技术方案/P1-便携数据根.md
 // curatedTestServer returns a server with an isolated data/agents dir and
 // one hand-placed curated (SourceDefault) expert in data/agents-default —
 // mustServer never calls agentprofile.MaterializeDefaults, so the curated

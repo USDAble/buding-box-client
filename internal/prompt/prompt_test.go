@@ -64,6 +64,7 @@ func TestCompose_LayersInOrder(t *testing.T) {
 }
 
 func TestCompose_SkipsAbsentLayers(t *testing.T) {
+	// OCTO-FORK: 数据根：`~/.octo` → `<exe dir>/data`（硬规则 1） — see dev-docs-usdable/需求/2260906/技术方案/P1-便携数据根.md
 	// Isolate from real data/{soul,user,octorules}.md so the test runs the
 	// same on a developer machine and on a fresh CI runner.
 	useIdentityFiles(t, "", "")

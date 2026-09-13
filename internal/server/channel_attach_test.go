@@ -48,6 +48,7 @@ func TestAttachInboundFiles_DocumentNote(t *testing.T) {
 }
 
 func TestAttachInboundFiles_Image(t *testing.T) {
+	// OCTO-FORK: 数据根：`~/.octo` → `<exe dir>/data`（硬规则 1） — see dev-docs-usdable/需求/2260906/技术方案/P1-便携数据根.md
 	// Redirect data/uploads into a temp home so the test doesn't touch the
 	// real home dir (saveImageAttachment persists the decoded bytes there).
 	// Both vars: os.UserHomeDir reads HOME on unix, USERPROFILE on Windows.

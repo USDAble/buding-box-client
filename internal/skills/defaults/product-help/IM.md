@@ -1,5 +1,6 @@
 # IM bridge — chat with octo from WeChat, Feishu, Telegram, etc.
 
+<!-- OCTO-FORK: 技能文档改为数据根语义：用户级数据根改用 <data root>  — see dev-docs-usdable/需求/2260906/技术方案/P1-便携数据根.md -->
 octo can run as a chat bot on WeChat (iLink), Feishu, DingTalk, WeCom, Discord, and Telegram. The bridge runs **inside `octo serve`** — no separate process. Each platform is connected, tested, and can send a one-off test message from the web UI's **Channels** panel (WeChat is scan-to-login; the rest use app/bot credentials). Credentials persist to `<data root>/channels.yml` and hot-reload — no restart needed after editing a platform in the panel.
 
 Each chat is a session like any other — per-user history and permission context, slash commands (a different set than the TUI/web; see the reference below), attachments bridge both ways, and a session goal works the same as elsewhere — `/goal <objective>` starts pursuing it right away, without waiting for your next message.

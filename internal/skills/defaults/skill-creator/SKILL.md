@@ -44,6 +44,7 @@ Check available skills and tools — if useful for research, use subagents to se
 
 ### Where the skill lives
 
+<!-- OCTO-FORK: 技能文档改为数据根语义：用户级数据根改用 <data root>  — see dev-docs-usdable/需求/2260906/技术方案/P1-便携数据根.md -->
 A skill is a directory holding a `SKILL.md` under `<data root>/skills/<name>/SKILL.md` —
 available in every session, regardless of which project you're working in.
 `octo skills add` and the web Skills panel install here.

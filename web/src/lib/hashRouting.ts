@@ -2,6 +2,7 @@
 // (cmd/octo-desktop) navigates the frontend via location.hash, and the app
 // reflects its current view there so a refresh lands back where the user was —
 // both directions must agree on the exact hash shape.
+// OCTO-FORK: 前端适配（webview 路由/构建/入口隐藏） — see dev-docs-usdable/需求/2260906/技术方案/P6-入口隐藏与积分.md
 import { viewHidden } from './features'
 
 export function normalizeHash(view: string, sid: string | null): string {

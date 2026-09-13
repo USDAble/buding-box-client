@@ -8,10 +8,11 @@ import { test } from 'node:test'
 import path from 'node:path'
 
 import {
-  analyzeApiProduct,
   analyzeCeiling,
   analyzeProductFiles,
-  countApiProduct,
+  analyzeRouteTable,
+  countAddedRouteLines,
+  countRouteLines,
   forkDiffLines,
   resolveUpstream,
   listGovernedFiles,
@@ -19,38 +20,42 @@ import {
   GOVERNED_PREFIX,
 } from './server-diff-guard.mjs'
 
-// ─── R1: apiProduct ratchet ─────────────────────────────────────────────────
+// ─── R1: the route table ────────────────────────────────────────────────────
+//
+// This replaced a count of `apiProduct`, which does not exist: it was 0 at HEAD,
+// so the check reported "the ratchet target is reached" on every run while the
+// risk stayed live. These tests pin the property that was missing — the check
+// must fail loudly when its own subject disappears.
 
-test('apiProduct: standing still is not a failure (the fold has not landed yet)', () => {
-  const { problems, notes } = analyzeApiProduct({ current: 157, baseline: 157, upstream: 0 })
+test('route table: standing still is not a failure (the fold has not landed yet)', () => {
+  const { problems, notes } = analyzeRouteTable({ added: 1, upstreamCount: 147, total: 148, ceiling: 1 })
   assert.deepEqual(problems, [])
   assert.equal(notes.length, 1)
-  assert.match(notes[0], /157 call sites remaining/)
+  assert.match(notes[0], /1 added `s\.api\(` line\(s\) of 148/)
 })
 
-test('apiProduct: growth fails and names the middleware as the fix', () => {
-  const { problems } = analyzeApiProduct({ current: 160, baseline: 157, upstream: 0 })
+test('route table: growth fails and names the registrar as the fix', () => {
+  const { problems } = analyzeRouteTable({ added: 3, upstreamCount: 147, total: 150, ceiling: 1 })
   assert.equal(problems.length, 1)
-  assert.match(problems[0], /grew to 160/)
-  assert.match(problems[0], /middleware/)
+  assert.match(problems[0], /adds 3 `s\.api\(` line\(s\)/)
+  assert.match(problems[0], /ceiling 1, upstream has 147, this branch 150/)
+  assert.match(problems[0], /Config\.MountAPI/)
 })
 
-test('apiProduct: shrinking passes and reports progress', () => {
-  const { problems, notes } = analyzeApiProduct({ current: 4, baseline: 157, upstream: 0 })
+test('route table: reaching zero is announced as the target', () => {
+  const { problems, notes } = analyzeRouteTable({ added: 0, upstreamCount: 147, total: 147, ceiling: 1 })
   assert.deepEqual(problems, [])
-  assert.match(notes[0], /4 call sites remaining/)
+  assert.match(notes[0], /target is reached/)
 })
 
-test('apiProduct: reaching zero is announced as the target', () => {
-  const { problems, notes } = analyzeApiProduct({ current: 0, baseline: 157, upstream: 0 })
-  assert.deepEqual(problems, [])
-  assert.match(notes[0], /fold complete/)
-})
-
-test('apiProduct: an upstream occurrence invalidates the fork-only premise', () => {
-  const { problems } = analyzeApiProduct({ current: 5, baseline: 157, upstream: 3 })
+test('route table: a zero upstream count invalidates the measurement', () => {
+  // The exact way the previous R1 died: measuring a symbol that is not there.
+  // It must fail, not pass, and it must not also emit a reassuring note.
+  const { problems, notes } = analyzeRouteTable({ added: 0, upstreamCount: 0, total: 0, ceiling: 1 })
   assert.equal(problems.length, 1)
-  assert.match(problems[0], /no longer a fork-only symbol/)
+  assert.match(problems[0], /no `s\.api\(` call site found upstream/)
+  assert.match(problems[0], /no longer upstream's/)
+  assert.deepEqual(notes, [])
 })
 
 // ─── R2: debt ceilings ──────────────────────────────────────────────────────
@@ -131,29 +136,82 @@ test('resolveUpstream returns null when no candidate exists', () => {
   assert.equal(resolveUpstream('/repo', ['origin/main', 'main'], run), null)
 })
 
-test('countApiProduct treats git grep exit 1 as zero', () => {
+test('countRouteLines treats git grep exit 1 as zero', () => {
   const run = () => {
     const error = new Error('no matches')
     error.status = 1
     throw error
   }
-  assert.equal(countApiProduct('/repo', 'main', run), 0)
+  assert.equal(countRouteLines('/repo', 'main', run), 0)
 })
 
-test('countApiProduct counts occurrences, not matching lines', () => {
+test('countRouteLines counts occurrences, not matching lines', () => {
   // `git grep -o` prints one line PER OCCURRENCE, each carrying the path prefix.
   const run = () =>
     [
-      'internal/server/server.go:s.apiProduct',
-      'internal/server/server.go:s.apiProduct',
-      'internal/server/product_nickname.go:apiProduct',
+      'internal/server/server.go:s.api(',
+      'internal/server/server.go:s.api(',
     ].join('\n') + '\n'
-  assert.equal(countApiProduct('/repo', 'HEAD', run), 3)
+  assert.equal(countRouteLines('/repo', 'HEAD', run), 2)
 })
 
-test('forkDiffLines sums added and removed, and tolerates binary output', () => {
-  assert.equal(forkDiffLines('/r', 'main', 'a.go', () => '317\t167\ta.go\n'), 484)
-  assert.equal(forkDiffLines('/r', 'main', 'a.png', () => '-\t-\ta.png\n'), 0)
+test('countAddedRouteLines counts only added lines that register a route', () => {
+  const run = () =>
+    [
+      'diff --git a/x b/x',
+      '--- a/internal/server/server.go',
+      '+++ b/internal/server/server.go',
+      '@@ -1,2 +1,3 @@',
+      ' \ts.api("GET /a", h)          # context, not added',
+      '+\ts.api("PATCH /api/sessions/{id}/chat_mode", h)',
+      '+\t// s.api( mentioned in a comment does not count either',
+      '-\ts.api("GET /old", h2)       # a removal is not an addition',
+    ].join('\n')
+  assert.equal(countAddedRouteLines('/repo', 'main', run), 1)
+})
+
+test('forkDiffLines counts added and removed lines, and skips the file header', () => {
+  const run = () =>
+    [
+      'diff --git a/a.go b/a.go',
+      '--- a/a.go',
+      '+++ b/a.go',
+      '@@ -1,2 +1,3 @@',
+      ' upstream context is not present with -U0',
+      '+added one',
+      '+added two',
+      '-removed one',
+    ].join('\n')
+  assert.equal(forkDiffLines('/r', 'main', 'a.go', run), 3)
+})
+
+test('forkDiffLines does not charge hard rule 3 markers as debt', () => {
+  // A marker line is mandated, so counting it would make the marker guard and
+  // this ratchet contradict: complying with one would fail the other.
+  const run = () =>
+    [
+      'diff --git a/a.go b/a.go',
+      '--- a/a.go',
+      '+++ b/a.go',
+      '@@ -1,1 +1,3 @@',
+      '+// OCTO-FORK: the reason - see the design doc',
+      '+\trealChange()',
+      '+\t# OCTO-FORK: a non-Go introducer counts too',
+    ].join('\n')
+  assert.equal(forkDiffLines('/r', 'main', 'a.go', run), 1)
+})
+
+test('forkDiffLines counts an empty added line, which a "non-plus char" filter would drop', () => {
+  const run = () =>
+    ['diff --git a/a.go b/a.go', '--- a/a.go', '+++ b/a.go', '@@ -1,1 +1,3 @@', '+', '+x', '-'].join('\n')
+  assert.equal(forkDiffLines('/r', 'main', 'a.go', run), 3)
+})
+
+test('forkDiffLines treats an unreadable diff as zero rather than throwing', () => {
+  const run = () => {
+    throw new Error('binary file')
+  }
+  assert.equal(forkDiffLines('/r', 'main', 'a.png', run), 0)
   assert.equal(forkDiffLines('/r', 'main', 'new.go', () => ''), 0)
 })
 

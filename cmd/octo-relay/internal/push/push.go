@@ -1,4 +1,5 @@
 // Package push sends content-free wakeup notifications. The relay consumes a
+// OCTO-FORK: 内置默认工作区从 `~/Octo` 改为数据根下的 `data/workspace/`（便携化） — see dev-docs-usdable/需求/2260906/技术方案/P12-便携打包.md
 // host's wakeup frame and fires a generic "Pudding Box has new activity" push
 // at the phone's token — no session content, no token persistence, no token
 // logging. APNs and FCM credentials belong to the relay operator (the octo

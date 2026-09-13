@@ -10,6 +10,7 @@ import (
 func TestDir_PerRepoUnderHome(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
+	// OCTO-FORK: 数据根：`~/.octo` → `<exe dir>/data`（硬规则 1） — see dev-docs-usdable/需求/2260906/技术方案/P1-便携数据根.md
 	t.Setenv("OCTO_DATA_ROOT", home)
 	t.Setenv("USERPROFILE", home)
 

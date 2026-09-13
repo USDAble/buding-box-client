@@ -24,6 +24,7 @@ type PermissionAsk func(ctx context.Context, toolName string, toolInput map[stri
 //
 // The optional auditLog exists for tests: pass audit.NewAt("") (a no-op
 // logger) or a temp-path logger so test checks never land in the real
+// OCTO-FORK: 数据根：`~/.octo` → `<exe dir>/data`（硬规则 1） — see dev-docs-usdable/需求/2260906/技术方案/P1-便携数据根.md
 // data/audit.log. Production callers omit it and audit to the default path.
 func NewPermissionGate(engine *permission.Engine, ask PermissionAsk, auditLog ...*audit.Logger) agent.PermissionGate {
 	l := audit.New()

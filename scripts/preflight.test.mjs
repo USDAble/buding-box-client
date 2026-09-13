@@ -20,13 +20,32 @@ test('advisory: a missing upstream ref warns instead of failing', async () => {
   assert.equal(upstream.length, 1)
   assert.match(upstream[0], /no upstream ref/)
   assert.match(upstream[0], /NOT verified/)
+  // The marker guard needs the same ref, and "not verified" has to be said
+  // about it too — silently skipping a guard is how a wiring claim goes stale.
+  const marker = warnings.filter((w) => w.startsWith('fork-marker-guard: '))
+  assert.equal(marker.length, 1)
+  assert.match(marker[0], /no upstream ref/)
+  assert.match(marker[0], /NOT verified/)
 })
 
 test('advisory: with an upstream ref the drift result is reported', async () => {
   // The real repo has main, so this reports real numbers rather than a warning.
   const { warnings, notes } = await runAdvisoryChecks(ROOT)
   assert.ok(notes.length > 0, 'expected server-diff notes when the ref resolves')
-  for (const w of warnings) assert.match(w, /^(server-diff-guard|release-config-guard): /)
+  for (const w of warnings) assert.match(w, /^(server-diff-guard|release-config-guard|fork-marker-guard): /)
+})
+
+test('advisory: the fork-marker guard really runs, and says how much it examined', async () => {
+  // "Wired into the preflight" is a claim that goes stale silently, so assert
+  // the census line reaches the build log and is not the empty one. The
+  // examined count is the anti-no-op number: 0 would mean the ref resolved to
+  // this tree and the guard checked nothing while reporting success (V-49).
+  const { notes } = await runAdvisoryChecks(ROOT)
+  const census = notes.find((n) => n.includes('modified upstream file(s)'))
+  assert.ok(census, `expected a fork-marker census note, got: ${JSON.stringify(notes)}`)
+  const examined = Number.parseInt(/(\d+) modified upstream/.exec(census)[1], 10)
+  assert.ok(examined > 0, `expected the guard to examine files, got ${examined}`)
+  assert.match(census, /0 missing/)
 })
 
 test('advisory: an unset control plane is warned about, not failed', async () => {

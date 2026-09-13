@@ -15,13 +15,13 @@ import path from 'node:path'
 
 import {
   ALLOWLIST_CEILING,
-  MARKER_PATTERN,
   analyzeMarkers,
   listModifiedUpstreamFiles,
   markerInFrontmatter,
   parseAllowlist,
   readMarkerState,
 } from './fork-marker-guard.mjs'
+import { MARKER_PATTERN, isMarkerLine } from './fork-marker.mjs'
 
 // ─── the marker line vs a mention ───────────────────────────────────────────
 //
@@ -57,6 +57,19 @@ test('every comment introducer the fork touches is accepted', () => {
 test('a block-comment continuation and indented markers are accepted', () => {
   assert.ok(MARKER_PATTERN.test('   * OCTO-FORK: inside a /* */ block'))
   assert.ok(MARKER_PATTERN.test('\t// OCTO-FORK: indented with a tab'))
+})
+
+test('isMarkerLine is the shared predicate both guards use', () => {
+  // The marker guard detects with it and server-diff-guard excludes with it, so
+  // a marker cannot be required by one and charged as debt by the other. It is
+  // line-anchored: a line that merely contains the token mid-sentence is not a
+  // marker, which is what makes `^` meaningful rather than decorative.
+  assert.equal(isMarkerLine('// OCTO-FORK: why — see the design doc'), true)
+  assert.equal(isMarkerLine('\t# OCTO-FORK: another introducer'), true)
+  assert.equal(isMarkerLine('see // OCTO-FORK: mid-line, not at the start'), false)
+  assert.equal(isMarkerLine('// mentions OCTO-FORK: in prose'), false)
+  // Not global, so repeated calls must not drift via lastIndex.
+  for (let i = 0; i < 3; i += 1) assert.equal(isMarkerLine('// OCTO-FORK: x'), true)
 })
 
 test('the colon is load-bearing', () => {
@@ -192,6 +205,47 @@ test('listModifiedUpstreamFiles includes renames and reports the destination pat
   const files = listModifiedUpstreamFiles(dir, upstream, run)
   assert.deepEqual(files.sort(), ['plain.go', 'renamed.go'])
   assert.ok(!files.includes('untouched.go'), 'an untouched upstream file must not be listed')
+})
+
+// The census reads the working tree, so `make marker-check` just before a commit
+// checks the change being committed. A HEAD-based diff would report success on
+// the previous commit instead — a guard validating something other than what it
+// was run to check (V-49, one layer down).
+//
+// The fixture has to separate the two revisions, so the file that discriminates
+// is edited ONLY in the working tree: untouched at HEAD, modified on disk.
+test('an uncommitted edit to an upstream file is examined, not just HEAD', (t) => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'fork-marker-guard-dirty-'))
+  t.after(() => fs.rmSync(dir, { recursive: true, force: true }))
+  const run = (_root, args) => execFileSync('git', args, { cwd: dir, encoding: 'utf8' })
+  const sh = (args) => run(dir, args)
+
+  sh(['init', '-q', '-b', 'main'])
+  sh(['config', 'user.email', 'test@example.com'])
+  sh(['config', 'user.name', 'test'])
+  fs.writeFileSync(path.join(dir, 'at-head.go'), 'package a\n')
+  fs.writeFileSync(path.join(dir, 'only-on-disk.go'), 'package a\n')
+  sh(['add', '-A'])
+  sh(['commit', '-q', '-m', 'base'])
+  const upstream = sh(['rev-parse', 'HEAD']).trim()
+
+  // A committed change, so the branch is not identical to upstream...
+  fs.writeFileSync(path.join(dir, 'at-head.go'), 'package a\n// OCTO-FORK: committed\n')
+  sh(['commit', '-q', '-am', 'committed marker'])
+  // ...and an edit that exists ONLY in the working tree.
+  fs.writeFileSync(path.join(dir, 'only-on-disk.go'), 'package a\n// uncommitted edit\n')
+
+  // The premise: HEAD alone would not see this file, so the two diff revisions
+  // really do disagree and the assertion below is not vacuous.
+  const atHead = sh(['diff', '--diff-filter=MR', '-M', '--name-only', upstream, 'HEAD'])
+  assert.ok(
+    !atHead.split('\n').includes('only-on-disk.go'),
+    'fixture is wrong: HEAD already contains the discriminating edit',
+  )
+
+  const files = listModifiedUpstreamFiles(dir, upstream, run)
+  assert.ok(files.includes('at-head.go'), 'the committed edit is still in range')
+  assert.ok(files.includes('only-on-disk.go'), 'a working-tree-only edit must be examined')
 })
 
 // The same gathering against this repository, asserting properties rather than

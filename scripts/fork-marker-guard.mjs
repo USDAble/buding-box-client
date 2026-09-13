@@ -50,24 +50,7 @@ import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 import { UPSTREAM_REFS, git, resolveUpstream } from './server-diff-guard.mjs'
-
-// A marker LINE: whitespace, a comment introducer, the token, and a colon.
-// The colon is load-bearing. Without it prose *about* the rule matches — which
-// is exactly how the loose census over-counted by 24 files. The introducers
-// cover:
-//   //      Go, TypeScript, Svelte <script>, C
-//   #       YAML, shell, .desktop, Makefile
-//   <!--    Markdown, HTML, XML, plist
-//   /* *    block-comment continuations
-//   ;       Inno Setup (.iss)
-//   --      Lua, SQL
-//   %       TeX, Erlang
-//   '       Visual Basic
-//
-// The introducer group repeats: `;;` is a legal Inno Setup comment, and `**`
-// opens a JSDoc block continuation.
-export const MARKER_PATTERN =
-  /^[ \t]*(?:(?:\/\/|#|<!--|\/\*|\*|;|--|%|')[ \t]*)+OCTO-FORK:/m
+import { MARKER_PATTERN } from './fork-marker.mjs'
 
 // Measured on 2026-09-13 against origin/main (6a9d040b): 324 modified upstream
 // files, 68 with a marker line, 6 unable to hold one and named in the
@@ -194,8 +177,15 @@ export function markerInFrontmatter(text) {
 // upstream. Renames are included: a rename of an upstream file is a fork change
 // with a merge consequence, and `--name-only` reports the destination path,
 // which is the one that must carry the marker.
+//
+// It diffs the WORKING TREE, not `HEAD`. The guard's most useful moment is
+// `make marker-check` just before committing, and a HEAD-based diff there would
+// validate the previous commit — reporting success on exactly the change it was
+// run to check. That is the "a guard that cannot fail is a sentence" failure
+// (V-49), one layer down. In CI the checkout is clean, so the two are the same
+// revision; `server-diff-guard` diffs the working tree for the same reason.
 export function listModifiedUpstreamFiles(root, ref, run = git) {
-  const out = run(root, ['diff', '--diff-filter=MR', '-M', '--name-only', ref, 'HEAD'])
+  const out = run(root, ['diff', '--diff-filter=MR', '-M', '--name-only', ref])
   return out.split('\n').filter((l) => l.trim().length > 0)
 }
 
@@ -263,8 +253,10 @@ export async function check(root, run = git, read) {
 
   // A stale allowlist entry pre-authorises a file that is no longer modified,
   // and more importantly lets a file be exempted *before* it is edited.
+  // Working tree, like the census above — see the note on
+  // listModifiedUpstreamFiles.
   for (const entry of entries) {
-    const modified = run(root, ['diff', '--diff-filter=MR', '-M', '--name-only', upstream, 'HEAD', '--', entry.path])
+    const modified = run(root, ['diff', '--diff-filter=MR', '-M', '--name-only', upstream, '--', entry.path])
     if (modified.trim().length === 0) {
       problems.push(
         `${ALLOWLIST_PATH}: "${entry.path}" is not a modified upstream file — ` +

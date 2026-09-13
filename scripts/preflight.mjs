@@ -27,6 +27,7 @@
 //   ADVISORY (warn, do not fail)
 //     release-config-guard     the embedded production profile's values are real
 //     server-diff-guard        fork drift vs the upstream-tracking branch
+//     fork-marker-guard        every modified upstream file carries a marker
 //
 //     release-config-guard is advisory because packaging a build whose
 //     control-plane host is not set yet is legitimate during B0/B1 and for
@@ -35,13 +36,16 @@
 //     RFC 6761 `.invalid` placeholder, which cannot resolve — so nothing is
 //     sent anywhere, and the build log is the right place to say so.
 //
-//     server-diff-guard needs an `origin/main` (or `main`) ref to diff
-//     against. A packaging host may legitimately lack it — a shallow clone, a
-//     machine that only ever fetched one branch, a release runner checking out
-//     a tag. Blocking packaging on "you have not fetched main" would push
-//     people to disable the check, which is worse than warning. When the ref
-//     IS present the result is reported either way, so real drift is still
-//     visible in the build log.
+//     server-diff-guard and fork-marker-guard both need an `origin/main` (or
+//     `main`) ref to diff against. A packaging host may legitimately lack it —
+//     a shallow clone, a machine that only ever fetched one branch, a release
+//     runner checking out a tag. Blocking packaging on "you have not fetched
+//     main" would push people to disable the check, which is worse than
+//     warning. When the ref IS present the result is reported either way, so
+//     real drift is still visible in the build log. fork-marker-guard is
+//     tiered with it for the ref reason, NOT because hard rule 3 is optional:
+//     it is a HARD CI job, and the marker census it produces is exactly what an
+//     upstream merge is planned from (开发规范 §3.3).
 //
 // Usage:
 //   node scripts/preflight.mjs
@@ -59,6 +63,7 @@ import { check as checkNorms } from './norms-guard.mjs'
 import { check as checkAgents } from './sync-agents.mjs'
 import { check as checkServerDiff, resolveUpstream } from './server-diff-guard.mjs'
 import { check as checkReleaseConfig } from './release-config-guard.mjs'
+import { check as checkForkMarker } from './fork-marker-guard.mjs'
 
 // HARD: returns a list of problem strings. Every entry is prefixed with its
 // guard name so a build log shows which rule stopped the build.
@@ -101,12 +106,21 @@ export async function runAdvisoryChecks(root, { resolve = resolveUpstream } = {}
         'fork-drift vs upstream was NOT verified for this build. ' +
         'Run `git fetch origin main` and re-package if you want that check.',
     )
+    warnings.push(
+      'fork-marker-guard: no upstream ref (origin/main or main) is fetched — ' +
+        'hard rule 3 compliance was NOT verified for this build. ' +
+        'Run `git fetch origin main` and re-package if you want that check.',
+    )
     return { warnings, notes }
   }
 
   const { problems, notes: diffNotes } = await checkServerDiff(root)
   for (const p of problems) warnings.push(`server-diff-guard: ${p}`)
   notes.push(...diffNotes)
+
+  const { problems: markerProblems, notes: markerNotes } = await checkForkMarker(root)
+  for (const p of markerProblems) warnings.push(`fork-marker-guard: ${p}`)
+  notes.push(...markerNotes)
 
   return { warnings, notes }
 }

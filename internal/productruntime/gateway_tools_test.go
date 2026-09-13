@@ -34,7 +34,13 @@ import (
 // real permission.Engine rather than a stub that answers yes/no, because C10's
 // point is precisely that the decision comes from the local policy: the model
 // asking for a tool is not the user authorising it (PQ20 - when the gateway
-// sends no toolPolicy the local gate still applies and does not allow).
+// sends no toolPolicy the local gate still applies).
+//
+// "Still applies" is not "always asks", and the difference is V-53: the default
+// policy silently ALLOWS a set of safe verbs plus every read_file, so only a
+// command matching no rule at all reaches the engine's implicit ask. Two nails
+// below cover both halves, and the premise nail asserts which command this file
+// is using.
 
 const (
 	nailsModel = "buding-privacy-1"

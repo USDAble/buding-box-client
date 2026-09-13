@@ -74,10 +74,10 @@ func main() {
 // exists for a hand-run process: "is the desktop build really talking to this
 // stand-in, or is something else answering?" Until this existed the stand-in was
 // silent, so "the flow works" and "the stand-in was reached" were
-// indistinguishable — which is exactly how the frontend's development stand-in
-// (web/src/dev/devBackend.ts) could answer every /api call while looking like a
-// working backend (需求基线 V-9). A silent substitute is indistinguishable from
-// no substitute.
+// indistinguishable — which is exactly how the frontend's own stand-in for the
+// local /api boundary (web/src/dev, removed by PR-3) could answer every call
+// while looking like a working backend (需求基线 V-9). A silent substitute is
+// indistinguishable from no substitute.
 //
 // The completions line is marked because that is the one that proves a model turn
 // crossed the platform boundary rather than reaching a third-party endpoint —

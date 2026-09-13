@@ -5,38 +5,20 @@ import { initTheme } from './lib/theme'
 import { initFramelessDrag } from './lib/framelessDrag'
 import { installArtifactThemeRefresh } from './lib/artifacts'
 
-// TEMPORARY: the P1-P13 screens call a product backend that is not on this
-// branch, so their interactions would 404 and the flow could not be walked at
-// all. This installs a local stand-in. The real backend replaces it — when it
-// lands, delete src/dev/devBackend.ts and this block (nothing else references
-// it). See dev-docs-usdable/需求/2260906/技术方案/开发期假后端说明.md.
+// OCTO-FORK: a comment-only deviation recording where the development stand-in
+// used to be installed, and the two rules learned from it — see
+// dev-docs-usdable/需求/20260911/开发计划.md PR-3 and 需求基线 §5.6 G5/V-47.
 //
-// Scope: development only.
+// The stand-in that used to be installed here is gone (PR-3, 2026-09-13):
+// /api/* now always reaches the local Go service, in dev builds too (vite
+// proxies it, see vite.config.ts's server.proxy). It answered every /api path
+// with 200 - including paths no server had registered - which is how V-24 and
+// V-46 stayed invisible while the UI looked healthy.
 //
-// WHY A DYNAMIC IMPORT (V-47). This used to be a static `import { … }` plus
-// `if (import.meta.env.DEV) installDevBackend()`, on the belief that the dead
-// branch let Rollup "tree-shake the module out of the bundle". It does not,
-// and the claim was never checked against a built artifact: a module that is
-// imported at all has its **top-level statements evaluated**, and this module
-// has them (`const realFetch = globalThis.fetch.bind(globalThis)`, a `MODES`
-// array built by calling a helper, a demo session pushed into an array). The
-// production bundle therefore contained the stand-in's fixture data and ran
-// eight helper calls, one demo-session build and a `bind` on every start —
-// unused results, but executed. A dynamic import inside the dead branch is
-// what actually keeps the module out of the production graph.
-//
-// Verified by a control build (V-47): with the static import, `grep -rl
-// 演示会话 webdist/assets/` hits; with this dynamic one it does not. Clean
-// webdist first, or emptyOutDir:false leaves the previous build's chunks
-// addressable and the answer becomes meaningless.
-//
-// The `await` is deliberate: installing after mount would let the first state
-// read reach the real (usually absent) dev server, which looks like a bug in
-// the screens rather than a race in the stand-in.
-if (import.meta.env.DEV) {
-  const { installDevBackend } = await import('./dev/devBackend')
-  installDevBackend()
-}
+// If one is ever reintroduced, the import must be DYNAMIC and inside the
+// `import.meta.env.DEV` branch. A static import does not get tree-shaken: the
+// module's top-level statements land in the shipped bundle and run at every
+// start (V-47, verified by a control build).
 
 // Apply the persisted theme before first paint so there's no light-mode flash.
 initTheme()

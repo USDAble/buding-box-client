@@ -196,6 +196,37 @@ type Config struct {
 	// `octo serve`, the CLI and every existing test leave it nil, and a
 	// gateway-bound model is then refused (PR-4c0) rather than routed.
 	GatewaySender func() (agent.Sender, error)
+	// RequireGateway closes the other half of the same rule (需求基线 C9 规则 2,
+	// PR-5c): when true, the control plane — the gateway and the signed catalog —
+	// is this build's ONLY permitted model source, so a turn that does not
+	// resolve to the gateway is refused instead of riding the default sender.
+	//
+	// It exists because the default sender is not a neutral fallback in a product
+	// build: it is whatever data/config.yml or the environment names, i.e. a third
+	// party. Before this field, a production build whose config.yml happened to
+	// hold a usable endpoint sent the conversation there, which is the same
+	// defect as V-35 arriving through a different door.
+	//
+	// It is a boolean rather than a profile lookup because internal/server does
+	// not import fork packages: cmd/octo-desktop passes
+	// productprofile.Profile.RequiresControlPlane(), the predicate that already
+	// decides this for every other caller.
+	//
+	// False means unchanged upstream behavior, which is also what a developer
+	// build wants — allowEnvironmentModelSource builds source models from the
+	// environment on purpose.
+	RequireGateway bool
+	// ControlPlaneReady reports whether the profile names a real control plane
+	// and holds at least one trusted signing key. It is only consulted when
+	// RequireGateway is true, and when it is false the refusal comes before any
+	// lookup: an unconfigured profile's hosts are `.invalid` placeholders, and
+	// dialing one turns "this build has no service" into a DNS error the user
+	// cannot act on.
+	//
+	// Both facts already have an owner (productprofile.ControlPlaneConfigured and
+	// HasTrustedKeys) and are already read at assembly time; this field forwards
+	// the answer rather than re-deciding what "configured" means.
+	ControlPlaneReady bool
 }
 
 // Server is the HTTP server skeleton. It owns the mux, the agent factory,
@@ -1820,6 +1851,15 @@ func (s *Server) effectiveCoauthor(cfg config.Config) bool {
 // TrimPrefix is a no-op there.
 func (s *Server) senderForSession(sess *agent.Session) (agent.Sender, string) {
 	sender, model, degraded := s.resolveSenderForSession(sess)
+
+	// OCTO-FORK: PR-5c — a build that requires the control plane refuses before
+	// anything is looked up when the control plane is not configured. Order
+	// matters: the gateway branch below would otherwise dial a `.invalid` host
+	// and hand the user a DNS failure to interpret (C9 规则 2, L-C5 face 4).
+	if s.cfg.RequireGateway && !s.cfg.ControlPlaneReady {
+		return failingSender{err: errControlPlaneUnconfigured(model)}, model
+	}
+
 	if degraded && s.gatewayBound(sess, model) {
 		bare := strings.TrimPrefix(model, s.cfg.GatewayModelPrefix)
 		if s.cfg.GatewaySender == nil {
@@ -1831,6 +1871,21 @@ func (s *Server) senderForSession(sess *agent.Session) (agent.Sender, string) {
 		}
 		return gw, bare
 	}
+
+	// OCTO-FORK: PR-5c — the control plane is the only permitted model source in
+	// such a build, so a turn that did not resolve to the gateway is refused
+	// rather than handed to the default sender. That sender is not a neutral
+	// fallback here: it is config.yml's or the environment's endpoint, i.e. a
+	// third party (C9 规则 2 — this is the half V-35 did not cover, because V-35
+	// only refused models that NAME the gateway).
+	//
+	// Refusing is the whole point rather than a limitation: the model the turn
+	// asked for is one the catalog did not offer, so there is nothing the user
+	// meant to reach. The message sends them back to the picker.
+	if s.cfg.RequireGateway {
+		return failingSender{err: errModelNotFromCatalog(model)}, model
+	}
+
 	// OCTO-FORK: V-36 — a product build has no third-party endpoint by design,
 	// so "no default sender" is its normal state rather than a misconfiguration,
 	// and ensureSender no longer refuses to start such a build. The requirement
@@ -1849,6 +1904,34 @@ func (s *Server) senderForSession(sess *agent.Session) (agent.Sender, string) {
 func errNoGatewaySender(model string) error {
 	return fmt.Errorf(
 		"model %q is served by the built-in gateway, which this build does not have yet — the turn was not started and nothing was sent",
+		model)
+}
+
+// errModelNotFromCatalog is PR-5c's refusal for a turn the control plane is not
+// serving in a build where it is the only permitted source. It names the model
+// because that is the one thing the user can act on: the picker is where a
+// usable model comes from, and a message that only said "refused" would leave
+// them with nothing to do.
+//
+// Like errDefaultSenderMissing it is built here rather than passed in: the two
+// are different answers to different questions ("this build has no provider" vs
+// "this model is not one the catalog offers"), and collapsing them would send a
+// product user to the Web UI's provider wizard, which B4 says they do not need.
+func errModelNotFromCatalog(model string) error {
+	return fmt.Errorf(
+		"model %q is not one this build can reach: a signed-in session uses the models in the list — pick one there; the turn was not started and nothing was sent",
+		model)
+}
+
+// errControlPlaneUnconfigured is the answer for a release build whose profile
+// still carries `.invalid` placeholders (or holds no trusted signing key). The
+// wording deliberately describes the BUILD rather than a network symptom: the
+// alternative is a DNS error against a placeholder host, which reads as "your
+// internet is broken" and sends the user looking in the wrong place (L-C5
+// face 4 — the test asserts the refusal does not read like a network failure).
+func errControlPlaneUnconfigured(model string) error {
+	return fmt.Errorf(
+		"this build is not connected to a service yet, so model %q cannot be reached — the turn was not started and nothing was sent",
 		model)
 }
 

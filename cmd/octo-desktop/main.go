@@ -494,6 +494,10 @@ func startHub(app *application.App, bridge *nativeBridge, settings desktopSettin
 	// branches.
 	mountProduct, gatewaySender := mountProductAPI()
 
+	// Immutable for the life of the process, and the owner of both facts the
+	// turn-path policy needs (see RequireGateway below), so it is read once.
+	profile := productprofile.Current()
+
 	srv, err := server.New(server.Config{
 		Tools: true,
 		// On: the version badge needs the latest-release lookup to know an update
@@ -525,6 +529,15 @@ func startHub(app *application.App, bridge *nativeBridge, settings desktopSettin
 		// (V-36), because such a build has none by design (B4).
 		GatewayModelPrefix: productprofile.GatewayModelPrefix(),
 		GatewaySender:      gatewaySender,
+		// OCTO-FORK: the model source this build permits — see
+		// dev-docs-usdable/需求/20260911/开发计划.md §PR-5c. Both values are read
+		// from the profile (their owner) rather than decided here, and they are
+		// what stops a production build from falling back to config.yml or the
+		// environment when the gateway cannot serve a turn (C9 规则 2, L-C5).
+		// A developer profile answers false to the first, so local models keep
+		// working there.
+		RequireGateway:    profile.RequiresControlPlane(),
+		ControlPlaneReady: profile.ControlPlaneConfigured() && profile.HasTrustedKeys(),
 	})
 	if err != nil {
 		bridge.showError(L().errTitle, fmt.Sprintf(L().errStartFmt, err))

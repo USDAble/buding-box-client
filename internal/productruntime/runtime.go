@@ -563,15 +563,29 @@ func (rt *Runtime) failPlatform(w http.ResponseWriter, err error) {
 //
 // A failure to clear is reported and does not stop the logout; see
 // P4-拦截页.md §4.4 for why the in-memory phase must still reach the login page.
+//
+// It is a function of the two stores rather than a method because there are two
+// callers now: this package's HTTP funnel, and the renewal a gateway turn asks
+// for (PR-4c1). A turn refusal never passes through the other one, so the
+// alternative was a second copy of "the session is over" in session.go - and a
+// copy is how the login flag and the credential file drift apart (开发规范 §3.8).
 func (rt *Runtime) forgetSession(cause error) {
-	if err := rt.deps.Creds.Delete(); err != nil {
-		// Not fatal: State.Logout below still returns the interface to the login
-		// page, which is the part the user depends on. Reported rather than
-		// swallowed so a read-only or unplugged data root is visible.
-		slog.Error("product: session expired but the credential could not be removed",
-			"err", err, "cause", cause)
+	forgetSession(rt.deps.Creds, rt.deps.State, cause)
+}
+
+func forgetSession(creds *credentialstore.Store, state *productstate.Store, cause error) {
+	if creds != nil {
+		if err := creds.Delete(); err != nil {
+			// Not fatal: State.Logout below still returns the interface to the
+			// login page, which is the part the user depends on. Reported rather
+			// than swallowed so a read-only or unplugged data root is visible.
+			slog.Error("product: session expired but the credential could not be removed",
+				"err", err, "cause", cause)
+		}
 	}
-	if err := rt.deps.State.Logout(); err != nil {
-		slog.Error("product: session expired but the login flag could not be cleared", "err", err)
+	if state != nil {
+		if err := state.Logout(); err != nil {
+			slog.Error("product: session expired but the login flag could not be cleared", "err", err)
+		}
 	}
 }

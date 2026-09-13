@@ -119,11 +119,12 @@ func mountProductAPI() (mount func(api func(pattern string, h http.HandlerFunc))
 	// client un-restored by accident.
 	tokens := &productclient.CredentialHolder{}
 	productruntime.RestoreSession(state, creds, tokens)
+	platform := newPlatformClient(state.InstallID(), tokens)
 
 	rt := productruntime.New(productruntime.Deps{
 		State:    state,
 		Creds:    creds,
-		Platform: newPlatformClient(state.InstallID(), tokens),
+		Platform: platform,
 		ControlPlane: productruntime.ControlPlaneStatus{
 			Configured:     profile.ControlPlaneConfigured(),
 			HasTrustedKeys: profile.HasTrustedKeys(),
@@ -149,7 +150,16 @@ func mountProductAPI() (mount func(api func(pattern string, h http.HandlerFunc))
 	// The host comes from the profile. It is written bare, and either that shape
 	// or one carrying /v1 dials the same path — the provider's endpointURL
 	// normalises the suffix (see GatewayEndpoint.Host).
-	gateway := productruntime.GatewayEndpoint{Host: profile.GatewayHost, Tokens: tokens}
+	//
+	// The renewal is wired here because this is the one place that holds all
+	// three owners at once: the client that performs the exchange, the holder the
+	// gateway reads, and the credential store the rotation has to land in
+	// (PR-4c1, V-39 + V-42). A gateway sender built without it refuses the first
+	// turn of every launch, because a restart has a refresh token and no access
+	// token; one built with the exchange but without the store hands the next
+	// launch a token the platform has already rotated away.
+	renew := productruntime.SessionRenewer{Platform: platform, Tokens: tokens, Creds: creds, State: state}
+	gateway := productruntime.GatewayEndpoint{Host: profile.GatewayHost, Tokens: tokens, Ensure: renew.Ensure}
 
 	return rt.Mount, gateway.Sender
 }

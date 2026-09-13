@@ -64,7 +64,15 @@ type GatewayEndpoint struct {
 // other server-side turn error on this path, and they matter beyond
 // tidiness: C9 forbids falling back to any other model source, so a turn that
 // cannot be served must fail here rather than be handed to the default sender.
-func (g GatewayEndpoint) Sender() (agent.Sender, error) {
+//
+// WHY IT TAKES A TUNING (PR-5b1). The two reasoning preferences are handed in
+// rather than looked up here, for the same reason the token is: they change at
+// run time, and this endpoint cannot see the caller's config. It does not read
+// them itself because internal/config's values are read in exactly one place on
+// behalf of senders — internal/server — and a fork package holding a config
+// handle would be a second reader (开发规范 §3.8). The caller resolves them per
+// turn for the same reason it calls this method per turn.
+func (g GatewayEndpoint) Sender(tuning app.ReasoningTuning) (agent.Sender, error) {
 	if strings.TrimSpace(g.Host) == "" {
 		return nil, fmt.Errorf("the built-in gateway has no address in this build; the turn was not started and nothing was sent")
 	}
@@ -82,10 +90,28 @@ func (g GatewayEndpoint) Sender() (agent.Sender, error) {
 	// framing, the tool_calls index reassembly, the usage normalisation and the
 	// Accept/Authorization headers all come from internal/provider/openai, which
 	// is exactly why C3 forbids writing a second parser.
+	//
+	// ReasoningEffort and ShowReasoning are forwarded verbatim, both halves. The
+	// tuner is the user's, and the two do different jobs: the effort asks the
+	// model to reason at all (and is omitted on the wire when empty — the "off"
+	// level), while ShowReasoning decides whether a trace that comes back reaches
+	// the event stream. Wiring only one of them is a half-fix that looks whole:
+	// show-only never asks a model to think, effort-only receives the trace and
+	// drops it (app.sender.reasoningSink).
+	//
+	// Dialect is deliberately left unset. It selects which of five reasoning
+	// field shapes internal/provider/openai emits, so the empty value means "the
+	// default branch" — a flat reasoning_effort — and that is the shape the
+	// contract now names (中台交付包 §5.2, PQ27); the alternative shapes are what
+	// Bailian, DeepSeek's native API, OpenRouter and Kimi each need. Setting it
+	// here would be guessing a contract fact, and if the real gateway disagrees
+	// this field is the one place that changes.
 	return app.NewSender(app.SenderOptions{
-		Provider: app.ProviderCustom,
-		Protocol: "openai",
-		APIKey:   token,
-		BaseURL:  g.Host,
+		Provider:        app.ProviderCustom,
+		Protocol:        "openai",
+		APIKey:          token,
+		BaseURL:         g.Host,
+		ReasoningEffort: tuning.ReasoningEffort,
+		ShowReasoning:   tuning.ShowReasoning,
 	})
 }

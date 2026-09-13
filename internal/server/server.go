@@ -176,10 +176,20 @@ type Config struct {
 	// never set it.
 	GatewayModelPrefix string
 	// GatewaySender, when non-nil, builds the sender for one gateway-bound turn
-	// (需求基线 C1/C2). It is a factory rather than a sender because the
-	// credential rotates: C2 规则 1 keeps the access token in memory and never on
-	// disk, and 规则 2 assembles the sender from the current one, so a sender
-	// built once would freeze a token that expires.
+	// (需求基线 C1/C2). It is a factory rather than a sender for two reasons that
+	// are the same reason: the credential rotates — C2 规则 1 keeps the access
+	// token in memory and never on disk, and 规则 2 assembles the sender from the
+	// current one — and the reasoning preferences change between turns too
+	// (PATCH /api/config/show_reasoning, PATCH /api/sessions/{id}/reasoning_effort).
+	// A sender built once would freeze both.
+	//
+	// It takes a ReasoningTuning (PR-5b1) because those two preferences are the
+	// caller's to read, not the factory's: this package already resolves them for
+	// every other sender (see reasoningTuning), and a fork package holding a
+	// config handle would be a second place that knows how to read them
+	// (开发规范 §3.8). Without it a gateway turn could neither ask a model to
+	// reason nor show the trace it got back — the opposite of what every endpoint
+	// in config.yml does by default.
 	//
 	// It is injected for the same reason GatewayModelPrefix is: internal/server
 	// does not import fork packages, so the product supplies the capability and
@@ -195,7 +205,7 @@ type Config struct {
 	// Empty means unchanged upstream behavior, exactly like the prefix above:
 	// `octo serve`, the CLI and every existing test leave it nil, and a
 	// gateway-bound model is then refused (PR-4c0) rather than routed.
-	GatewaySender func() (agent.Sender, error)
+	GatewaySender func(app.ReasoningTuning) (agent.Sender, error)
 	// RequireGateway closes the other half of the same rule (需求基线 C9 规则 2,
 	// PR-5c): when true, the control plane — the gateway and the signed catalog —
 	// is this build's ONLY permitted model source, so a turn that does not
@@ -1714,6 +1724,7 @@ func resolveProviderAndModel(flagProvider, flagModel string) (agent.Sender, stri
 	// only when the resolved provider actually matches the config entry (same
 	// rule as key/model) — see app.EntryConnectionOverrides.
 	conn := app.EntryConnectionOverrides(provName, entry)
+	tuning := reasoningTuning()
 	sender, err := app.NewSender(app.SenderOptions{
 		Provider:        provName,
 		APIKey:          apiKey,
@@ -1722,8 +1733,8 @@ func resolveProviderAndModel(flagProvider, flagModel string) (agent.Sender, stri
 		Headers:         conn.Headers,
 		RPM:             conn.RPM,
 		MaxConcurrency:  conn.MaxConcurrency,
-		ReasoningEffort: cfg.ReasoningEffort,
-		ShowReasoning:   cfg.EffectiveShowReasoning(nil),
+		ReasoningEffort: tuning.ReasoningEffort,
+		ShowReasoning:   tuning.ShowReasoning,
 	})
 	if err != nil {
 		return nil, "", "", err
@@ -1865,7 +1876,18 @@ func (s *Server) senderForSession(sess *agent.Session) (agent.Sender, string) {
 		if s.cfg.GatewaySender == nil {
 			return failingSender{err: errNoGatewaySender(model)}, bare
 		}
-		gw, err := s.cfg.GatewaySender()
+		// OCTO-FORK: PR-5b1 — the reasoning preferences are read HERE, per turn,
+		// and handed to the factory: both change at run time (PATCH
+		// /api/config/show_reasoning, PATCH /api/sessions/{id}/reasoning_effort),
+		// and the gateway factory is built once at assembly. Reading them at
+		// assembly instead would pin the first turn's answer for the life of the
+		// process — the same failure mode as caching the sender itself (C2 规则 2).
+		//
+		// This is deliberately the same read as configSenderForEntry: cfg from the
+		// cache, cfg.EffectiveShowReasoning(nil) for the flag. internal/server stays
+		// the one place that reads config on behalf of a sender (开发规范 §3.8), and
+		// the fork package that implements the factory is not given a config handle.
+		gw, err := s.cfg.GatewaySender(reasoningTuning())
 		if err != nil {
 			return failingSender{err: err}, bare
 		}
@@ -2117,7 +2139,7 @@ func senderForEntry(entry config.ModelEntry) (agent.Sender, error) {
 	if apiKey == "" && !app.VendorKeyOptional(entry.Provider) {
 		return nil, fmt.Errorf("no API key for model %q (provider %q)", entry.Model, entry.Provider)
 	}
-	cfg, _ := config.LoadCached()
+	tuning := reasoningTuning()
 	return app.NewSender(app.SenderOptions{
 		Provider:        entry.Provider,
 		APIKey:          apiKey,
@@ -2126,9 +2148,34 @@ func senderForEntry(entry config.ModelEntry) (agent.Sender, error) {
 		Headers:         entry.Headers,
 		RPM:             entry.RPM,
 		MaxConcurrency:  entry.MaxConcurrency,
+		ReasoningEffort: tuning.ReasoningEffort,
+		ShowReasoning:   tuning.ShowReasoning,
+	})
+}
+
+// reasoningTuning resolves the two reasoning preferences for a sender.
+//
+// WHY IT EXISTS. Both facts have exactly one reader — this package — and three
+// consumers since PR-5b1: the default sender (resolveProviderAndModel), the
+// senders built from a config.yml entry (senderForEntry), and the gateway
+// factory, which is asked per turn (see senderForSession). Before it, the same
+// two expressions were written out separately in each of those places, which is
+// how the copies drift — and the drift is user-visible: the same model would
+// show its trace on one endpoint and not on another. The gateway, whose wiring
+// was added last, is exactly where a missing copy would have gone unnoticed.
+//
+// The empty value of ReasoningEffort is passed through unchanged rather than
+// defaulted: "off" is a level the user can pick, and internal/provider/openai
+// omits the field on the wire when it is empty.
+//
+// It takes no receiver because neither value lives on server.Config — both come
+// from internal/config, which stays their owner (开发规范 §3.8).
+func reasoningTuning() app.ReasoningTuning {
+	cfg, _ := config.LoadCached()
+	return app.ReasoningTuning{
 		ReasoningEffort: cfg.ReasoningEffort,
 		ShowReasoning:   cfg.EffectiveShowReasoning(nil),
-	})
+	}
 }
 
 // invalidateSenderCache drops every cached per-entry sender. Called on any

@@ -91,15 +91,32 @@ type Server struct {
 	// the test that needs one - a platform broken by default would make every
 	// other test depend on the fault it is not testing.
 	bootstrapCount   int
-	completionCount  int    // turns the stand-in gateway served (see handleCompletions)
-	bootstrapStatus  int    // non-zero: bootstrap fails with this status and code
-	bootstrapCode    string // the code that failure carries
-	tamperPolicy     bool   // sign correctly, then change a byte of the payload
-	omitPolicy       bool   // answer bootstrap with no envelope at all
-	catalogVersion   string // "" means FixturePolicyVersion
-	policyAudience   string // "" means FixturePolicyAudience
-	catalogTTLSec    int    // 0 means FixtureCatalogTTLSec
-	refuseSessionsAt bool   // hand out tokens the server will not recognise
+	completionCount  int     // turns the stand-in gateway served (see handleCompletions)
+	lastEffort       *string // reasoning_effort as received: nil means the field was ABSENT, "" means present and empty
+	bootstrapStatus  int     // non-zero: bootstrap fails with this status and code
+	bootstrapCode    string  // the code that failure carries
+	tamperPolicy     bool    // sign correctly, then change a byte of the payload
+	omitPolicy       bool    // answer bootstrap with no envelope at all
+	catalogVersion   string  // "" means FixturePolicyVersion
+	policyAudience   string  // "" means FixturePolicyAudience
+	catalogTTLSec    int     // 0 means FixtureCatalogTTLSec
+	refuseSessionsAt bool    // hand out tokens the server will not recognise
+}
+
+// LastReasoningEffort reports the reasoning_effort the stand-in last received,
+// and whether the field was there at all.
+//
+// The two-value answer is the point: PQ27 requires an absent field to be legal
+// (the UI's "off" level), and a client that sent a default instead of nothing
+// would be buying reasoning the user did not ask for. Decoding into a plain
+// string cannot tell those apart, which is why the field is a pointer.
+func (s *Server) LastReasoningEffort() (string, bool) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.lastEffort == nil {
+		return "", false
+	}
+	return *s.lastEffort, true
 }
 
 // RefuseSessionsAfterLogin makes the stand-in issue tokens it does not record,
@@ -524,6 +541,14 @@ func (s *Server) handleCompletions(w http.ResponseWriter, r *http.Request) {
 			Role    string `json:"role"`
 			Content string `json:"content"`
 		} `json:"messages"`
+		// A pointer so "absent" and "present but empty" stay distinguishable: PQ27
+		// makes the absent form the one an "off" level produces, and a client that
+		// sent a default instead would be indistinguishable without this.
+		//
+		// Unknown fields are ignored rather than rejected on purpose - the same
+		// requirement the contract now puts on the real gateway (§5.2), because the
+		// client reuses the generic OpenAI stack and its fields change over time.
+		ReasoningEffort *string `json:"reasoning_effort"`
 	}
 	// Decoded before the token check so a malformed body is reported as such
 	// rather than as an auth failure: a hand test chasing the wrong error is
@@ -534,6 +559,7 @@ func (s *Server) handleCompletions(w http.ResponseWriter, r *http.Request) {
 
 	s.mu.Lock()
 	s.completionCount++
+	s.lastEffort = req.ReasoningEffort
 	_, authorised := s.access[bearer(r)]
 	s.mu.Unlock()
 	if !authorised {
@@ -542,6 +568,17 @@ func (s *Server) handleCompletions(w http.ResponseWriter, r *http.Request) {
 	}
 
 	reply := fmt.Sprintf("[stand-in gateway] model=%s, %d message(s) received", req.Model, len(req.Messages))
+	// A trace, and deliberately one that does NOT name the model: the reply above
+	// is asserted to contain the bare catalog id by several nails, so a trace
+	// that carried the same text would let "the trace leaked into the content
+	// channel" pass unnoticed.
+	//
+	// Emitted unconditionally rather than behind a switch: reasoning is normal
+	// platform behaviour, not a fault, and the client-side gate (show_reasoning)
+	// is what decides whether the user sees it. Gating it here as well would make
+	// the two indistinguishable - a build that dropped the trace and a build that
+	// was never sent one would look the same.
+	const trace = "[stand-in gateway] weighing the request"
 	if !req.Stream {
 		w.Header().Set("Content-Type", "application/json; charset=utf-8")
 		w.WriteHeader(http.StatusOK)
@@ -552,7 +589,7 @@ func (s *Server) handleCompletions(w http.ResponseWriter, r *http.Request) {
 			"model":   req.Model,
 			"choices": []any{map[string]any{
 				"index":         0,
-				"message":       map[string]any{"role": "assistant", "content": reply},
+				"message":       map[string]any{"role": "assistant", "content": reply, "reasoning_content": trace},
 				"finish_reason": "stop",
 			}},
 		})
@@ -586,6 +623,10 @@ func (s *Server) handleCompletions(w http.ResponseWriter, r *http.Request) {
 	}
 
 	chunk(map[string]any{"role": "assistant", "content": ""}, nil)
+	// The trace goes first, as a real reasoning model emits it, and in its own
+	// delta: a gateway that merged it into the content would make the two blocks
+	// indistinguishable at the only layer that can tell them apart (C10).
+	chunk(map[string]any{"reasoning_content": trace}, nil)
 	// Deliberately framed in several chunks: concatenating chunked content is
 	// part of the provider's aggregator, and a single-chunk reply would leave
 	// that path unexercised in the one place a person can see it working.

@@ -105,6 +105,38 @@ jobs:
       - name: Run sync-agents tests
         run: node --test scripts/sync-agents.test.mjs
 
+  # Guards hard rule 3 (开发规范 §3.3): every change to an upstream file carries
+  # an `OCTO-FORK:` marker, and that marker list is the complete
+  # diff-from-upstream inventory an upstream merge is done from. Nothing checked
+  # it until 2026-09-13, by which point 250 of 318 modified upstream files had
+  # no marker. Two properties are load-bearing and both are tested: the check
+  # anchors on a marker LINE (a file that merely *mentions* the token — .octorules
+  # and CLAUDE.md define the rule — is not marked), and a run that examined zero
+  # files fails instead of reporting success (the V-49 failure mode, where a
+  # guard counted a symbol that does not exist and announced the target reached).
+  fork-marker-guard:
+    name: Fork Marker Guard
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          # The guard diffs this branch against the upstream-tracking branch, so
+          # it needs more than the single-commit checkout.
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '22'
+
+      - name: Fetch the upstream-tracking branch
+        run: git fetch --no-tags origin main:refs/remotes/origin/main
+
+      - name: Run fork-marker guard
+        run: node scripts/fork-marker-guard.mjs
+
+      - name: Run fork-marker guard tests
+        run: node --test scripts/fork-marker-guard.test.mjs
+
   svelte-check:
     name: Svelte Check
     runs-on: ubuntu-latest

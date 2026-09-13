@@ -236,6 +236,20 @@ agents-check:
 	node scripts/sync-agents.mjs --check
 	node --test scripts/sync-agents.test.mjs
 
+# ── fork-marker guard ────────────────────────────────────────────────────────
+# Hard rule 3 (开发规范 §3.3) requires `OCTO-FORK:` on every change to an
+# upstream file, and that marker list is the inventory an upstream merge is done
+# from. The guard anchors on a marker LINE rather than the bare token (prose
+# *about* the rule lives in .octorules and CLAUDE.md, which is how a 79%-missing
+# tree looked compliant), and it fails when it examined zero files. It needs an
+# upstream ref: locally that is origin/main with a fallback to main; CI's
+# fork-marker-guard job fetches main explicitly, because the default checkout
+# does not. Text formats that cannot hold a comment are named, with reasons, in
+# scripts/fork-marker-allowlist.txt.
+marker-check:
+	node scripts/fork-marker-guard.mjs
+	node --test scripts/fork-marker-guard.test.mjs
+
 # ── ripgrep embed (build-time only) ──────────────────────────────────────────
 # Downloads the matching rg release for GOOS/GOARCH, extracts the binary,
 # and places it where go:embed will pick it up. No-op if already present.

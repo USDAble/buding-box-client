@@ -211,7 +211,9 @@ export function analyzeProductFiles({ found, registered }) {
 
 // ─── git-backed fact gathering ──────────────────────────────────────────────
 
-function git(root, args) {
+// Exported so fork-marker-guard shares this runner and the upstream-ref
+// resolution below rather than writing a second copy of them (开发规范 §3.5).
+export function git(root, args) {
   return execFileSync('git', args, { cwd: root, encoding: 'utf8' })
 }
 

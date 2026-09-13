@@ -358,9 +358,15 @@ export interface ChatModesResponse {
 export async function getChatModes(): Promise<ChatModesResponse> {
   return request<ChatModesResponse>('/api/product/chat-modes')
 }
+// The session's chat mode is persisted through its own route, and the path is
+// PATCH /chat_mode — an underscore, like permission_mode / reasoning_effort /
+// show_reasoning / working_dir / agent_profile. It is NOT `/chat-mode`, which
+// no server has ever registered: only the DEV fake backend answered it, so on a
+// real build the first of a switch's two requests answered a plain-text 404
+// that the caller rendered as "404 Not Found" (V-46).
 export async function setSessionChatMode(id: string, mode: string): Promise<{ ok: boolean; chat_mode: string }> {
-  return request<{ ok: boolean; chat_mode: string }>(`/api/sessions/${id}/chat-mode`, {
-    method: 'PUT',
+  return request<{ ok: boolean; chat_mode: string }>(`/api/sessions/${id}/chat_mode`, {
+    method: 'PATCH',
     ...json({ mode }),
   })
 }

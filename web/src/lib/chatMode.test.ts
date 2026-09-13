@@ -1,7 +1,9 @@
-import { afterEach, describe, expect, it } from 'vitest'
-import { isPrivacyMode, modelDisplayName } from './chatMode'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { get } from 'svelte/store'
+import { isPrivacyMode, modelDisplayName, setSessionMode } from './chatMode'
+import { chatMode, chatModel, sessions } from './stores'
 import { en, zh, setLocale } from './i18n'
-import type { ChatModeModel } from './api'
+import type { ChatModeModel, Session } from './api'
 
 // Fixtures are built through this helper rather than inline so a row always has
 // the shape the projection produces: a catalog name in both languages and a
@@ -72,5 +74,47 @@ describe('modelDisplayName', () => {
     // one half of that is visible from the function.
     const table = [...Object.keys(en), ...Object.keys(zh)].filter((k) => k.startsWith('model.'))
     expect(table).toEqual([])
+  })
+})
+
+describe('setSessionMode', () => {
+  beforeEach(() => {
+    vi.unstubAllGlobals()
+    chatMode.set({})
+    chatModel.set({})
+    sessions.set([])
+  })
+
+  it('saves the mode before the model, and updates both stores', async () => {
+    // V-46. The mode request is the FIRST of the two a switch makes, and it used
+    // to go to `/api/sessions/{id}/chat-mode` — a path no server has ever
+    // registered (only the DEV fake backend answered it). On a real build that
+    // 404 rejected before the model request or either local store update ran, so
+    // the visible result was "the switch did nothing, plus a 404". Both the path
+    // and the order are therefore part of the contract this pins.
+    const fetchMock = vi.fn(async (_input: RequestInfo | URL, _init?: RequestInit) => ({
+      ok: true,
+      status: 200,
+      statusText: '',
+      json: async () => ({
+        ok: true,
+        chat_mode: 'privacy',
+        model: 'buding-gateway::buding-cloud-pro',
+        model_id: 'buding-gateway::buding-cloud-pro',
+      }),
+    }))
+    vi.stubGlobal('fetch', fetchMock)
+    sessions.set([{ id: 's1' } as unknown as Session])
+
+    await setSessionMode('s1', 'privacy', 'buding-gateway::buding-cloud-pro')
+
+    expect(
+      fetchMock.mock.calls.map((c) => [String(c[0]), (c[1] as RequestInit)?.method]),
+    ).toEqual([
+      ['/api/sessions/s1/chat_mode', 'PATCH'],
+      ['/api/sessions/s1/model', 'PATCH'],
+    ])
+    expect(get(chatMode)['s1']).toBe('privacy')
+    expect(get(chatModel)['s1']).toBe('buding-gateway::buding-cloud-pro')
   })
 })

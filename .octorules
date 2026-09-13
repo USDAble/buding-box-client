@@ -59,7 +59,7 @@ Beyond those three, the fork spec adds five discipline rules (`开发规范.md` 
 7. **Stop and ask (§3.7).** Reuse-avoidance, breaking an architectural convention, touching auth/credential/data-root/brand/billing/permission/routing, unconventional logic (an extra layer to dodge a rule, one concept stored twice, silent fallback), upstream core files, and using a capability outside its design intent all need explicit human confirmation recorded in the PR: which row, the facts, the choice, who confirmed.
 8. **Write the scope (§3.10).** Every rule says which domain it governs — production vs developer, build-time vs run-time, local vs remote. A rule without a scope gets cited in both directions.
 
-These are ratcheted by `norms-guard`, `datapath-guard`, `brand-guard`, `reuse-guard`, `server-diff-guard`, and `release-profile-guard` — all wired into `make *-check`, CI, and the packaging preflight.
+These are ratcheted by `norms-guard`, `datapath-guard`, `brand-guard`, `reuse-guard`, `server-diff-guard`, `release-profile-guard`, and `fork-marker-guard` — all wired into `make *-check`, CI, and the packaging preflight.
 
 Upstream merges use `merge`, never `rebase`, and land as their own PR with no functional changes riding along.
 

@@ -1,13 +1,26 @@
 package productruntime
 
 import (
+	"context"
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/open-octo/octo-agent/internal/agent"
 	"github.com/open-octo/octo-agent/internal/app"
 	"github.com/open-octo/octo-agent/internal/productclient"
 )
+
+// gatewayEnsureBudget bounds the token exchange Sender may run when the holder
+// has no access token (V-39).
+//
+// A budget rather than a bare call because the turn is waiting on it: an
+// endpoint that accepts the connection and never answers would otherwise hold
+// the turn open with nothing on screen to explain it, and "we are waiting for a
+// token" is indistinguishable from "we are working" (开发规范 §3.9). Ten seconds
+// is several times a healthy exchange while staying short enough that the user
+// gets an error rather than silence.
+const gatewayEnsureBudget = 10 * time.Second
 
 // GatewayEndpoint is the built-in gateway endpoint (需求基线 C1) expressed as a
 // sender factory, and it is the only genuinely new piece of PR-5a.
@@ -48,16 +61,45 @@ type GatewayEndpoint struct {
 	// Tokens is the in-memory credential holder. nil means the caller never
 	// wired one — a wiring mistake, refused rather than panicked on.
 	Tokens *productclient.CredentialHolder
+	// Ensure obtains an access token when the holder has none, and nil means the
+	// old behaviour: no token, no turn.
+	//
+	// WHY IT IS HERE AND NOT SOMEWHERE ELSE (PR-4c1). A relaunched process holds
+	// nothing but a refresh token, and this factory is the first place that
+	// discovers it: the turn cannot be built without a bearer, and until V-39
+	// there was nobody to ask for one — the only authorised call any production
+	// code made was the login-time catalog fetch, which does not happen on a
+	// restart. Putting the ask here costs nothing upstream (internal/server does
+	// not change by a byte, and it is the caller that decides when a sender is
+	// wanted), and it puts the exchange exactly where the need is rather than at
+	// startup, where it would have to write the credential file before the user
+	// did anything (§3.9.1).
+	//
+	// The alternative — threading a context down from the turn path — was
+	// rejected: senderForSession and buildAgent have no context today, so it
+	// would touch four upstream call sites and five test files to improve the
+	// cancellation story only. The budget below is what takes its place.
+	//
+	// WHAT IT IS NOT. It is not a second refresh path: it is handed
+	// productruntime.SessionRenewer.Ensure, which calls the client's own
+	// single-flight exchange and then persists the rotation (V-42). This type
+	// neither knows nor decides how a token is obtained.
+	Ensure func(context.Context) error
 }
 
 // Sender builds the sender for one gateway turn.
 //
 // It reads the token at call time, so a refresh that happened between turns is
-// picked up with no invalidation step. It deliberately performs no refresh of
-// its own: C2 规则 3 requires construction to stay free of I/O, because the
-// single-flight refresh belongs to the client that owns the credential, and a
-// token that expired mid-turn must be handled (and the request replayed once)
-// there rather than here.
+// picked up with no invalidation step.
+//
+// It performs no exchange of its own EXCEPT when the holder has no access token
+// at all (V-39): then, and only then, it asks Ensure for one under the budget
+// above. The two halves of C2 规则 3 are kept apart deliberately — an expired
+// token mid-turn is still the client's business, and the single-flight refresh
+// still belongs to the code that owns the credential; what changed is that "no
+// token has ever been obtained in this process" became a state someone answers
+// for. That is the one scope in which construction touches the network, and it
+// is a state the user cannot fix any other way.
 //
 // The errors are what a signed-out or mis-wired build produces instead of a
 // request, and each names which half is missing. They are English like every
@@ -78,6 +120,17 @@ func (g GatewayEndpoint) Sender(tuning app.ReasoningTuning) (agent.Sender, error
 	}
 	if g.Tokens == nil {
 		return nil, fmt.Errorf("no credential holder is wired for the built-in gateway; the turn was not started and nothing was sent")
+	}
+	if g.Tokens.AccessToken() == "" && g.Ensure != nil {
+		ctx, cancel := context.WithTimeout(context.Background(), gatewayEnsureBudget)
+		defer cancel()
+		if err := g.Ensure(ctx); err != nil {
+			// The cause is carried into the message rather than swallowed: "the
+			// turn did not start" is the same sentence for a refused session, a
+			// dead control plane and a timeout, and only one of the three is
+			// fixed by signing in again.
+			return nil, fmt.Errorf("not signed in: the built-in gateway needs a session token and obtaining one failed (%w); the turn was not started and nothing was sent", err)
+		}
 	}
 	token := g.Tokens.AccessToken()
 	if token == "" {

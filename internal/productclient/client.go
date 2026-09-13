@@ -164,6 +164,43 @@ func (c *Client) Bootstrap(ctx context.Context) (*BootstrapData, error) {
 	return &out, nil
 }
 
+// EnsureToken makes sure an access token is held, exchanging the held refresh
+// token for one when memory has none.
+//
+// WHY IT EXISTS. A process that has just started holds a refresh token and
+// nothing else (需求基线 E6 规则 2: the access token is never written down), and
+// every call that goes through doAuthorized repairs that by itself - it runs
+// without a bearer, takes the 401 and refreshes. The gateway turn does not: it
+// is an ordinary OpenAI-protocol request built by internal/provider/openai with
+// the bearer read straight from the holder, so with no token it can only be
+// refused. That refusal is correct and fail-closed; what was missing is anyone
+// making the token exist first (V-39).
+//
+// It is a wrapper around refreshSingleFlight rather than a second exchange path,
+// and deliberately so: the single-flight owns the rotation, the "never
+// half-apply" rule and the concurrency, and it already treats "no access token
+// held" as its cue (its early return requires a token that differs from the
+// stale one). A second implementation would be a second thing to keep in step
+// (开发规范 §3.5/§3.8).
+//
+// No file is touched. The rotated refresh token is the caller's to persist - the
+// credential store owns that file, and a client that wrote it would be a second
+// owner of data/credential.json.
+//
+// A refusal clears the held credential, exactly as doAuthorized does: C12/L-A6
+// say an unauthorised answer ends the session, and it must end it in memory and
+// on disk together rather than one layer at a time.
+func (c *Client) EnsureToken(ctx context.Context) error {
+	if c.creds.AccessToken() != "" {
+		return nil
+	}
+	err := c.refreshSingleFlight(ctx, "")
+	if err != nil && errors.Is(err, ErrSessionExpired) {
+		c.creds.Clear()
+	}
+	return err
+}
+
 // doAuthorized performs an authenticated call with exactly one refresh and one
 // replay when the access token is rejected (§C2 规则 4/5).
 func (c *Client) doAuthorized(ctx context.Context, method, path string, body, out any) error {
@@ -177,9 +214,18 @@ func (c *Client) doAuthorized(ctx context.Context, method, path string, body, ou
 	}
 
 	if rerr := c.refreshSingleFlight(ctx, stale); rerr != nil {
-		// A refresh token the platform refuses does not heal by retrying. Drop
-		// the credentials so the caller lands on the blocked screen.
-		c.creds.Clear()
+		// A refresh token the platform refuses does not heal by retrying: the
+		// session is over, the credential goes with it, and the caller lands on
+		// the blocked screen (C12/L-A6).
+		//
+		// Any other failure is not that answer. An exchange that never completed
+		// — a dropped connection, a 5xx, a timeout — has no verdict in it, and
+		// clearing on one would turn a flaky network into a forced SMS login
+		// (V-43: this used to be what happened, because refreshSingleFlight
+		// reported every failure as an expired session).
+		if errors.Is(rerr, ErrSessionExpired) {
+			c.creds.Clear()
+		}
 		return rerr
 	}
 
@@ -208,7 +254,16 @@ func (c *Client) refreshSingleFlight(ctx context.Context, stale string) error {
 	}
 	data, err := c.Refresh(ctx, token)
 	if err != nil {
-		return fmt.Errorf("%w: %v", ErrSessionExpired, err)
+		if isUnauthorized(err) {
+			return fmt.Errorf("%w: %w", ErrSessionExpired, err)
+		}
+		// Not a refusal, so not an answer about the session at all: the exchange
+		// never completed. Returning ErrSessionExpired here is what let a
+		// dropped connection end a live session (V-43), and dto.go's own
+		// definition says otherwise — "the refresh token is gone or the platform
+		// refused it". Every caller keys on that sentinel, so the distinction has
+		// to be made here or it cannot be made later.
+		return err
 	}
 	c.creds.Set(Credentials{
 		AccessToken:  data.AccessToken,

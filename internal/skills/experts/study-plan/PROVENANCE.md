@@ -72,6 +72,7 @@ no `NOTICE` file exists):
   `weak-point-drill` and `flashcards`.
 - **Plugin config paths**
   (`~/.claude/plugins/config/claude-for-legal/law-student/...`) — replaced
+  <!-- OCTO-FORK: 技能文档改为数据根语义：用户级数据根改用 <data root>  — see dev-docs-usdable/需求/2260906/技术方案/P1-便携数据根.md -->
   with `<data root>/learning-data/`, following this repository's
   `<data root>/site-patterns/` precedent for skill data that must survive a
   version-bump re-materialization of the skill directory.

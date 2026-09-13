@@ -32,6 +32,7 @@ func (WorkflowSaveTool) Definition() agent.ToolDefinition {
 		Name: "workflow_save",
 		Description: "Save a Ruby workflow script as a reusable named workflow, so you can later " +
 			"run it with the workflow tool's `name` parameter (passing `args` to parameterize it). " +
+			// OCTO-FORK: 数据根：`~/.octo` → `<exe dir>/data`（硬规则 1） — see dev-docs-usdable/需求/2260906/技术方案/P1-便携数据根.md
 			"Writes <name>.rb to <data root>/workflows. Use after you've built and validated a workflow " +
 			"you'll want again.",
 		Parameters: map[string]any{

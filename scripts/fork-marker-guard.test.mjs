@@ -18,6 +18,7 @@ import {
   MARKER_PATTERN,
   analyzeMarkers,
   listModifiedUpstreamFiles,
+  markerInFrontmatter,
   parseAllowlist,
   readMarkerState,
 } from './fork-marker-guard.mjs'
@@ -211,4 +212,48 @@ test('the gathering is self-consistent against the real repository', () => {
     assert.ok(fs.existsSync(path.join(root, f)), `${f} was reported modified but does not exist`)
   }
   assert.ok(upstream.length > 0)
+})
+
+// ─── marker placement: not inside YAML frontmatter ──────────────────────────
+//
+// Proved the hard way: an HTML comment in a SKILL.md frontmatter parses as a
+// mapping key `<!-- OCTO-FORK` rather than failing, so the skill still loads and
+// four shipped default skills carried a junk key with every test green.
+
+test('a marker inside frontmatter is located', () => {
+  const file = ['---', 'name: x', '<!-- OCTO-FORK: why -->', 'description: d', '---', 'body'].join('\n')
+  assert.equal(markerInFrontmatter(file), 3)
+})
+
+test('a marker after the frontmatter is fine', () => {
+  const file = ['---', 'name: x', 'description: d', '---', '<!-- OCTO-FORK: why -->', 'body'].join('\n')
+  assert.equal(markerInFrontmatter(file), null)
+})
+
+test('no frontmatter at all is fine', () => {
+  assert.equal(markerInFrontmatter('// OCTO-FORK: why\npackage a\n'), null)
+})
+
+test('an unterminated frontmatter is not used to invent a placement error', () => {
+  assert.equal(markerInFrontmatter(['---', 'name: x'].join('\n')), null)
+})
+
+test('analyzeMarkers reports a misplaced marker', () => {
+  const { problems } = analyzeMarkers({
+    examined: 10,
+    missing: [],
+    ceiling: 0,
+    misplaced: [{ file: 'internal/skills/x/SKILL.md', line: 3 }],
+  })
+  assert.equal(problems.length, 1)
+  assert.match(problems[0], /internal\/skills\/x\/SKILL\.md:3/)
+  assert.match(problems[0], /YAML frontmatter block/)
+})
+
+test('readMarkerState surfaces misplacement for a marked file', () => {
+  const read = () => Buffer.from(['---', 'name: x', '<!-- OCTO-FORK: why -->', '---'].join('\n'))
+  const { marked, missing, misplaced } = readMarkerState('/x', ['s/SKILL.md'], read)
+  assert.deepEqual(marked, ['s/SKILL.md'])
+  assert.deepEqual(missing, [])
+  assert.deepEqual(misplaced, [{ file: 's/SKILL.md', line: 3 }])
 })

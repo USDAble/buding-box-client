@@ -28,6 +28,7 @@ coauthor                          model names
 workspace_dir                     default / lite model
 ```
 
+<!-- OCTO-FORK: 技能文档改为数据根语义：用户级数据根改用 <data root>  — see dev-docs-usdable/需求/2260906/技术方案/P1-便携数据根.md -->
 All of these live in `<data root>/config.yml` and are editable through the REST API
 on the running octo server at `http://localhost:<port>` (use `curl` via the `terminal` tool — do NOT use `web_fetch`, localhost is blocked by SSRF).
 

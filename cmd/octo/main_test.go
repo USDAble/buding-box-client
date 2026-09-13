@@ -50,6 +50,7 @@ func TestRun_PositionalMessage_RoutesToChat(t *testing.T) {
 	t.Setenv("OPENAI_API_KEY", "")
 	tmp := t.TempDir()
 	t.Setenv("HOME", tmp)
+	// OCTO-FORK: 数据根：`~/.octo` → `<exe dir>/data`（硬规则 1） — see dev-docs-usdable/需求/2260906/技术方案/P1-便携数据根.md
 	t.Setenv("OCTO_DATA_ROOT", tmp)
 	t.Setenv("USERPROFILE", tmp)
 	var stdout, stderr bytes.Buffer

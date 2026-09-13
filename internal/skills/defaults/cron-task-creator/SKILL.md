@@ -3,6 +3,8 @@ name: cron-task-creator
 description: Create, inspect, run, edit, enable/disable, and delete octo's scheduled cron tasks — recurring agent prompts stored in <data root>/tasks/*.json and executed by the octo serve scheduler. Use when the user wants to schedule a recurring task, e.g. "run X every morning", "schedule a daily report", "set up a cron job", "定时任务", "每天自动跑".
 ---
 
+<!-- OCTO-FORK: 技能文档改为数据根语义：用户级数据根改用 <data root>  — see dev-docs-usdable/需求/2260906/技术方案/P1-便携数据根.md -->
+
 # Create and manage octo cron tasks
 
 octo runs an agent prompt on a schedule. Each task is a JSON file in

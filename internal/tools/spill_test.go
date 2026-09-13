@@ -9,6 +9,7 @@ import (
 	"unicode/utf8"
 )
 
+// OCTO-FORK: 数据根：`~/.octo` → `<exe dir>/data`（硬规则 1） — see dev-docs-usdable/需求/2260906/技术方案/P1-便携数据根.md
 // spillHome points the portable data root at a temp dir so spill files don't
 // touch the real one, and cleans up after the test.
 func spillHome(t *testing.T) {

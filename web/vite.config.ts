@@ -10,6 +10,7 @@ export default defineConfig({
     // .gitkeep and leaves the git tree dirty — goreleaser refuses to release
     // from a dirty tree (broke the v1.12.22 tag build). Stale hashed assets
     // left behind are inert: index.html only references the fresh ones.
+    // OCTO-FORK: 前端适配（webview 路由/构建/入口隐藏） — see dev-docs-usdable/需求/2260906/技术方案/P6-入口隐藏与积分.md
     //
     // The inert half of that reasoning only covers hashed names. A fixed-name
     // file stays addressable and keeps getting embedded, and nothing here could

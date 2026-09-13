@@ -33,6 +33,7 @@ metadata:
 
 ## 加载上下文
 
+<!-- OCTO-FORK: 技能文档改为数据根语义：用户级数据根改用 <data root>  — see dev-docs-usdable/需求/2260906/技术方案/P1-便携数据根.md -->
 如果存在 `<data root>/learning-data/study-plan.yaml`，读取该学科的
 `session_history`，看看之前哪些子主题错得多——出题权重往那些子主题倾斜。
 没有这个文件也没关系，直接问用户"最近在哪几个知识点上容易出错"。

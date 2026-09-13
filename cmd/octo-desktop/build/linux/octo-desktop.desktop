@@ -1,5 +1,6 @@
 [Desktop Entry]
 Type=Application
+# OCTO-FORK: 桌面壳的打包与品牌资产（图标/清单/启动器） — see dev-docs-usdable/需求/2260906/技术方案/P12-便携打包.md
 Name=Pudding Box
 Comment=Pudding Box desktop
 Exec=octo-desktop

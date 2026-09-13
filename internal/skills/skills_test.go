@@ -31,6 +31,7 @@ func useUserRoot(t *testing.T, dir string) {
 // Discover becomes available without rebuilding the registry — the mechanism
 // that lets the `skill` tool load a skill dropped in mid-session.
 func TestReload_PicksUpLateSkill(t *testing.T) {
+	// OCTO-FORK: 技能文档改为数据根语义（`~/.octo/…` → `<data root>/…`） — see dev-docs-usdable/需求/2260906/技术方案/P1-便携数据根.md
 	useDefaultRoot(t, t.TempDir()) // isolate from real data/skills-default
 	userRoot := t.TempDir()
 	useUserRoot(t, userRoot)

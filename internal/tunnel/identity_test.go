@@ -52,6 +52,7 @@ func TestLoadOrCreateIdentity_RoundTrip(t *testing.T) {
 }
 
 // TestLoadOrCreateIdentity_CreatesParentDir covers a fresh machine where
+// OCTO-FORK: 数据根：`~/.octo` → `<exe dir>/data`（硬规则 1） — see dev-docs-usdable/需求/2260906/技术方案/P1-便携数据根.md
 // the data root does not exist yet (e.g. access key came from the environment, so
 // server startup never created it). Creating the identity must make the dir.
 func TestLoadOrCreateIdentity_CreatesParentDir(t *testing.T) {

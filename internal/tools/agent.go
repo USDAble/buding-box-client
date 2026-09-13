@@ -52,12 +52,15 @@ func profileNames(store *agentprofile.Store) string {
 //   - prompt:      the task. Self-contained — the child starts with zero
 //     conversation context and can't see this conversation.
 //   - subagent_type: agent type (explore, general, code-review, or a
-//     user-defined agent from data/agents). Required.
-//   - run_in_background: when true the agent runs async and you are notified
-//     on completion. When false (default) it blocks and returns the result.
-//   - model: optional model override ("lite" resolves to the endpoint's lite
-//     model, falling back to the parent's model when none is configured)
-//   - tools: optional tool-name allowlist for the child
+//
+// OCTO-FORK: 数据根：`~/.octo` → `<exe dir>/data`（硬规则 1） — see dev-docs-usdable/需求/2260906/技术方案/P1-便携数据根.md
+//
+//	  user-defined agent from data/agents). Required.
+//	- run_in_background: when true the agent runs async and you are notified
+//	  on completion. When false (default) it blocks and returns the result.
+//	- model: optional model override ("lite" resolves to the endpoint's lite
+//	  model, falling back to the parent's model when none is configured)
+//	- tools: optional tool-name allowlist for the child
 //
 // The tool is advertised only when a SubAgentManager is registered.
 type AgentTool struct{}

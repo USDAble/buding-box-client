@@ -11,6 +11,7 @@ import (
 // tests here pass an explicit Options.JournalDir, but a few exercise Run's
 // default-journal-dir fallback deliberately; without this redirect, those
 // (and any future test that forgets to set JournalDir) would leave .jsonl
+// OCTO-FORK: 数据根：`~/.octo` → `<exe dir>/data`（硬规则 1） — see dev-docs-usdable/需求/2260906/技术方案/P1-便携数据根.md
 // files in the real data/workflow-journals forever, since nothing prunes
 // it mid-session.
 func TestMain(m *testing.M) {

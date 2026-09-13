@@ -61,6 +61,7 @@ only law-specific surface is vocabulary ("professor", "casebook", "hypo",
   bar-prep/IRAC references with `weak-point-drill`, the equivalent
   targeted-practice skill in this repository.
 - **Storage path**: `~/.claude/plugins/config/.../exam-forecasts/` →
+  <!-- OCTO-FORK: 技能文档改为数据根语义：用户级数据根改用 <data root>  — see dev-docs-usdable/需求/2260906/技术方案/P1-便携数据根.md -->
   `<data root>/learning-data/exam-forecasts/`, following this repository's
   `<data root>/site-patterns/` convention for skill data that must survive a
   version-bump re-materialization.

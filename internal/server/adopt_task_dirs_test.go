@@ -71,6 +71,7 @@ func TestAdoptTaskWorkingDirs_LeavesTheWorkspaceAlone(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	// OCTO-FORK: 内置默认工作区从 `~/Octo` 改为数据根下的 `data/workspace/`（便携化） — see dev-docs-usdable/需求/2260906/技术方案/P12-便携打包.md
 	workspace := filepath.Join(home, "workspace")
 	if err := os.MkdirAll(workspace, 0o755); err != nil {
 		t.Fatal(err)

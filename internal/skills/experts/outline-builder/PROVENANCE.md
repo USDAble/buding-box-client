@@ -60,6 +60,7 @@ subject, not just law.
   `exam-forecast`, and `study-plan`, this skill does not mandate a fixed
   file location; the source doesn't either (the student's outline can live
   wherever they already keep it), so this skill preserves that
+  <!-- OCTO-FORK: 技能文档改为数据根语义：用户级数据根改用 <data root>  — see dev-docs-usdable/需求/2260906/技术方案/P1-便携数据根.md -->
   flexibility rather than imposing a `<data root>/learning-data/` path.
 
 ## Conclusion

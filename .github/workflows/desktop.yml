@@ -19,6 +19,7 @@ on:
       - 'internal/server/**'
       # The app embeds the web UI built from web/ (webdist is gitignored).
       - 'web/**'
+      # OCTO-FORK: CI 守卫接线：新增 norms/brand/datapath/agents/server-diff 等 job — see dev-docs-usdable/开发规范.md §3.4
       # The tray menu and dialogs take the product name from internal/brand,
       # which embeds branding/brand.json. Without these, renaming the product
       # would skip the only job that runs cmd/octo-desktop's tests.

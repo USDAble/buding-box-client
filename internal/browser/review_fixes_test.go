@@ -99,6 +99,7 @@ func TestNormalizeUploadFiles(t *testing.T) {
 	// must be set for the tilde expansion below to resolve into home rather
 	// than the CI runner's real profile dir.
 	t.Setenv("HOME", home)
+	// OCTO-FORK: 数据根：`~/.octo` → `<exe dir>/data`（硬规则 1） — see dev-docs-usdable/需求/2260906/技术方案/P1-便携数据根.md
 	t.Setenv("OCTO_DATA_ROOT", home)
 	t.Setenv("USERPROFILE", home)
 	if err := os.WriteFile(filepath.Join(home, "doc.md"), []byte("x"), 0o644); err != nil {

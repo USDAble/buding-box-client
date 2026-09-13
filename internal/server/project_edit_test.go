@@ -83,6 +83,7 @@ func TestMountedHooksTrust(t *testing.T) {
 	srv := groupTestServer(t)
 	writeHooks := func(dir, body string) {
 		t.Helper()
+		// OCTO-FORK: 数据根：`~/.octo` → `<exe dir>/data`（硬规则 1） — see dev-docs-usdable/需求/2260906/技术方案/P1-便携数据根.md
 		if err := os.WriteFile(filepath.Join(dir, ".octo-hooks.yml"), []byte(body), 0o600); err != nil {
 			t.Fatal(err)
 		}

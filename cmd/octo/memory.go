@@ -125,6 +125,7 @@ func printLint(w io.Writer, dir string) {
 }
 
 // memoryWriteRoots returns the write-allowlist roots for the permission engine,
+// OCTO-FORK: 数据根：`~/.octo` → `<exe dir>/data`（硬规则 1） — see dev-docs-usdable/需求/2260906/技术方案/P1-便携数据根.md
 // mirroring the server's Server.memoryWriteRoots: the whole data/memories
 // tree rather than just this session's two directories, so a durable fact about
 // ANOTHER repo can be filed in that repo's memory dir (see

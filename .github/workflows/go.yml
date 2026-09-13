@@ -17,6 +17,7 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  # OCTO-FORK: CI 守卫接线：新增 norms/brand/datapath/agents/server-diff 等 job — see dev-docs-usdable/开发规范.md §3.4
   # Guards branding/brand.json — the single source of truth for product identity
   # — and the generated copies that go:embed, Vite and Inno Setup read.
   #

@@ -132,6 +132,7 @@ metadata:
 
 ### 第五步：保存
 
+<!-- OCTO-FORK: 技能文档改为数据根语义：用户级数据根改用 <data root>  — see dev-docs-usdable/需求/2260906/技术方案/P1-便携数据根.md -->
 写入 `<data root>/learning-data/exam-forecasts/[课程]/forecast-[YYYY-MM-DD].md`。
 按版本保存——如果学期中又拿到新的真题，重新分析并追加，不覆盖之前的版本。
 

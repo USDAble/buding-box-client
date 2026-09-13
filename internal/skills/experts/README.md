@@ -2,6 +2,7 @@
 
 Skills bundled for the built-in experts (`internal/agentprofile/defaults/`).
 Each subdirectory holding a `SKILL.md` ships embedded in the binary and is
+<!-- OCTO-FORK: 技能文档改为数据根语义：用户级数据根改用 <data root>  — see dev-docs-usdable/需求/2260906/技术方案/P1-便携数据根.md -->
 materialized to `<data root>/skills-expert` at startup, discovered with
 `Source: "expert"`.
 

@@ -13,6 +13,7 @@ import (
 )
 
 // IM sessions persist their conversation history to the same store web
+// OCTO-FORK: 数据根：`~/.octo` → `<exe dir>/data`（硬规则 1） — see dev-docs-usdable/需求/2260906/技术方案/P1-便携数据根.md
 // sessions use (data/sessions, agent.Session JSONL). The store ID is
 // derived deterministically from the session key, so after a server restart
 // the first message from a chat reloads its history — before this, IM

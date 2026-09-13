@@ -2,6 +2,7 @@
 
 octo connects to MCP servers for extra tools — databases, ticket trackers, internal APIs. Tools are on by default; each configured server connects at session start and its tools ride alongside octo's built-ins as `mcp__<server>__<tool>`.
 
+<!-- OCTO-FORK: 技能文档改为数据根语义：用户级数据根改用 <data root>  — see dev-docs-usdable/需求/2260906/技术方案/P1-便携数据根.md -->
 Declared in `<data root>/mcp.json` (user-global):
 
 ```json

@@ -225,6 +225,7 @@ func (s *scriptedSender) StreamMessagesWithTools(_ context.Context, _, _ string,
 // finishes in one request. Three sender calls prove it: parent → child → parent.
 func TestServerRunsSubAgentSynchronously(t *testing.T) {
 	// Isolate HOME so the permission engine uses the embedded defaults (which
+	// OCTO-FORK: 数据根：`~/.octo` → `<exe dir>/data`（硬规则 1） — see dev-docs-usdable/需求/2260906/技术方案/P1-便携数据根.md
 	// allow sub_agent), not a developer's data/permissions.yml.
 	tmp := t.TempDir()
 	t.Setenv("HOME", tmp)

@@ -70,6 +70,7 @@ func (s *cwdProbeSender) StreamMessagesWithTools(_ context.Context, _, _ string,
 func TestDoAgentTurn_TerminalRunsInSessionWorkingDir(t *testing.T) {
 	tmp := t.TempDir()
 	t.Setenv("HOME", tmp)
+	// OCTO-FORK: 内置默认工作区从 `~/Octo` 改为数据根下的 `data/workspace/`（便携化） — see dev-docs-usdable/需求/2260906/技术方案/P12-便携打包.md
 	t.Setenv("OCTO_DATA_ROOT", tmp)
 	t.Setenv("USERPROFILE", tmp)
 

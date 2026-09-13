@@ -12,6 +12,7 @@ import (
 	"github.com/open-octo/octo-agent/internal/config"
 )
 
+// OCTO-FORK: 数据根：`~/.octo` → `<exe dir>/data`（硬规则 1） — see dev-docs-usdable/需求/2260906/技术方案/P1-便携数据根.md
 // writeTestConfig writes a config with the given models to data/config.yml
 // in a temp HOME dir.
 func writeTestConfig(t *testing.T, cfg config.Config) {

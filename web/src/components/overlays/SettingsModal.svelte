@@ -220,6 +220,7 @@
   let showReasoningVal = $state(true)
   let coauthorVal      = $state(true)
   let workspaceDir        = $state('')
+  // OCTO-FORK: 前端适配（webview 路由/构建/入口隐藏） — see dev-docs-usdable/需求/2260906/技术方案/P6-入口隐藏与积分.md
   // Resolved default new sessions get when workspaceDir is empty (data/workspace/,
   // expanded server-side) — shown as the input's placeholder instead of a
   // bare "auto" that's easy to mistake for an actually-saved value.

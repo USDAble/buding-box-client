@@ -5,6 +5,7 @@ Skills are reusable instruction sets in Claude Code's SKILL.md format (YAML fron
 ## Where skills live
 
 ```
+<!-- OCTO-FORK: 技能文档改为数据根语义：用户级数据根改用 <data root>  — see dev-docs-usdable/需求/2260906/技术方案/P1-便携数据根.md -->
 <data root>/skills-default/   built-in set, materialized from the binary (octo skills update re-syncs)
    ↓ overridden by
 <data root>/skills/<name>/SKILL.md      user-level, all projects

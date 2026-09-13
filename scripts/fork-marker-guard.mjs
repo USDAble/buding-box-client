@@ -71,10 +71,10 @@ export const MARKER_PATTERN =
 
 // Measured on 2026-09-13 against origin/main (6a9d040b): 324 modified upstream
 // files, 68 with a marker line, 6 unable to hold one and named in the
-// allowlist — 250 missing. The guard lands at 250 so the fix is a visible
-// sequence rather than an assertion, and it goes to 0 in the same PR as the
-// 250 markers.
-export const MARKER_DEBT_CEILING = 250
+// allowlist — 250 missing. The guard landed at 250 and the 250 markers were
+// added in the same PR, so the ceiling is 0: every modified upstream file is
+// marked, and a new one that is not fails immediately.
+export const MARKER_DEBT_CEILING = 0
 
 // The allowlist covers formats and generators that cannot carry a marker.
 // ALLOWLIST_CEILING is a second ratchet: adding an entry is a deliberate act,
@@ -118,6 +118,7 @@ export function analyzeMarkers({
   allowlisted = [],
   allowlistCeiling = ALLOWLIST_CEILING,
   allowlistProblems = [],
+  misplaced = [],
 }) {
   const problems = [...allowlistProblems]
   const notes = []
@@ -138,6 +139,14 @@ export function analyzeMarkers({
     )
   }
 
+  for (const { file, line } of misplaced) {
+    problems.push(
+      `${file}:${line}: the marker sits inside a YAML frontmatter block. An HTML comment is not a YAML comment there — ` +
+        `yaml.v3 reads it as a mapping entry keyed "\u003c!-- OCTO-FORK", so the file still parses and no test notices, ` +
+        `but the metadata gains a junk key. Move the marker after the closing "---".`,
+    )
+  }
+
   if (allowlisted.length > allowlistCeiling) {
     problems.push(
       `${ALLOWLIST_PATH} has ${allowlisted.length} entries (ceiling ${allowlistCeiling}). ` +
@@ -150,6 +159,33 @@ export function analyzeMarkers({
       `${allowlisted.length}/${allowlistCeiling} allowlisted`,
   )
   return { problems, notes }
+}
+
+// markerInFrontmatter returns the 1-based line of a marker that sits inside a
+// leading `---`-delimited block, or null.
+//
+// WHY THIS IS A RULE AND NOT A NICETY. An HTML comment is not a YAML comment.
+// Inserted into a SKILL.md frontmatter, `yaml.v3` reads
+// `<!-- OCTO-FORK: why -->` as a mapping entry whose key is `<!-- OCTO-FORK`,
+// so the skill still loads, `name` and `description` still parse, and every
+// existing test still passes — while the shipped skill metadata carries a junk
+// key (measured 2026-09-13 against internal/skills; four default skills hit it).
+// Nothing could notice, which is the same failure mode as V-48 itself.
+export function markerInFrontmatter(text) {
+  const lines = text.split('\n')
+  if (lines.length === 0 || lines[0].trim() !== '---') return null
+  let closing = -1
+  for (let i = 1; i < lines.length; i += 1) {
+    if (lines[i].trim() === '---') {
+      closing = i
+      break
+    }
+  }
+  if (closing === -1) return null
+  for (let i = 0; i <= closing; i += 1) {
+    if (MARKER_PATTERN.test(lines[i]) && /OCTO-FORK:/.test(lines[i])) return i + 1
+  }
+  return null
 }
 
 // ─── git-backed fact gathering ──────────────────────────────────────────────
@@ -168,6 +204,7 @@ export function listModifiedUpstreamFiles(root, ref, run = git) {
 export function readMarkerState(root, files, read = (p) => fs.readFileSync(p)) {
   const marked = []
   const missing = []
+  const misplaced = []
   for (const file of files) {
     let text = ''
     try {
@@ -178,10 +215,15 @@ export function readMarkerState(root, files, read = (p) => fs.readFileSync(p)) {
       missing.push(file)
       continue
     }
-    if (MARKER_PATTERN.test(text)) marked.push(file)
-    else missing.push(file)
+    if (!MARKER_PATTERN.test(text)) {
+      missing.push(file)
+      continue
+    }
+    marked.push(file)
+    const line = markerInFrontmatter(text)
+    if (line !== null) misplaced.push({ file, line })
   }
-  return { marked, missing }
+  return { marked, missing, misplaced }
 }
 
 // ─── guard ──────────────────────────────────────────────────────────────────
@@ -217,7 +259,7 @@ export async function check(root, run = git, read) {
   const files = listModifiedUpstreamFiles(root, upstream, run).filter(
     (f) => !allowlistedPaths.has(f),
   )
-  const { missing } = readMarkerState(root, files, read)
+  const { missing, misplaced } = readMarkerState(root, files, read)
 
   // A stale allowlist entry pre-authorises a file that is no longer modified,
   // and more importantly lets a file be exempted *before* it is edited.
@@ -237,6 +279,7 @@ export async function check(root, run = git, read) {
     ceiling: MARKER_DEBT_CEILING,
     allowlisted: entries,
     allowlistProblems,
+    misplaced,
   })
   problems.push(...result.problems)
   notes.push(...result.notes)

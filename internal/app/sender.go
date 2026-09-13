@@ -63,6 +63,7 @@ type SenderOptions struct {
 	ShowReasoning bool
 }
 
+// OCTO-FORK: sender 装配的推理偏好透传（PR-5b1） — see dev-docs-usdable/需求/20260911/开发计划.md
 // ReasoningTuning is the pair of reasoning preferences a caller hands to a
 // sender factory, in a form that can cross an injection seam.
 //

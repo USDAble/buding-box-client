@@ -1,5 +1,6 @@
 ; octo-setup — per-user Windows installer for the Octo desktop app.
 ;
+; OCTO-FORK: 便携交付物：安装器与发行配置的品牌化 — see dev-docs-usdable/需求/2260906/技术方案/P12-便携打包.md
 ; Installs the desktop app (PuddingBox.exe) + the octo CLI to
 ; %LOCALAPPDATA%\Programs\octo, puts that dir on the user PATH (HKCU — no admin,
 ; no UAC) so `octo` works in a terminal, creates a Start-menu shortcut that

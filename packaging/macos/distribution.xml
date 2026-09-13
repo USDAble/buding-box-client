@@ -1,5 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <installer-gui-script minSpecVersion="2">
+    <!-- OCTO-FORK: 便携交付物：安装器与发行配置的品牌化 — see dev-docs-usdable/需求/2260906/技术方案/P12-便携打包.md -->
     <title>Pudding Box</title>
     <!-- Per-user only: no admin password, no root-owned files. Mirrors the
          Windows installer's PrivilegesRequired=lowest — Installer.app skips

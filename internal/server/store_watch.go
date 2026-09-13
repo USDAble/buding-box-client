@@ -13,6 +13,7 @@ import (
 // changed, from broadcasts this process emits as it makes those changes. That
 // covers nothing another process does — and another process routinely does:
 // `octo` in a terminal creates sessions and files them under projects
+// OCTO-FORK: 数据根：`~/.octo` → `<exe dir>/data`（硬规则 1） — see dev-docs-usdable/需求/2260906/技术方案/P1-便携数据根.md
 // (EnsureProjectForDir) against the same data root, and a second `octo serve` or
 // the desktop shell can too.
 //

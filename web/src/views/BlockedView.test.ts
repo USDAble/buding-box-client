@@ -170,6 +170,49 @@ describe('BlockedView first activation', () => {
       expect(target.textContent).not.toContain('激活码不正确')
     }
   })
+
+  // V-44. The wall's shape is the server's answer, and a refusal can change it:
+  // when the platform denies the activation for a sign-in that offered no
+  // credential, the server lowers the local claim, and the two-field form would
+  // otherwise keep showing "incorrect activation code" with no field to fix it.
+  it('switches back to the activation form when the platform denies the activation', async () => {
+    // The desktop shell adopts the gate token before the first window shows; the
+    // state read below is a gated call, so the test has to provide one.
+    sessionStorage.setItem('octo_window_token', 'tok')
+    productState.set({
+      ...firstActivationState(),
+      loggedIn: false,
+      activated: true,
+      account: { phoneMasked: '138****1234', nickname: 'tester', lastLoginAt: '2026-09-12T17:43:59Z' },
+    } as never)
+    vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input)
+      if (url.includes('/api/product/login')) {
+        return { ok: false, status: 400, json: async () => ({ code: 'activation_invalid' }) }
+      }
+      // What the server answers after the refusal: the claim is gone, the record
+      // it last received is not.
+      return {
+        ok: true,
+        status: 200,
+        json: async () => ({ ...firstActivationState(), activated: false, account: { phoneMasked: '138****1234' } }),
+      }
+    }))
+    render()
+
+    // Two fields only, which is what makes the refusal a dead end today.
+    expect(input_('activationCode')).toBeNull()
+
+    type('phone', '13800002222')
+    type('code', '123456')
+    submit()
+    await vi.waitFor(() => expect(target.textContent).toContain('激活码不正确'))
+
+    // The message now sits above a form that can act on it.
+    expect(input_('activationCode')).toBeTruthy()
+    expect(input_('boxCode')).toBeTruthy()
+    sessionStorage.clear()
+  })
 })
 
 describe('BlockedView blocked-page selection (L-B2)', () => {

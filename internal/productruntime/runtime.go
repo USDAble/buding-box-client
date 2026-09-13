@@ -341,6 +341,7 @@ func (rt *Runtime) handleLogin(w http.ResponseWriter, r *http.Request) {
 		InstallID:      rt.deps.State.InstallID(),
 	})
 	if err != nil {
+		rt.followActivationRefusal(req.ActivationCode, req.BoxCode, err)
 		rt.failPlatform(w, err)
 		return
 	}
@@ -545,6 +546,63 @@ func (rt *Runtime) failPlatform(w http.ResponseWriter, err error) {
 		rt.forgetSession(err)
 	}
 	writePlatformError(w, err)
+}
+
+// followActivationRefusal makes the local activation flag follow the platform
+// when it denies a sign-in that offered no activation credential (V-44).
+//
+// BOTH HALVES OF THE CONDITION ARE LOAD-BEARING, and neither is a detail:
+//
+//   - The platform must have SAID the authorization is unusable. Only the four
+//     codes 本地API契约 §3 classifies as activation failures count. A transport
+//     failure, a 5xx, a wrong SMS code or a restricted account says nothing
+//     about whether this installation is activated, and un-activating a paying
+//     user because the network blinked would be the worst reading of §3.9.
+//   - The attempt must NOT have offered a credential. An attempt that carries an
+//     activation code is the user saying "activate this", and the platform
+//     refusing that code says nothing about an activation this installation
+//     already holds. Without this half, one mistyped character in the five-field
+//     form would un-activate an installation that is fine.
+//
+// `phone_mismatch` is deliberately outside the family even though it is an
+// activation failure: it can only answer an attempt that carried a credential,
+// so the second half above already excludes it, and what it means is "that code
+// belongs to another number" - not "this installation is unactivated".
+//
+// The answer itself is untouched: the code, the envelope and the status the user
+// sees are the platform's. All this changes is which form they read it on.
+func (rt *Runtime) followActivationRefusal(activationCode, boxCode string, err error) {
+	if strings.TrimSpace(activationCode) != "" || strings.TrimSpace(boxCode) != "" {
+		return
+	}
+	var pe *productclient.Error
+	if !errors.As(err, &pe) || !refusesActivation(pe.Code) {
+		return
+	}
+	if rt.deps.State == nil {
+		return
+	}
+	if err := rt.deps.State.WithdrawActivationClaim(); err != nil {
+		// Not fatal: the user still gets the platform's answer. But the wall then
+		// keeps the two-field shape, so the one line that explains why the
+		// interface still asks for a code it cannot accept is worth having.
+		slog.Error("product: the platform denied this installation's activation but the local claim could not be lowered",
+			"code", pe.Code, "err", err)
+	}
+}
+
+// refusesActivation reports whether a platform code is one of the four that mean
+// "this authorization is not usable" (需求基线 E1 规则 2, L-A4). The four come
+// from internal/productclient, which owns the vocabulary.
+func refusesActivation(code string) bool {
+	switch code {
+	case productclient.CodeActivationInvalid,
+		productclient.CodeActivationCodeUsed,
+		productclient.CodeBoxCodeUnknown,
+		productclient.CodeBoxCodeMismatch:
+		return true
+	}
+	return false
 }
 
 // forgetSession drops the local half of a session the platform has revoked

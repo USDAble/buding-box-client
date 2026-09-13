@@ -22,11 +22,12 @@ import (
 // harness wires the local runtime to the platform stand-in, which is the same
 // topology as a running client: web UI -> local service -> platform.
 type harness struct {
-	t        *testing.T
-	rt       *productruntime.Runtime
-	local    *httptest.Server
-	platform *clienttest.Server
-	root     string
+	t           *testing.T
+	rt          *productruntime.Runtime
+	local       *httptest.Server
+	platform    *clienttest.Server
+	platformSrv *httptest.Server
+	root        string
 }
 
 func newHarness(t *testing.T) *harness {
@@ -89,7 +90,7 @@ func newHarnessWithControlPlane(t *testing.T, status productruntime.ControlPlane
 	local := httptest.NewServer(rt.Handler())
 	t.Cleanup(local.Close)
 
-	return &harness{t: t, rt: rt, local: local, platform: platform, root: root}
+	return &harness{t: t, rt: rt, local: local, platform: platform, platformSrv: platformSrv, root: root}
 }
 
 // do issues a request against the local service and returns status plus the

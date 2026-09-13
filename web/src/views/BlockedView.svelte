@@ -1,7 +1,7 @@
 <script lang="ts">
   import { onMount } from 'svelte'
   import { t, locale, setLocale } from '../lib/i18n'
-  import { productState, blockedPage, sendCode, login, setProductLocale, ProductError, failureTier, tierRetryable } from '../lib/product'
+  import { productState, blockedPage, sendCode, login, setProductLocale, ProductError, failureTier, tierRetryable, refreshProductState } from '../lib/product'
   import { normalizePhone } from '../lib/phone'
   import { randomNickname, validateNickname } from '../lib/nickname'
   import { brandName, brandTagline, brandTermsTitle, brandPrivacyTitle, brandText } from '../lib/brand'
@@ -155,6 +155,15 @@
           // Only a retryable tier is worth re-running; for the others the
           // button is not rendered at all.
           lastFailed = failureTier(e.code) ? 'login' : null
+          // Which form this wall shows is the SERVER's answer, and a refusal can
+          // have changed it: the platform denying the activation lowers the local
+          // claim (V-44), and then the two-field form would be holding a message
+          // ("incorrect activation code") it has no field to act on. So re-read
+          // instead of re-deriving — deliberately no list of "codes that change
+          // the form" here, or the frontend would keep a second copy of the
+          // activation family as the server's vocabulary drifts (开发规范 §3.8).
+          // Same principle as the logout path (V-22).
+          await refreshProductState()
         }
       } else {
         formError = 'generic'

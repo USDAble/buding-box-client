@@ -19,8 +19,9 @@
 //
 // Usage:
 //
-//	go run ./cmd/productstub            # 127.0.0.1:8788
-//	go run ./cmd/productstub :9123      # a different port
+//	go run ./cmd/productstub                     # 127.0.0.1:8788
+//	go run ./cmd/productstub :9123               # a different port
+//	go run ./cmd/productstub -tool=terminal      # make the gateway ask for a tool
 //
 // Then set internal/productprofile/profiles/developer.json's apiHost to
 // http://127.0.0.1:<port>/v1 and its gatewayHost to http://127.0.0.1:<port> and
@@ -34,11 +35,11 @@
 package main
 
 import (
+	"flag"
 	"fmt"
 	"log"
 	"net"
 	"net/http"
-	"os"
 	"strings"
 	"time"
 
@@ -47,10 +48,43 @@ import (
 
 const defaultAddr = "127.0.0.1:8788"
 
+// toolArguments maps -tool values to what the stand-in will ask the client to
+// run. Only tools whose arguments can be written down in advance appear here:
+// the fixture is a stand-in, not a model, and inventing a path at run time would
+// make the walkthrough unrepeatable.
+//
+// terminal is the interesting one. Its command is `hostname` because that
+// matches no rule in internal/permission/defaults.yml and therefore falls
+// through to the engine's implicit ask - so the local permission prompt really
+// does appear. `echo` would not: the policy auto-allows the common safe verbs,
+// and the walkthrough would quietly demonstrate the allow path instead (which is
+// what the nails' first draft did, and why the premise is asserted there).
+// read_file needs no prompt at all - the policy allows any read - so it shows
+// the other half: a call that runs with no user involvement.
+var toolArguments = map[string]string{
+	"terminal":  `{"command":"hostname"}`,
+	"read_file": `{"path":"go.mod"}`,
+}
+
 func main() {
+	toolName := flag.String("tool", "", "make the stand-in ask for this tool (terminal | read_file); empty means the healthy shape, no tool call")
+	flag.Parse()
 	addr := defaultAddr
-	if len(os.Args) > 1 {
-		addr = os.Args[1]
+	if rest := flag.Args(); len(rest) > 1 {
+		// Go's flag package stops at the first positional argument, so
+		// `productstub :8802 -tool=x` lands here with the switch unparsed.
+		// Refusing is right - silently dropping it would make the walkthrough
+		// look like "the gateway declined to ask for a tool" - and the message
+		// says which way round the arguments go instead of just complaining.
+		log.Fatalf("productstub: at most one positional argument (the address), and flags come before it; got %v. Try: productstub -tool=%s %s",
+			rest, *toolName, rest[0])
+	} else if len(rest) == 1 {
+		addr = rest[0]
+	}
+	if *toolName != "" {
+		if _, ok := toolArguments[*toolName]; !ok {
+			log.Fatalf("productstub: -tool=%s has no pre-scripted arguments; known: %v", *toolName, knownTools())
+		}
 	}
 
 	// Loopback only. Binding wider would put a fake platform — one that hands out
@@ -60,11 +94,24 @@ func main() {
 		log.Fatalf("productstub: listen on %s: %v", addr, err)
 	}
 
-	printFixtures(ln.Addr().String())
+	stub := clienttest.New()
+	if *toolName != "" {
+		stub.RequestToolCall(*toolName, toolArguments[*toolName])
+	}
 
-	if err := http.Serve(ln, withRequestLog(clienttest.New().Handler())); err != nil {
+	printFixtures(ln.Addr().String(), *toolName)
+
+	if err := http.Serve(ln, withRequestLog(stub.Handler())); err != nil {
 		log.Fatalf("productstub: serve: %v", err)
 	}
+}
+
+func knownTools() []string {
+	out := make([]string, 0, len(toolArguments))
+	for name := range toolArguments {
+		out = append(out, name)
+	}
+	return out
 }
 
 // withRequestLog prints one line per request the stand-in answers.
@@ -115,8 +162,19 @@ func (r *statusRecorder) WriteHeader(code int) {
 // turns into guesswork: these values are fixed by the fixture constants, and
 // they are the same ones the fake frontend backend used, so they may already
 // look familiar.
-func printFixtures(addr string) {
+//
+// The tool section prints on every run, including when the switch is off. A
+// walkthrough that does not say whether the gateway will ask for a tool is a
+// walkthrough that cannot tell "the tool loop is broken" from "the switch is
+// off" - and an unexplained approval prompt is worse than a missing one.
+func printFixtures(addr, toolName string) {
 	base := "http://" + addr
+	toolLine := "  tool calls   OFF - the gateway will not ask for any tool (the healthy shape)"
+	if toolName != "" {
+		toolLine = fmt.Sprintf("  tool calls   ON - the gateway will ask for %s with %s\n"+
+			"                 once; it stops asking as soon as the result comes back",
+			toolName, toolArguments[toolName])
+	}
 	fmt.Printf(`productstub: Central Platform stand-in listening on %s
 
   apiHost      %s/v1
@@ -131,13 +189,18 @@ func printFixtures(addr string) {
     box code           %s
     nickname           1-20 characters
 
+%s
+
   Endpoints: POST %s/v1/auth/sms/send, /auth/login, /auth/refresh
              GET  %s/v1/client/bootstrap
+             GET  %s/v1/catalog/models
              POST %s/v1/chat/completions     (the built-in gateway: streams,
                                               needs a Bearer access token)
 
   State is in memory: restarting this process resets every consumed code,
-  which is what makes the single-use activation path repeatable.
+    which is what makes the single-use activation path repeatable. It also
+    re-issues the same refresh tokens, so clear the client's data/credential.json
+    when you restart this process to test from a fresh install (V-51).
 `,
 		addr, base, base,
 		clienttest.FixtureSMSCode,
@@ -145,5 +208,6 @@ func printFixtures(addr string) {
 		clienttest.FixtureSecondActivationCode,
 		clienttest.FixtureBoundPhoneActivationCode, clienttest.FixtureBoundPhone,
 		clienttest.FixtureBoxCode,
-		base, base, base)
+		toolLine,
+		base, base, base, base)
 }

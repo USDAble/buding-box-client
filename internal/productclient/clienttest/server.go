@@ -106,6 +106,34 @@ type Server struct {
 
 	catalogRefreshCount int  // refresh endpoint hits, so "exactly once" is checkable
 	unchangedInBody     bool // spell "nothing new" as {"unchanged":true} instead of 304
+
+	// Tool-call injection (PR-5b2). Empty name means the stand-in never asks
+	// for a tool, which is the default and the healthy shape.
+	//
+	// WHY THIS ONE IS BEHIND A SWITCH WHILE THE REASONING TRACE IS NOT. The
+	// trace is passive data: whether the user sees it is the client's decision
+	// (show_reasoning), so gating it here as well would make "the client dropped
+	// it" and "it was never sent" indistinguishable. A tool call is a request
+	// for action - it changes the shape of the turn and raises a local
+	// permission prompt - so emitting one by default would put an approval
+	// dialog in front of every other hand walkthrough and would alter the reply
+	// text that several existing nails assert on.
+	toolCallName string // "" = off
+	toolCallArgs string
+	toolCallID   string
+	emittedCalls int
+
+	// What the last completions request carried, so a test can assert on what
+	// arrived rather than on what it hoped was sent.
+	lastToolNames []string
+	lastToolCalls []toolResultSeen
+}
+
+// toolResultSeen is one role:"tool" message as the client sent it back: the
+// call it answers, and the text of the result.
+type toolResultSeen struct {
+	CallID  string
+	Content string
 }
 
 // LastReasoningEffort reports the reasoning_effort the stand-in last received,
@@ -222,10 +250,74 @@ func (s *Server) CatalogRefreshCount() int {
 // to recognise either, which is only testable if the fixture can produce either.
 // A fixture with one spelling would let a client that only understood that one
 // pass, and the contract explicitly lets the platform pick.
+// SpellUnchangedInBody answers a conditional catalog refresh with
+// {"data":{"unchanged":true}} instead of 304, which is the other spelling of
+// "nothing new" the contract allows (中台交付包 §4.3).
 func (s *Server) SpellUnchangedInBody() {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.unchangedInBody = true
+}
+
+// RequestToolCall makes the stand-in's gateway ask the client to run a tool:
+// the model-side half of C10 (需求基线), and the only way L-C3c can be judged end
+// to end. Off by default - see the field comment for why this is gated when the
+// reasoning trace is not.
+//
+// The call is emitted on the STREAMING completions path only. That is the path
+// the product uses (the gateway sender implements ToolStreamingSender, so the
+// agent loop streams every turn); the non-streaming branch exists for curl and
+// leaves this switch alone.
+//
+// It is emitted once per turn: as soon as the request carries a role:"tool"
+// message, the stand-in answers normally, so the loop terminates instead of
+// asking for the same tool forever.
+func (s *Server) RequestToolCall(name, argsJSON string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.toolCallName = name
+	s.toolCallArgs = argsJSON
+	// A fixed id rather than a counter: nails assert that the result comes back
+	// linked to the call, and a stable id makes that assertion readable. It is
+	// the fixture's own label, not a guess at the platform's format.
+	s.toolCallID = "call_standin_1"
+}
+
+// ToolCallCount reports how many tool-call deltas the stand-in has emitted, so
+// "the switch is off" and "it asked once" are both checkable.
+func (s *Server) ToolCallCount() int {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.emittedCalls
+}
+
+// LastToolCallID is the id carried by the tool call the stand-in emitted.
+func (s *Server) LastToolCallID() string {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.toolCallID
+}
+
+// LastToolNames reports the tool names the last completions request
+// advertised. A client that stopped offering its tools would leave the model
+// unable to call one, and "no tool call happened" would then be
+// indistinguishable from "none was ever possible".
+func (s *Server) LastToolNames() []string {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return append([]string(nil), s.lastToolNames...)
+}
+
+// LastToolResults reports the role:"tool" messages the last request carried,
+// keyed by the call they answer (tool_call_id).
+func (s *Server) LastToolResults() map[string]string {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	out := make(map[string]string, len(s.lastToolCalls))
+	for _, r := range s.lastToolCalls {
+		out[r.CallID] = r.Content
+	}
+	return out
 }
 
 // New builds a stand-in seeded with the fixture codes above.
@@ -614,7 +706,20 @@ func (s *Server) handleCompletions(w http.ResponseWriter, r *http.Request) {
 		Messages []struct {
 			Role    string `json:"role"`
 			Content string `json:"content"`
+			// Present on the role:"tool" message that carries a result back
+			// (internal/provider/openai serialises it from the tool_result
+			// block's ToolUseID).
+			ToolCallID string `json:"tool_call_id"`
 		} `json:"messages"`
+		// The tool schemas the client advertised this turn. Decoded for the same
+		// reason the request is recorded at all: a fixture that proves a model
+		// asked for a tool, without proving the client offered one, cannot tell
+		// "the tool loop works" from "the client stopped sending its tools".
+		Tools []struct {
+			Function struct {
+				Name string `json:"name"`
+			} `json:"function"`
+		} `json:"tools"`
 		// A pointer so "absent" and "present but empty" stay distinguishable: PQ27
 		// makes the absent form the one an "off" level produces, and a client that
 		// sent a default instead would be indistinguishable without this.
@@ -631,9 +736,30 @@ func (s *Server) handleCompletions(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	names := make([]string, 0, len(req.Tools))
+	for _, t := range req.Tools {
+		names = append(names, t.Function.Name)
+	}
+	var results []toolResultSeen
+	returned := false
+	for _, m := range req.Messages {
+		if m.Role != "tool" {
+			continue
+		}
+		returned = true
+		results = append(results, toolResultSeen{CallID: m.ToolCallID, Content: m.Content})
+	}
+
 	s.mu.Lock()
 	s.completionCount++
 	s.lastEffort = req.ReasoningEffort
+	s.lastToolNames = names
+	s.lastToolCalls = results
+	// One call per turn, and no repeat: once a tool result is in the request the
+	// loop has run the tool, so the stand-in answers normally instead of asking
+	// for the same tool forever (which would spin the loop to its turn cap).
+	askForTool := s.toolCallName != "" && !returned
+	toolName, toolArgs, toolID := s.toolCallName, s.toolCallArgs, s.toolCallID
 	_, authorised := s.access[bearer(r)]
 	s.mu.Unlock()
 	if !authorised {
@@ -654,6 +780,11 @@ func (s *Server) handleCompletions(w http.ResponseWriter, r *http.Request) {
 	// was never sent one would look the same.
 	const trace = "[stand-in gateway] weighing the request"
 	if !req.Stream {
+		// The tool-call switch is deliberately ignored on this branch: the
+		// product streams every turn (the gateway sender implements
+		// ToolStreamingSender, so the agent loop never takes the buffered path),
+		// and this branch exists so a person can curl the fixture. Answering a
+		// curl with a tool call would ask for a tool nobody is there to run.
 		w.Header().Set("Content-Type", "application/json; charset=utf-8")
 		w.WriteHeader(http.StatusOK)
 		_ = json.NewEncoder(w).Encode(map[string]any{
@@ -701,6 +832,36 @@ func (s *Server) handleCompletions(w http.ResponseWriter, r *http.Request) {
 	// delta: a gateway that merged it into the content would make the two blocks
 	// indistinguishable at the only layer that can tell them apart (C10).
 	chunk(map[string]any{"reasoning_content": trace}, nil)
+
+	if askForTool {
+		// The arguments are cut into three pieces on purpose. A real gateway
+		// streams function arguments as JSON fragments that the client
+		// concatenates by index (the pitfall CLAUDE.md records), and a
+		// single-chunk call would leave that aggregation unexercised at the only
+		// layer a person can watch it work.
+		for i, part := range splitInThree(toolArgs) {
+			call := map[string]any{"index": 0, "type": "function"}
+			// id and name arrive with the first fragment, as OpenAI sends them.
+			if i == 0 {
+				call["id"] = toolID
+				call["function"] = map[string]any{"name": toolName, "arguments": part}
+			} else {
+				call["function"] = map[string]any{"arguments": part}
+			}
+			chunk(map[string]any{"tool_calls": []any{call}}, nil)
+		}
+		// finish_reason is "tool_calls" here, not "stop": the OpenAI spelling the
+		// provider adapter normalises to "tool_use" before the agent loop sees it.
+		chunk(map[string]any{}, "tool_calls")
+		fmt.Fprint(w, "data: [DONE]\n\n")
+		if flusher != nil {
+			flusher.Flush()
+		}
+		s.mu.Lock()
+		s.emittedCalls++
+		s.mu.Unlock()
+		return
+	}
 	// Deliberately framed in several chunks: concatenating chunked content is
 	// part of the provider's aggregator, and a single-chunk reply would leave
 	// that path unexercised in the one place a person can see it working.
@@ -718,6 +879,28 @@ func (s *Server) handleCompletions(w http.ResponseWriter, r *http.Request) {
 	if flusher != nil {
 		flusher.Flush()
 	}
+}
+
+// splitInThree cuts a string into three pieces, the way a real gateway streams
+// function arguments as JSON fragments. Rune-wise so each piece is valid UTF-8
+// on the wire even though the client concatenates the fragments before parsing
+// them - a mid-rune split would be legal for the client but would make a
+// packet-level recording of the fixture look corrupt for no reason.
+func splitInThree(s string) []string {
+	if s == "" {
+		return []string{""}
+	}
+	r := []rune(s)
+	n := (len(r) + 2) / 3
+	var out []string
+	for i := 0; i < len(r); i += n {
+		end := i + n
+		if end > len(r) {
+			end = len(r)
+		}
+		out = append(out, string(r[i:end]))
+	}
+	return out
 }
 
 // policyEnvelope signs the fixture policy with the current fault switches

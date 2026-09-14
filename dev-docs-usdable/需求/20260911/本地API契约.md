@@ -1,6 +1,6 @@
 # 本地 API 契约（`/api/product/*`）
 
-> **状态**：`v0.10`（2026-09-13 `PR-4c`：新增第 14 条端点 `GET /api/product/catalog` + 三条降级文案 + 目录条件刷新）
+> **状态**：`v0.13` —— **版本号与变更内容都看 [`§6 修订`](#6-修订) 的顶行**，本节不复述（本行此前停在第 `v0.10` 而修订表已到 `v0.12`：同一个版本写两处，第二处必然落后 —— `V-56` 同型，2026-09-14 收敛）。
 > **本批次第二份契约**，解决 [`需求基线.md`](需求基线.md) §5.1 `S-1` 与 §5.2 `PQ24`。
 > **权威实现落点**：`internal/productruntime`（[`需求基线.md`](需求基线.md) `G1`）。**不继续加进 `internal/server`**——`internal/server/product_*.go` 是 20260909 线上的旧落点，只作参考。
 > **与《中台交付包》的分工**：本文件管「Web UI ↔ 本地 Go 服务」；[`中台交付包.md`](中台交付包.md) 管「本地 Go 服务 ↔ 中台」。两份契约**不互相复制字段定义**，只引用结论。
@@ -18,18 +18,18 @@
 
 ### 0.1 本文件的依据与可信度（重要）
 
-`v1` 上**后端的落地是部分的**（2026-09-12 更正，原文说"还没有真后端"已过期）：[`internal/productruntime`](../../../internal/productruntime) 已随 `PR-2b1` / `PR-2b2a` 落地并接进服务，**§1.4 的 14 条端点里有 7 条**（`state` / `send-code` / `login` / `logout` / `locale` / `control-plane` / `catalog`）**是真实实现、可反向核对**；其余 7 条仍是正向整理。所以本文件的可信度是**混合**的：
+`v1` 上**后端的落地是部分的**（2026-09-12 更正，原文说"还没有真后端"已过期）：[`internal/productruntime`](../../../internal/productruntime) 已随 `PR-2b1` / `PR-2b2a` 落地并接进服务，**§1.4 的 15 条端点里有 11 条**（`state` / `send-code` / `login` / `logout` / `locale` / `nickname` / `prefs` / `chat-modes` / `control-plane` / `catalog` / `credits`）**是真实实现、可反向核对**；其余 4 条（四条词库/检测路由）仍是正向整理 —— **这四条今天还没注册**，见 §1.4 的 ⬜ 标记与 `V-24`。所以本文件的可信度是**混合**的：
 
 | 依据 | 位置 | 可信度 |
 | --- | --- | --- |
-| 已落地的 Go handler（**最高**） | `internal/productruntime/`（`state` / `send-code` / `login` / `logout` / `locale` / `control-plane` / `catalog` 七条）+ `internal/productclient/dto.go` | **高** —— 已实现且经测试，与它不一致的是本文件而不是代码 |
+| 已落地的 Go handler（**最高**） | `internal/productruntime/`（上列 11 条 ＝ 该包 `Mount` 表里的全部 `api(...)` 行）+ `internal/productclient/dto.go` | **高** —— 已实现且经测试，与它不一致的是本文件而不是代码 |
 | 前端调用与解析逻辑 | `web/src/lib/product.ts`、`api.ts`、`sensitive.ts`、`sensitiveDict.ts` | **高** —— 前端必须这样解析才能工作，字段名与信封形状是硬事实 |
 | ~~临时假后端~~ | **已拆除（`PR-3`，2026-09-13）** —— 原 `web/src/dev/devBackend.ts`。它曾是一处"中等"可信度来源（替身形状），也因此让 `V-24`/`V-46` 两条"路由根本没注册"的缺口在界面上不可见 | **无** —— `rg devBackend web/src` 已无命中；凡此前只标"取自假后端"的行，形状以 `internal/productruntime` 的实现为准（见各行的 2026-09-13 更正） |
 | 本文档的设计决定 | 本文件新定 | **待实现** —— 一律标 🚧 |
 
 因此每行的状态要这样读：`✅ 现状` = **前端已依赖此形状**（改它要动前端，不是纯后端改动）；`🚧 修订` = 本契约新定，代码尚未实现。
 
-**标 `✅` 不等于「后端已验证」**（2026-09-12 收紧）。上一句只保证"前端依赖它"。要算**后端已验证**，还须该行落在上表第一行的七条已实现端点里 —— 即 `state` / `send-code` / `login` / `logout` / `locale` / `control-plane` / `catalog`。**其余 7 条即使标 `✅` 也没有后端**，它们的权威校验（去重、归一化、限流边界）仍未验证。
+**标 `✅` 不等于「后端已验证」**（2026-09-12 收紧）。上一句只保证"前端依赖它"。要算**后端已验证**，还须该行落在上表第一行的十一条已实现端点里。**2026-09-14 更正（`V-24` 的相邻面）**：此前这条口径与 §1.4 的 ✅ 列合起来仍会误导 —— 四条词库/检测路由在 §1.4 标着 `✅`、在这里又被列进"其实没有后端"，读者分不出哪一列在说形状、哪一列在说存在。**现在 §1.4 的状态列直接标存在性**（⬜ ＝ 该路由今天没有注册），两处不再互相打架。
 
 ---
 
@@ -84,16 +84,18 @@
 | 3 | POST | `/api/product/login` | 否 | `{state}` | 🚧 加 `boxCode` |
 | 4 | POST | `/api/product/logout` | 是 | 否 | ✅ |
 | 5 | PUT | `/api/product/locale` | 否 | 否 | ✅ |
-| 6 | PUT | `/api/product/nickname` | 是 | `{state}` | ✅ |
-| 7 | PUT | `/api/product/prefs` | 是 | `{state}` | ✅ |
+| 6 | PUT | `/api/product/nickname` | 是 | `{state}` | ✅ 已注册（`PR-6b1`，2026-09-14） |
+| 7 | PUT | `/api/product/prefs` | 是 | `{state}` | ✅ 已注册（`PR-6b1`，2026-09-14） |
 | 8 | GET | `/api/product/chat-modes` | 否 | 否 | ✅ 新形状已实现（`PR-4d`，2026-09-12） |
-| 9 | GET | `/api/product/sensitive/dict` | 否 | 否 | ✅ |
-| 10 | PUT | `/api/product/sensitive/dict` | 是 | 否 | ✅ |
-| 11 | POST | `/api/product/sensitive/dict/import` | 是 | 否 | ✅ |
-| 12 | POST | `/api/product/sensitive/check` | 否 | 否 | ✅ |
+| 9 | GET | `/api/product/sensitive/dict` | 否 | 否 | ⬜ **未注册**（`V-24`；形状已定，见 §2.9，落点归 `PR-6b2`） |
+| 10 | PUT | `/api/product/sensitive/dict` | 是 | 否 | ⬜ **未注册**（`V-24`；§2.10，归 `PR-6b2`） |
+| 11 | POST | `/api/product/sensitive/dict/import` | 是 | 否 | ⬜ **未注册**（`V-24`；§2.11，归 `PR-6b2`） |
+| 12 | POST | `/api/product/sensitive/check` | 否 | 否 | ⬜ **未注册**（`V-24`；§2.12，归 `PR-6b2`） |
 | 13 | GET | `/api/product/control-plane` | 否 | 否 | ✅ 新增（`PR-2c`，见 §2.13） |
 | 14 | GET | `/api/product/catalog` | 否 | 否 | ✅ 新增（`PR-4c`，见 §2.14） |
 | 15 | GET | `/api/product/credits` | 是 | 否 | ✅ 新增（`PR-5d1`，见 §2.15） |
+
+> **状态列说的是「这条路由今天在不在」**（2026-09-14 明确，`V-24`）。判据是可核对的一件事：它在 `internal/productruntime` 的 `Mount` 表里有没有一行 `api(...)`。**在此之前这一列只表达了"形状定了没有"**，于是四条词库/检测路由挂着 `✅` 而代码里一条都没有 —— 这正是 `V-24`（前端 `sensitive.ts` / `sensitiveDict.ts` 调得很顺，真机一律 404）能在文档里长期不可见的原因：**"形状已定"和"路由已挂"被同一个记号表达了**。`🚧` 仍表示"形状本身还在改"（只有第 3 行）。
 
 > **「需登录」列是设计约定，不是观测事实。** 前端对 `/api/product/*` 一律带 window token（`api.ts` 的 `withWindowToken`），**产品门是否拦某条路由由服务端决定**，前端不区分。本列表达的是**应有的门策略**：凡读写账号数据或改词库的都要登录；`state` / `locale` / `send-code` / `login` 必须在未登录时可达，否则登录页根本渲染不出来。
 >
@@ -205,14 +207,14 @@
 
 - **请求**：`{"locale": "zh" | "en"}`
 - **应答 `200`**：`{"ok": true}`（同上，2026-09-13 起依据为 Go 实现；`runtime.go:431`）
-- **错误**：`400 {"fieldErrors": {"locale": "invalid_value"}}` —— 🚧 **本契约新定**。前端目前对非 2xx 只抛通用 `Error`、不解析应答体（`product.ts:220`），所以这个形状**尚无任何代码依赖**，现在定下来成本最低。
+- **错误**：`400 {"field": "locale", "code": "invalid_value"}` —— **2026-09-14 统一（`PR-6b1` / `V-72`）**。§2.7 从一开始就是这个形状，而本节原先写的是 `{"fieldErrors": {"locale": "invalid_value"}}`，同一张 §3 码表于是描述了两种信封。统一到 `{"field": …, "code": …}` 的理由有三条：① 前端今天对这条路由**不解析应答体**（`setProductLocale` 只读 `res.ok`，`product.ts:494`），两条形状都没有消费者，改成哪个都不破坏界面；② §3 的 `fieldErrors` 是**转发平台**在登录路径上的字段级判断，而 `invalid_value` 是**本地自己**对「这个值不在可接受集合里」的判断（`envelope.go` 的 `fieldLevelCodes` 只有三条，`invalid_value` 本来就不在其中）；③ 同一个值在两条路由上被拒，用户该看到同一句话。实现上两条路由共用 `writeValueRefusal`。
 - **备注**：默认语言**跟随系统语言**，非中文落 `en`（`PQ18`）。首启时由桌面壳把系统语言带进来，不靠前端猜。
 
 ### 2.6 `PUT /api/product/nickname` ✅
 
 - **请求**：`{"nickname": "<新昵称>"}`
 - **应答 `200`**：`{"state": ProductStateDTO}`
-- **错误**：`400 {"code": "nickname_format" | "nickname_sensitive"}`
+- **错误**：`400 {"code": "nickname_format" | "nickname_sensitive"}` —— **业务级**：应答体里**没有** `fieldErrors`。这两个码**同时**在 `fieldLevelCodes` 表里（那条路径服务登录表单的中台应答），所以这里最容易"顺手统一"成 `writeFieldErrors`；那样写**不报错**，只是前端 `body.code` 读到 `undefined` 并回落成「昵称格式不正确」——**命中敏感词会说成格式错误**。与 §2.2 的 `invalid_phone` 同型。
 - **备注**：应答里的 `state` **就是持久化后的真相**（服务端回读自己的存储），前端直接覆盖共享 store，不再本地乐观更新。
 
 ### 2.7 `PUT /api/product/prefs` ✅
@@ -220,7 +222,7 @@
 - **请求**：`{"locale"?: "zh"|"en", "defaultChatMode"?: "<mode id>", "inputSensitiveCheck"?: true|false}`
   未变的字段可省略，默认「保持不变」。
 - **应答 `200`**：`{"state": ProductStateDTO}`
-- **错误**：`400 {"field": "<字段名>", "code": "invalid_value"}`
+- **错误**：`400 {"field": "<字段名>", "code": "invalid_value"}` —— 信封由 `writeValueRefusal` 一处写出，`PUT /api/product/locale`（§2.5）同形（`V-72`）。
 - **备注**：`defaultChatMode` 必须是 §2.8 目录里存在的 mode（`internal/chatmode` 是 mode 分组的唯一 owner，§3.8）。
 
 ### 2.8 `GET /api/product/chat-modes` ✅（新形状已实现，`PR-4d` 2026-09-12）
@@ -359,7 +361,7 @@
 | `nickname_sensitive` | 字段/业务 | `nickname` | `product.err_nickname_sensitive` |
 | `invalid_activation` | 字段 | `activationCode`（空/格式） | `product.err_activation` |
 | `invalid_box_code` | 字段 | `boxCode`（空/格式） | `product.err_box_code` |
-| `invalid_value` | 字段 | `locale` / `prefs.*` | — |
+| `invalid_value` | **字段名 + 业务码** | 一个不在可接受集合里的值：`locale` / `prefs.*`。信封是 `{"field": …, "code": "invalid_value"}`，**不是** `fieldErrors`（§2.5 / §2.7） | — |
 | `code_not_sent` | 业务 | 未获取验证码 | `product.err_code_not_sent` |
 | `invalid_code` | 业务 | 验证码错误/过期 | `product.err_invalid_code` |
 | `activation_invalid` | 业务 | 中台拒激活码 | `product.err_activation_invalid` |
@@ -382,6 +384,7 @@
 
 **信封层级由本表决定，不由中台决定（2026-09-11，`PR-2b` 实施时明确）。** 中台会在它的错误体里带 `field`（例如它把 `activation_invalid` 标成 `activationCode` 的错），但**本地该走字段级还是业务级，是本契约的决定** —— 上表把 `activation_invalid` / `box_code_unknown` / `box_code_mismatch` / `phone_mismatch` 都定为**业务级**，所以实现必须**忽略中台那个 `field`**，把它们送到顶部横幅而不是输入框下面。理由：用户改不动这些值（`activation_code_used` 只能找客服），落在输入框下面会误导成"改一下就能过"。
 - **实现落点：`internal/productruntime/envelope.go` 的 `fieldLevelCodes` 表**（只有 3 个 code 是字段级：`invalid_code` / `nickname_format` / `nickname_sensitive`）。**本表与那张表必须同步改** —— 这与 §2.10 前端 `normalizeWord` 的同步约束是同一类要求：规范在文档，执行在代码，两处一起动。
+- **`invalid_value` 不在这 3 个里，且这是判据不是遗漏（`V-72`，2026-09-14 统一）**：`fieldLevelCodes` 的唯一调用方是 `writePlatformError`，只有**中台**的错误码能走到那里；而 `invalid_value` 是**本地**对「这个值不在可接受集合里」的判断，永远不会以中台错误的形式到达。所以它按 `{"field": …, "code": …}` 走，由 `writeValueRefusal` 一处写出 —— §2.5 与 §2.7 共用它。**下一次有人觉得"既然带字段名就该并进 `fieldLevelCodes`"时，代价是把同一个 code 变成两种形状**（这正是 `V-72` 被登记的原因：本表原先把 `invalid_value` 标成"字段"，而 §2.5 与 §2.7 给了两种信封）。
 - 其余 code 一律**业务级**（安全默认：宁可让用户在上方看到一条横幅，也不要让文案被静默丢进错误的输入框）。
 - `invalid_phone` / `invalid_code` 在两层都出现，靠**上下文**区分，规则是：**格式问题在本地校验阶段就拦下**（`productruntime` 的 `validPhone`/`validCode`），所以**凡是从中台回来的同码，按业务级处理**。
 
@@ -425,6 +428,7 @@
 
 | 版本 | 日期 | 变更 |
 | --- | --- | --- |
+| `v0.13` | 2026-09-14 | **`PR-6b1` 落地：§2.6 `nickname` 与 §2.7 `prefs` 两条路由真挂上（`V-24` 的两条清零），并把 `invalid_value` 的信封从两种收成一种（`V-72`）。** ① **§2.5 的错误信封改写**：`{"fieldErrors": {"locale": "invalid_value"}}` → `{"field": "locale", "code": "invalid_value"}` —— 与 §2.7 一致。三条理由写在 §2.5：前端对这条路由**不解析应答体**、`fieldLevelCodes` 本来就不含 `invalid_value`（那张表转发的是**中台**的字段判断）、同一个值在两条路由上被拒该看到同一句话。实现上两条路由共用 `writeValueRefusal`。② **§3 的 `invalid_value` 行改写**：层级从"字段"改为"字段名 + 业务码"，并写明它**刻意不在** `fieldLevelCodes` 里 —— 那段说明是给下一个"顺手统一信封"的人看的（`V-72`）。③ **昵称格式规则以需求为 owner 收口**：`需求 20260906` 的 **2–16 字、中文/字母/数字/下划线**，Go 侧原为"非空且 ≤ 20 码点、不限字符"（`V-73`）—— 服务端比前端宽，于是 1 字、含空格/emoji、17–20 字**都曾被服务端接受**。④ **§2.6 的拒绝是业务级 `{"code": …}`**，虽然那两个码**同时在** `fieldLevelCodes` 里（那条路径服务登录）：复用 `writeFieldErrors` 会让前端 `body.code` 读到 `undefined` 并回落成「格式不正确」，即**命中敏感词被说成格式错误**（§2.2 的 `invalid_phone` 是同型）。⑤ 本文件**不新增端点、不新增错误码** ⇒ §1.4 无结构变化，只是两条既有编号从"未挂"变为"已挂"。 |
 | `v0.12` | 2026-09-14 | **`turn_error` 加 `code` 字段（`PR-5d3`，`L-C4c` / `G3` / `V-55` / `V-58`）—— 本文件登记该事件，是因为它是「前端可见的失败载体」而此前只带 `error` 一句。** ① **§4 补 `turn_error` 一行**：字段 `{session_id, error, code?, input_rolled_back?}`，**有码才带该字段**（空串与"没有码"必须分得开）；**码值的 owner 是 `中台交付包` §3.2**，前端 `web/src/lib/turnError.ts` 是 `code → i18n key` 的**唯一** owner。② **为什么不是"把中文发下来"**：`C8` 规则 1 禁止客户端用中台的 `message` 当界面文案，而走到这里的 `402` 原文是**英文原始 JSON**（网关的扁平信封 `{"code":…,"message":…}` 与 OpenAI 嵌套形状不同，见 `中台交付包` §3.2）⇒ 码必须单独走一个字段。③ **§3 的 402 行同批更新**（`中台交付包` §3.2）：客户端**不得在本地预测**这个码（`PQ8`），本文件夹里 `Composer.svelte` 那行按余额判「积分不足」的提示已删（`V-58`）。④ 本文件**不新增端点、不新增本地错误码** ⇒ §1.4 / §3 无结构变化。 |
 | `v0.11` | 2026-09-14 | **余额收敛：新增第 15 条端点 `GET /api/product/credits`（§2.15），并把 `credits` 对象从三个字段收成一个 —— 依据是人工 2026-09-14 拍板的新规则「余额必须从服务器刷新、服务器扣减、客户端只老实刷新余额」（`需求基线` `E9` 规则 2 已改写）。** ① **`credits: {balance, monthUsed, monthKey}` → `{balance}`**：中台账本只有 `balanceMicroCredits`，而 `E9` 规则 5 明令客户端不做跨月加总 ⇒ 后两个字段**既无来源又不许本地算**（§3.8，留着一个永远显示 0 的"事实"）。② **新端点与 §2.6 / §2.7 同形**（回 `{state}`）—— 不新增形状：`credits` 对象已在 §1.3 登记。③ **本条把"余额从哪来"从两个来源两套判据收成一条路径**（`V-11` 那条已被取代的"两条并列合法来源"），于是 `D-002`（SSE 终态帧）**不再是余额链路的阻塞项** —— 终态帧只是"该去拉一次"的触发器。④ **§4 的 `credits_update` 状态改为 ⬜ 无发射方**，触发时机归 `PR-8` / `N-5`（本轮不发明）。⑤ 本文件是 `credits` 对象字段表的 owner；判定理由在 `E9` 规则 2/7，不在此处复述。 |
 | `v0.10` | 2026-09-13 | **`PR-4c` 落地，新增第 14 条端点 `GET /api/product/catalog`（§2.14）**：四值 `state`（`ready` / `absent` / `stale` / `unverifiable`）+ `retryable` + 缓存元数据（`catalogVersion` / `expiresAt`）。判定唯一 owner 在 `internal/productruntime` 的 `assessCatalog`，三输入＝缓存有无 / 是否过期 / 最近一次刷新的结局；优先级是**验签失败压过可用缓存**（不再"列表说一套、横幅说另一套"），其次无缓存，再次过期，最后 `ready`。前端只在 `chatMode.ts` 的 `catalogNoticeKey()` 一处做状态→文案映射。**四条 `B9` 文案新增三个 i18n 键**（`catalog.absent` / `catalog.stale` / `catalog.unverifiable`），第四条（分组空）沿用既有的 `mode.no_models`。**§1.4 增第 14 行。** 顺带把「能不能开新回合」（`canStartTurn()`，`ChatView.send()` 的第一道闸）的判据写清：只认 `state === "ready"`；**服务端侧强制归 `PR-5`**，读同一个判据、不新建第二个。**目录刷新改条件请求**：客户端带已有的 `catalogVersion` 作 `knownVersion`，`304` 与 `{"unchanged":true}` 两种"没变"都认、都不重写缓存；**已过 TTL 时中台不得回"没变"**（`中台交付包` §4.3 已写明，否则客户端会被永久卡在"需要联网更新"）。**周期性刷新仍为 `TODO`**（当前只有登录后强制 + 开选择器按需两条触发路径），已登记在 `开发计划`。 |

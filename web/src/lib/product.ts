@@ -537,7 +537,9 @@ export async function updateNickname(nickname: string): Promise<ProductStateDTO>
  * Saves preference edits (PUT /api/product/prefs): locale and/or the default
  * chat mode for new sessions (P9 reads defaultChatMode when creating a
  * session). Unchanged fields may be omitted. Throws ProductError with
- * fieldErrors[field] = "invalid_value" on an unknown value.
+ * `code` = "invalid_value" on an unknown value, with the offending field name
+ * travelling inside the ProductError's fieldErrors map (product.ts builds it from
+ * body.field) — the same refusal shape PUT /api/product/locale answers with.
  */
 export async function updatePrefs(prefs: AccountPrefs): Promise<ProductStateDTO> {
   const res = await productFetch("/api/product/prefs", {

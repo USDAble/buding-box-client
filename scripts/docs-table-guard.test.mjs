@@ -11,7 +11,14 @@ import fs from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
 
-import { checkDocument, check, splitRow, isDelimiterRow, SCAN_ROOTS } from './docs-table-guard.mjs'
+import {
+  checkDocument,
+  checkHeadingStructure,
+  check,
+  splitRow,
+  isDelimiterRow,
+  SCAN_ROOTS,
+} from './docs-table-guard.mjs'
 
 // ─── what a cell boundary is ────────────────────────────────────────────────
 
@@ -189,7 +196,10 @@ test('check reports a defect found in a real file on disk', async () => {
   try {
     const dir = path.join(root, 'dev-docs-usdable')
     await fs.mkdir(dir, { recursive: true })
-    await fs.writeFile(path.join(dir, 'a.md'), '| a | b |\n| --- | --- |\n| 1 |\n')
+    await fs.writeFile(
+      path.join(dir, 'a.md'),
+      `| a | b |\n| --- | --- |\n| 1 |\n\n### s\n${step(0, 'x')}\n`,
+    )
     const { problems, notes } = await check(root)
     assert.equal(problems.length, 1)
     assert.match(problems[0], /dev-docs-usdable\/a\.md:3/)
@@ -221,6 +231,98 @@ test('files but no recognised table header is a parser failure, not a clean tree
     const { problems } = await check(root)
     assert.equal(problems.length, 1)
     assert.match(problems[0], /no table headers recognised/)
+  } finally {
+    await fs.rm(root, { recursive: true, force: true })
+  }
+})
+
+// ─── a step that lost its section (V-74) ────────────────────────────────────
+
+const step = (n, text = '') => `#### 第 ${n} 步${text ? ` · ${text}` : ''}`
+
+test('a step skeleton under its own section is not a defect', () => {
+  const doc = ['### `PR-6a` engine', step(0, '粒度自检'), '', step(1, '需求分析'), ''].join('\n')
+  const { problems, steps } = checkHeadingStructure('p.md', doc)
+  assert.deepEqual(problems, [])
+  assert.equal(steps, 2)
+})
+
+test('a landing record placed before the plan is not a defect', () => {
+  // The counter-example that killed this rule's first criterion. Five of the
+  // six documents it flagged used exactly this order — the section landed, the
+  // record was written first, and the 第 0–2 步 it landed came after. It is a
+  // legitimate layout, so the criterion had to change rather than exempt it.
+  const doc = [
+    '### `PR-4c` catalog',
+    '#### 落地结果（2026-09-13，已合 `v1`）',
+    '',
+    '**新增守卫债务：无**',
+    '',
+    step(0, '粒度自检'),
+    '',
+    step(1, '需求分析'),
+    '',
+  ].join('\n')
+  const { problems } = checkHeadingStructure('p.md', doc)
+  assert.deepEqual(problems, [])
+})
+
+test('a second step skeleton under one section is a defect', () => {
+  // The shape V-74 was: the lane-2 section was inserted without its own `###`
+  // heading, so its 第 0–3 步 nested under the PR-6a section.
+  const doc = [
+    '### `PR-6a` engine',
+    step(0, '粒度自检'),
+    '',
+    step(4, '落地结果（2026-09-14，合本地 `v1`）'),
+    '',
+    step(0, '粒度自检'),
+    '',
+  ].join('\n')
+  const { problems } = checkHeadingStructure('p.md', doc)
+  assert.equal(problems.length, 1)
+  assert.match(problems[0], /second "第 0 步"/)
+  assert.match(problems[0], /`PR-6a`/)
+})
+
+test('a new section heading resets the skeleton counter', () => {
+  const doc = [
+    '### `PR-6a` engine',
+    step(0, '粒度自检'),
+    '',
+    '### `L-A5` three facts',
+    step(0, '粒度自检'),
+    '',
+  ].join('\n')
+  const { problems } = checkHeadingStructure('p.md', doc)
+  assert.deepEqual(problems, [])
+})
+
+test('a step with no heading above it alone is a defect', () => {
+  const { problems } = checkHeadingStructure('p.md', `${step(0, '粒度自检')}\n`)
+  assert.equal(problems.length, 1)
+  assert.match(problems[0], /no heading above it at all/)
+})
+
+test('steps inside a fenced code block are not headings', () => {
+  const doc = ['### section', '```', step(0, '粒度自检'), '```', step(0, '粒度自检'), ''].join('\n')
+  const { problems, steps } = checkHeadingStructure('p.md', doc)
+  assert.deepEqual(problems, [])
+  assert.equal(steps, 1)
+})
+
+test('a tree with tables but no step heading is a parser failure too', async () => {
+  // The refusal to pass vacuously has to cover the second rule as well: with
+  // only the table assertion wired, the step rule could be silently dead and
+  // every run would still look clean.
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), 'docs-table-guard-'))
+  try {
+    const dir = path.join(root, 'dev-docs-usdable')
+    await fs.mkdir(dir, { recursive: true })
+    await fs.writeFile(path.join(dir, 'a.md'), '| a | b |\n| --- | --- |\n| 1 | 2 |\n')
+    const { problems } = await check(root)
+    assert.equal(problems.length, 1)
+    assert.match(problems[0], /no step heading recognised/)
   } finally {
     await fs.rm(root, { recursive: true, force: true })
   }

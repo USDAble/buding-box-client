@@ -17,15 +17,37 @@ import (
 // path is resolved through datapath rather than compiled in (hard rule 1).
 const sensitiveDictName = "sensitive-words.txt"
 
-// newSensitiveEngine builds the one engine this server instance uses. A data
-// root that cannot be resolved degrades to the built-in words instead of
-// failing startup (B4: an unconfigured product must still start).
-func newSensitiveEngine() *sensitive.Engine {
+// NewSensitiveEngine builds the one engine a process uses. A data root that
+// cannot be resolved degrades to the built-in words instead of failing startup
+// (B4: an unconfigured product must still start).
+//
+// WHY IT IS EXPORTED AND WIRED FROM OUTSIDE. The engine is needed on two sides
+// that must not import each other: this package masks model output on the turn
+// path, and internal/productruntime answers the input-check and dictionary
+// routes (PR-6b). Building one per side would give the same file two readers
+// with two caches, so "the effective word list" could differ between the screen
+// and the checker (开发规范 §3.8). cmd/octo-desktop's mountProductAPI therefore
+// calls this once and hands the result to both (人工拍板 2026-09-14).
+//
+// New still falls back to this when Config.SensitiveEngine is nil, so the CLI
+// (`octo serve`) keeps masking without knowing the product exists.
+func NewSensitiveEngine() *sensitive.Engine {
 	p, err := datapath.Join(sensitiveDictName)
 	if err != nil {
 		return sensitive.New("")
 	}
 	return sensitive.New(p)
+}
+
+// sensitiveEngineOr is the injection seam: the process's engine when the build
+// supplied one, its own otherwise. Nil is the CLI's shape, never a way to turn
+// masking off — a nil engine does pass through app.WrapSensitive unchanged, so
+// treating nil as "no filtering" would be a silent compliance hole.
+func sensitiveEngineOr(injected *sensitive.Engine) *sensitive.Engine {
+	if injected != nil {
+		return injected
+	}
+	return NewSensitiveEngine()
 }
 
 // wrapSensitive decorates the sender a turn's agent is built on, so every

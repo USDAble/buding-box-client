@@ -24,6 +24,8 @@ import (
 	"github.com/open-octo/octo-agent/internal/productprofile"
 	"github.com/open-octo/octo-agent/internal/productruntime"
 	"github.com/open-octo/octo-agent/internal/productstate"
+	"github.com/open-octo/octo-agent/internal/sensitive"
+	"github.com/open-octo/octo-agent/internal/server"
 	"github.com/open-octo/octo-agent/internal/version"
 )
 
@@ -59,7 +61,7 @@ import (
 // The predicate is not built in main.go for the same reason: this is the
 // function holding the catalog store, and the judgement belongs to the runtime
 // that owns it (productruntime.CatalogOffers), not to the shell.
-func mountProductAPI() (mount func(api func(pattern string, h http.HandlerFunc)), gatewaySender func(app.ReasoningTuning) (agent.Sender, error), catalogOffers func(id string) (offers, known bool)) {
+func mountProductAPI() (mount func(api func(pattern string, h http.HandlerFunc)), gatewaySender func(app.ReasoningTuning) (agent.Sender, error), catalogOffers func(id string) (offers, known bool), engine *sensitive.Engine) {
 	if windowToken() == "" {
 		// Fail closed. Without a token the gate cannot distinguish this window
 		// from any other loopback caller, so mounting the routes would publish
@@ -67,7 +69,7 @@ func mountProductAPI() (mount func(api func(pattern string, h http.HandlerFunc))
 		// which the frontend already renders as "blocked" — the user is told,
 		// and never silently authorized (开发规范 §3.9).
 		slog.Error("product: window token unavailable, product routes not mounted")
-		return nil, nil, nil
+		return nil, nil, nil, nil
 	}
 
 	state, err := productstate.Open(productstate.Options{
@@ -80,7 +82,7 @@ func mountProductAPI() (mount func(api func(pattern string, h http.HandlerFunc))
 	})
 	if err != nil {
 		slog.Error("product: state unavailable, product routes not mounted", "err", err)
-		return nil, nil, nil
+		return nil, nil, nil, nil
 	}
 	if state.Corrupt() {
 		// A damaged file degrades to "not logged in" and is left on disk for
@@ -91,7 +93,7 @@ func mountProductAPI() (mount func(api func(pattern string, h http.HandlerFunc))
 	creds, err := credentialstore.Open(credentialstore.Options{})
 	if err != nil {
 		slog.Error("product: credential store unavailable, product routes not mounted", "err", err)
-		return nil, nil, nil
+		return nil, nil, nil, nil
 	}
 
 	// The catalog cache (PR-4b). A failure here does NOT unmount the routes:
@@ -127,10 +129,24 @@ func mountProductAPI() (mount func(api func(pattern string, h http.HandlerFunc))
 	productruntime.RestoreSession(state, creds, tokens)
 	platform := newPlatformClient(state.InstallID(), tokens)
 
+	// The one compliance-word engine this process uses (PR-6b1). It is built
+	// HERE, at the single point that already assembles the four objects below,
+	// and handed to both consumers: the runtime's routes (input check, nickname,
+	// dictionary — PR-6b1/PR-6b2) and internal/server's turn-path masking
+	// (PR-6a). Two instances would mean two readers of
+	// data/sensitive-words.txt with two caches, so the screen and the checker
+	// could disagree about the effective word list (开发规范 §3.8).
+	//
+	// internal/server therefore no longer builds its own when this build gives
+	// it one; it keeps its fallback for `octo serve`, which has no product
+	// assembly at all.
+	engine = server.NewSensitiveEngine()
+
 	rt := productruntime.New(productruntime.Deps{
-		State:    state,
-		Creds:    creds,
-		Platform: platform,
+		State:     state,
+		Creds:     creds,
+		Platform:  platform,
+		Sensitive: engine,
 		ControlPlane: productruntime.ControlPlaneStatus{
 			Configured:     profile.ControlPlaneConfigured(),
 			HasTrustedKeys: profile.HasTrustedKeys(),
@@ -167,7 +183,7 @@ func mountProductAPI() (mount func(api func(pattern string, h http.HandlerFunc))
 	renew := productruntime.SessionRenewer{Platform: platform, Tokens: tokens, Creds: creds, State: state}
 	gateway := productruntime.GatewayEndpoint{Host: profile.GatewayHost, Tokens: tokens, Ensure: renew.Ensure}
 
-	return rt.Mount, gateway.Sender, rt.CatalogOffers
+	return rt.Mount, gateway.Sender, rt.CatalogOffers, engine
 }
 
 // catalogClockSkew tolerates drift between this machine's clock and the

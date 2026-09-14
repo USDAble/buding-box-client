@@ -38,7 +38,8 @@
 // per-column semantics, and that the honest place for those judgements is a
 // human reading the row. Container integrity is mechanical; content is not.
 //
-// One assertion for cell counts, one for a row that lost its table. The second
+// Three assertions: cell counts, a row that lost its table, and a step that lost
+// its section. The second
 // exists because the first could be bypassed: a blank line inside a table ends
 // the table for the parser (and for GFM), so every row below it is compared
 // against nothing and passes. That is exactly how V-64 / V-65 / V-66 sat in
@@ -78,6 +79,16 @@ export const SCAN_ROOTS = ['dev-docs-usdable']
 
 /** A cell that is only dashes (optionally colon-anchored) is the delimiter row. */
 const DELIMITER_CELL = /^:?-+:?$/
+
+/** A heading line, capturing its level so a step can be told from a section. */
+const HEADING = /^(#{1,6})\s+(.*)$/
+
+/**
+ * A "step" heading is 开发计划.md's per-PR skeleton — `#### 第 0 步 · …`. Those
+ * four headings belong to exactly one `###` section, and the way a section
+ * loses its own heading is that the steps stay where they are.
+ */
+const STEP = /^第\s*\d+\s*步(?![0-9])/
 
 // ─── pure analyzers (unit-tested) ───────────────────────────────────────────
 
@@ -200,6 +211,90 @@ export function checkDocument(rel, content) {
   return { problems, tables }
 }
 
+/**
+ * checkHeadingStructure reports a step that lost the section it belongs to.
+ *
+ * Why this is a *container* defect of the same family as the table rules above,
+ * and why the tables rule could not see it (V-74). 开发计划.md keeps one
+ * `###` section per PR, each carrying the same skeleton of `#### 第 N 步`
+ * headings. When a new section is inserted by replacing a heading line, the
+ * steps stay where they are, so the new section's 第 0–3 步 nest under the
+ * previous PR's `###` and read as part of it. Nothing is false — every sentence
+ * is still true — and nothing is caught: a reader attributes the steps to the
+ * wrong change, and the writer of the *next* window hunts for an anchor that is
+ * not there.
+ *
+ * The measurement that justified a check: by 2026-09-14 this had happened
+ * twice in this one file, once as a section-*order* inversion (`1.2.4` below
+ * `1.2.5`, caught by eye) and once as `L-A5`'s whole 第 0–3 步 nested under
+ * `PR-6a` — committed, and visible only from the table of contents.
+ *
+ * The criterion is "one `###` section carries at most one 第 0 步", and it was
+ * chosen after a wrong one. The first attempt asked whether the nearest
+ * non-step heading above a step was shallower than `####`; that fired six
+ * times and five were legitimate layouts (a section may put
+ * `#### 落地结果` *before* the original 第 0–2 步 it landed). A criterion that
+ * reports correct documents teaches the next reader to add an exemption, so it
+ * was replaced rather than tolerated. This one is narrow and says so: a new
+ * section whose plan opens somewhere other than 第 0 步 would slip through.
+ * Catching that needs content, and the honest place for content is a human
+ * reading the section — the same conclusion V-52 and V-56 reached about tables.
+ */
+export function checkHeadingStructure(rel, content) {
+  const problems = []
+  const lines = content.split('\n')
+
+  let inFence = false
+  let section = null // the nearest heading that is not itself a step
+  let zeros = 0 // 第 0 步 headings seen under the current section
+  let steps = 0
+
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i]
+
+    if (/^\s*(```|~~~)/.test(line)) {
+      inFence = !inFence
+      continue
+    }
+    if (inFence) continue
+
+    const m = HEADING.exec(line)
+    if (!m) continue
+
+    const level = m[1].length
+    const text = m[2].trim()
+
+    if (!STEP.test(text)) {
+      section = { level, lineNo: i + 1, text }
+      zeros = 0
+      continue
+    }
+
+    steps++
+    if (!text.startsWith('第 0 步')) continue
+
+    zeros++
+    if (zeros === 1) {
+      if (section === null) {
+        problems.push(
+          `${rel}:${i + 1}: step heading "${text}" has no heading above it at all. ` +
+            `Its steps belong to no section.`,
+        )
+      }
+      continue
+    }
+
+    problems.push(
+      `${rel}:${i + 1}: a second "第 0 步" under the same \`###\` section ` +
+        `(line ${section.lineNo}: "${section.text}"). Steps read as belonging to that ` +
+        `section: give the new section its own \`###\` heading instead of letting its ` +
+        `skeleton nest under the one before it.`,
+    )
+  }
+
+  return { problems, steps }
+}
+
 // ─── filesystem-backed scan ─────────────────────────────────────────────────
 
 async function markdownFilesIn(root, dir) {
@@ -228,6 +323,7 @@ export async function check(root) {
   const notes = []
   let files = 0
   let tables = 0
+  let steps = 0
 
   for (const dir of SCAN_ROOTS) {
     for (const rel of await markdownFilesIn(root, dir)) {
@@ -236,6 +332,9 @@ export async function check(root) {
       const result = checkDocument(rel, content)
       problems.push(...result.problems)
       tables += result.tables
+      const structure = checkHeadingStructure(rel, content)
+      problems.push(...structure.problems)
+      steps += structure.steps
     }
   }
 
@@ -251,8 +350,19 @@ export async function check(root) {
       `${files} Markdown file(s) scanned but no table headers recognised — ` +
         `the guard examined no table, which is a parser failure, not a clean tree.`,
     )
+  } else if (steps === 0) {
+    // Same argument one level up: the step rule would report nothing, forever,
+    // if 开发计划.md's skeleton were renamed — and green-while-blind is the
+    // failure this guard exists to refuse.
+    problems.push(
+      `${files} Markdown file(s) scanned but no step heading recognised — ` +
+        `the guard examined no \`#### 第 N 步\`, which is a parser failure, not a clean tree.`,
+    )
   } else {
-    notes.push(`${files} file(s), ${tables} table(s) checked for container integrity.`)
+    notes.push(
+      `${files} file(s), ${tables} table(s) checked for container integrity, ` +
+        `${steps} step heading(s) checked for a section above them.`,
+    )
   }
 
   return { problems, notes }
@@ -275,7 +385,7 @@ async function main() {
     return
   }
 
-  console.log('docs-table-guard passed: every table row matches its header.')
+  console.log('docs-table-guard passed: every table row matches its header, and every step has a section.')
 }
 
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {

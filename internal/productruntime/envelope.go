@@ -114,6 +114,22 @@ var fieldLevelCodes = map[string]string{
 	"nickname_sensitive":          "nickname",
 }
 
+// codeInvalidValue is the ONE code that names a field and is deliberately absent
+// from fieldLevelCodes: "this value is not one of the accepted ones", for the two
+// routes that accept a preference (本地API契约 §2.5 / §2.7). Its shape is
+// {"field": …, "code": …}, written by writeValueRefusal — not {"fieldErrors": …}.
+//
+// WHY IT IS NOT IN THE MAP. Every entry in fieldLevelCodes exists to relay the
+// PLATFORM's answer on the login path, where the platform decides which input to
+// blame; the map has exactly one caller, writePlatformError, and can only be
+// reached by a productclient.Error. invalid_value is never that: it is this
+// build's own verdict on a value it is the only judge of — a locale, a mode id —
+// so it cannot arrive as a platform code. Putting it in the map would therefore
+// change nothing on the login path while inviting the next reader of §2.5 to
+// reach for writeFieldErrors, which is the silent wrong message this constant's
+// placement is meant to prevent (V-72; the field-level rows of §3 stay three).
+const codeInvalidValue = "invalid_value"
+
 // statusForCode picks the local status for a business-level platform code.
 func statusForCode(pe *productclient.Error) int {
 	switch {

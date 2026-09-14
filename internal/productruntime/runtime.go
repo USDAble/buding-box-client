@@ -23,6 +23,7 @@ import (
 	"github.com/open-octo/octo-agent/internal/credentialstore"
 	"github.com/open-octo/octo-agent/internal/productclient"
 	"github.com/open-octo/octo-agent/internal/productstate"
+	"github.com/open-octo/octo-agent/internal/sensitive"
 )
 
 // defaultCooldownSec mirrors the platform's usual value, used only when the
@@ -64,6 +65,15 @@ type Deps struct {
 	// same reason ControlPlane is - this package forwards the answer, it does
 	// not own the question.
 	CatalogTrust CatalogTrust
+	// Sensitive is the process's one compliance-word engine, injected rather
+	// than built here: the same instance masks model output on the turn path
+	// (internal/server), and the two sides must see the same effective word
+	// list (开发规范 §3.8). It arrives from cmd/octo-desktop's assembly, next to
+	// GatewaySender and CatalogOffers.
+	//
+	// nil means the build did not wire it. The nickname route then refuses the
+	// edit instead of storing an unchecked name — see account.go.
+	Sensitive *sensitive.Engine
 }
 
 // CatalogTrust is the trust anchor a fetched policy is checked against.
@@ -144,6 +154,10 @@ func (rt *Runtime) Mount(api func(pattern string, h http.HandlerFunc)) {
 	api("POST /api/product/login", rt.handleLogin)
 	api("POST /api/product/logout", rt.handleLogout)
 	api("PUT /api/product/locale", rt.handleLocale)
+	// PR-6b1 — the account-editing pair. They sit here, in the one list of
+	// product routes, so both adapters (this one and Handler()) stay in step.
+	api("PUT /api/product/nickname", rt.handleNickname)
+	api("PUT /api/product/prefs", rt.handlePrefs)
 }
 
 // chatModesDTO is the wire shape of 本地API契约 §2.8.
@@ -514,7 +528,13 @@ func (rt *Runtime) handleLocale(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if !validLocale(req.Locale) {
-		writeFieldErrors(w, http.StatusBadRequest, map[string]string{"locale": "invalid_value"})
+		// One refusal shape for both routes that accept a preference (V-72): this
+		// used to answer with fieldErrors while §2.7's prefs route answered with
+		// {"field": …, "code": …}. Nothing reads this route's body yet
+		// (setProductLocale reads res.ok only), so the two are free to agree — and
+		// "the same refusal for the same value" is what §3's table already says by
+		// listing one code for locale and prefs.* together.
+		writeValueRefusal(w, "locale")
 		return
 	}
 	if err := rt.deps.State.SetLocale(req.Locale); err != nil {
@@ -608,13 +628,6 @@ func validCode(code string) bool {
 		}
 	}
 	return true
-}
-
-// validNickname bounds the nickname. Whether it contains a sensitive word is the
-// platform's answer, because the dictionary is server-side authoritative (P8).
-func validNickname(nickname string) bool {
-	n := strings.TrimSpace(nickname)
-	return n != "" && len([]rune(n)) <= 20
 }
 
 // validLocale accepts only the two shipped languages. Anything else is a

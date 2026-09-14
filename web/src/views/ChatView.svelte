@@ -2347,10 +2347,10 @@ import QuestionModal from '../components/overlays/QuestionModal.svelte'
     // Both halves are asked of the same session: "may a turn start" and "why
     // not" are one judgement with one owner (chatMode.ts), so the sentence can
     // never describe a state the gate did not check (PR-5e).
-    const sid = get(activeSessionId)
-    if (!canStartTurn(sid)) {
+    const currentSid = get(activeSessionId)
+    if (!canStartTurn(currentSid)) {
       composer?.restore(text, files)
-      showToast(tr(catalogNoticeKey(sid)), 'error')
+      showToast(tr(catalogNoticeKey(currentSid)), 'error')
       return
     }
     const active = await ensureActiveSession()

@@ -67,6 +67,14 @@ func TestConfigGuard_TouchedConfigFile(t *testing.T) {
 		{"write_file ~ path", "write_file", map[string]any{"path": "~/config.yml"}, true},
 		{"edit_file other file", "edit_file", map[string]any{"path": "/tmp/other.yml"}, false},
 		{"terminal touches config", "terminal", map[string]any{"command": "sed -i '' s/x/y/ ~/config.yml"}, true},
+		// Both spellings, on every host. filepath.Join used to build this
+		// needle, which made the match platform-dependent: on Windows it
+		// produced `~\config.yml` and the forward-slash command above stopped
+		// matching, so the guard silently never fired on the platform this
+		// product ships to first. Pinned here rather than in a GOOS-gated case
+		// because the matcher is a pure string operation — it owes the same
+		// answer everywhere.
+		{"terminal touches config (windows spelling)", "terminal", map[string]any{"command": `python -c "open(r'~\config.yml')"`}, true},
 		{"terminal unrelated", "terminal", map[string]any{"command": "go test ./..."}, false},
 		{"terminal other project config.yml", "terminal", map[string]any{"command": "cat ./project/config.yml"}, false},
 		{"read_file is not a write", "read_file", map[string]any{"path": cfgPath}, false},

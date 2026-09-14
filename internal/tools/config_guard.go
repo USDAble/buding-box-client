@@ -68,8 +68,19 @@ func touchedConfigFile(tool string, input map[string]any) bool {
 		// Best-effort: match the config's full path, or the ~-relative
 		// spelling of it. A bare "config.yml" under some other directory (a
 		// project's own config) must not match.
+		//
+		// Both separators are tried on every platform, and that is not
+		// belt-and-braces: filepath.Join is platform-dependent, so building
+		// this needle with filepath.Join("~", base) yields `~\config.yml` on
+		// Windows while the shell the user actually types into (PowerShell and
+		// cmd both accept `~/config.yml`) keeps using the forward slash — the
+		// guard then never fires on the platform this product ships to first.
+		// A backslash spelling can also appear on POSIX when the model writes
+		// a Windows-style path, so neither form is host-specific.
+		base := filepath.Base(cfgPath)
 		return strings.Contains(cmd, cfgPath) ||
-			strings.Contains(cmd, filepath.Join("~", filepath.Base(cfgPath)))
+			strings.Contains(cmd, "~/"+base) ||
+			strings.Contains(cmd, `~\`+base)
 	}
 	return false
 }

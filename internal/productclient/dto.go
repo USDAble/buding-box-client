@@ -128,6 +128,11 @@ const (
 	// 第 6 条). It is the one endpoint that answers a conditional request, which
 	// is why the refresh path goes through it rather than through bootstrap.
 	pathCatalogModels = "/catalog/models"
+	// pathLogout revokes the current refresh token / session (中台交付包 §4.1 第 4
+	// 条). It has been in the contract since the beginning and had no caller until
+	// V-54: logout was two local acts, so a COPY of data/ kept refreshing after the
+	// user signed out - the one scenario a u-disk product is built around.
+	pathLogout = "/auth/logout"
 )
 
 // PurposeLogin is the only code purpose this build requests.

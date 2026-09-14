@@ -165,6 +165,31 @@ func (c *Client) Bootstrap(ctx context.Context) (*BootstrapData, error) {
 	return &out, nil
 }
 
+// Logout revokes this session on the platform (中台交付包 §4.1 第 4 条 / 需求基线
+// E7) and releases the held credentials.
+//
+// WHY IT GOES THROUGH doAuthorized RATHER THAN do. The access token having lapsed
+// is the ordinary state of a process that has been open a while, and the session
+// still has to be revocable then - a logout that failed with "unauthorized" would
+// force the user to sign in again in order to sign out. doAuthorized already
+// carries exactly the exchange-and-replay this needs, so there is no second
+// refresh path here (C2 规则 3).
+//
+// WHY THE HOLDER IS CLEARED ONLY ON SUCCESS. A refused session (401) means the
+// session is over, and holding a dead token after it would leave the gateway
+// sender looking authorised - doAuthorized's own rule, reused. A transport
+// failure is NOT that: it has no verdict in it (V-43), and the user's decision to
+// leave is answered by the caller deleting the stored credential either way
+// (PQ29 option 1, decided by a human 2026-09-14). Which of the two happened is
+// reported to the caller through the error, not through a second kind of success.
+func (c *Client) Logout(ctx context.Context) error {
+	if err := c.doAuthorized(ctx, http.MethodPost, pathLogout, nil, nil); err != nil {
+		return err
+	}
+	c.creds.Clear()
+	return nil
+}
+
 // CatalogModels refreshes the catalog without a re-login, conditionally on the
 // version the caller already holds (中台交付包 §4.3).
 //

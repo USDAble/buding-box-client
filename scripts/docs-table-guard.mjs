@@ -38,9 +38,18 @@
 // per-column semantics, and that the honest place for those judgements is a
 // human reading the row. Container integrity is mechanical; content is not.
 //
-// One assertion only. A single rule covers both diagnosed shapes, because a
-// concatenation brings the second record's own pipes with it: "two revision
-// records on one line" shows up as a two-column table row with four cells.
+// One assertion for cell counts, one for a row that lost its table. The second
+// exists because the first could be bypassed: a blank line inside a table ends
+// the table for the parser (and for GFM), so every row below it is compared
+// against nothing and passes. That is exactly how V-64 / V-65 / V-66 sat in
+// 需求基线 §5.6 unchecked while this guard reported a clean tree — 50-odd rows
+// were being rendered as a paragraph of pipe text, and the guard said nothing.
+// Reported as *one* defect per row so a cut of N rows names all N.
+//
+// The row-fragment rule is deliberately narrow: a line that starts with `|` and
+// is neither a delimiter row nor the header of the table below it. A single-row
+// table written without a header is therefore reported too — and it should be,
+// because that is how GFM renders it: not as a table.
 //
 // A rejected candidate is worth recording. Counting ISO dates inside a cell was
 // tried first, on the theory that a joined record repeats its date — it fired
@@ -153,7 +162,7 @@ export function checkDocument(rel, content) {
     }
 
     if (headerCount === null) {
-      // Either a header (when the next line delimits it) or a lone row.
+      // Either a header (when the next line delimits it) or a row fragment.
       const next = splitRow(lines[i + 1] ?? '')
       if (isDelimiterRow(next)) {
         headerCount = cells.length
@@ -168,6 +177,13 @@ export function checkDocument(rel, content) {
               `header's extra column is dropped.`,
           )
         }
+      } else {
+        problems.push(
+          `${rel}:${lineNo}: row with no table above it (${cells.length} cell(s)). A blank ` +
+            `line inside a table ends it: this row and the ones after it are rendered as ` +
+            `text, not as a table, and are never compared against a header. Delete the ` +
+            `blank line, or move the row into its table.`,
+        )
       }
       continue
     }

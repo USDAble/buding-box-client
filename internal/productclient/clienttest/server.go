@@ -125,6 +125,15 @@ type Server struct {
 	catalogTTLSec    int     // 0 means FixtureCatalogTTLSec
 	refuseSessionsAt bool    // hand out tokens the server will not recognise
 
+	// The gateway's own refusal (L-C4c). Zero means the stand-in serves turns the
+	// way a platform with credit does; non-zero makes it answer like the control
+	// plane does when there is none: a flat {"code":…} envelope and no provider
+	// call. Deliberately NOT a per-route flag on the control-plane side: the 402
+	// belongs to the turn endpoint, and the client's whole point is that it does not
+	// predict it locally (PQ8).
+	completionStatus int
+	completionCode   string
+
 	catalogRefreshCount int  // refresh endpoint hits, so "exactly once" is checkable
 	unchangedInBody     bool // spell "nothing new" as {"unchanged":true} instead of 304
 
@@ -235,6 +244,25 @@ func (s *Server) FailLogout(status int, code string) {
 	defer s.mu.Unlock()
 	s.logoutStatus = status
 	s.logoutCode = code
+}
+
+// FailCompletions makes every gateway call answer with the given status and code
+// instead of a completion.
+//
+// WHY IT EXISTS (L-C4c / PR-5d3). The requirement is that a user out of credit sees
+// one localized sentence, and the platform decides that with a 402 — the client is
+// explicitly forbidden from predicting it (PQ8). Reaching that branch needs a platform
+// that refuses a turn, and no other switch produces one: RefuseSessionsAfterLogin
+// fails the authorisation call, which lands on the session-expiry path instead, and
+// FailLedger moves a number the turn does not consult.
+//
+// WHY IT IS BEHIND A SWITCH. A gateway that always refuses is not a healthy fixture,
+// so it is off unless a test asks — the same rule as every other knob here (纪律 4).
+func (s *Server) FailCompletions(status int, code string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.completionStatus = status
+	s.completionCode = code
 }
 
 // SetBalance changes what the ledger reports (中台交付包 §5.5).
@@ -1024,9 +1052,18 @@ func (s *Server) handleCompletions(w http.ResponseWriter, r *http.Request) {
 	askForTool := s.toolCallName != "" && !returned
 	toolName, toolArgs, toolID := s.toolCallName, s.toolCallArgs, s.toolCallID
 	_, authorised := s.access[bearer(r)]
+	refuseStatus, refuseCode := s.completionStatus, s.completionCode
 	s.mu.Unlock()
 	if !authorised {
 		writeError(w, http.StatusUnauthorized, productclient.CodeUnauthorized, "")
+		return
+	}
+	// After the authorisation check, because that is the platform's own order
+	// (§5.4: 资格/余额/模型校验 come after the request is authenticated) — and before
+	// any output, so a refused turn is a plain envelope rather than a stream that dies
+	// halfway.
+	if refuseStatus != 0 {
+		writeError(w, refuseStatus, refuseCode, "")
 		return
 	}
 

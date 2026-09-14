@@ -1969,7 +1969,7 @@ func (w *wsStreamWriter) sendRaw(data []byte) {
 // tool_id): a turn error belongs to no tool card, so the frontend renders it as
 // a standalone error notice in the transcript rather than dropping it.
 func (w *wsStreamWriter) error(msg string) {
-	w.errorInput(msg, false)
+	w.errorInput(msg, false, "")
 }
 
 // errorInput is error plus the inputRolledBack hint: the failed turn's user
@@ -1977,11 +1977,19 @@ func (w *wsStreamWriter) error(msg string) {
 // from the transcript too and the browser should put it back in the composer.
 // Absent (or false) means the message survived — a mid-turn failure keeps the
 // bubble, and restoring the text there would duplicate it on the next send.
-func (w *wsStreamWriter) errorInput(msg string, inputRolledBack bool) {
+//
+// OCTO-FORK: `code` is the control plane's code (G3 / 需求基线 C8) — the only field the
+// browser may key its copy on; `error` stays the fallback sentence. An empty code is
+// omitted, so "no code" and "a code with no copy" stay distinguishable. See
+// dev-docs-usdable/需求/20260911/开发计划.md §PR-5d3.
+func (w *wsStreamWriter) errorInput(msg string, inputRolledBack bool, code string) {
 	ev := map[string]any{
 		"type":       "turn_error",
 		"session_id": w.sessionID,
 		"error":      msg,
+	}
+	if code != "" {
+		ev["code"] = code
 	}
 	if inputRolledBack {
 		ev["input_rolled_back"] = true
@@ -1993,12 +2001,12 @@ func (w *wsStreamWriter) errorInput(msg string, inputRolledBack bool) {
 // message shown in the browser is user-friendly instead of displaying
 // "agent: loop[0]: anthropic: HTTP 403 ...".
 func (w *wsStreamWriter) userError(err error) {
-	w.error(agent.UserFacingError(err))
+	w.errorInput(agent.UserFacingError(err), false, agent.ErrorCodeOf(err))
 }
 
 // userErrorInput is userError carrying errorInput's inputRolledBack hint.
 func (w *wsStreamWriter) userErrorInput(err error, inputRolledBack bool) {
-	w.errorInput(agent.UserFacingError(err), inputRolledBack)
+	w.errorInput(agent.UserFacingError(err), inputRolledBack, agent.ErrorCodeOf(err))
 }
 
 // bufferTurnEvent records an already-broadcast turn event in the session's

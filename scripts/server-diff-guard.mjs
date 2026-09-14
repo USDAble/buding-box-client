@@ -154,10 +154,11 @@ export const ROUTE_TABLE_CEILING = 1
 export const DEBT_CEILINGS = [
   {
     file: 'internal/server/server.go',
-    ceiling: 533,
+    ceiling: 517,
     why:
       'the product seam and the data-root migration: Config.MountAPI/WindowToken/RequireGateway/ControlPlaneReady plumbing, the productAPI registrar (a method value, not a call site), V-36/PR-5c/PR-5b1 gates on the turn path, and Config.CatalogOffers + its guard (PR-5e, L-C7). ' +
-      'Measured 2026-09-14 at 533 after excluding marker lines (see the marker note in forkDiffLines) and after trimming the PR-5e prose to pointers into 开发计划 §PR-5e; of the added lines the large majority are prose explaining those seams',
+      'Measured 2026-09-14 at 533 after excluding marker lines (see the marker note in forkDiffLines) and after trimming the PR-5e prose to pointers into 开发计划 §PR-5e; of the added lines the large majority are prose explaining those seams. ' +
+      'PR-5d3 folded 16 of them out: errModelNotListed and its doc comment moved to internal/server/turn_refusal.go when the refusal gained a code (G3), and the ceiling came down with the fold rather than keeping the headroom',
     convergence:
       'P0-01A C (the apiProduct fold is dead — see the R1 note; what remains is the registrar and the product-state move, P0-01A D). PR-5e adds nothing to fold: its 37 lines are the floor for a turn-path guard, and they shrink only if upstream grows a pre-send hook',
   },
@@ -169,13 +170,17 @@ export const DEBT_CEILINGS = [
     convergence: 'P0-01A D (+8 folds when the session descriptor moves); the datapath lines are the finished cost of hard rule 1',
   },
   {
-    // Not modified by this fork at the time of writing. The 0 is the point: any
-    // future change to an upstream WebSocket turn handler has to come here and
-    // justify itself, which a ceiling of 36 lines did not require.
+    // Raised 0 → 15 by PR-5d3 (2026-09-14), the first change this fork has ever
+    // made to this file. The 0 was doing its job: it forced the three justifications
+    // below rather than letting a 36-line allowance hide them (V-49).
     file: 'internal/server/ws_handlers.go',
-    ceiling: 0,
-    why: 'this fork does not modify this file; the recorded debt was a 36-line allowance for a change that is not there',
-    convergence: 'nothing to converge — keep it at 0',
+    ceiling: 15,
+    why:
+      'G3 (需求基线 C8): the control plane\'s error code on the turn_error event. Composition at the measured 15 — 2 added + 3 removed are the `errorInput` signature and `error`\'s call line; 3 are the `if code != "" { ev["code"] = code }` that puts the field on the wire; 4 are the two `userError`/`userErrorInput` call lines (each forwards agent.ErrorCodeOf(err)); 3 are prose plus the marker. ' +
+      'WHY NO SMALLER FORM: the field can only be added where the event is built, and once a fourth parameter exists the three call sites in this file must pass it — the alternative (a second emitter function) measured 22 lines, not fewer. The code has to be read from the error object, which exists only in the two userError* callers. ' +
+      'WHAT WAS MOVED OUT FIRST: nothing was available to move. The file had zero fork lines, so there was no accumulated bulk to fold into internal/server/turn_refusal.go — that is where PR-5e\'s refusal moved TO in the same PR, and it took server.go from 533 to 517 in the same change (see that entry)',
+    convergence:
+      'shrinks only if upstream grows a code channel on turn_error (or a pre-send hook that carries one); otherwise this is the permanent cost of the requirement that the client must not render `message`',
   },
   {
     file: 'internal/server/native_handlers.go',

@@ -71,6 +71,8 @@
   import { ws, wsState, wsReconnect } from '../lib/ws'
   import * as api from '../lib/api'
   import { canStartTurn, catalogNoticeKey } from '../lib/chatMode'
+  // OCTO-FORK: turn failures are read by CODE, not by the server's sentence (G3 / C8) — see dev-docs-usdable/需求/20260911/开发计划.md §PR-5d3.
+  import { turnErrorView } from '../lib/turnError'
   import { refreshCredits } from '../lib/product'
   import { observeArtifact, resetArtifacts } from '../lib/artifacts'
   import { renderMarkdown, escapeHtml, setupCopyButtons } from '../lib/markdown'
@@ -1029,7 +1031,10 @@ import QuestionModal from '../components/overlays/QuestionModal.svelte'
     // banner above the composer stays visible until dismissed or a new message.
     cleanups.push(ws.on('turn_error', (ev) => {
       if ((ev as any).session_id && (ev as any).session_id !== sid) return
-      const msg = (ev as any).error ?? 'request failed'
+      // The copy comes from the code when the server named one (G3 / C8): the
+      // sentence it also sent is the gateway's, and the gateway's sentence for a
+      // 402 is raw JSON.
+      const { text: msg } = turnErrorView(ev, tr('turn_error.unknown'))
       turnError = msg
       addChatMsg(sid, {
         id: uid('err'),

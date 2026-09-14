@@ -9,17 +9,16 @@ import (
 	"github.com/open-octo/octo-agent/internal/sensitive"
 )
 
-// sensitiveDictName is the user-extensible word list inside the data root.
-// Missing is a legal state, not a fault: the engine then serves its embedded
-// list, and nothing is created — absence means "use the default", never
-// "materialise the default" (开发规范 §3.9.1). A portable data root copied from
-// another machine may legitimately carry the user's own list, which is why the
-// path is resolved through datapath rather than compiled in (hard rule 1).
-const sensitiveDictName = "sensitive-words.txt"
-
-// NewSensitiveEngine builds the one engine a process uses. A data root that
-// cannot be resolved degrades to the built-in words instead of failing startup
-// (B4: an unconfigured product must still start).
+// NewSensitiveEngine builds the one engine a process uses.
+//
+// A data root that cannot be resolved degrades to the built-in words instead of
+// failing startup (B4: an unconfigured product must still start), and a missing
+// dictionary file is a legal state — the embedded list serves and nothing is
+// created (开发规范 §3.9.1). The dictionary's NAME lives in internal/sensitive
+// (sensitive.DictFileName), because the package that reads the file is the one
+// that must name it: the dictionary routes in internal/productruntime write
+// that same file and may not import this package (see PR-6b2 in
+// dev-docs-usdable/需求/20260911/开发计划.md).
 //
 // WHY IT IS EXPORTED AND WIRED FROM OUTSIDE. The engine is needed on two sides
 // that must not import each other: this package masks model output on the turn
@@ -32,7 +31,7 @@ const sensitiveDictName = "sensitive-words.txt"
 // New still falls back to this when Config.SensitiveEngine is nil, so the CLI
 // (`octo serve`) keeps masking without knowing the product exists.
 func NewSensitiveEngine() *sensitive.Engine {
-	p, err := datapath.Join(sensitiveDictName)
+	p, err := datapath.Join(sensitive.DictFileName)
 	if err != nil {
 		return sensitive.New("")
 	}

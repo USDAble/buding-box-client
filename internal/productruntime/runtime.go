@@ -158,6 +158,13 @@ func (rt *Runtime) Mount(api func(pattern string, h http.HandlerFunc)) {
 	// product routes, so both adapters (this one and Handler()) stay in step.
 	api("PUT /api/product/nickname", rt.handleNickname)
 	api("PUT /api/product/prefs", rt.handlePrefs)
+
+	// PR-6b2 — the dictionary-management trio. Same reasoning as the pair above:
+	// one list, so both adapters stay in step, and the gate comes with the road
+	// rather than with the handler.
+	api("GET /api/product/sensitive/dict", rt.handleSensitiveDictGet)
+	api("PUT /api/product/sensitive/dict", rt.handleSensitiveDictPut)
+	api("POST /api/product/sensitive/dict/import", rt.handleSensitiveDictImport)
 }
 
 // chatModesDTO is the wire shape of 本地API契约 §2.8.

@@ -5,7 +5,7 @@
 // The server re-checks on the chat path anyway (frontends can be bypassed), so
 // this is purely for responsiveness + input-box substitution — not the source
 // of truth. See P8-敏感词接入.md §3.5.
-import { WINDOW_TOKEN_HEADER, windowToken } from "./product";
+import { request } from "./api";
 
 export interface SensitiveCheck {
   hit: boolean;
@@ -16,17 +16,19 @@ export interface SensitiveCheck {
  * Asks the server whether text hits a sensitive word, returning the masked
  * form when it does. Resolves with hit=false outside the desktop shell (no
  * window token), matching the server's gate-exempt behaviour.
+ *
+ * Goes through request() (the same funnel as sensitiveDict.ts) rather than a
+ * raw fetch: a 401 must return the window to the login page (noteSessionLost)
+ * exactly like every other product call, not be swallowed by the composer's
+ * catch. The composer's "failure doesn't block sending" still holds — the
+ * server re-checks authoritatively on the chat path — but a revoked session is
+ * no longer silently ignored. PR-6c §4.1 第 38 行.
  */
 export async function checkSensitive(text: string): Promise<SensitiveCheck> {
-  const headers: Record<string, string> = { "Content-Type": "application/json" };
-  const token = windowToken();
-  if (token) headers[WINDOW_TOKEN_HEADER] = token;
-  const res = await fetch("/api/product/sensitive/check", {
+  const body = await request<{ hit?: boolean; masked?: string }>("/api/product/sensitive/check", {
     method: "POST",
-    headers,
+    headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ text }),
   });
-  if (!res.ok) throw new Error(`${res.status} ${res.statusText}`);
-  const body = (await res.json()) as { hit?: boolean; masked?: string };
   return { hit: !!body.hit, masked: body.masked ?? "" };
 }

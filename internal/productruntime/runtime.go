@@ -428,7 +428,49 @@ func (rt *Runtime) handleLogin(w http.ResponseWriter, r *http.Request) {
 // It deletes the credential and clears the login flag. The activation record and
 // the bound number stay: logging out is not un-activating, and the second-login
 // form compares against the number (需求基线 E7).
+// handleLogout ends the session on this installation AND revokes it on the
+// platform (V-54 / 需求基线 E7).
+//
+// WHY THE PLATFORM HALF HAD TO BE ADDED. Deleting the credential file is a local
+// act, so before V-54 a copy of data/ kept refreshing after the user signed out -
+// and a copy of data/ is this product's normal mode of existence (E1 rule 7).
+// The endpoint has been in the contract from the start (交付包 §4.1 #4); nothing
+// called it. 需求基线 E6.1's "logout = delete this file" had been read as the
+// whole definition of logging out, which is how the other half went missing (the
+// same shape as V-45: registered, never wired).
+//
+// WHAT STAYS LOCAL AND WHAT DOES NOT. The activation record and the bound number
+// stay: logging out is not un-activating, and the second-login form compares
+// against the number (E7).
+//
+// WHY THE LOCAL HALF RUNS EVEN WHEN THE PLATFORM REFUSES OR IS UNREACHABLE
+// (PQ29 option 1, decided by a human 2026-09-14). E6 rule 6's fail-closed applies
+// to AUTHORISATION, not to "the user wants to quit": a u-disk gets unplugged, and
+// an offline logout is the normal case rather than an edge one. Failing closed
+// here would lock the user into a session whose only exit is hand-editing data/.
+// So the local half always runs, and the answer says out loud whether the
+// platform was told - a fallback that keeps working and says nothing is the
+// failure mode §3.9 is about.
+//
+// The response carries one boolean rather than a reason code. The two failure
+// shapes (refused / unreachable) stay distinguishable inside the client, where
+// only one of them means "sign in again" (V-43); the UI renders one sentence for
+// both, so a second field would be one nobody reads.
 func (rt *Runtime) handleLogout(w http.ResponseWriter, r *http.Request) {
+	// Ordered: revoke first, then forget locally. On the success path that makes
+	// "the platform forgot this session" and "this installation forgot it" true at
+	// the same moment, which is what E7 describes. The failure path reaches the
+	// same local end state - only `revoked` differs.
+	revoked := false
+	if rt.deps.Platform != nil {
+		if err := rt.deps.Platform.Logout(r.Context()); err != nil {
+			// Logged because it is the only trace of an unrevoked session: the user
+			// is told on screen, and an operator needs to know it happened.
+			slog.Warn("logout: the platform session was not revoked", "error", err)
+		} else {
+			revoked = true
+		}
+	}
 	if err := rt.deps.Creds.Delete(); err != nil {
 		writeCode(w, http.StatusInternalServerError, productclient.CodeInternalError, nil)
 		return
@@ -437,7 +479,7 @@ func (rt *Runtime) handleLogout(w http.ResponseWriter, r *http.Request) {
 		writeCode(w, http.StatusInternalServerError, productclient.CodeInternalError, nil)
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"ok": true})
+	writeJSON(w, http.StatusOK, map[string]any{"ok": true, "revoked": revoked})
 }
 
 // handleLocale stores the interface language. It works while logged out, because

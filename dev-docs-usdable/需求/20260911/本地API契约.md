@@ -194,9 +194,9 @@
 ### 2.4 `POST /api/product/logout` ✅
 
 - **请求**：空体。
-- **应答 `200`**：`{"ok": true}` —— ✅ **形状已由 Go handler 确认**（`internal/productruntime/runtime.go:411` 的 `writeJSON(w, http.StatusOK, map[string]any{"ok": true})`）。**2026-09-13 更正（`PR-3`）**：本行原文写"形状取自假后端（`devBackend.ts`）"，那是因为当时真后端这条路径未被逐字核对；假后端已拆除，此形状现在的依据是 Go 实现本身。前端仍忽略应答体，改它仍属后端单边改动，但仍须同步本行。
-- **副作用**：清 `data/credential.json`，`productPhase → blocked`。
-- **备注**：**绑定手机号与昵称仍留在 `data/`**，供二次登录表单预填与比对（`E2`）。注销 ≠ 清数据。
+- **应答 `200`**：`{"ok": true, "revoked": true}` —— `revoked` 是 **2026-09-14（`PR-2f` / `V-54`）新增的字段**：`true` = 平台侧会话已撤销，`false` = **本机已登出但平台没撤销**（离线、超时、平台拒绝）。**老服务端不带这个字段时按 `false` 读**（前端 `body?.revoked === true`），因为"没说"与"没撤销"对用户是同一件事 —— 静默当作成功正是 `§3.9` 禁止的那种兜底。形状的依据是 Go handler 本身（`internal/productruntime/handleLogout`）。
+- **副作用**：① **撤销平台会话**（`POST /v1/auth/logout`，`中台交付包` §4.1 #4）—— **这是 `PR-2f` 补上的半边**，此前只删本地文件、平台侧毫无效果（`V-54`）；② 清 `data/credential.json`；③ `productPhase → blocked`。**②③ 无论 ① 成功与否都执行**（`PQ29` 取法 ①，人工定）：离线登出是 U 盘产品的常态，把用户锁在登录态里等于让他去手删 `data/`。
+- **备注**：**绑定手机号与昵称仍留在 `data/`**，供二次登录表单预填与比对（`E2`）。注销 ≠ 清数据。**`activated` 不降**（`E7`：登出不是取消激活）。
 
 ### 2.5 `PUT /api/product/locale` ✅
 

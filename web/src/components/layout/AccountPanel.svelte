@@ -144,9 +144,13 @@
     })
     if (!ok) return
     try {
-      await logout()
+      const result = await logout()
       accountPanelOpen.set(false)
       accountPanelPage.set('root')
+      // The local half succeeded; the platform half may not have (V-54). Saying
+      // nothing would leave the user believing a copied u-disk can no longer use
+      // the account, which is exactly what he would have just tried to prevent.
+      if (!result.revoked) showToast(tr('product.panel.logout_not_revoked'), 'error')
     } catch {
       showToast(tr('product.send_failed'), 'error')
     }

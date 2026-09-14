@@ -97,6 +97,8 @@ type Server struct {
 	lastEffort       *string // reasoning_effort as received: nil means the field was ABSENT, "" means present and empty
 	bootstrapStatus  int     // non-zero: bootstrap fails with this status and code
 	bootstrapCode    string  // the code that failure carries
+	logoutStatus     int     // non-zero: logout fails with this status and code
+	logoutCode       string  // the code that failure carries
 	tamperPolicy     bool    // sign correctly, then change a byte of the payload
 	omitPolicy       bool    // answer bootstrap with no envelope at all
 	catalogVersion   string  // "" means FixturePolicyVersion
@@ -176,6 +178,25 @@ func (s *Server) FailBootstrap(status int, code string) {
 	s.bootstrapCount = 0 // start counting from the injection
 	s.bootstrapStatus = status
 	s.bootstrapCode = code
+}
+
+// FailLogout makes every logout attempt fail with the given status and business
+// code.
+//
+// WHY IT EXISTS (V-54 / PR-2f). The client now revokes its session on the
+// platform, and the interesting half of that is what happens when the revoke does
+// NOT succeed: the user must still be signed out locally, and the answer must say
+// the platform session was not revoked (PQ29 option 1). That branch cannot be
+// reached with RefuseSessionsAfterLogin - that switch only affects tokens issued
+// after it is armed, and arming it before the login makes the runtime's own
+// post-login catalog fetch fail first (so the nail would be about a different
+// failure). This is the same reasoning FailBootstrap is built on: an injection
+// switch beside the code that models the failure, off unless a test asks.
+func (s *Server) FailLogout(status int, code string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.logoutStatus = status
+	s.logoutCode = code
 }
 
 // TamperPolicy changes one byte of the signed policy after signing it, leaving
@@ -355,6 +376,13 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("POST "+"/v1/auth/sms/send", s.handleSendSMS)
 	mux.HandleFunc("POST "+"/v1/auth/login", s.handleLogin)
 	mux.HandleFunc("POST "+"/v1/auth/refresh", s.handleRefresh)
+	// The revoke route (中台交付包 §4.1 第 4 条). It was missing until V-54: the
+	// contract had carried `/v1/auth/logout` from the start, but no client path
+	// called it and the stand-in did not serve it, so "logout revokes the session"
+	// was unverifiable from both ends. Serving it is not an invention - the
+	// endpoint is the platform's (开发规范 §6.4.6 discipline 4), and the stand-in's
+	// job is to mirror what the platform will do.
+	mux.HandleFunc("POST "+"/v1/auth/logout", s.handleLogout)
 	mux.HandleFunc("GET "+"/v1/client/bootstrap", s.handleBootstrap)
 	mux.HandleFunc("GET "+"/v1/catalog/models", s.handleCatalogModels)
 	// The built-in gateway half (需求基线 C1). It lives on the same stand-in as
@@ -615,6 +643,65 @@ func (s *Server) handleRefresh(w http.ResponseWriter, r *http.Request) {
 		RefreshToken:            s.issueToken("rt", phone),
 		AccessTokenExpiresInSec: fixtureAccessTokenTTL,
 	})
+}
+
+// handleLogout revokes the session behind the presented bearer.
+//
+// The contract says "revoke the current refresh token / session, without
+// deleting the activation binding, the ledger, or data that has to be kept"
+// (中台交付包 §4.1 #4). Both halves are modelled here and they are different
+// acts: the ACCESS token stops being accepted (the session is over), and every
+// refresh token issued to the same phone stops buying a new one (the copy that
+// carries the credential file can no longer resurrect this session - E1 rule 7).
+//
+// Revoking the refresh token rather than only the presented access token is the
+// point of the whole endpoint: the threat is a copied data/ directory, and until
+// V-54 the copy outlived the logout because nothing told the platform.
+//
+// The activation record, the bound number and the accounts map are deliberately
+// untouched. Logging out is not un-activating (需求基线 E7), and the stand-in
+// keeps that distinction visible because the client's second-login form depends
+// on it.
+func (s *Server) handleLogout(w http.ResponseWriter, r *http.Request) {
+	token := bearer(r)
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	if s.logoutCode != "" {
+		writeError(w, s.logoutStatus, s.logoutCode, "")
+		return
+	}
+	phone, ok := s.access[token]
+	if !ok {
+		writeError(w, http.StatusUnauthorized, productclient.CodeUnauthorized, "")
+		return
+	}
+	// EVERY token of the session, not just the one presented. The contract says
+	// "revoke the current refresh token / SESSION" (中台交付包 §4.1 #4), and the
+	// distinction is load-bearing: a beaten path that removed only the presented
+	// access token leaves the older access tokens of the same session accepted
+	// until they expire, so a copy that captured an earlier pair keeps working and
+	// "logged out" is not true yet. This nail found exactly that while it was being
+	// written (the copy signed in again after a lapse-driven logout).
+	for accessToken, owner := range s.access {
+		if owner == phone {
+			delete(s.access, accessToken)
+		}
+	}
+	for refreshToken, owner := range s.refresh {
+		if owner == phone {
+			delete(s.refresh, refreshToken)
+		}
+	}
+	// `data: null` and nothing else. 中台交付包 §4.1 #4 specifies no response body
+	// for this endpoint ("revoke the current refresh token / session"), and the
+	// client reads only the status - so the stand-in must not invent a field here.
+	// An earlier draft returned `{"revoked": true}`, which would have made the
+	// stand-in a second authority for a fact the contract does not define
+	// (开发规范 §6.4.6 discipline 4: the stand-in only does what the contract can
+	// state, and an invention drifts the two apart silently).
+	writeData(w, http.StatusOK, nil)
 }
 
 func (s *Server) handleBootstrap(w http.ResponseWriter, r *http.Request) {

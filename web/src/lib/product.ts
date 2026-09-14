@@ -328,13 +328,27 @@ export async function refreshProductState(): Promise<void> {
   }
 }
 
-// logout clears the login token server-side and flips the phase back to
-// blocked. The bound phone/nickname stay in the data root so the second-login
-// form can prefill and compare against them (需求 §5.3.4). The logout button
-// itself is P5's; this helper is wired there.
-export async function logout(): Promise<void> {
+// logout clears the login token server-side AND revokes the session on the
+// platform (V-54), then flips the phase back to blocked. The bound
+// phone/nickname stay in the data root so the second-login form can prefill and
+// compare against them (需求 §5.3.4). The logout button itself is P5's; this
+// helper is wired there.
+//
+// The returned `revoked` is the platform half of the answer. Deleting the local
+// credential is what the user asked for and always happens; telling the platform
+// is a second act that can fail on its own (PQ29 option 1, decided by a human
+// 2026-09-14), and the caller must be able to say which of the two happened -
+// a local-only logout that reports plain success is exactly the silent fallback
+// 开发规范 §3.9 forbids. `false` is also what an older server answers by
+// omission, which is the right reading: it did not revoke anything.
+export interface LogoutResult {
+  revoked: boolean
+}
+
+export async function logout(): Promise<LogoutResult> {
   const res = await productFetch("/api/product/logout", { method: "POST", headers: windowTokenHeaders() });
   if (!res.ok) throw new Error(`${res.status} ${res.statusText}`);
+  const body = (await res.json().catch(() => null)) as { revoked?: boolean } | null;
   // Re-read the state instead of blanking the store. Logging out is not an
   // un-activation (E7): the box is still activated, and the blocked page reads
   // `activated` to choose between the short phone+code form and the activation
@@ -342,6 +356,7 @@ export async function logout(): Promise<void> {
   // one-shot, so a single tap on logout stranded the user with nothing left to
   // enter (V-22). The server owns the fact; this asks it again.
   await refreshProductState();
+  return { revoked: body?.revoked === true };
 }
 
 // ─── P4 login form ──────────────────────────────────────────────────────────

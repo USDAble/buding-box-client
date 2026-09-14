@@ -68,7 +68,7 @@
 | `activated` | boolean | 是否已激活；`loggedIn===true` 时恒为 `true` |
 | `activation` | object \| null | `{activatedAt, expiresAt, boxCode?}`。`boxCode` 是**明文盒子编号，不脱敏**（`E1` 规则 7）；老数据缺字段时为 `null`，前端显示「—」 |
 | `account` | object \| null | `{phoneMasked, nickname, lastLoginAt}` |
-| `credits` | object | `{balance, monthUsed, monthKey}` |
+| `credits` | object | `{balance: <int64>}` —— **只有余额一个字段**（2026-09-14 收敛）。原 `monthUsed` / `monthKey` **已删除**：中台账本只给 `balanceMicroCredits`，而 `E9` 规则 5 明令客户端不做跨月加总 ⇒ 两个字段**既无来源、又不许本地算**，留着只会永远显示 0（凭空造出来的事实）。判定与理由见 [`需求基线.md`](需求基线.md) `E9` 规则 7；**本文件是该对象的字段表 owner**（§3.8） |
 | `plan` | object | `{name}` |
 | `prefs` | object | `{locale, inputSensitiveCheck, defaultChatMode}` |
 | `suppressOnboarding` | boolean | 桌面构建跳过首启向导（P9） |
@@ -93,6 +93,7 @@
 | 12 | POST | `/api/product/sensitive/check` | 否 | 否 | ✅ |
 | 13 | GET | `/api/product/control-plane` | 否 | 否 | ✅ 新增（`PR-2c`，见 §2.13） |
 | 14 | GET | `/api/product/catalog` | 否 | 否 | ✅ 新增（`PR-4c`，见 §2.14） |
+| 15 | GET | `/api/product/credits` | 是 | 否 | ✅ 新增（`PR-5d1`，见 §2.15） |
 
 > **「需登录」列是设计约定，不是观测事实。** 前端对 `/api/product/*` 一律带 window token（`api.ts` 的 `withWindowToken`），**产品门是否拦某条路由由服务端决定**，前端不区分。本列表达的是**应有的门策略**：凡读写账号数据或改词库的都要登录；`state` / `locale` / `send-code` / `login` 必须在未登录时可达，否则登录页根本渲染不出来。
 >
@@ -329,6 +330,22 @@
 
 ---
 
+### 2.15 `GET /api/product/credits` ✅ 新增（`PR-5d1`，2026-09-14）
+
+**这是第 15 条端点**，为 `L-C4a` 服务：**余额的唯一写入路径**（`E9` 规则 2）。它做两件事 —— 拉一次中台账本，把结果落进本地投影，然后把落盘后的真相回给调用方。
+
+- **请求**：无体。
+- **应答 `200`**：`{"state": ProductStateDTO}` —— **与 §2.6 / §2.7 同形**（"写了一个字段之后回读自己"）。**不新增形状**：`credits` 对象已在 §1.3 登记，再开一个 `{balance}` 的扁平应答就是同一个事实的第二份定义（§3.8）。
+- **错误**：
+  - `401/403` 与其余需登录端点一致（按 §1.4 的注：当前产品的门校验的是**窗口身份**，不是登录态）；
+  - 平台失败按**统一失败漏斗**（`internal/productruntime` 的 `failPlatform`）：`session_expired` ⇒ 清凭证 + 进拦截页（`L-A6`）；其余（`upstream_unavailable` / `invalid_signature` / …）⇒ 原样转发中台的码，**本地投影保持不变**。
+- **为什么不是"顺带从别的应答里带出来"**（这是本条的设计要点，也是 `E9` 规则 2 的落地）：余额只能有一个来源、一个写入路径。若它同时从登录应答、终态帧、账本三处进来，就必然出现"两个数谁说了算"、"哪个更新"、"终端帧丢了怎么办"三类问题，以及**两版验收判据**（这正是 `V-11` 那条已被取代的条文留下的状态）。收敛之后：**任何"余额可能变了"的信号都只是"调用本端点"的触发器**。
+- **登录路径**：登录成功后**也调用同一个函数**（`refreshCredits`），不复用登录已经打过的 `Bootstrap` —— 后者的应答里确实带着 `credits`，但让余额从登录应答里进来就是第二条写入路径。代价是登录多一次往返，**人工已明确接受**（2026-09-14：「客户端只需要老老实实从服务器定时刷新余额就行了」）。
+- **`credits_update` WS 广播**：**本端点不发射它**（见 §4 的状态栏）。跨窗口一致性记在残余里、归属 `PR-8`。
+- **需登录**：本表登记为「是」（它读写账号数据），实际门的判据同 §1.4 的注。
+
+---
+
 ## 3. 错误码总表
 
 **machine code 是契约；用户可见文案不在本文件**（唯一来源 `web/src/lib/i18n.ts`）。
@@ -381,7 +398,7 @@
 
 | 事件 | 载荷 | 接收方 | 说明 |
 | --- | --- | --- | --- |
-| `credits_update` | `{ credits: {balance, monthUsed, monthKey} }` | `App.svelte` | 就地替换 `productState.credits` |
+| `credits_update` | `{ credits: {balance} }` | `App.svelte`（**接手半已在**） | ⬜ **无发射方（2026-09-14 核实）** —— `App.svelte:278` 的接收端在，而服务端**零命中**。它与 `PR-5d1` **不是一回事**：`E9` 规则 2 定下"余额只有拉取一个写入路径"之后，本事件的**触发时机**变成一个独立问题（推送 vs 拉取的关系），而已登记的 `N-5`（四个产品 WS 事件的触发时机与重放语义）**正是这个问题** ⇒ 归属 `PR-8`，本轮不实现、也不发明时机 |
 | `input_sensitive` | `{ session_id, text }` | `ChatView.svelte` | 服务端在聊天链路拦下敏感输入，前端把文本还回输入框 + 提示 |
 | `datastore:lost` | 无 | `App.svelte` | 数据目录失联（U 盘拔出）→ 冻结遮罩，阻止所有输入 |
 | `datastore:restored` | 无 | `App.svelte` | 同路径恢复 → 解冻 |
@@ -407,6 +424,7 @@
 
 | 版本 | 日期 | 变更 |
 | --- | --- | --- |
+| `v0.11` | 2026-09-14 | **余额收敛：新增第 15 条端点 `GET /api/product/credits`（§2.15），并把 `credits` 对象从三个字段收成一个 —— 依据是人工 2026-09-14 拍板的新规则「余额必须从服务器刷新、服务器扣减、客户端只老实刷新余额」（`需求基线` `E9` 规则 2 已改写）。** ① **`credits: {balance, monthUsed, monthKey}` → `{balance}`**：中台账本只有 `balanceMicroCredits`，而 `E9` 规则 5 明令客户端不做跨月加总 ⇒ 后两个字段**既无来源又不许本地算**（§3.8，留着一个永远显示 0 的"事实"）。② **新端点与 §2.6 / §2.7 同形**（回 `{state}`）—— 不新增形状：`credits` 对象已在 §1.3 登记。③ **本条把"余额从哪来"从两个来源两套判据收成一条路径**（`V-11` 那条已被取代的"两条并列合法来源"），于是 `D-002`（SSE 终态帧）**不再是余额链路的阻塞项** —— 终态帧只是"该去拉一次"的触发器。④ **§4 的 `credits_update` 状态改为 ⬜ 无发射方**，触发时机归 `PR-8` / `N-5`（本轮不发明）。⑤ 本文件是 `credits` 对象字段表的 owner；判定理由在 `E9` 规则 2/7，不在此处复述。 |
 | `v0.10` | 2026-09-13 | **`PR-4c` 落地，新增第 14 条端点 `GET /api/product/catalog`（§2.14）**：四值 `state`（`ready` / `absent` / `stale` / `unverifiable`）+ `retryable` + 缓存元数据（`catalogVersion` / `expiresAt`）。判定唯一 owner 在 `internal/productruntime` 的 `assessCatalog`，三输入＝缓存有无 / 是否过期 / 最近一次刷新的结局；优先级是**验签失败压过可用缓存**（不再"列表说一套、横幅说另一套"），其次无缓存，再次过期，最后 `ready`。前端只在 `chatMode.ts` 的 `catalogNoticeKey()` 一处做状态→文案映射。**四条 `B9` 文案新增三个 i18n 键**（`catalog.absent` / `catalog.stale` / `catalog.unverifiable`），第四条（分组空）沿用既有的 `mode.no_models`。**§1.4 增第 14 行。** 顺带把「能不能开新回合」（`canStartTurn()`，`ChatView.send()` 的第一道闸）的判据写清：只认 `state === "ready"`；**服务端侧强制归 `PR-5`**，读同一个判据、不新建第二个。**目录刷新改条件请求**：客户端带已有的 `catalogVersion` 作 `knownVersion`，`304` 与 `{"unchanged":true}` 两种"没变"都认、都不重写缓存；**已过 TTL 时中台不得回"没变"**（`中台交付包` §4.3 已写明，否则客户端会被永久卡在"需要联网更新"）。**周期性刷新仍为 `TODO`**（当前只有登录后强制 + 开选择器按需两条触发路径），已登记在 `开发计划`。 |
 | `v0.9` | 2026-09-13 | **`PR-3`：前端假后端（`web/src/dev/devBackend.ts`）已拆除，§0.1 的「临时假后端」可信度来源随之作废。** ① §0.1 该行改为「已拆除，可信度＝无」，并写明**凡此前只标「形状取自假后端」的行，形状自本版起以 `internal/productruntime` 的实现为准**；② §2.4 `logout` 与 §2.5 `locale` 的 `{"ok": true}` 已**对 Go 实现逐字核对**（`runtime.go:411` / `:431`）并标注行号 —— 这两处此前是靠假后端「自称」的，属本文件里可信度最低的一类；③ 记下该替身为何危险（对**未注册路径回 `{}` + `200`**，`V-24` / `V-46` 因此长期不可见），性质属 §3.9 静默降级。 |
 | `v0.8` | 2026-09-13 | **新增 §1.5「会话级路由」并登记 `PATCH /api/sessions/{id}/chat_mode`（`PR-4d1`，修 `V-46`）。** 起因是用户手工验收 `PR-4d` 时问"切换模型提示 404 Not Found"：前端 `setSessionMode` **先**发的 `PUT /api/sessions/{id}/chat-mode` 是**从未注册**的路由（只被 `devBackend.ts` 的 DEV 假后端接住），真机下第一步就 404，且**把后面的模型请求与两处本地 store 一起吃掉**。新节写清四件事：① 路径取**下划线**（与五个兄弟一致）且改为 `PATCH`；② **不过产品门**（不经 `MountAPI` 缝注册，只走 `requireAuth`）；③ 校验的 owner 是 `internal/chatmode`；④ 请求/应答/错误/副作用与"字段名四处逐字一致"的约束。**为什么不并进 §1.4 / §2**：那两处的编号是产品端点的编号，已被 `开发计划` §1.1 与闭环判据引用，插入会连带改号。 |

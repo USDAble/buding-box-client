@@ -62,7 +62,11 @@ afterEach(() => {
 })
 
 function render() {
-  app = mount(AccountPanel, { target, props: {} }) as Record<string, unknown>
+  // `anchorEl` is a required prop whose value may be null (the panel reads the
+  // trigger's rect for its geometry; null means "no trigger", which is what a
+  // test mounting the panel directly has). Passing `{}` satisfies esbuild but
+  // fails svelte-check — V-63.
+  app = mount(AccountPanel, { target, props: { anchorEl: null } }) as Record<string, unknown>
   flushSync()
 }
 

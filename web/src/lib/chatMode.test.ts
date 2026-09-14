@@ -3,7 +3,11 @@ import { get } from 'svelte/store'
 import { isPrivacyMode, modelDisplayName, setSessionMode } from './chatMode'
 import { chatMode, chatModel, sessions } from './stores'
 import { en, zh, setLocale } from './i18n'
-import type { ChatModeModel, Session } from './api'
+import type { ChatModeModel } from './api'
+// `Session` lives in ./types (the wire-shape owner); ./api only imports it.
+// Importing it from ./api compiles under esbuild but not under svelte-check —
+// V-63, which is why this line is worth a comment.
+import type { Session } from './types'
 
 // Fixtures are built through this helper rather than inline so a row always has
 // the shape the projection produces: a catalog name in both languages and a

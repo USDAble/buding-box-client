@@ -42,7 +42,12 @@ export interface ProductStateDTO {
     nickname: string;
     lastLoginAt: string;
   } | null;
-  credits: { balance: number; monthUsed: number; monthKey: string };
+  /** The balance, and nothing else: the platform's ledger sends one number, and
+   *  the client is forbidden from summing anything by month (E9 rule 5). The
+   *  monthUsed/monthKey pair that used to sit here had no source and would have
+   *  read 0 forever (V-28). It is written by exactly one call:
+   *  refreshCredits() below. */
+  credits: { balance: number };
   plan: { name: string };
   prefs: {
     locale: string;
@@ -345,6 +350,35 @@ export async function logout(): Promise<LogoutResult> {
   // enter (V-22). The server owns the fact; this asks it again.
   await refreshProductState();
   return { revoked: body?.revoked === true };
+}
+
+// ─── Balance refresh ────────────────────────────────────────────────────────
+
+/**
+ * refreshCredits re-reads the balance from the platform and stores it.
+ *
+ * IT IS THE ONLY THING THAT WRITES `credits` (需求基线 E9 rule 2, decided by a
+ * human 2026-09-14: "the server deducts the credits; the client just honestly
+ * re-reads the balance from the server"). Every caller below is therefore a
+ * TRIGGER, not a carrier: none of them knows the new number, they only decide
+ * when to ask. That is what keeps "which of the two numbers wins" from being a
+ * question, and why the gateway's terminal-frame shape (D-002) does not block
+ * this path.
+ *
+ * The server answers with the whole state object, so the store is replaced by
+ * the persisted truth rather than patched locally — the same rule the nickname
+ * and prefs calls follow.
+ *
+ * A failure is thrown, never swallowed into a zero: the caller keeps whatever it
+ * was showing, because an unread answer is not a statement about the user's
+ * credits and 0 is the one number the UI must not invent.
+ */
+export async function refreshCredits(): Promise<number> {
+  const res = await productFetch("/api/product/credits", { headers: windowTokenHeaders() });
+  if (!res.ok) throw new Error(`${res.status} ${res.statusText}`);
+  const body = (await res.json()) as { state: ProductStateDTO };
+  productState.set(body.state);
+  return body.state.credits.balance;
 }
 
 // ─── P4 login form ──────────────────────────────────────────────────────────

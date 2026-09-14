@@ -71,6 +71,7 @@
   import { ws, wsState, wsReconnect } from '../lib/ws'
   import * as api from '../lib/api'
   import { canStartTurn, catalogNoticeKey } from '../lib/chatMode'
+  import { refreshCredits } from '../lib/product'
   import { observeArtifact, resetArtifacts } from '../lib/artifacts'
   import { renderMarkdown, escapeHtml, setupCopyButtons } from '../lib/markdown'
   import { applyToolToggle, buildExportConversation, exportConversationStyles, hasRenderableTurn, TOOL_RESULT_CHARS } from '../lib/exportTranscript'
@@ -1177,6 +1178,14 @@ import QuestionModal from '../components/overlays/QuestionModal.svelte'
           })
         }
       }
+
+      // The turn is over, so the balance may have changed: ask the ledger
+      // (需求基线 E9 rule 2). The turn-completion event is not read for a number -
+      // it cannot be, since nothing in it is defined as one - it is read as "now
+      // is a good moment to look". A failed read leaves the last known value and
+      // reports nothing: the user did not ask, and the points page says so out
+      // loud when they do.
+      void refreshCredits().catch(() => {})
     }))
 
     cleanups.push(ws.on('session_update', (ev) => {

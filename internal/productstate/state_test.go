@@ -165,7 +165,7 @@ func TestInstallIDSurvivesLogoutAndRelogin(t *testing.T) {
 		ActivatedAt: "2026-09-11T08:00:00Z",
 		ExpiresAt:   "2027-09-11T08:00:00Z",
 		BoxCode:     "BOX-DEMO-0001",
-	}, productstate.Credits{}); err != nil {
+	}); err != nil {
 		t.Fatalf("ApplyLogin: %v", err)
 	}
 	if err := first.Logout(); err != nil {
@@ -196,8 +196,14 @@ func TestLogoutKeepsActivationAndAccount(t *testing.T) {
 		ActivatedAt: "2026-09-11T08:00:00Z",
 		ExpiresAt:   "2027-09-11T08:00:00Z",
 		BoxCode:     "BOX-DEMO-0001",
-	}, productstate.Credits{Balance: 12500}); err != nil {
+	}); err != nil {
 		t.Fatalf("ApplyLogin: %v", err)
+	}
+	// The balance is written through its own setter, because that is the only way
+	// it can arrive (E9 rule 2). Asserting it survives logout is therefore also
+	// asserting that logout is not a writer of it.
+	if err := store.SetCredits(productstate.Credits{Balance: 12500}); err != nil {
+		t.Fatalf("SetCredits: %v", err)
 	}
 	if err := store.Logout(); err != nil {
 		t.Fatalf("Logout: %v", err)
@@ -237,7 +243,7 @@ func TestBoxCodeComesFromLoginOutcome(t *testing.T) {
 		ActivatedAt: "2026-09-11T08:00:00Z",
 		ExpiresAt:   "2027-09-11T08:00:00Z",
 		BoxCode:     "BOX-DEMO-0001",
-	}, productstate.Credits{}); err != nil {
+	}); err != nil {
 		t.Fatalf("ApplyLogin: %v", err)
 	}
 
@@ -262,7 +268,7 @@ func TestStateFileCarriesNoToken(t *testing.T) {
 		ActivatedAt: "2026-09-11T08:00:00Z",
 		ExpiresAt:   "2027-09-11T08:00:00Z",
 		BoxCode:     "BOX-DEMO-0001",
-	}, productstate.Credits{}); err != nil {
+	}); err != nil {
 		t.Fatalf("ApplyLogin: %v", err)
 	}
 
@@ -434,7 +440,7 @@ func TestLoggedInImpliesActivatedInProjection(t *testing.T) {
 		Nickname:    "tester",
 		ActivatedAt: "2026-09-11T08:00:00Z",
 		ExpiresAt:   "2027-09-11T08:00:00Z",
-	}, productstate.Credits{}); err != nil {
+	}); err != nil {
 		t.Fatalf("ApplyLogin: %v", err)
 	}
 	if pub := store.PublicState(); !pub.LoggedIn || !pub.Activated {

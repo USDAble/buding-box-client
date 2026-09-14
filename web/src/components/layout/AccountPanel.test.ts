@@ -43,7 +43,7 @@ beforeEach(() => {
     schemaVersion: 1,
     loggedIn: true,
     activated: true,
-    credits: { balance: 0, monthUsed: 0, monthKey: '2026-09' },
+    credits: { balance: 0 },
     plan: { name: '' },
     prefs: { locale: 'zh', inputSensitiveCheck: true, defaultChatMode: 'default' },
     suppressOnboarding: true,

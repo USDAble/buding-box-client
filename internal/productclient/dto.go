@@ -68,6 +68,21 @@ var ErrSessionExpired = errors.New("productclient: session expired")
 // caller.
 var ErrNotModified = errors.New("productclient: not modified")
 
+// ErrLedgerMalformed reports a ledger answer that carries no balance.
+//
+// A sentinel rather than a new business code because this is not the platform
+// refusing anything - it is an answer this client cannot use, and inventing a
+// code would put a value in the error registry that no user can act on
+// (中台交付包 §3.2 owns that registry; code_test.go asserts the two agree).
+//
+// WHY IT IS AN ERROR AND NOT A ZERO. "The platform sent no balance" and "the
+// platform says the balance is zero" have to stay different facts, because zero
+// is the most likely legitimate value here - it is precisely the state that makes
+// the gateway answer 402. Folding them together would let one malformed response
+// wipe a real balance off the screen, and the user would be told they are out of
+// credits without having spent anything (需求基线 E9 rule 2 / C7).
+var ErrLedgerMalformed = errors.New("productclient: ledger answer has no balance")
+
 // Business error codes. Values come from the platform's registry
 // (中台交付包 §3.2) - add a new value there before using it here, so the
 // spelling has one owner.
@@ -133,6 +148,12 @@ const (
 	// V-54: logout was two local acts, so a COPY of data/ kept refreshing after the
 	// user signed out - the one scenario a u-disk product is built around.
 	pathLogout = "/auth/logout"
+	// pathCreditsLedger reads the balance (中台交付包 §4.1 第 9 条 / §5.5). It is
+	// the ONLY thing that writes the local balance projection: a settled terminal
+	// frame, the end of a turn, window focus and the refresh button are all just
+	// reasons to call this, never carriers of the number (需求基线 E9 rule 2,
+	// decided by a human 2026-09-14).
+	pathCreditsLedger = "/credits/ledger"
 )
 
 // PurposeLogin is the only code purpose this build requests.
@@ -217,7 +238,17 @@ type RefreshData struct {
 type BootstrapData struct {
 	Account    Account     `json:"account"`
 	Activation *Activation `json:"activation,omitempty"`
-	Balance    Balance     `json:"balance"`
+	// The platform calls this field `credits`, not `balance` (中台交付包 §4.3).
+	// It read `balance` until V-57, which is why the field never once
+	// deserialised: a wrong tag fails no test and raises no error, it just
+	// quietly leaves a zero behind, and nothing consumed it so nothing noticed.
+	//
+	// It is deliberately kept even though the balance is now written only from
+	// the ledger (需求基线 E9 rule 2, 2026-09-14): deleting it would erase "the
+	// login answer does carry the balance" from the DTO layer, and the next
+	// person to need a balance would reach for the field that is already there.
+	// Reading it is what this field must NOT do - one write path, one owner.
+	Credits Balance `json:"credits"`
 	// The policy envelope rides beside the account summary in the same `data`
 	// object (中台交付包 §4.3), so it is embedded rather than nested: the wire
 	// shape has the signature at the top level, and a named field would need a
@@ -229,8 +260,33 @@ type BootstrapData struct {
 
 // Balance is a read-only projection of the platform ledger. The client never
 // computes credits locally (需求基线 E9).
+//
+// WHY THE FIELD IS A POINTER. "The platform sent no balance" and "the platform
+// says the balance is zero" have to stay different facts, and zero is the most
+// likely legitimate value here - it is exactly the state that makes the gateway
+// answer 402. With an int64 a malformed answer decodes to 0, which would wipe a
+// real balance off the screen and tell the user they are out of credits without
+// having spent anything (E9 rule 2, C7). Absent means "keep what you had"; the
+// client refuses the answer rather than inventing a number.
 type Balance struct {
-	BalanceMicroCredits int64 `json:"balanceMicroCredits"`
+	BalanceMicroCredits *int64 `json:"balanceMicroCredits"`
+}
+
+// CreditsLedgerData is the answer to a ledger read (中台交付包 §5.5).
+//
+// The balance is embedded rather than nested because the wire shape is inline:
+// `data.balanceMicroCredits` sits beside `data.entries`, and the bootstrap
+// envelope's `credits` object is the same balance shape - so there is one
+// spelling of it in this file rather than two that drift (开发规范 §3.8).
+//
+// entries[] IS DELIBERATELY NOT MODELLED. Nothing in the product renders a
+// per-entry view, and an unread DTO is a second definition of a contract fact
+// that no test would keep honest (the same reasoning as V-57, where an unused
+// field sat with a wrong tag for as long as nobody read it). It gets a field on
+// the day a screen shows it; until then the decoder drops it, which is the
+// ordinary reading of "a field this client does not know about".
+type CreditsLedgerData struct {
+	Balance
 }
 
 // CatalogModelsData is the answer to a catalog refresh (中台交付包 §4.3).

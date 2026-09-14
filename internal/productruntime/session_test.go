@@ -35,7 +35,7 @@ func (f *catalogFixture) firstProcess() {
 	if err := f.rt.deps.State.ApplyLogin(productstate.LoginOutcome{
 		PhoneMasked: f.login.Account.PhoneMasked,
 		Nickname:    f.login.Account.Nickname,
-	}, productstate.Credits{}); err != nil {
+	}); err != nil {
 		f.t.Fatalf("ApplyLogin: %v", err)
 	}
 	if err := f.rt.deps.Creds.Save(credentialstore.Credential{
@@ -142,7 +142,7 @@ func TestADamagedCredentialDoesNotStopStartup(t *testing.T) {
 // against a restore that invents a session when there is nothing to restore.
 func TestNoCredentialLeavesTheHolderEmpty(t *testing.T) {
 	f := newCatalogFixture(t)
-	if err := f.rt.deps.State.ApplyLogin(productstate.LoginOutcome{PhoneMasked: "138****9999"}, productstate.Credits{}); err != nil {
+	if err := f.rt.deps.State.ApplyLogin(productstate.LoginOutcome{PhoneMasked: "138****9999"}); err != nil {
 		t.Fatalf("ApplyLogin: %v", err)
 	}
 

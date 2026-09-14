@@ -2,6 +2,7 @@ package productclient_test
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"testing"
 	"time"
@@ -88,6 +89,62 @@ func TestBootstrapWithoutAPolicyIsNotAFailedBootstrap(t *testing.T) {
 	}
 	if data.Account.PhoneMasked == "" {
 		t.Error("the account half was lost along with the missing policy")
+	}
+}
+
+// TestBootstrapDecodesTheCreditsFieldByItsContractName pins the json tag that
+// 需求基线 V-57 caught sitting one word away from the contract.
+//
+// The field read `json:"balance"` for as long as nothing consumed it, while
+// 中台交付包 §4.3 names it `credits` - so the platform's number decoded into
+// nothing, and that is indistinguishable from a platform that sent nothing.
+// This is the nail whose absence let the tag drift.
+//
+// WHY IT DECODES A LITERAL RATHER THAN ASKING THE STAND-IN. The stand-in builds
+// its answer by marshalling productclient.BootstrapData itself
+// (clienttest/server.go's bootstrapResponse), so a mutated tag is written out
+// and read back with the same wrong name and the round trip passes. Measured,
+// not assumed: flipping this tag back to `balance` leaves the stand-in-driven
+// nails green, which is the whole reason the defect lived. A wire shape can only
+// be nailed against bytes that did not come from the type under test, so the
+// body below is the contract spelled out by hand.
+//
+// The pointer is what is asserted, because "no balance in this answer" and "the
+// balance is zero" are different facts in this product (需求基线 E9 rule 2): a
+// tag that stopped matching leaves both nil, and only the pointer can notice.
+// A field this build does not consume still has to decode correctly - the wrong
+// tag is exactly what would turn it back into a balance source for the next
+// person to come along.
+func TestBootstrapDecodesTheCreditsFieldByItsContractName(t *testing.T) {
+	// 中台交付包 §4.3: the account summary, an activation record and the credits
+	// object, all inside `data`. Nothing here mentions the client's field names.
+	body := []byte(`{
+		"requestId": "req_fixture",
+		"data": {
+			"account": {"id": "acct_1", "phoneMasked": "138****1234", "nickname": "tester"},
+			"credits": {"balanceMicroCredits": 2478200}
+		}
+	}`)
+
+	var envelope struct {
+		Data json.RawMessage `json:"data"`
+	}
+	if err := json.Unmarshal(body, &envelope); err != nil {
+		t.Fatalf("unmarshal envelope: %v", err)
+	}
+	var data productclient.BootstrapData
+	if err := json.Unmarshal(envelope.Data, &data); err != nil {
+		t.Fatalf("unmarshal bootstrap data: %v", err)
+	}
+
+	if data.Account.PhoneMasked == "" {
+		t.Error("the fixture body no longer decodes as a bootstrap answer at all")
+	}
+	if data.Credits.BalanceMicroCredits == nil {
+		t.Fatal("the credits field decoded to nothing: the contract calls it `credits` (中台交付包 §4.3), not `balance`")
+	}
+	if got := *data.Credits.BalanceMicroCredits; got != 2_478_200 {
+		t.Errorf("balance = %d, want 2478200", got)
 	}
 }
 

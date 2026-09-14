@@ -190,6 +190,36 @@ func (c *Client) Logout(ctx context.Context) error {
 	return nil
 }
 
+// CreditsLedger reads the balance from the platform ledger (中台交付包 §5.5).
+//
+// IT IS THE ONLY WRITE PATH FOR THE BALANCE. A human decided on 2026-09-14 that
+// the client never deducts, never estimates and never derives: the server
+// deducts, and the client honestly re-reads. Every signal that the balance may
+// have moved - a settled terminal frame, the end of a turn, window focus, the
+// refresh button - is therefore only a reason to call this, never a carrier of
+// the number (需求基线 E9 rule 2). That single owner is what removes the
+// "which of the two numbers wins" question, and with it the two-version
+// acceptance criterion that V-11's "two parallel sources" left behind.
+//
+// WHY doAuthorized RATHER THAN do. The access token having lapsed while the
+// window sits open is the ordinary state of this product, and the balance is
+// exactly the thing that must still refresh then. doAuthorized already carries
+// the exchange-and-replay (C2 rule 3), so there is no second refresh path here.
+//
+// A ledger answer with no balance is refused (ErrLedgerMalformed) instead of
+// being read as zero: the caller keeps the value it had, because an answer this
+// client cannot use is not a statement about the user's credits.
+func (c *Client) CreditsLedger(ctx context.Context) (*CreditsLedgerData, error) {
+	var out CreditsLedgerData
+	if err := c.doAuthorized(ctx, http.MethodGet, pathCreditsLedger, nil, &out); err != nil {
+		return nil, err
+	}
+	if out.BalanceMicroCredits == nil {
+		return nil, ErrLedgerMalformed
+	}
+	return &out, nil
+}
+
 // CatalogModels refreshes the catalog without a re-login, conditionally on the
 // version the caller already holds (中台交付包 §4.3).
 //

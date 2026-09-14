@@ -138,6 +138,7 @@ func (rt *Runtime) Mount(api func(pattern string, h http.HandlerFunc)) {
 	api("GET /api/product/state", rt.handleState)
 	api("GET /api/product/control-plane", rt.handleControlPlane)
 	api("GET /api/product/catalog", rt.handleCatalog)
+	api("GET /api/product/credits", rt.handleCredits)
 	api("GET /api/product/chat-modes", rt.handleChatModes)
 	api("POST /api/product/send-code", rt.handleSendCode)
 	api("POST /api/product/login", rt.handleLogin)
@@ -387,7 +388,9 @@ func (rt *Runtime) handleLogin(w http.ResponseWriter, r *http.Request) {
 		outcome.ExpiresAt = data.Activation.ExpiresAt
 		outcome.BoxCode = data.Activation.BoxCode
 	}
-	if err := rt.deps.State.ApplyLogin(outcome, rt.deps.State.State().Credits); err != nil {
+	// No balance is passed: the projection has one writer, and it is not this
+	// handler. See ApplyLogin's own note.
+	if err := rt.deps.State.ApplyLogin(outcome); err != nil {
 		writeCode(w, http.StatusInternalServerError, productclient.CodeInternalError, nil)
 		return
 	}
@@ -418,6 +421,25 @@ func (rt *Runtime) handleLogin(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		rt.logCatalogOutcome(outcome, err)
+	}
+
+	// The balance is read on the same terms and for the same reason as the
+	// catalog: after the session exists, before the response goes out, and a
+	// failure never blocks the login (需求基线 B1 rule 1). The one exception is a
+	// refused session, which is not a ledger problem at all - the platform has
+	// just told us the token it issued is unusable - so it goes through the same
+	// funnel rather than being logged as a refresh that did not happen.
+	//
+	// It calls the same function the credits endpoint calls rather than reading
+	// the balance out of this login answer, which also carries one. That field is
+	// deliberately left unread: two paths to one number is two chances for them
+	// to disagree (需求基线 E9 rule 2).
+	if _, err := rt.refreshCredits(r.Context()); err != nil {
+		if IsSessionExpired(err) {
+			rt.failPlatform(w, err)
+			return
+		}
+		slog.Warn("login: the balance was not refreshed", "error", err)
 	}
 
 	writeJSON(w, http.StatusOK, map[string]any{"state": rt.deps.State.PublicState()})

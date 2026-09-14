@@ -63,7 +63,7 @@ func (f *sessionFixture) signIn(t *testing.T) {
 		ActivatedAt: "2026-09-12T00:00:00Z",
 		ExpiresAt:   "2027-09-12T00:00:00Z",
 		BoxCode:     "BOX-TEST",
-	}, f.state.State().Credits); err != nil {
+	}); err != nil {
 		t.Fatalf("ApplyLogin: %v", err)
 	}
 	if err := f.creds.Save(credentialstore.Credential{

@@ -103,7 +103,7 @@ describe("refreshProductState", () => {
 
   it("sets ready when the window is logged in", async () => {
     sessionStorage.setItem("octo_window_token", "tok");
-    const state = { schemaVersion: 1, loggedIn: true, activated: true, credits: { balance: 1, monthUsed: 0, monthKey: "" }, plan: { name: "" }, prefs: { locale: "", inputSensitiveCheck: false, defaultChatMode: "" } };
+    const state = { schemaVersion: 1, loggedIn: true, activated: true, credits: { balance: 1 }, plan: { name: "" }, prefs: { locale: "", inputSensitiveCheck: false, defaultChatMode: "" } };
     vi.stubGlobal("fetch", fetchReturning(200, state));
 
     await refreshProductState();
@@ -114,7 +114,7 @@ describe("refreshProductState", () => {
 
   it("sets blocked when the window is not logged in", async () => {
     sessionStorage.setItem("octo_window_token", "tok");
-    vi.stubGlobal("fetch", fetchReturning(200, { schemaVersion: 1, loggedIn: false, activated: false, credits: { balance: 0, monthUsed: 0, monthKey: "" }, plan: { name: "" }, prefs: { locale: "", inputSensitiveCheck: false, defaultChatMode: "" } }));
+    vi.stubGlobal("fetch", fetchReturning(200, { schemaVersion: 1, loggedIn: false, activated: false, credits: { balance: 0 }, plan: { name: "" }, prefs: { locale: "", inputSensitiveCheck: false, defaultChatMode: "" } }));
 
     await refreshProductState();
 
@@ -142,7 +142,7 @@ describe("logout", () => {
       json: async () =>
         String(input).includes("/logout")
           ? {}
-          : { schemaVersion: 1, loggedIn: false, activated: true, credits: { balance: 0, monthUsed: 0, monthKey: "" }, plan: { name: "" }, prefs: { locale: "", inputSensitiveCheck: false, defaultChatMode: "" } },
+          : { schemaVersion: 1, loggedIn: false, activated: true, credits: { balance: 0 }, plan: { name: "" }, prefs: { locale: "", inputSensitiveCheck: false, defaultChatMode: "" } },
     }));
     vi.stubGlobal("fetch", fetchMock);
 
@@ -175,7 +175,7 @@ describe("logout", () => {
                 loggedIn: false,
                 activated: true,
                 account: { phoneMasked: "138****1234", nickname: "tester", lastLoginAt: "" },
-                credits: { balance: 0, monthUsed: 0, monthKey: "" },
+                credits: { balance: 0 },
                 plan: { name: "" },
                 prefs: { locale: "", inputSensitiveCheck: false, defaultChatMode: "" },
               },
@@ -212,7 +212,7 @@ describe("noteSessionLost", () => {
       loggedIn: true,
       activated: true,
       account: { phoneMasked: "138****1234", nickname: "tester", lastLoginAt: "" },
-      credits: { balance: 0, monthUsed: 0, monthKey: "" },
+      credits: { balance: 0 },
       plan: { name: "" },
       prefs: { locale: "", inputSensitiveCheck: false, defaultChatMode: "" },
       suppressOnboarding: true,
@@ -281,7 +281,7 @@ describe("sendCode", () => {
 describe("login", () => {
   const stateDTO = {
     schemaVersion: 1, loggedIn: true, activated: true,
-    credits: { balance: 1, monthUsed: 0, monthKey: "" }, plan: { name: "" },
+    credits: { balance: 1 }, plan: { name: "" },
     prefs: { locale: "", inputSensitiveCheck: false, defaultChatMode: "" },
   };
 
@@ -380,7 +380,7 @@ describe("blocked-page selection (L-B2)", () => {
 
   const stateBody = {
     schemaVersion: 1, loggedIn: false, activated: false,
-    credits: { balance: 0, monthUsed: 0, monthKey: "" }, plan: { name: "" },
+    credits: { balance: 0 }, plan: { name: "" },
     prefs: { locale: "", inputSensitiveCheck: false, defaultChatMode: "" },
   };
 

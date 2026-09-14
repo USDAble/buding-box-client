@@ -99,6 +99,11 @@ type Server struct {
 	bootstrapCode    string  // the code that failure carries
 	logoutStatus     int     // non-zero: logout fails with this status and code
 	logoutCode       string  // the code that failure carries
+	ledgerStatus     int     // non-zero: the ledger read fails with this status and code
+	ledgerCode       string  // the code that failure carries
+	ledgerBalance    *int64  // nil means fixtureBalanceMicroCredits
+	ledgerNoBalance  bool    // answer without balanceMicroCredits at all (a malformed answer)
+	ledgerCount      int     // ledger reads served, so "one per trigger" is checkable
 	tamperPolicy     bool    // sign correctly, then change a byte of the payload
 	omitPolicy       bool    // answer bootstrap with no envelope at all
 	catalogVersion   string  // "" means FixturePolicyVersion
@@ -169,6 +174,25 @@ func (s *Server) RefuseSessionsAfterLogin() {
 	s.refuseSessionsAt = true
 }
 
+// RevokeSessions makes the stand-in forget every token it has already issued, so
+// the next authorised call is refused and the refresh that follows is refused
+// too.
+//
+// WHY THIS IS NOT RefuseSessionsAfterLogin. That one makes the platform
+// distrust tokens from that moment on; this one makes it forget tokens it
+// already handed out. They are different facts and they reach different code:
+// the first is only reachable at a login boundary, the second is reachable while
+// a window sits open - which is when a real session dies (another device signed
+// in, an operator revoked it, the account was removed). The balance refresh is
+// the call that happens at that moment, so a nail that cannot revoke a live
+// session cannot reach the branch at all.
+func (s *Server) RevokeSessions() {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.access = map[string]string{}
+	s.refresh = map[string]string{}
+}
+
 // FailBootstrap makes every bootstrap attempt fail with the given status and
 // business code, which is how the transport and upstream failure tiers are
 // produced (本地API契约 §2.13 的四档失败面).
@@ -197,6 +221,71 @@ func (s *Server) FailLogout(status int, code string) {
 	defer s.mu.Unlock()
 	s.logoutStatus = status
 	s.logoutCode = code
+}
+
+// SetBalance changes what the ledger reports (中台交付包 §5.5).
+//
+// It is a real state change, not a fault injection: the point of L-C4a is that
+// the number on screen follows the server, and the only way to assert that is to
+// move the server's number and watch. A client that computed anything locally
+// would keep showing the old value, which is exactly the failure this switch
+// exists to catch.
+//
+// It also moves the bootstrap fixture's balance, because the platform has one
+// ledger and the stand-in should not have two: a test that changed one and read
+// the other would be asserting on the stand-in's bookkeeping rather than on the
+// client's.
+func (s *Server) SetBalance(microCredits int64) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.ledgerBalance = &microCredits
+}
+
+// Balance reports what the ledger is currently serving, so a test can state the
+// expectation without repeating the fixture constant.
+func (s *Server) Balance() int64 {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.balanceLocked()
+}
+
+func (s *Server) balanceLocked() int64 {
+	if s.ledgerBalance != nil {
+		return *s.ledgerBalance
+	}
+	return fixtureBalanceMicroCredits
+}
+
+// FailLedger makes every ledger read fail with the given status and business
+// code, which is how the "keep the old value" branch is reached
+// (本地API契约 §2.15: a failed read has no verdict in it).
+func (s *Server) FailLedger(status int, code string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.ledgerStatus = status
+	s.ledgerCode = code
+}
+
+// OmitLedgerBalance answers with an otherwise successful ledger response that
+// carries no balanceMicroCredits field.
+//
+// It models a platform that changed its mind about the field, or a proxy that
+// stripped it - an answer this client cannot use. The distinction it protects is
+// "absent" versus "zero": a client that decoded into an int64 would read this as
+// 0 and wipe a real balance off the screen, telling the user they are out of
+// credits without having spent anything (需求基线 E9 rule 2).
+func (s *Server) OmitLedgerBalance() {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.ledgerNoBalance = true
+}
+
+// LedgerReads reports how many ledger reads the stand-in has served, so "the
+// balance is refreshed once per trigger" can be asserted instead of assumed.
+func (s *Server) LedgerReads() int {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.ledgerCount
 }
 
 // TamperPolicy changes one byte of the signed policy after signing it, leaving
@@ -385,6 +474,11 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("POST "+"/v1/auth/logout", s.handleLogout)
 	mux.HandleFunc("GET "+"/v1/client/bootstrap", s.handleBootstrap)
 	mux.HandleFunc("GET "+"/v1/catalog/models", s.handleCatalogModels)
+	// The ledger read (中台交付包 §4.1 第 9 条). It was missing until L-C4a
+	// because the balance had no reader at all: no code path called the endpoint,
+	// and the projection it feeds was written only by the login handler handing
+	// back the value it had just read off disk (V-28).
+	mux.HandleFunc("GET "+"/v1/credits/ledger", s.handleCreditsLedger)
 	// The built-in gateway half (需求基线 C1). It lives on the same stand-in as
 	// the control plane because the developer profile points both hosts at this
 	// one process (internal/productprofile/profiles/developer.json), and a
@@ -726,13 +820,17 @@ func (s *Server) handleBootstrap(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	activation := acct.activation
+	// The same number the ledger serves: the platform has one ledger, and a
+	// stand-in with two would let a test assert on its own bookkeeping instead of
+	// on the client (see SetBalance).
+	balance := s.balanceLocked()
 	data := bootstrapResponse{
 		BootstrapData: productclient.BootstrapData{
 			Account: productclient.Account{
 				ID: acct.id, PhoneMasked: acct.phoneMasked, Nickname: acct.nickname,
 			},
 			Activation: &activation,
-			Balance:    productclient.Balance{BalanceMicroCredits: fixtureBalanceMicroCredits},
+			Credits:    productclient.Balance{BalanceMicroCredits: &balance},
 		},
 	}
 	if !s.omitPolicy {
@@ -744,6 +842,53 @@ func (s *Server) handleBootstrap(w http.ResponseWriter, r *http.Request) {
 		data.PolicyEnvelope = envelope
 	}
 	writeData(w, http.StatusOK, data)
+}
+
+// handleCreditsLedger serves the balance read (中台交付包 §4.1 第 9 条, §5.5).
+//
+// The shape mirrors the platform: the balance sits inline in `data` beside
+// entries[]. A realistic entry is always included even though this client models
+// none, so "an unread field does not disturb the read" is exercised by every
+// call rather than by a test that has to remember to ask for it.
+//
+// The failure switches sit beside the code that models them and are off by
+// default, like FailBootstrap and FailLogout: a stand-in broken by default would
+// make every other test depend on the fault it is not testing.
+func (s *Server) handleCreditsLedger(w http.ResponseWriter, r *http.Request) {
+	token := bearer(r)
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	s.ledgerCount++
+	if s.ledgerCode != "" {
+		writeError(w, s.ledgerStatus, s.ledgerCode, "")
+		return
+	}
+	if _, ok := s.access[token]; !ok {
+		writeError(w, http.StatusUnauthorized, productclient.CodeUnauthorized, "")
+		return
+	}
+
+	entries := []any{map[string]any{
+		"ledgerId":           "led_standin_1",
+		"clientRequestId":    "48ed8953-73a3-4e5e-b4a2-0dc7b0ea0360",
+		"modelId":            "standin-model",
+		"pricingVersion":     "2026-09-a",
+		"state":              "settled",
+		"chargeMicroCredits": 100,
+		"createdAt":          "2026-09-10T08:00:00Z",
+	}}
+	if s.ledgerNoBalance {
+		// A successful envelope with the one field the client needs left out. It
+		// cannot be written with the typed DTO, because carrying that field is the
+		// DTO's whole job.
+		writeData(w, http.StatusOK, map[string]any{"entries": entries})
+		return
+	}
+	writeData(w, http.StatusOK, map[string]any{
+		"balanceMicroCredits": s.balanceLocked(),
+		"entries":             entries,
+	})
 }
 
 // handleCatalogModels serves the conditional catalog refresh (中台交付包 §4.1 第 6

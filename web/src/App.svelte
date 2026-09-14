@@ -1,7 +1,7 @@
 <script lang="ts">
   import { onMount } from 'svelte'
   import { view, sessions, sessionGroups, pinnedSessions, collapsedSessions, activeSessionId, onboardPhase, openAgentSession, chatShowReasoning, globalPermissionMode, globalReasoningEffort, nativeShell, mobileShell, panelContent, panelExpanded, cmdkOpen, settingsModalOpen, createNewSession, clearPendingSessionOpts, isDesktopShell, readLastRoute, writeLastRoute, frozen, showToast } from './lib/stores'
-  import { productPhase, productState, adoptWindowToken, refreshProductState } from './lib/product'
+  import { productPhase, productState, adoptWindowToken, refreshProductState, refreshCredits } from './lib/product'
   import MobileApp from './mobile/MobileApp.svelte'
   import { ws, wsState } from './lib/ws'
   import { notificationsEnabled } from './lib/notifications'
@@ -270,14 +270,24 @@
     ws.on('datastore:lost', () => { frozen.set(true) })
     ws.on('datastore:restored', () => { frozen.set(false) })
 
-    // P6: the server broadcasts the fresh credits after each successful send
-    // (ws_handlers.go handleWSUserMessage). Merge them into the global product
-    // state so the sidebar corner + account panel update live without a round
-    // trip. OCTO-FORK: P6 credits — see
+    // The balance may have moved: ask the ledger (需求基线 E9 rule 2).
+    //
+    // The payload is deliberately NOT merged into the store. Before 2026-09-14
+    // this handler copied `ev.credits` straight in, which made it a second writer
+    // of a number the ledger already owns - and a stale or reordered event would
+    // have overwritten a fresher read with no way to tell. The event is a
+    // TRIGGER; the number comes from refreshCredits() and nowhere else.
+    //
+    // No emitter exists yet: the event's timing belongs to N-5 (PR-8), so this
+    // is the shape that question will be answered against, not a live path.
+    // OCTO-FORK: P6 credits — see
     // dev-docs-usdable/需求/2260906/技术方案/P6-入口隐藏与积分.md.
-    ws.on('credits_update', (ev: any) => {
-      if (!ev?.credits) return
-      productState.update(s => (s ? { ...s, credits: ev.credits } : s))
+    ws.on('credits_update', () => {
+      void refreshCredits().catch(() => {
+        // Swallowed on purpose: this is an unsolicited refresh the user did not
+        // ask for, the number on screen keeps its last value, and the points page
+        // reports a failure at the moment the user asks (CreditsPage.svelte).
+      })
     })
 
     // Restore the persisted UI language from server config so a refresh
@@ -597,6 +607,19 @@
     recompute()
     window.addEventListener('resize', recompute)
     return () => window.removeEventListener('resize', recompute)
+  })
+
+  // Coming back to the window is one of the moments the balance is re-read
+  // (需求基线 E9 rule 2). The user looks away, spends credits in another window or
+  // on another device, and comes back - the number in the corner should be true
+  // when they look at it. A failed read leaves the old value and says nothing:
+  // this trigger is not the user asking, so there is nothing to report.
+  $effect(() => {
+    function onFocus() {
+      void refreshCredits().catch(() => {})
+    }
+    window.addEventListener('focus', onFocus)
+    return () => window.removeEventListener('focus', onFocus)
   })
 </script>
 

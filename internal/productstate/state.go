@@ -63,10 +63,21 @@ type Account struct {
 
 // Credits is a read-only projection of the platform ledger. The client never
 // computes credits locally (E9).
+//
+// ONE FIELD, BECAUSE THERE IS ONE NUMBER. The ledger answers with
+// balanceMicroCredits and nothing else in the way of totals (中台交付包 §5.5),
+// and E9 rule 5 forbids this client from summing anything by month - so a
+// monthly-consumption field would have neither a source nor a permitted
+// derivation. This struct carried MonthUsed and MonthKey until 2026-09-14, where
+// both would have read 0 for the life of the product: a fact invented locally, in
+// the file whose whole job is to mirror the platform (V-28). A number nobody can
+// fill is worse than a missing one, because a screen that shows it claims
+// knowledge it does not have.
+//
+// Balance is the only field the ledger read writes, and that read is the only
+// writer (E9 rule 2: the server deducts, the client re-reads).
 type Credits struct {
-	Balance   int64  `json:"balance"`
-	MonthUsed int64  `json:"monthUsed"`
-	MonthKey  string `json:"monthKey"`
+	Balance int64 `json:"balance"`
 }
 
 // Plan is the subscription name reported by the platform.
@@ -273,12 +284,22 @@ func (s *Store) SetPrefs(locale *string, inputSensitiveCheck *bool, defaultChatM
 }
 
 // ApplyLogin records a successful login: the account, the activation record and
-// the balance projection.
+// the login flag.
 //
 // The activation fields come from the platform, not from the form the user
 // filled in. That is what lets a second installation - a fresh data directory -
 // learn the box code it never had typed into it (E6.1).
-func (s *Store) ApplyLogin(out LoginOutcome, credits Credits) error {
+//
+// WHY IT NO LONGER TAKES THE BALANCE. The balance has one writer - the ledger
+// read (E9 rule 2, 2026-09-14) - so a login is not a place a balance can arrive
+// from, and a parameter that only ever carried "whatever is already on disk" was
+// a read-modify-write: the caller read the projection, then wrote it back, so a
+// ledger read landing in between would be silently overwritten by the stale
+// value. Dropping the parameter makes "login cannot supply a balance" a property
+// of the signature rather than a convention. The projection is left exactly as
+// the platform last described it, which is what a login that learned nothing
+// about credits should do.
+func (s *Store) ApplyLogin(out LoginOutcome) error {
 	return s.mutate(func(st *State) {
 		st.LoggedIn = true
 		st.Activated = true
@@ -292,7 +313,6 @@ func (s *Store) ApplyLogin(out LoginOutcome, credits Credits) error {
 			ExpiresAt:   out.ExpiresAt,
 			BoxCode:     out.BoxCode,
 		}
-		st.Credits = credits
 	})
 }
 
@@ -307,6 +327,10 @@ func (s *Store) SetNickname(nickname string) error {
 }
 
 // SetCredits replaces the balance projection.
+//
+// It has exactly one caller - the ledger read in internal/productruntime - and
+// that is the point rather than an accident (需求基线 E9 rule 2): the balance has
+// one source and one write path, so nothing else has business calling this.
 func (s *Store) SetCredits(credits Credits) error {
 	return s.mutate(func(st *State) { st.Credits = credits })
 }

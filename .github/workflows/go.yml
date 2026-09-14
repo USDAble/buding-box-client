@@ -2,7 +2,13 @@ name: Go
 
 on:
   push:
-    branches: [main]
+    # OCTO-FORK: 把集成分支 v1 接进 CI — see dev-docs-usdable/需求/20260911/需求基线.md §5.6 `V-62`
+    #
+    # v1 is the product integration branch and PRs land there by local merge
+    # followed by a direct push — so without it here, no guard, no Go test and
+    # no frontend check ever runs on the branch everything ships from (V-62;
+    # V-61 is what landed in that blind spot).
+    branches: [main, v1]
   pull_request:
   workflow_dispatch:
 

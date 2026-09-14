@@ -13,7 +13,6 @@
   // AutostartAvailable() is always false there), so no row for it appears.
 
   const nickname = $derived($productState?.account?.nickname ?? '')
-  const phoneMasked = $derived($productState?.account?.phoneMasked ?? '—')
   const currentLocale = $derived($productState?.prefs?.locale || $locale)
   const currentMode = $derived($productState?.prefs?.defaultChatMode || 'default')
 
@@ -113,7 +112,6 @@
         {#if nicknameErr}
           <p class="field-err">{$t(errKey())}</p>
         {/if}
-        <p class="phone"><span class="mini">{$t('product.panel.phone')}</span> {phoneMasked}</p>
       </div>
     </div>
   </section>
@@ -176,7 +174,6 @@
   .save:hover:not(:disabled) { background: var(--blue-5); }
   .save:disabled { opacity: 0.5; cursor: not-allowed; }
   .field-err { margin: 0; font-size: 12px; color: var(--error); }
-  .phone { margin: 0; font-size: 13px; color: var(--text); display: flex; gap: 8px; }
   .seg { display: inline-flex; border: 1px solid var(--border); border-radius: 8px; overflow: hidden; width: fit-content; }
   .seg button {
     border: none; background: transparent; font-family: inherit;

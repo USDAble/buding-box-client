@@ -84,6 +84,7 @@
   import { inlineSlashCommand } from '../lib/inlineSlash'
   import { exportModeStore, selectedMessagesStore } from '../lib/exportStore'
   import { filenameStem } from '../lib/filename'
+  import { fmtDur, thinkingTokenSegment, turnSummarySegments } from '../lib/turnSummary'
   import { anchorBgTasks } from '../lib/bgTaskAnchor'
   import DOMPurify from 'dompurify'
   import ToolGroup from '../components/chat/ToolGroup.svelte'
@@ -315,7 +316,11 @@ import QuestionModal from '../components/overlays/QuestionModal.svelte'
   let typingActive = $derived(streaming && lastTextAt > 0 && (now - lastTextAt) < CARET_IDLE_MS)
   // Output-token estimate (~chars/4), derived from persisted stores — the live
   // assistant text plus the reasoning buffer — so it survives view remounts
-  // alongside the elapsed clock instead of resetting to 0.
+  // alongside the elapsed clock instead of resetting to 0. Still an estimate:
+  // mid-turn the provider has not reported anything yet, so this is the only
+  // number available and the "~" in the readout is honest. The turn's REAL
+  // output count arrives with the `complete` event and is shown in the summary
+  // line underneath (PR-5d2).
   let turnOutChars = $derived(
     ((msgs.find((m: any) => m.streaming && m.type === 'assistant')?.content?.length) ?? 0) + thinking.length
   )
@@ -327,14 +332,16 @@ import QuestionModal from '../components/overlays/QuestionModal.svelte'
       ? progress.message
       : $t(THINKING_KEYS[Math.floor(thinkElapsed / 3) % THINKING_KEYS.length])
   )
-  // Uplink size: the context being sent up (last known occupancy in tokens).
+  // Uplink size: the context being sent up. This is the provider-REPORTED
+  // occupancy (context_tokens on the wire comes from Agent.RealContextTokens /
+  // Session.LastContextTokens), not a transcript estimate — which is why the
+  // readout below prints it without the "~" that the output-side estimate
+  // carries. When no round-trip has reported usage yet the store holds 0 and
+  // that branch prints the bare arrow instead of a made-up number.
   let ctxTokens = $derived(Number($chatContextTokens[$activeSessionId ?? ''] ?? 0))
-  function fmtDur(s: number): string {
-    return s < 60 ? `${s}s` : `${Math.floor(s / 60)}m${s % 60}s`
-  }
-  function fmtTokens(n: number): string {
-    return n >= 1000 ? `${(n / 1000).toFixed(1)}k` : `${n}`
-  }
+  // Duration/token formatting and which summary segments exist live in
+  // lib/turnSummary.ts, so the "never print an unmeasured 0" rule has a name and
+  // a nail instead of being a template literal inside this file.
   // HH:MM for the message meta row; only optimistic sends carry createdAt, so
   // the row simply omits the time for replayed history.
   function fmtTime(ts: number): string {
@@ -1136,10 +1143,18 @@ import QuestionModal from '../components/overlays/QuestionModal.svelte'
       // fields on error/interrupt, so this only fires on a clean completion.
       // cache_pct is omitted (not 0) when the backend reported no cache
       // activity, so cache-less providers keep the two-part line.
+      //
+      // tokens == 0 is treated as "no usage reported" and dropped from the line
+      // rather than printed. A gateway that reports no usage (the stand-in did
+      // exactly that until PR-5d2) would otherwise put "0 tokens" in front of
+      // the user, which reads as a measurement and is not one — the same reason
+      // cache_pct is omitted instead of shown as 0%. The elapsed time still
+      // shows: it was measured here.
       const durationMs = (ev as any).duration_ms
       const tokens = (ev as any).tokens
       const cachePct = (ev as any).cache_pct
       if (typeof durationMs === 'number' && typeof tokens === 'number') {
+        const segs = turnSummarySegments(durationMs, tokens, cachePct)
         // A silent panel-update turn draws nothing in the transcript, so a
         // summary notice would float anchored to nothing. Hand the stats to
         // the panel's own status chip instead (GenuiBlock, via panelTurnStats)
@@ -1152,8 +1167,7 @@ import QuestionModal from '../components/overlays/QuestionModal.svelte'
           const actionPanel = silentActionPanel(precedingSaid(list, k))
           if (actionPanel) {
             if (isSilentPairAt(list, k)) {
-              panelTurnStats[`${sid}\x00${actionPanel}`] =
-                `${fmtDur(Math.round(durationMs / 1000))} · ${fmtTokens(tokens)} tokens`
+              panelTurnStats[`${sid}\x00${actionPanel}`] = segs.join(' · ')
               handed = true
             } else {
               // Degraded silent turn: the model chose to answer with a visible
@@ -1169,7 +1183,7 @@ import QuestionModal from '../components/overlays/QuestionModal.svelte'
           addChatMsg(sid, {
             id: uid('sum'),
             type: 'notice',
-            content: `⏱ ${fmtDur(Math.round(durationMs / 1000))}, ${fmtTokens(tokens)} tokens${typeof cachePct === 'number' ? `, cache ${cachePct}%` : ''}`,
+            content: `⏱ ${segs.join(', ')}`,
             level: 'info',
             createdAt: Date.now(),
             streaming: false,
@@ -3037,7 +3051,7 @@ import QuestionModal from '../components/overlays/QuestionModal.svelte'
                   <summary class="think-summary">
                     <iconify-icon icon="ant-design:bulb-outlined" width="13"></iconify-icon>
                     <span>{$t('chat.thinking')}</span>
-                    <span class="think-meta mono">{fmtDur(thinkElapsed)}{#if thinkTokens > 0} · ↓ ~{fmtTokens(thinkTokens)} tokens{:else if ctxTokens > 0} · ↑ ~{fmtTokens(ctxTokens)} tokens{:else} · ↑{/if}</span>
+                    <span class="think-meta mono">{fmtDur(thinkElapsed)} · {thinkingTokenSegment(thinkTokens, ctxTokens)}</span>
                   </summary>
                   <div class="think-body" use:setupAssistantEl>{@html throttledMarkdown('live-thinking:' + id, thinking, true, showReasoning)}</div>
                 </details>
@@ -3057,7 +3071,7 @@ import QuestionModal from '../components/overlays/QuestionModal.svelte'
                   <span style="animation-delay:0.4s"></span>
                 </span>
                 <span class="think-meta mono">
-                  {fmtDur(thinkElapsed)}{#if thinkTokens > 0} · ↓ ~{fmtTokens(thinkTokens)} tokens{:else if ctxTokens > 0} · ↑ ~{fmtTokens(ctxTokens)} tokens{:else} · ↑{/if}
+                  {fmtDur(thinkElapsed)} · {thinkingTokenSegment(thinkTokens, ctxTokens)}
                 </span>
               </div>
             </div>

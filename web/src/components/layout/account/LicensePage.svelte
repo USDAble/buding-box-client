@@ -26,6 +26,12 @@
   // older data root predates the field, so absence renders "—" rather than
   // blocking anything (需求基线 E5 rule 1, PQ19).
   const boxCode = $derived($productState?.activation?.boxCode || '—')
+
+  // The bound phone is masked by the platform already (productState.account.
+  // phoneMasked is the server's field), so render it verbatim — a second mask
+  // would mangle 138****8000 into 138******00 (E5 rule 1). Older data roots
+  // predate the field, so absence renders "—" rather than blocking (PQ19).
+  const phoneMasked = $derived($productState?.account?.phoneMasked ?? '—')
 </script>
 
 <div class="license">
@@ -47,6 +53,7 @@
   {/if}
 
   <p class="valid">{validUntil($productState?.activation?.expiresAt)}</p>
+  <p class="valid">{$t('product.panel.license_phone').replaceAll('{phone}', phoneMasked)}</p>
   <p class="valid">{$t('product.panel.license_box_code').replaceAll('{code}', boxCode)}</p>
 </div>
 

@@ -59,8 +59,11 @@ GOFILES := $(shell find . -name '*.go' -not -path './vendor/*' -not -path '*/_ve
 RG_EMBED_DIR := internal/tools/rgembed/binaries
 RG_EMBED_BIN := $(RG_EMBED_DIR)/rg
 
-.PHONY: all build install test cover vet fmt fmt-check tidy clean \
+.PHONY: all build install test test-production cover vet fmt fmt-check tidy clean \
         brand brand-check datapath-check norms-check agents agents-check \
+        docs-table-check \
+        reuse-check server-diff-check release-profile-check release-config-check \
+        preflight-check \
         eval-build eval-list eval \
         rg-embed rg-embed-clean \
         bundle-tools-windows bundle-tools-macos \
@@ -167,6 +170,23 @@ install: web-build rg-embed
 test:
 	go test -race $(GOFLAGS) -tags='$(GOTAGS)' ./...
 
+# OCTO-FORK: 六条守卫的 Makefile 接线（TODO-02 / V-1） — see
+# dev-docs-usdable/需求/20260911/TODO.md §TODO-02
+#
+# Test the build that is actually shipped: everything compiled with the
+# product_production tag, which selects the production runtime profile and
+# compiles the developer-only paths out. This is the configuration a released
+# binary runs, so it is the one whose tests have to pass.
+test-production:
+	go build -tags product_production ./...
+	go vet -tags product_production ./...
+	go test -tags product_production $(GOFLAGS) ./...
+	# cmd/octo-desktop is a nested module, so the lines above skip it — and that
+	# module is where the shipped desktop binary is built from. Its
+	# production-only tests are what prove the shipped build installs the host
+	# port and stays fail-closed, so they run here too.
+	cd cmd/octo-desktop && go test -tags product_production $(GOFLAGS) ./...
+
 cover:
 	go test $(GOFLAGS) -tags='$(GOTAGS)' -coverprofile=coverage.out ./...
 	go tool cover -html=coverage.out -o coverage.html
@@ -249,6 +269,70 @@ agents-check:
 marker-check:
 	node scripts/fork-marker-guard.mjs
 	node --test scripts/fork-marker-guard.test.mjs
+
+# ── docs table guard (V-56 / V-59) ───────────────────────────────────────────
+# OCTO-FORK: 表格容器守卫（V-59 处置 ③） — see dev-docs-usdable/需求/20260911/需求基线.md §5.6 `V-59`
+#
+# The registers carry their facts in tables, so a row whose cell count does not
+# match its header renders as shifted columns and the record becomes invisible
+# while staying true. Six instances were found by hand on 2026-09-14 and four of
+# them were in the register; wiring this guard then found eight more that no
+# audit had seen. It asserts container integrity only — whether a row's content
+# is up to date needs per-column semantics and stays a human judgement (V-52).
+docs-table-check:
+	node scripts/docs-table-guard.mjs
+	node --test scripts/docs-table-guard.test.mjs
+
+# ── remaining fork guards (TODO-02 / V-1) ────────────────────────────────────
+# OCTO-FORK: 四条守卫的 Makefile 接线（此前只有 CI 与本文件的注释声称它们在跑） — see
+# dev-docs-usdable/需求/20260911/TODO.md §TODO-02
+#
+# These four scripts already existed on v1 with their unit tests, and
+# scripts/preflight.mjs already ran them at packaging time — so packaging was
+# protected while committing was not. They are wired here so `make *-check` and
+# CI enforce the same rules at the point a change is made, which is where V-1's
+# "the rule exists but nothing asserts it" is actually fixed.
+#
+# reuse-guard exists because the 中台 gateway assembles an app.Sender over
+# internal/provider instead of speaking HTTP/SSE itself. The scan is a no-op
+# until internal/productclient/gateway exists.
+reuse-check:
+	node scripts/reuse-guard.mjs
+	node --test scripts/reuse-guard.test.mjs
+
+# server-diff-guard is a ratchet: it records today's fork debt (apiProduct call
+# sites, per-file diff ceilings, product files parked in the upstream tree) as a
+# ceiling that may only shrink. It compares against the upstream-tracking
+# branch (origin/main or main), so one must be fetched — locally that means a
+# recent `git fetch origin main`.
+server-diff-check:
+	node scripts/server-diff-guard.mjs
+	node --test scripts/server-diff-guard.test.mjs
+
+# release-profile-guard is what stops a release build that forgot
+# `-tags product_production`: the default profile branch is the developer one,
+# so a pipeline that forgets the tag still compiles, still passes every test and
+# still produces a working binary — it just ships a developer package where
+# OCTO_DESKTOP_DEV_URL, environment provider keys and OCTO_DATA_ROOT all apply.
+release-profile-check:
+	node scripts/release-profile-guard.mjs
+	node --test scripts/release-profile-guard.test.mjs
+
+# release-config-guard checks the *content* of the embedded production profile:
+# a release that still carries the `.invalid` placeholder hosts validates
+# perfectly and then fails every control-plane call at runtime. Advisory —
+# packaging an unconfigured build is legitimate while Q1 is open.
+release-config-check:
+	node scripts/release-config-guard.mjs
+	node --test scripts/release-config-guard.test.mjs
+
+# preflight-check is the packaging-time tier: a shipped artifact cannot be
+# produced from a tree the guards would reject. CI already runs them on a
+# commit; packaging is a later, different act — it can start from a dirty tree,
+# a stale checkout, or a machine that skipped CI. HARD checks fail the build;
+# the release-config and server-diff checks only warn.
+preflight-check:
+	node scripts/preflight.mjs
 
 # ── ripgrep embed (build-time only) ──────────────────────────────────────────
 # Downloads the matching rg release for GOOS/GOARCH, extracts the binary,

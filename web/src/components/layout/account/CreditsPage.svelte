@@ -1,10 +1,11 @@
 <script lang="ts">
   import { onMount } from 'svelte'
-  import { t } from '../../../lib/i18n'
+  import { t, tr } from '../../../lib/i18n'
   import { productState, refreshCredits } from '../../../lib/product'
+  import { showToast } from '../../../lib/stores'
 
-  // Points page (P5 shell): the balance, plus the placeholder "top up" entry
-  // point (no real payment, 需求 §7).
+  // Points page (P5 shell): the balance, plus the "top up" entry point (no real
+  // payment, 需求 §7).
   //
   // THE BALANCE IS NEVER COMPUTED HERE. It is whatever the platform's ledger last
   // said (需求基线 E9 rule 2: the server deducts, the client re-reads), and this
@@ -34,6 +35,22 @@
   }
 
   onMount(reload)
+
+  // 充值 (L-C4b, E10). The button used to be `disabled`, which is a dead end
+  // rather than a placeholder: a disabled control cannot be focused or clicked
+  // and its `title` never appears on a touch screen, so "点击打开占位或外链"
+  // could not be satisfied at all. There is no top-up URL in the contract, the
+  // brand file or the profile, and inventing one in the frontend would put the
+  // address's owner in the wrong layer - so the entry point answers with the
+  // app's existing coming-soon channel instead (showToast, the same one
+  // SensitiveDictPage and SettingsPage use) and does not open anything.
+  //
+  // Deliberately NOT gated on the balance: 需求基线 E9 rule 6 / PQ8 make the
+  // entry permanent, because the moment a user wants to top up is usually the
+  // moment they still have enough.
+  function recharge() {
+    showToast(tr('product.panel.recharge_soon'))
+  }
 </script>
 
 <div class="credits">
@@ -50,10 +67,9 @@
     {#if failed}
       <p class="note warn">{$t('product.panel.refresh_failed')}</p>
     {/if}
-    <button class="btn-recharge" disabled title={$t('product.panel.recharge_soon')}>
+    <button class="btn-recharge" onclick={recharge}>
       {$t('product.panel.recharge')}
     </button>
-    <p class="note">{$t('product.panel.recharge_soon')}</p>
   </div>
 </div>
 
@@ -77,9 +93,9 @@
   .btn-recharge {
     height: 32px; padding: 0 18px; border: 1px solid var(--blue-6);
     background: transparent; color: var(--blue-6); border-radius: 8px;
-    font-size: 13px; font-weight: 500; cursor: not-allowed; font-family: inherit;
-    opacity: 0.55;
+    font-size: 13px; font-weight: 500; cursor: pointer; font-family: inherit;
   }
+  .btn-recharge:hover { background: var(--blue-1, rgba(22,119,255,0.06)); }
   .note { margin: 0; font-size: 12px; color: var(--text-tertiary); line-height: 1.6; }
   .warn { color: var(--red-6, #d4380d); }
 </style>

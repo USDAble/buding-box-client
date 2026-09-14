@@ -56,6 +56,20 @@ const (
 	// FixtureBoundPhone owns FixtureBoundPhoneActivationCode.
 	FixtureBoundPhone = "13800000000"
 
+	// StandinPromptTokens / StandinCompletionTokens are what the stand-in reports
+	// in its usage frame for one turn (PR-5d2).
+	//
+	// Exported because the nails that prove the number travelled have to compare
+	// against the same value the fixture sends, and because they are deliberately
+	// NOT derivable from the reply: the fixture's answer is ~60 characters, so a
+	// chars/4 estimate is around 15, while the prompt count is two orders of
+	// magnitude larger and the completion count is not a whole number of
+	// quarter-characters either. That gap is the point — a build that fell back
+	// to the transcript estimate instead of reading the usage frame must fail
+	// the nail rather than coincidentally match it (V-57).
+	StandinPromptTokens     = 4096
+	StandinCompletionTokens = 217
+
 	fixtureBalanceMicroCredits = 12500
 	fixtureAccessTokenTTL      = 7200
 )
@@ -1046,6 +1060,7 @@ func (s *Server) handleCompletions(w http.ResponseWriter, r *http.Request) {
 				"message":       map[string]any{"role": "assistant", "content": reply, "reasoning_content": trace},
 				"finish_reason": "stop",
 			}},
+			"usage": standinUsage(),
 		})
 		return
 	}
@@ -1066,6 +1081,28 @@ func (s *Server) handleCompletions(w http.ResponseWriter, r *http.Request) {
 				"delta":         delta,
 				"finish_reason": finish,
 			}},
+		})
+		if err != nil {
+			return
+		}
+		fmt.Fprintf(w, "data: %s\n\n", body)
+		if flusher != nil {
+			flusher.Flush()
+		}
+	}
+
+	// The usage frame: an empty choices array, which is where an OpenAI-protocol
+	// server puts it when stream_options.include_usage is set — and the branch
+	// internal/provider/openai reads before it looks at any choice. Emitted on
+	// every streamed turn, before [DONE], unconditionally; see standinUsage.
+	usageChunk := func() {
+		body, err := json.Marshal(map[string]any{
+			"id":      "chatcmpl-standin",
+			"object":  "chat.completion.chunk",
+			"created": s.now().Unix(),
+			"model":   req.Model,
+			"choices": []any{},
+			"usage":   standinUsage(),
 		})
 		if err != nil {
 			return
@@ -1102,6 +1139,7 @@ func (s *Server) handleCompletions(w http.ResponseWriter, r *http.Request) {
 		// finish_reason is "tool_calls" here, not "stop": the OpenAI spelling the
 		// provider adapter normalises to "tool_use" before the agent loop sees it.
 		chunk(map[string]any{}, "tool_calls")
+		usageChunk()
 		fmt.Fprint(w, "data: [DONE]\n\n")
 		if flusher != nil {
 			flusher.Flush()
@@ -1124,9 +1162,33 @@ func (s *Server) handleCompletions(w http.ResponseWriter, r *http.Request) {
 		chunk(map[string]any{"content": string(runes[i:end])}, nil)
 	}
 	chunk(map[string]any{}, "stop")
+	usageChunk()
 	fmt.Fprint(w, "data: [DONE]\n\n")
 	if flusher != nil {
 		flusher.Flush()
+	}
+}
+
+// usageChunk writes the usage frame the way an OpenAI-protocol server does when
+// the client asked for stream_options.include_usage: one frame with an EMPTY
+// choices array, after the finish_reason and before [DONE].
+//
+// The shape matters to the client as much as the numbers do.
+// internal/provider/openai reads chunk-level usage before it checks whether there
+// are any choices at all, so an empty choices array is the branch this
+// exercises — and it is the branch a real gateway takes, which is why emitting
+// usage attached to a content chunk instead would leave the production path
+// unexercised at the one layer a person can watch.
+//
+// Emitted unconditionally, without reading stream_options back: missing usage is
+// the failure this fixture exists to remove (the turn summary read "0 tokens"),
+// and a fixture that only emitted it when asked would reproduce the condition it
+// was built to catch.
+func standinUsage() map[string]any {
+	return map[string]any{
+		"prompt_tokens":     StandinPromptTokens,
+		"completion_tokens": StandinCompletionTokens,
+		"total_tokens":      StandinPromptTokens + StandinCompletionTokens,
 	}
 }
 

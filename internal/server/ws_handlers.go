@@ -516,6 +516,15 @@ func (s *Server) handleWSUserMessage(conn *wsConn, msg *wsMsgUserMessage) {
 			return
 		}
 	}
+
+	// OCTO-FORK: PR-6b3 — the input gate, before any binding is taken and before
+	// the message is broadcast or persisted: a refused message leaves no mark on
+	// the session (需求 D1). Consults what the user typed; the local slash
+	// commands above never reach a model and are not input. See 开发计划 §PR-6b3.
+	if masked, refuse := s.sensInputVerdict(content); refuse {
+		s.broadcastInputSensitive(sid, masked)
+		return
+	}
 	// Document attachments ride as path notes in the text so the model can
 	// read_file them and the transcript keeps a visible record.
 	if len(att.notes) > 0 {

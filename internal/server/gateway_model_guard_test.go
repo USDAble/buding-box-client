@@ -29,11 +29,49 @@ const testGatewayPrefix = "buding-gateway::"
 // It is the difference between "we returned a nicer error" and "nothing left the
 // device", and only the second is the guarantee B4 asks for — so the nails below
 // assert the count, not just the error.
-type countingSender struct{ calls int }
+//
+// lastUserText is the same question asked about the CONTENT: PR-6b3's gate sits
+// on the way through, so "the message was delivered as-is" (as opposed to
+// rewritten by a gate that was wired in as "always take my output") is its own
+// fact. It is empty when no user text was sent.
+//
+// replyText is the answer the stub gives, empty meaning the usual "stub reply".
+// It exists for the one nail that has to observe the OUTPUT side on the same
+// server: 需求 D1 lets the user turn the input check off, and turning it off must
+// not touch output masking (G2).
+type countingSender struct {
+	calls        int
+	lastUserText string
+	replyText    string
+}
 
-func (c *countingSender) SendMessages(_ context.Context, _, _ string, _ []agent.Message, _ int) (agent.Reply, error) {
+func (c *countingSender) SendMessages(_ context.Context, _, _ string, msgs []agent.Message, _ int) (agent.Reply, error) {
 	c.calls++
+	c.lastUserText = lastUserText(msgs)
+	if c.replyText != "" {
+		return agent.Reply{Content: c.replyText}, nil
+	}
 	return agent.Reply{Content: "stub reply"}, nil
+}
+
+// lastUserText returns the text of the last user message, so a stub can record
+// what the model was actually asked.
+func lastUserText(msgs []agent.Message) string {
+	for i := len(msgs) - 1; i >= 0; i-- {
+		if msgs[i].Role != agent.RoleUser {
+			continue
+		}
+		if msgs[i].Content != "" {
+			return msgs[i].Content
+		}
+		for _, b := range msgs[i].Blocks {
+			if b.Type == "text" {
+				return b.Text
+			}
+		}
+		return ""
+	}
+	return ""
 }
 
 // serverWithCountingSender builds a server whose default sender is the counting

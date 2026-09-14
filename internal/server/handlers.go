@@ -333,6 +333,13 @@ func (s *Server) handleCreateChat(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// OCTO-FORK: PR-6b3 — the input gate, before the session is minted: a refused
+	// message must not leave a session file behind (需求 D1). See 开发计划 §PR-6b3.
+	if masked, refuse := s.sensInputVerdict(req.Message); refuse {
+		refuseSensitiveInput(w, masked)
+		return
+	}
+
 	model := s.model
 	if req.Model != "" {
 		model = req.Model
@@ -394,6 +401,14 @@ func (s *Server) handleTurn(w http.ResponseWriter, r *http.Request) {
 	}
 	if strings.TrimSpace(req.Message) == "" {
 		writeError(w, http.StatusBadRequest, "message is required")
+		return
+	}
+
+	// OCTO-FORK: PR-6b3 — the input gate, before the session binding is taken:
+	// a refused message is not a turn, so it must not take the session over from
+	// the window holding it. See 开发计划 §PR-6b3.
+	if masked, refuse := s.sensInputVerdict(req.Message); refuse {
+		refuseSensitiveInput(w, masked)
 		return
 	}
 

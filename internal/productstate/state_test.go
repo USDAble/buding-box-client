@@ -68,6 +68,37 @@ func TestFirstRunSeedsInstallID(t *testing.T) {
 	}
 }
 
+// D1: the input check starts ON. The zero value would leave a fresh install with
+// detection off while the requirement says 默认开启 - and because the composer
+// reads this field as `!== false` (Composer.svelte:1127), "off by default" means
+// the whole input gate is unreachable until the user finds the switch. Every
+// other nail in this batch stays green through that, because they either turn
+// the switch on themselves or never look at it.
+//
+// The assertion reads the FILE, not just the struct: "seeded in memory but not
+// written" is the mirror-image shape, and a struct assertion cannot see it - the
+// same blind spot V-57 recorded for a wrong JSON tag.
+func TestFirstRunSeedsTheInputCheckOn(t *testing.T) {
+	root := useTempDataRoot(t)
+
+	store, err := productstate.Open(productstate.Options{Locale: "zh"})
+	if err != nil {
+		t.Fatalf("Open: %v", err)
+	}
+	if !store.PublicState().Prefs.InputSensitiveCheck {
+		t.Error("a fresh install reports the input check off; 需求 D1 says 默认开启")
+	}
+
+	onDisk := readRaw(t, statePath(t, root))
+	prefs, ok := onDisk["prefs"].(map[string]any)
+	if !ok {
+		t.Fatalf("no prefs object on disk: %v", onDisk)
+	}
+	if got := prefs["inputSensitiveCheck"]; got != true {
+		t.Errorf("prefs.inputSensitiveCheck on disk = %v, want true", got)
+	}
+}
+
 // E6.4 rule 2 (as relaxed on 2026-09-11): an existing file is read, never
 // rewritten. This is the guarantee that carries the whole rule now that startup
 // seeding is allowed - and it is the half that actually protects a user, because

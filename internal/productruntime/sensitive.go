@@ -157,3 +157,74 @@ func (rt *Runtime) handleSensitiveDictImport(w http.ResponseWriter, r *http.Requ
 
 	writeJSON(w, http.StatusOK, map[string]any{"added": added, "skipped": skipped})
 }
+
+// codeInputSensitive is the code the CHAT path carries when the input gate
+// refuses a message (本地API契约 §3, WS event §4). It names the message the user
+// just typed, so it is deliberately not in envelope.go's fieldLevelCodes: that
+// table maps a code onto the input box to redden, and the answer here already
+// carries the replacement text the box should hold instead.
+const codeInputSensitive = "input_sensitive"
+
+// SensitiveInputGate is the server-side input gate: it answers "this text must
+// not be sent, and here is its masked form".
+//
+// WHY IT IS A METHOD HANDED OUT RATHER THAN A ROUTE. The composer checks before
+// sending, but the composer is a browser - 需求 D1's substance is that the check
+// also runs where a frontend cannot skip it. That place is the turn entry point,
+// which lives in internal/server; that package may not import this one (layering)
+// and must not hold a *productstate.Store (开发规范 §3.8), yet the judgement needs
+// both the user's switch and the one engine. So the two facts stay here and only
+// the verdict travels - the same shape as CatalogOffers and SensitiveEngine
+// (开发规范 §3.7, 开发计划 §PR-6b3).
+//
+// THE ORDER MATTERS AT THE CALL SITE, not here: the caller must refuse before it
+// broadcasts or persists the user message, or the transcript keeps a question
+// that was never asked. That is why this is a pre-turn seam and not a wrapper
+// around the sender - see 开发计划 §PR-6b3's refutation of the decorator.
+//
+// The second return value is "refuse". On false the first is meaningless (empty,
+// not the original text), so a caller that forwards it to a client must use its
+// own input when refuse is false - handleSensitiveCheck does exactly that, which
+// is where §2.12's `masked 字段始终在` comes from.
+func (rt *Runtime) SensitiveInputGate(text string) (string, bool) {
+	if rt.deps.Sensitive == nil || rt.deps.State == nil {
+		return "", false
+	}
+	// Read at call time, not at assembly: the switch is a user preference that
+	// changes while the process runs (PR-6b1 registers the write path), so a
+	// value captured once would keep masking after the user turned it off.
+	if !rt.deps.State.State().Prefs.InputSensitiveCheck {
+		return "", false
+	}
+	res := rt.deps.Sensitive.Filter(text)
+	if !res.Matched() {
+		return "", false
+	}
+	return res.Text, true
+}
+
+// handleSensitiveCheck implements POST /api/product/sensitive/check (§2.12):
+// the composer's instant check, so the input box can be substituted and the
+// notice shown without a round trip through the chat path.
+//
+// The answer always carries `masked` - on a miss it is the original text. The
+// archived handler omitted the field when no engine was wired; that is the one
+// shape the frontend has no branch for, and a missing field decodes identically
+// to an empty one, so the nail for it asserts presence rather than value.
+//
+// There is no business error: an empty text is a miss, not a 400, because this
+// route is called on the way to sending a message and an error path here would
+// surface as a toast on an ordinary action.
+func (rt *Runtime) handleSensitiveCheck(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		Text string `json:"text"`
+	}
+	if !decodeBody(w, r, &req) {
+		return
+	}
+	masked, hit := rt.SensitiveInputGate(req.Text)
+	if !hit {
+		masked = req.Text
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"hit": hit, "masked": masked})
+}

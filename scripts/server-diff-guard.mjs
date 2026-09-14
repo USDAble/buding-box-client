@@ -192,7 +192,7 @@ export const ROUTE_TABLE_CEILING = 1
 export const DEBT_CEILINGS = [
   {
     file: 'internal/server/server.go',
-    ceiling: 546,
+    ceiling: 565,
     why:
       'the product seam and the data-root migration: Config.MountAPI/WindowToken/RequireGateway/ControlPlaneReady plumbing, the productAPI registrar (a method value, not a call site), V-36/PR-5c/PR-5b1 gates on the turn path, and Config.CatalogOffers + its guard (PR-5e, L-C7). ' +
       'Measured 2026-09-14 at 533 after excluding marker lines (see the marker note in forkDiffLines) and after trimming the PR-5e prose to pointers into 开发计划 §PR-5e; of the added lines the large majority are prose explaining those seams. ' +
@@ -200,27 +200,38 @@ export const DEBT_CEILINGS = [
       'PR-6a added 14: the import, the sensitiveEngine field, its assignment, the three agent-construction sites that now go through s.wrapSensitive, and the same wrap on the resolved lite sender — see the fifth raise note above for why no smaller form exists. ' +
       'PR-6b1 added 15 (seventh raise), all of it Config.SensitiveEngine: the field, its documentation, and the one-line assignment that now reads it. ' +
       'It cannot be folded out the way PR-5d3 folded errModelNotListed: a Config field is where a build hands this package a dependency it may not import, so it has to be declared on the struct that receives it — the alternative is a second engine built here, which is the defect the field exists to prevent (two readers of data/sensitive-words.txt, so the screen and the word-list routes could disagree; see 开发计划 §PR-6b1). ' +
-      'The prose in those 15 lines is the three questions the header asks: why this package rather than a fork-owned one (the type is upstream s), why not nil-defaulted instead of injected (nil then means a second engine, and the fallback for `octo serve` already covers the no-injection case), and why no smaller form exists (a field plus one call).',
+      'The prose in those 15 lines is the three questions the header asks: why this package rather than a fork-owned one (the type is upstream s), why not nil-defaulted instead of injected (nil then means a second engine, and the fallback for `octo serve` already covers the no-injection case), and why no smaller form exists (a field plus one call). ' +
+      'PR-6b3 added 19 (eighth raise), all of it Config.SensitiveInputGate: the field and its documentation. ' +
+      'WHY IT CANNOT BE FOLDED OUT: the gate has to fire where the three turn entry points are, and those live in this package; the same shape as SensitiveEngine above, and for the same reason — a Config field is where a build hands this package a dependency it may not import. The alternative the archived implementation used, letting internal/server hold a *productstate.Store and read the switch itself, is forbidden twice over: this package may not import a fork package, and a user preference is not this package\'s fact to own (开发规范 §3.8). The other alternative, decorating the sender, was rejected by measurement, not taste: the WS path broadcasts AND persists the user message before buildAgent runs, so a refusal at send time would leave a question in the transcript that was never asked (开发计划 §PR-6b3). ' +
+      'WHAT WAS MOVED OUT FIRST: the three verdict helpers (sensInputVerdict, refuseSensitiveInput, broadcastInputSensitive) went into the fork-owned internal/server/sensitive.go rather than beside their call sites, and the call-site prose was cut to one to four lines each; what is left here is the field plus the doc answering the three header questions. ' +
+      'WHY NO SMALLER FORM: the field is one line and the doc is where the next reader learns that a nil gate is the CLI shape and that the ORDER (refuse before broadcast/persist) is the requirement rather than an implementation detail — the PR-6b1 precedent for the same seam.',
     convergence:
       'P0-01A C (the apiProduct fold is dead — see the R1 note; what remains is the registrar and the product-state move, P0-01A D). PR-5e adds nothing to fold: its 37 lines are the floor for a turn-path guard, and they shrink only if upstream grows a pre-send hook',
   },
   {
     file: 'internal/server/handlers.go',
-    ceiling: 88,
+    ceiling: 101,
     why:
-      'the data-root migration (a datapath import and the directory joins) plus sessionItem.ChatMode (PR-4d1, V-46 — see the raise notes above)',
+      'the data-root migration (a datapath import and the directory joins) plus sessionItem.ChatMode (PR-4d1, V-46 — see the raise notes above). ' +
+      'PR-6b3 added 13: two input-gate call sites, one in handleCreateChat (before the session is minted, so a refused message leaves no session file) and one in handleTurn (before the session binding is taken, so a refused message does not take the session over). ' +
+      'WHY NO SMALLER FORM: the two REST turn entry points are both in this file, so the gate has to be named twice; the alternative, one call inside runTurn, is the WRONG ORDER — that is after the session exists, and for handleCreateChat it would leave a session file behind for a question that was never asked (需求 D1, 开发计划 §PR-6b3). ' +
+      'WHAT WAS MOVED OUT FIRST: the verdict itself (the switch plus the engine) is not here at all — it arrives as Config.SensitiveInputGate from the fork-owned assembly, and the refusal writer lives in internal/server/sensitive.go. These 13 lines are the wiring and the three-to-four-line marker each, nothing more.',
     convergence: 'P0-01A D (+8 folds when the session descriptor moves); the datapath lines are the finished cost of hard rule 1',
   },
   {
     // Raised 0 → 15 by PR-5d3 (2026-09-14), the first change this fork has ever
     // made to this file. The 0 was doing its job: it forced the three justifications
     // below rather than letting a 36-line allowance hide them (V-49).
+    // Raised 15 → 23 by PR-6b3 (2026-09-15), the second change.
     file: 'internal/server/ws_handlers.go',
-    ceiling: 15,
+    ceiling: 23,
     why:
       'G3 (需求基线 C8): the control plane\'s error code on the turn_error event. Composition at the measured 15 — 2 added + 3 removed are the `errorInput` signature and `error`\'s call line; 3 are the `if code != "" { ev["code"] = code }` that puts the field on the wire; 4 are the two `userError`/`userErrorInput` call lines (each forwards agent.ErrorCodeOf(err)); 3 are prose plus the marker. ' +
       'WHY NO SMALLER FORM: the field can only be added where the event is built, and once a fourth parameter exists the three call sites in this file must pass it — the alternative (a second emitter function) measured 22 lines, not fewer. The code has to be read from the error object, which exists only in the two userError* callers. ' +
-      'WHAT WAS MOVED OUT FIRST: nothing was available to move. The file had zero fork lines, so there was no accumulated bulk to fold into internal/server/turn_refusal.go — that is where PR-5e\'s refusal moved TO in the same PR, and it took server.go from 533 to 517 in the same change (see that entry)',
+      'WHAT WAS MOVED OUT FIRST: nothing was available to move. The file had zero fork lines, so there was no accumulated bulk to fold into internal/server/turn_refusal.go — that is where PR-5e\'s refusal moved TO in the same PR, and it took server.go from 533 to 517 in the same change (see that entry). ' +
+      'PR-6b3 added 8: the input-gate call in handleWSUserMessage, before the session binding is taken and before the user message is broadcast or persisted, plus its three-line marker. ' +
+      'WHY NO SMALLER FORM for that 8: this is the only WS entry point a typed message passes through, and the position is the requirement — the two lines below it in the same function broadcast `history_user_message` and append to the session, so a gate anywhere later is a refusal of something the transcript already shows (开发计划 §PR-6b3; this is also why the sender-wrapper alternative was measured and rejected). ' +
+      'WHAT WAS MOVED OUT FIRST for it: the verdict and both response shapes (the WS broadcast and the REST refusal writer) are in the fork-owned internal/server/sensitive.go; what is here is the call and the marker.',
     convergence:
       'shrinks only if upstream grows a code channel on turn_error (or a pre-send hook that carries one); otherwise this is the permanent cost of the requirement that the client must not render `message`',
   },

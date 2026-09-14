@@ -167,6 +167,26 @@ type Config struct {
 	// builds its own, so masking is present rather than silently off.
 	SensitiveEngine *sensitive.Engine
 
+	// OCTO-FORK: the server-side input gate — see
+	// dev-docs-usdable/需求/20260911/开发计划.md §PR-6b3
+	//
+	// A browser check is skippable, so 需求 D1's substance — the check also runs
+	// where the frontend cannot bypass it — lands in this package, the only
+	// place every turn entry point passes through. The verdict needs two facts
+	// this package must not own (the user's switch, a productstate preference,
+	// and the one engine), so the judgement stays in internal/productruntime and
+	// only its answer travels — the same shape as CatalogOffers above.
+	//
+	// It answers "refuse this text, and here is its masked form"; the second
+	// value decides and the first is meaningless when it is false. A caller must
+	// consult it BEFORE broadcasting or persisting the user message — that order
+	// is the requirement (§PR-6b3), which is why it sits at the entry points and
+	// not around the sender.
+	//
+	// Nil means "no gate": the CLI path (`octo serve`, no product assembly) and
+	// any test that is not about the gate refuse nothing.
+	SensitiveInputGate func(text string) (masked string, refuse bool)
+
 	// OCTO-FORK: gateway-bound model guard — see
 	// dev-docs-usdable/需求/20260911/开发计划.md §PR-4c0
 	//

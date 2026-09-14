@@ -165,6 +165,11 @@ func (rt *Runtime) Mount(api func(pattern string, h http.HandlerFunc)) {
 	api("GET /api/product/sensitive/dict", rt.handleSensitiveDictGet)
 	api("PUT /api/product/sensitive/dict", rt.handleSensitiveDictPut)
 	api("POST /api/product/sensitive/dict/import", rt.handleSensitiveDictImport)
+
+	// PR-6b3 — the composer's check route. The other half of the same judgement
+	// (the turn-path gate) is NOT a route: it is handed to internal/server as
+	// SensitiveInputGate, so a frontend cannot skip it.
+	api("POST /api/product/sensitive/check", rt.handleSensitiveCheck)
 }
 
 // chatModesDTO is the wire shape of 本地API契约 §2.8.

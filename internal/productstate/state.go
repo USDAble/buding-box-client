@@ -398,10 +398,20 @@ func (s *Store) write() error {
 // never regenerated - not on login, not on logout, not on an account switch
 // (E6.1, N-1).
 func (s *Store) seed(opts Options) State {
+	// Both preference defaults are deliberate and both are written down in
+	// 需求 D1 / E6.1: the locale comes from the build option, and the input
+	// check starts ON. The check defaulting to the zero value would leave a
+	// fresh install with detection off while the requirement says 默认开启, and
+	// the frontend reads exactly this field (`prefs.inputSensitiveCheck !==
+	// false` in the composer) - so the failure would be "the feature is off
+	// until the user finds the switch", with every test still green.
 	return State{
-		SchemaVersion:      CurrentSchemaVersion,
-		InstallID:          newInstallID(),
-		Prefs:              Prefs{Locale: localeOrDefault(opts.Locale)},
+		SchemaVersion: CurrentSchemaVersion,
+		InstallID:     newInstallID(),
+		Prefs: Prefs{
+			Locale:              localeOrDefault(opts.Locale),
+			InputSensitiveCheck: true,
+		},
 		SuppressOnboarding: opts.SuppressOnboarding,
 	}
 }

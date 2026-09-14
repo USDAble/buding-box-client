@@ -61,7 +61,13 @@ import (
 // The predicate is not built in main.go for the same reason: this is the
 // function holding the catalog store, and the judgement belongs to the runtime
 // that owns it (productruntime.CatalogOffers), not to the shell.
-func mountProductAPI() (mount func(api func(pattern string, h http.HandlerFunc)), gatewaySender func(app.ReasoningTuning) (agent.Sender, error), catalogOffers func(id string) (offers, known bool), engine *sensitive.Engine) {
+//
+// The fifth return is the input gate itself (PR-6b3) rather than a factory,
+// because the method is already the whole seam: it reads the user's switch and
+// the one engine, both of which live behind the runtime. internal/server needs
+// the verdict at its three turn entry points and must not learn where the facts
+// came from (开发规范 §3.8) — the same shape as CatalogOffers above.
+func mountProductAPI() (mount func(api func(pattern string, h http.HandlerFunc)), gatewaySender func(app.ReasoningTuning) (agent.Sender, error), catalogOffers func(id string) (offers, known bool), engine *sensitive.Engine, sensitiveInputGate func(text string) (string, bool)) {
 	if windowToken() == "" {
 		// Fail closed. Without a token the gate cannot distinguish this window
 		// from any other loopback caller, so mounting the routes would publish
@@ -69,7 +75,7 @@ func mountProductAPI() (mount func(api func(pattern string, h http.HandlerFunc))
 		// which the frontend already renders as "blocked" — the user is told,
 		// and never silently authorized (开发规范 §3.9).
 		slog.Error("product: window token unavailable, product routes not mounted")
-		return nil, nil, nil, nil
+		return nil, nil, nil, nil, nil
 	}
 
 	state, err := productstate.Open(productstate.Options{
@@ -82,7 +88,7 @@ func mountProductAPI() (mount func(api func(pattern string, h http.HandlerFunc))
 	})
 	if err != nil {
 		slog.Error("product: state unavailable, product routes not mounted", "err", err)
-		return nil, nil, nil, nil
+		return nil, nil, nil, nil, nil
 	}
 	if state.Corrupt() {
 		// A damaged file degrades to "not logged in" and is left on disk for
@@ -93,7 +99,7 @@ func mountProductAPI() (mount func(api func(pattern string, h http.HandlerFunc))
 	creds, err := credentialstore.Open(credentialstore.Options{})
 	if err != nil {
 		slog.Error("product: credential store unavailable, product routes not mounted", "err", err)
-		return nil, nil, nil, nil
+		return nil, nil, nil, nil, nil
 	}
 
 	// The catalog cache (PR-4b). A failure here does NOT unmount the routes:
@@ -183,7 +189,7 @@ func mountProductAPI() (mount func(api func(pattern string, h http.HandlerFunc))
 	renew := productruntime.SessionRenewer{Platform: platform, Tokens: tokens, Creds: creds, State: state}
 	gateway := productruntime.GatewayEndpoint{Host: profile.GatewayHost, Tokens: tokens, Ensure: renew.Ensure}
 
-	return rt.Mount, gateway.Sender, rt.CatalogOffers, engine
+	return rt.Mount, gateway.Sender, rt.CatalogOffers, engine, rt.SensitiveInputGate
 }
 
 // catalogClockSkew tolerates drift between this machine's clock and the

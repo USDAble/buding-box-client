@@ -503,7 +503,13 @@ func startHub(app *application.App, bridge *nativeBridge, settings desktopSettin
 	// Assembling it once here is what keeps them on the same word list. It stays
 	// non-nil when the product is not mounted (the server then builds its own),
 	// which is the `octo serve` shape.
-	mountProduct, gatewaySender, catalogOffers, engine := mountProductAPI()
+	//
+	// The fifth is the input gate (PR-6b3). It travels as a value for the same
+	// reason the engine does: the two facts it needs — the user's switch and the
+	// engine — belong to internal/productstate and this assembly, and
+	// internal/server must not hold either (it would have to import a fork
+	// package, which the dependency direction forbids).
+	mountProduct, gatewaySender, catalogOffers, engine, sensitiveInputGate := mountProductAPI()
 
 	// Immutable for the life of the process, and the owner of both facts the
 	// turn-path policy needs (see RequireGateway below), so it is read once.
@@ -560,6 +566,13 @@ func startHub(app *application.App, bridge *nativeBridge, settings desktopSettin
 		// product routes cannot end up on two dictionaries. nil (a build with no
 		// product) leaves internal/server to build its own.
 		SensitiveEngine: engine,
+		// OCTO-FORK: the server-side input gate (需求 D1, L-D1) — see
+		// dev-docs-usdable/需求/20260911/开发计划.md §PR-6b3. Forwarded for the
+		// same reason as the engine above: the verdict needs the user's switch
+		// (productstate) and the engine, both owned by the assembly, and
+		// internal/server must not hold either. nil (a build with no product, or
+		// a test) means "no gate" — nothing is refused.
+		SensitiveInputGate: sensitiveInputGate,
 	})
 	if err != nil {
 		bridge.showError(L().errTitle, fmt.Sprintf(L().errStartFmt, err))

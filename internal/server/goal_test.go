@@ -760,6 +760,35 @@ func TestChannelGoalCommand_SetsAndStartsTheGoal(t *testing.T) {
 	// The kick runs in its own goroutine; the zero-usage stub sender means the
 	// zero-progress guard stops the chain after the first hidden turn.
 	waitFor(t, func() bool { return goalContextTurns(sess.Agent) > 0 })
+	// The kick starting is not the kick finishing. Returning here leaves the
+	// session write in flight, and t.TempDir()'s RemoveAll then races that file
+	// handle: POSIX tolerates it, Windows fails the test with "directory is not
+	// empty" after every assertion above passed. CI proved that on v1's first
+	// windows-latest run (V-64), which is why the barrier is here.
+	waitTurnUnwound(t, srv, sess.Store.ID)
+}
+
+// OCTO-FORK: 上游文件补一个等待位 — 见 dev-docs-usdable/需求/20260911/需求基线.md `V-64`。
+//
+// waitTurnUnwound blocks until the session's background turn goroutine has
+// fully wound down. turnRunning flips back to false only after
+// runAgentTurnLoop — and every Save it makes — has returned, so this is the
+// point past which no goroutine still holds a session-file handle, which is
+// what t.TempDir()'s RemoveAll needs (see attachments_test.go, where the same
+// barrier is written inline; the two could be folded together).
+func waitTurnUnwound(t *testing.T, srv *Server, sid string) {
+	t.Helper()
+	mu := srv.sessionTurnLock(sid)
+	for deadline := time.Now().Add(5 * time.Second); time.Now().Before(deadline); {
+		mu.Lock()
+		running := srv.turnRunning[sid]
+		mu.Unlock()
+		if !running {
+			return
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+	t.Error("background turn did not wind down within 5s")
 }
 
 // A command that only reports or parks the goal must not start a turn.

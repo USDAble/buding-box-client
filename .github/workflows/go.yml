@@ -180,6 +180,18 @@ jobs:
       - name: Test with the product tag
         run: go test -tags product_production ./...
 
+      # The nested cmd/octo-desktop module is skipped by the root `go test ./...`,
+      # so its product-tagged tests only run if they are invoked from inside it.
+      #
+      # It needs the Linux webview toolchain to build at all (CGO links GTK4 +
+      # WebKitGTK 6.0 + libsoup 3.0). Wiring this job up without the deps failed
+      # on the first v1 run — the archived Makefile target had only ever been
+      # run on a developer machine, which already had them. Same three packages
+      # desktop.yml and release.yml install, kept in step deliberately.
+      - name: Install Linux webview deps
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y libgtk-4-dev libwebkitgtk-6.0-dev libsoup-3.0-dev
+
       - name: Test the desktop shell with the product tag
         working-directory: cmd/octo-desktop
         run: go test -tags product_production ./...

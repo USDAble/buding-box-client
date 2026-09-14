@@ -151,6 +151,22 @@ type Config struct {
 	// no window to identify and behavior must stay exactly as upstream.
 	WindowToken string
 
+	// OCTO-FORK: the process's one compliance-word engine — see
+	// dev-docs-usdable/需求/20260911/开发计划.md §PR-6b1
+	//
+	// The engine is needed on both sides of a package boundary that must not be
+	// crossed: this package masks model output on the turn path, and
+	// internal/productruntime answers the input-check and dictionary routes.
+	// They must see the SAME effective word list, so the build assembles one
+	// engine (mountProductAPI, next to GatewaySender and CatalogOffers) and
+	// hands it to both — a second instance would be a second reader of
+	// data/sensitive-words.txt, and the screen and the checker could disagree
+	// (开发规范 §3.8).
+	//
+	// Nil is the CLI's shape (`octo serve`, no product build): this package then
+	// builds its own, so masking is present rather than silently off.
+	SensitiveEngine *sensitive.Engine
+
 	// OCTO-FORK: gateway-bound model guard — see
 	// dev-docs-usdable/需求/20260911/开发计划.md §PR-4c0
 	//
@@ -658,7 +674,7 @@ func New(cfg Config) (*Server, error) {
 		provider:            provName,
 		system:              cfg.System,
 		skillReg:            skillReg,
-		sensitiveEngine:     newSensitiveEngine(),
+		sensitiveEngine:     sensitiveEngineOr(cfg.SensitiveEngine),
 		skillsManifest:      skillsManifest,
 		cwd:                 cwd,
 		envCtx:              envCtx,

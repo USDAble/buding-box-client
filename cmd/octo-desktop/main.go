@@ -492,11 +492,18 @@ func startHub(app *application.App, bridge *nativeBridge, settings desktopSettin
 	// would mean it kept presenting a stale one — and because the predicate reads
 	// the very catalog store whose routes are mounted here.
 	//
-	// Any of the three can be nil, and that means "not wired in this build" to
-	// internal/server rather than "no gateway": see mountProductAPI's fail-closed
-	// branches and the nil-means-unchanged-upstream-behavior contracts on
-	// GatewaySender and CatalogOffers.
-	mountProduct, gatewaySender, catalogOffers := mountProductAPI()
+	// Any of the first three can be nil, and that means "not wired in this
+	// build" to internal/server rather than "no gateway": see mountProductAPI's
+	// fail-closed branches and the nil-means-unchanged-upstream-behavior
+	// contracts on GatewaySender and CatalogOffers.
+	//
+	// The engine is the fourth because the two sides that need it cannot import
+	// each other (PR-6b1): internal/server masks model output, and
+	// internal/productruntime answers the input-check and dictionary routes.
+	// Assembling it once here is what keeps them on the same word list. It stays
+	// non-nil when the product is not mounted (the server then builds its own),
+	// which is the `octo serve` shape.
+	mountProduct, gatewaySender, catalogOffers, engine := mountProductAPI()
 
 	// Immutable for the life of the process, and the owner of both facts the
 	// turn-path policy needs (see RequireGateway below), so it is read once.
@@ -547,6 +554,12 @@ func startHub(app *application.App, bridge *nativeBridge, settings desktopSettin
 		// runtime's own, so "which models exist" keeps one owner; the shell only
 		// forwards it.
 		CatalogOffers: catalogOffers,
+		// OCTO-FORK: the process's one compliance-word engine — see
+		// dev-docs-usdable/需求/20260911/开发计划.md §PR-6b1. Forwarded, not
+		// built here: the assembly above owns it, so the turn path and the
+		// product routes cannot end up on two dictionaries. nil (a build with no
+		// product) leaves internal/server to build its own.
+		SensitiveEngine: engine,
 	})
 	if err != nil {
 		bridge.showError(L().errTitle, fmt.Sprintf(L().errStartFmt, err))

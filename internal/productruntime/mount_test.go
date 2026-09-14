@@ -78,6 +78,10 @@ func mountHarness(t *testing.T, h *harness, windowToken string) *mountedHarness 
 		NoMemory:    true,
 		MountAPI:    h.rt.Mount,
 		WindowToken: windowToken,
+		// The same instance the runtime got, which is the point of the fourth
+		// return value (PR-6b1): the turn path and the product routes must not
+		// read the dictionary twice.
+		SensitiveEngine: h.engine,
 	})
 	if err != nil {
 		t.Fatalf("server.New: %v", err)

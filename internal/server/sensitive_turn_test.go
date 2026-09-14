@@ -53,7 +53,7 @@ func dataRoot(t *testing.T) string {
 func newFilteredServer(t *testing.T, sender agent.Sender) *Server {
 	t.Helper()
 	srv := mustServer(t, Config{Addr: "127.0.0.1:0", Tools: false})
-	srv.sensitiveEngine = newSensitiveEngine()
+	srv.sensitiveEngine = NewSensitiveEngine()
 	srv.sender = sender
 	srv.initWS()
 	srv.turnRunning = make(map[string]bool)

@@ -1,6 +1,9 @@
 // Nickname generation and validation for the login form — the TypeScript
-// mirror of the Go side (internal/productstate/nickname.go), sharing the same
-// fixtures. The client check is for responsiveness; the server re-runs the rule.
+// mirror of the Go rule in internal/productruntime/account.go (validNickname),
+// which is the authority. The client check is for responsiveness; the server
+// re-runs the same rule, so the two must agree on both the bounds and the
+// allowed characters (V-73: they did not — the server allowed 1–20 code points
+// of anything while this file required 2–16 of Han/letters/digits/underscore).
 
 /** A fresh default nickname in the current UI language (需求 §5.3.3). */
 export function randomNickname(locale: 'zh' | 'en'): string {

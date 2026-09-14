@@ -192,12 +192,15 @@ export const ROUTE_TABLE_CEILING = 1
 export const DEBT_CEILINGS = [
   {
     file: 'internal/server/server.go',
-    ceiling: 531,
+    ceiling: 546,
     why:
       'the product seam and the data-root migration: Config.MountAPI/WindowToken/RequireGateway/ControlPlaneReady plumbing, the productAPI registrar (a method value, not a call site), V-36/PR-5c/PR-5b1 gates on the turn path, and Config.CatalogOffers + its guard (PR-5e, L-C7). ' +
       'Measured 2026-09-14 at 533 after excluding marker lines (see the marker note in forkDiffLines) and after trimming the PR-5e prose to pointers into 开发计划 §PR-5e; of the added lines the large majority are prose explaining those seams. ' +
       'PR-5d3 folded 16 of them out: errModelNotListed and its doc comment moved to internal/server/turn_refusal.go when the refusal gained a code (G3), and the ceiling came down with the fold rather than keeping the headroom. ' +
-      'PR-6a added 14: the import, the sensitiveEngine field, its assignment, the three agent-construction sites that now go through s.wrapSensitive, and the same wrap on the resolved lite sender — see the fifth raise note above for why no smaller form exists',
+      'PR-6a added 14: the import, the sensitiveEngine field, its assignment, the three agent-construction sites that now go through s.wrapSensitive, and the same wrap on the resolved lite sender — see the fifth raise note above for why no smaller form exists. ' +
+      'PR-6b1 added 15 (seventh raise), all of it Config.SensitiveEngine: the field, its documentation, and the one-line assignment that now reads it. ' +
+      'It cannot be folded out the way PR-5d3 folded errModelNotListed: a Config field is where a build hands this package a dependency it may not import, so it has to be declared on the struct that receives it — the alternative is a second engine built here, which is the defect the field exists to prevent (two readers of data/sensitive-words.txt, so the screen and the word-list routes could disagree; see 开发计划 §PR-6b1). ' +
+      'The prose in those 15 lines is the three questions the header asks: why this package rather than a fork-owned one (the type is upstream s), why not nil-defaulted instead of injected (nil then means a second engine, and the fallback for `octo serve` already covers the no-injection case), and why no smaller form exists (a field plus one call).',
     convergence:
       'P0-01A C (the apiProduct fold is dead — see the R1 note; what remains is the registrar and the product-state move, P0-01A D). PR-5e adds nothing to fold: its 37 lines are the floor for a turn-path guard, and they shrink only if upstream grows a pre-send hook',
   },

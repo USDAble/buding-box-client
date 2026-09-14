@@ -40,6 +40,24 @@ export async function readErrorMessage(res: Response, fallback: string): Promise
   return fallback
 }
 
+// OCTO-FORK: V-76 — request() used to throw a bare Error(message) and drop the
+// server's machine-code envelope ({"code","field","word"}), so a product call
+// whose refusal is a code rather than an error/message string (the dict routes'
+// invalid_word) rendered as "400 Bad Request". RequestError carries the code
+// beside the human message so a caller maps it to copy without re-parsing the
+// body; .message stays the human text for every existing catch.
+export class RequestError extends Error {
+  constructor(
+    message: string,
+    public code: string | null = null,
+    public field: string | null = null,
+    public word: string | null = null,
+  ) {
+    super(message)
+    this.name = 'RequestError'
+  }
+}
+
 export async function request<T>(path: string, init?: RequestInit): Promise<T> {
   // OCTO-FORK: stamp every call with the adopted window token so the server's
   // product gate can tell this window from other loopback peers. A plain
@@ -51,6 +69,9 @@ export async function request<T>(path: string, init?: RequestInit): Promise<T> {
     // window is no longer logged in — flip the phase so App.svelte shows the
     // login gate instead of leaving a dead UI on screen.
     let message = `${res.status} ${res.statusText}`
+    let code: string | null = null
+    let field: string | null = null
+    let word: string | null = null
     try {
       const body = await res.json()
       if (res.status === 403 && body?.error === 'product_gate') {
@@ -58,6 +79,12 @@ export async function request<T>(path: string, init?: RequestInit): Promise<T> {
       }
       if (typeof body?.error === 'string' && body.error) message = body.error
       else if (typeof body?.message === 'string' && body.message) message = body.message
+      // OCTO-FORK: V-76 — carry the machine-code envelope so a product call can
+      // map a code (invalid_word) to copy; product.ts reads code/field its own
+      // way over productFetch, this is the request()-side equivalent.
+      if (typeof body?.code === 'string') code = body.code
+      if (typeof body?.field === 'string') field = body.field
+      if (typeof body?.word === 'string') word = body.word
     } catch {
       // Not JSON (proxy error page, empty body, …) — keep the status line.
     }
@@ -66,7 +93,7 @@ export async function request<T>(path: string, init?: RequestInit): Promise<T> {
     // reporting an error the user cannot act on (需求基线 E12, P4-拦截页 §4).
     // Same rule as the product calls; noteSessionLost owns it (V-21).
     noteSessionLost(res.status)
-    throw new Error(message)
+    throw new RequestError(message, code, field, word)
   }
   return res.json() as Promise<T>
 }

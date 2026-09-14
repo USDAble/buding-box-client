@@ -7,14 +7,13 @@ import { describe, it, expect, beforeEach, vi } from "vitest";
 import { get } from "svelte/store";
 import {
   adoptWindowToken,
-  canStartTurn,
   catalogRetryable,
   catalogState,
   isCatalogState,
   refreshCatalogState,
   windowToken,
 } from "./product";
-import { catalogNoticeKey } from "./chatMode";
+import { canStartTurn, catalogNoticeKey } from "./chatMode";
 
 // A fetch stand-in returning a JSON body at a fixed status.
 function fetchReturning(status: number, body: unknown) {

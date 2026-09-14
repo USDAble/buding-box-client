@@ -271,24 +271,12 @@ export function isCatalogState(value?: string | null): value is CatalogState {
   return value === "ready" || value === "absent" || value === "stale" || value === "unverifiable";
 }
 
-/**
- * canStartTurn answers 需求基线 B4 rule 1: with an unusable catalogue a new turn
- * must not start.
- *
- * The rule is stated for the expired case, and it is applied to every non-ready
- * state on purpose. The three states all mean "there is no model list we may use"
- * (B9's own words), and a turn is a request to run a model: starting one would
- * have to name a model source, and the only legitimate one — the signed
- * catalogue — is exactly what is missing. Allowing it would be the quiet
- * degradation to something else that §3.9 forbids, and B1 规则 1 rules out the
- * "something else" by name.
- *
- * What is NOT blocked: reading. B4's "老会话可读、可改标题" is the other half of
- * this rule, and nothing here touches history.
- */
-export function canStartTurn(): boolean {
-  return get(catalogState) === "ready";
-}
+// canStartTurn and catalogNoticeKey — "may a new turn start?" and "if not, why?" —
+// live together in chatMode.ts as of PR-5e. They were split across two modules
+// (the first here, the second there) while the question had one half; L-C7 gave it
+// a second, and a two-module answer would have had this module importing the
+// projection both ways round. What stays here is the FACT (catalogState) and its
+// owner; what moved is the question asked of it.
 
 // refreshProductState loads the (de-identified) state and derives the phase.
 // Outside the desktop shell there is no gate, so the phase is ready outright.

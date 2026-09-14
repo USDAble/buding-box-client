@@ -125,16 +125,41 @@ export const ROUTE_TABLE_CEILING = 1
 //   were re-measured rather than left with slack, so the tightening is visible
 //   here instead of silently absorbed.
 //
-// A raise that cannot answer those three points should be a fold instead.
+//   server.go 496 → 533 for the turn guard's catalog predicate (PR-5e,
+//   2026-09-14). The fourth raise, judged by the same three points:
+//
+//   (a) what the 37 lines are: one nilable `Config` field (2 lines of Go, the
+//       rest the prose a caller cannot do without — a two-valued answer whose
+//       second half is the whole reason it is not a bool), a 5-line guard inside
+//       senderForSession, and one error constructor. Every one of the 37 is
+//       comment or declaration; no logic was added to upstream's own control flow.
+//   (b) no smaller form: the guard has to sit in senderForSession because that is
+//       the single funnel every turn path goes through, and it has to sit BEFORE
+//       the gateway factory — building a sender can exchange a token
+//       (GatewayEndpoint.Sender), so checking afterwards spends a network round
+//       trip on a turn the build already knows cannot be served. `Config` is the
+//       only construction channel (the same argument as P0-01 B1). The alternative
+//       the guard suggests by default — a fork-side wrapper sender — is the option
+//       that got rejected explicitly: it would have to forward the whole capability
+//       stack (StreamingSender/ToolSender/ToolStreamingSender), and missing one
+//       silently downgrades streaming, which is a worse defect than the one the
+//       wrapper would prevent.
+//   (c) the bulk was moved out first: the reasoning lives in
+//       dev-docs-usdable/需求/20260911/开发计划.md §PR-5e, and trimming the three
+//       comment blocks to pointers took the measured diff from 550 to 533 before
+//       the ceiling was touched (−17). The remaining 37 are not slack: they are
+//       the feature's floor for this file.
+//
+//   A raise that cannot answer those three points should be a fold instead.
 export const DEBT_CEILINGS = [
   {
     file: 'internal/server/server.go',
-    ceiling: 496,
+    ceiling: 533,
     why:
-      'the product seam and the data-root migration: Config.MountAPI/WindowToken/RequireGateway/ControlPlaneReady plumbing, the productAPI registrar (a method value, not a call site), V-36/PR-5c/PR-5b1 gates on the turn path. ' +
-      'Measured 2026-09-13 at 496 after excluding marker lines (see the marker note in forkDiffLines); of the added lines the large majority are prose explaining those seams',
+      'the product seam and the data-root migration: Config.MountAPI/WindowToken/RequireGateway/ControlPlaneReady plumbing, the productAPI registrar (a method value, not a call site), V-36/PR-5c/PR-5b1 gates on the turn path, and Config.CatalogOffers + its guard (PR-5e, L-C7). ' +
+      'Measured 2026-09-14 at 533 after excluding marker lines (see the marker note in forkDiffLines) and after trimming the PR-5e prose to pointers into 开发计划 §PR-5e; of the added lines the large majority are prose explaining those seams',
     convergence:
-      'P0-01A C (the apiProduct fold is dead — see the R1 note; what remains is the registrar and the product-state move, P0-01A D)',
+      'P0-01A C (the apiProduct fold is dead — see the R1 note; what remains is the registrar and the product-state move, P0-01A D). PR-5e adds nothing to fold: its 37 lines are the floor for a turn-path guard, and they shrink only if upstream grows a pre-send hook',
   },
   {
     file: 'internal/server/handlers.go',

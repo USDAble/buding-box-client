@@ -47,13 +47,19 @@ import (
 // already-generated token, so a token born later than the first window show
 // would leave that window unable to identify itself. main.go builds the server
 // before it shows any window, so generating here is early enough.
-// It returns the two seams internal/server needs, both derived from one
-// assembly: the local product API's mount hook, and the built-in gateway's
-// sender factory (PR-5a). They are returned together, rather than by two
-// functions, because they must share one CredentialHolder - the gateway sender
-// is built from the token the platform client refreshed, so two holders would
-// mean the gateway kept presenting a stale one.
-func mountProductAPI() (mount func(api func(pattern string, h http.HandlerFunc)), gatewaySender func(app.ReasoningTuning) (agent.Sender, error)) {
+// It returns the three seams internal/server needs, all derived from one
+// assembly: the local product API's mount hook, the built-in gateway's sender
+// factory (PR-5a), and the turn guard's "does the catalog still offer this
+// model?" predicate (PR-5e). They are returned together, rather than by two or
+// three functions, because they must share one assembly - the gateway sender is
+// built from the token the platform client refreshed, so two holders would mean
+// the gateway kept presenting a stale one, and the predicate reads the very
+// catalog store whose routes are mounted here.
+//
+// The predicate is not built in main.go for the same reason: this is the
+// function holding the catalog store, and the judgement belongs to the runtime
+// that owns it (productruntime.CatalogOffers), not to the shell.
+func mountProductAPI() (mount func(api func(pattern string, h http.HandlerFunc)), gatewaySender func(app.ReasoningTuning) (agent.Sender, error), catalogOffers func(id string) (offers, known bool)) {
 	if windowToken() == "" {
 		// Fail closed. Without a token the gate cannot distinguish this window
 		// from any other loopback caller, so mounting the routes would publish
@@ -61,7 +67,7 @@ func mountProductAPI() (mount func(api func(pattern string, h http.HandlerFunc))
 		// which the frontend already renders as "blocked" — the user is told,
 		// and never silently authorized (开发规范 §3.9).
 		slog.Error("product: window token unavailable, product routes not mounted")
-		return nil, nil
+		return nil, nil, nil
 	}
 
 	state, err := productstate.Open(productstate.Options{
@@ -74,7 +80,7 @@ func mountProductAPI() (mount func(api func(pattern string, h http.HandlerFunc))
 	})
 	if err != nil {
 		slog.Error("product: state unavailable, product routes not mounted", "err", err)
-		return nil, nil
+		return nil, nil, nil
 	}
 	if state.Corrupt() {
 		// A damaged file degrades to "not logged in" and is left on disk for
@@ -85,7 +91,7 @@ func mountProductAPI() (mount func(api func(pattern string, h http.HandlerFunc))
 	creds, err := credentialstore.Open(credentialstore.Options{})
 	if err != nil {
 		slog.Error("product: credential store unavailable, product routes not mounted", "err", err)
-		return nil, nil
+		return nil, nil, nil
 	}
 
 	// The catalog cache (PR-4b). A failure here does NOT unmount the routes:
@@ -161,7 +167,7 @@ func mountProductAPI() (mount func(api func(pattern string, h http.HandlerFunc))
 	renew := productruntime.SessionRenewer{Platform: platform, Tokens: tokens, Creds: creds, State: state}
 	gateway := productruntime.GatewayEndpoint{Host: profile.GatewayHost, Tokens: tokens, Ensure: renew.Ensure}
 
-	return rt.Mount, gateway.Sender
+	return rt.Mount, gateway.Sender, rt.CatalogOffers
 }
 
 // catalogClockSkew tolerates drift between this machine's clock and the

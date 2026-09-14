@@ -1106,6 +1106,11 @@ export const en: Record<string, string> = {
   "catalog.absent": "The model list has not been downloaded yet. Check your connection and try again.",
   "catalog.stale": "The model list needs an online update before you can send a message.",
   "catalog.unverifiable": "The model list could not be verified, so it is not being used. It will recover after the platform is updated.",
+  // PR-5e / L-C7: the catalogue is fine, but this conversation is bound to a model
+  // it no longer offers. Distinct from mode.no_models (nothing to pick at all) and
+  // from catalog.stale (the list itself needs a refresh) — all three end in "you
+  // cannot send", and only this one is about the model THIS session chose.
+  "session.model_withdrawn": "The model this conversation uses is no longer available. Pick another one to continue.",
   // OCTO-FORK: P10 隐私模式与 PII 处理 — see
   // dev-docs-usdable/需求/2260906/技术方案/P10-隐私模式与PII.md.
   "privacy.mode_label": "Privacy mode",
@@ -2204,6 +2209,8 @@ export const zh: Record<string, string> = {
   "catalog.absent": "模型列表尚未下载，请检查网络后重试。",
   "catalog.stale": "模型列表需要联网更新后才能发送消息。",
   "catalog.unverifiable": "模型列表未通过校验，已停止使用；平台更新后会自动恢复。",
+  // PR-5e / L-C7：目录本身是好的，但**本会话**绑定的模型已不在其中。
+  "session.model_withdrawn": "该模型已下架，请重新选择。",
   // OCTO-FORK: P10 隐私模式与 PII 处理 — see
   // dev-docs-usdable/需求/2260906/技术方案/P10-隐私模式与PII.md.
   "privacy.mode_label": "隐私模式",

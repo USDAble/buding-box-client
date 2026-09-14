@@ -72,6 +72,14 @@ describe('modelDisplayName', () => {
     // Asserted over the dictionaries rather than over modelDisplayName, because
     // the failure it prevents is a *re-added* key plus a reverted lookup; only
     // one half of that is visible from the function.
+    //
+    // The `model.` prefix is therefore RESERVED, and PR-5e is the near-miss that
+    // proves the guard earns its keep: its L-C7 sentence was first spelled
+    // `model.withdrawn`, which is a *sentence*, not a name table — and this test
+    // failed. The fix was to rename the key (`session.model_withdrawn`), never to
+    // allowlist it: a guard that grows exceptions for keys that mean something
+    // else stops being able to tell a name table from a sentence, and a name
+    // table is the failure that quietly keeps rendering a platform's stale rename.
     const table = [...Object.keys(en), ...Object.keys(zh)].filter((k) => k.startsWith('model.'))
     expect(table).toEqual([])
   })

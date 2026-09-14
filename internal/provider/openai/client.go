@@ -316,14 +316,8 @@ func (c *Client) Send(ctx context.Context, req provider.Request) (provider.Respo
 			}
 
 			dec := retry.Decision{Retry: retry.RetryableStatus(resp.StatusCode), RetryAfter: retry.RetryAfterHeader(resp.Header)}
-			var apiErr apiError
-			if jerr := json.Unmarshal(respBody, &apiErr); jerr == nil && apiErr.Error.Message != "" {
-				return nil, dec, fmt.Errorf(
-					"openai: HTTP %d (%s): %s",
-					resp.StatusCode, apiErr.Error.Type, apiErr.Error.Message,
-				)
-			}
-			return nil, dec, fmt.Errorf("openai: HTTP %d: %s", resp.StatusCode, string(respBody))
+			// OCTO-FORK: the control plane's flat error envelope is read here too — see dev-docs-usdable/需求/20260911/开发计划.md §PR-5d3.
+			return nil, dec, httpErrorFromBody(resp.StatusCode, respBody)
 		}
 
 		respBody, err := io.ReadAll(resp.Body)

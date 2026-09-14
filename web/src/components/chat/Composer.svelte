@@ -1081,15 +1081,15 @@
 
   const notices = $derived.by<Notice[]>(() => {
     const list: Notice[] = []
-    // 敏感词命中（拦截，warn）：排在积分不足之前（需求 §5.4.4 顺序）。读
-    // $state 的 sensitiveHit 建立响应式依赖，命中/清除即时反映到通知条。
+    // 敏感词命中（拦截，warn）。读 $state 的 sensitiveHit 建立响应式依赖，
+    // 命中/清除即时反映到通知条。
     if (sensitiveHit) {
       list.push({ id: 'sensitive', level: 'warn', text: $t('sensitive.hit_notice'), slot: 'below' })
     }
-    // 积分不足 (balance 0) shows before send but does NOT block it (§5.4.4).
-    if ($productState && $productState.credits.balance <= 0) {
-      list.push({ id: 'credits', level: 'info', text: $t('credits.insufficient'), slot: 'below' })
-    }
+    // OCTO-FORK: 「余额为 0 ⇒ 积分不足」的本地提示在这里删掉了（V-58，PR-5d3）。
+    // 它不编数字（余额确实来自中台），错在**替中台下结论**：PQ8 明写「客户端
+    // **不做任何额度判断**，全部由中台 402 驱动」——免费/套餐额度下余额为 0 仍
+    // 可以发。判据见 web/src/lib/turnError.ts 与 开发计划 §PR-5d3。
     return list
   })
   const noticesAbove = $derived(notices.filter(n => n.slot === 'above'))

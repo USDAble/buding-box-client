@@ -130,10 +130,43 @@ test('a second table after prose keeps its own header count', () => {
   assert.deepEqual(problems, [])
 })
 
-test('a lone row without a delimiter is not a table', () => {
+test('a row with no table above it is reported, not ignored', () => {
+  // This test used to assert the opposite ("not a table, and no problem"). That
+  // expectation is what let V-70 through: a blank line inside a table ends it,
+  // so every row below lost its header and was never compared against anything —
+  // fifty rows in 需求基线 §5.6 were rendering as pipe text while this guard
+  // reported a clean tree. Silence was the bug, so the assertion changed.
   const doc = ['| a | b |', '', '| c | d |'].join('\n')
-  assert.equal(checkDocument('doc.md', doc).tables, 0)
-  assert.deepEqual(checkDocument('doc.md', doc).problems, [])
+  const { problems, tables } = checkDocument('doc.md', doc)
+  assert.equal(tables, 0)
+  assert.equal(problems.length, 2)
+  for (const p of problems) assert.match(p, /row with no table above it/)
+})
+
+test('a blank line that cuts a table in two names every stranded row', () => {
+  const doc = ['| a | b |', '| --- | --- |', '| 1 | 2 |', '', '| 3 | 4 |', '| 5 | 6 |'].join('\n')
+  const { problems, tables } = checkDocument('doc.md', doc)
+  assert.equal(tables, 1)
+  assert.equal(problems.length, 2)
+  assert.match(problems[0], /doc\.md:5:/)
+  assert.match(problems[1], /doc\.md:6:/)
+})
+
+test('a blank line before a new header is a separator, not a cut', () => {
+  // The distinction the rule needs: both are "a blank line between two rows", but
+  // the row below this one is the header of its own table.
+  const doc = [
+    '| a | b |',
+    '| --- | --- |',
+    '| 1 | 2 |',
+    '',
+    '| c | d |',
+    '| --- | --- |',
+    '| 3 | 4 |',
+  ].join('\n')
+  const { problems, tables } = checkDocument('doc.md', doc)
+  assert.equal(tables, 2)
+  assert.deepEqual(problems, [])
 })
 
 test('prose containing a pipe is not a row', () => {

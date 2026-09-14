@@ -18,6 +18,8 @@ import { ws } from '../lib/ws'
 import { tr } from '../lib/i18n'
 import * as api from '../lib/api'
 import { inlineSlashCommand } from '../lib/inlineSlash'
+// OCTO-FORK: turn failures are read by CODE, not by the server's sentence (G3 / C8) — see dev-docs-usdable/需求/20260911/开发计划.md §PR-5d3.
+import { turnErrorView } from '../lib/turnError'
 import {
   chatMessages,
   chatStreaming,
@@ -216,8 +218,11 @@ export function wireMobileSession(sid: string): () => void {
 
   cleanups.push(ws.on('turn_error', (ev: any) => {
     if (!forSid(ev)) return
+    // Same mapping the desktop view uses — one owner for code → copy (§3.8), so a
+    // 402 reads the same in both shells.
+    const { text } = turnErrorView(ev, tr('turn_error.unknown'))
     addChatMsg(sid, {
-      id: uid('err'), type: 'notice', content: `${tr('m.err_prefix')}: ${ev.error ?? tr('m.request_failed')}`,
+      id: uid('err'), type: 'notice', content: `${tr('m.err_prefix')}: ${text}`,
       level: 'error', createdAt: Date.now(), streaming: false, tools: [], todos: [],
     })
     chatStreaming.update(s => ({ ...s, [sid]: false }))

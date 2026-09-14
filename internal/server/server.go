@@ -1959,22 +1959,6 @@ func errNoGatewaySender(model string) error {
 		model)
 }
 
-// errModelNotListed is PR-5e's refusal (L-C7): the session is bound to a catalog
-// model the catalog no longer offers, so there is nothing to send to and no model
-// may be substituted (B8 forbids the silent switch).
-//
-// It says "pick one from the list" rather than "this model was withdrawn" because
-// internal/server cannot see whether the list still has models in it, and a user
-// whose catalog came back empty needs a different sentence from one whose single
-// model was retired. Both of those have owners — the distinction in
-// internal/productruntime, the wording in the frontend's i18n, for which this is
-// the backstop when there is no UI (开发计划 §PR-5e).
-func errModelNotListed(model string) error {
-	return fmt.Errorf(
-		"model %q is no longer in the model list this build was given — pick one from the list; the turn was not started and nothing was sent",
-		model)
-}
-
 // errModelNotFromCatalog is PR-5c's refusal for a turn the control plane is not
 // serving in a build where it is the only permitted source. It names the model
 // because that is the one thing the user can act on: the picker is where a

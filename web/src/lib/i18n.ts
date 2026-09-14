@@ -890,7 +890,9 @@ export const en: Record<string, string> = {
   "m.allow_session": "Allow for this session",
   "m.approval_gone": "No pending approval (it may have been handled elsewhere).",
   "m.err_prefix": "Error",
-  "m.request_failed": "request failed",
+  // V-58's sibling (PR-5d3): `m.request_failed` was deleted because the mobile turn_error
+  // handler now uses the shared mapping's fallback (`turn_error.unknown`) — two keys with
+  // the same sentence is the copy-drifting twin 开发规范 §3.8 forbids.
   "m.send_fail": "Failed to send",
   "m.session_busy": "Session is in use by another client",
   "m.tasks_stat_enabled": "Enabled",
@@ -1092,7 +1094,9 @@ export const en: Record<string, string> = {
   // OCTO-FORK: P6 hidden entries + credits — see
   // dev-docs-usdable/需求/2260906/技术方案/P6-入口隐藏与积分.md.
   "feature.not_available": "This entry isn't available in this version",
-  "credits.insufficient": "Insufficient points",
+  // V-58 (PR-5d3) deleted `credits.insufficient`: the Composer no longer decides
+  // "not enough points" locally (PQ8 — the platform's 402 decides), so
+  // `turn_error.insufficient_credits` is the sentence that replaced it.
   // OCTO-FORK: P8 敏感词接入 — see
   // dev-docs-usdable/需求/2260906/技术方案/P8-敏感词接入.md.
   "sensitive.toggle": "Sensitive-word check",
@@ -1112,6 +1116,11 @@ export const en: Record<string, string> = {
   // from catalog.stale (the list itself needs a refresh) — all three end in "you
   // cannot send", and only this one is about the model THIS session chose.
   "session.model_withdrawn": "The model this conversation uses is no longer available. Pick another one to continue.",
+  // PR-5d3 / G3 (需求基线 C8): turn_error now carries the platform's error `code`,
+  // and the UI copy is keyed on it. The server sentence stays as the fallback for
+  // codes with no key here — so a missing entry shows English, not a blank notice.
+  "turn_error.insufficient_credits": "Not enough points. Top up and try again.",
+  "turn_error.unknown": "request failed",
   // OCTO-FORK: P10 隐私模式与 PII 处理 — see
   // dev-docs-usdable/需求/2260906/技术方案/P10-隐私模式与PII.md.
   "privacy.mode_label": "Privacy mode",
@@ -2006,7 +2015,8 @@ export const zh: Record<string, string> = {
   "m.allow_session": "本次会话都允许",
   "m.approval_gone": "没有待审批的请求(可能已在别处处理)。",
   "m.err_prefix": "错误",
-  "m.request_failed": "请求失败",
+  // V-58 的邻居（PR-5d3）：`m.request_failed` 已删 —— 移动端的 turn_error 处理器现在用
+  // 共用映射的兜底（`turn_error.unknown`），同一句话两个键就是 §3.8 禁止的漂移孪生。
   "m.send_fail": "发送失败",
   "m.session_busy": "会话正被其他端占用",
   "m.tasks_stat_enabled": "启用",
@@ -2196,7 +2206,8 @@ export const zh: Record<string, string> = {
   // OCTO-FORK: P6 入口隐藏与积分 — see
   // dev-docs-usdable/需求/2260906/技术方案/P6-入口隐藏与积分.md.
   "feature.not_available": "本期不提供此入口",
-  "credits.insufficient": "积分不足",
+  // V-58（PR-5d3）删掉了 `credits.insufficient`：输入框不再自己下「积分不足」的
+  // 结论（PQ8 —— 由中台 402 决定），替代它的是上面的 `turn_error.insufficient_credits`。
   // OCTO-FORK: P8 敏感词接入 — see
   // dev-docs-usdable/需求/2260906/技术方案/P8-敏感词接入.md.
   "sensitive.toggle": "敏感词检测",
@@ -2213,6 +2224,8 @@ export const zh: Record<string, string> = {
   "catalog.unverifiable": "模型列表未通过校验，已停止使用；平台更新后会自动恢复。",
   // PR-5e / L-C7：目录本身是好的，但**本会话**绑定的模型已不在其中。
   "session.model_withdrawn": "该模型已下架，请重新选择。",
+  "turn_error.insufficient_credits": "余额不足，请充值后重试。",
+  "turn_error.unknown": "请求失败",
   // OCTO-FORK: P10 隐私模式与 PII 处理 — see
   // dev-docs-usdable/需求/2260906/技术方案/P10-隐私模式与PII.md.
   "privacy.mode_label": "隐私模式",

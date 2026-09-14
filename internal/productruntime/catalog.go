@@ -535,6 +535,72 @@ func projectCatalog(policy productclient.Policy) ([]chatModeGroup, []string) {
 	return groups, ignored
 }
 
+// catalogOffersModel is CatalogOffers' pure half: the membership question with no
+// store and no I/O, so the eligibility rules can be tested without signing an
+// envelope.
+//
+// The ignored half of projectCatalog's return is the list of mode ids the
+// product does not have. It matters to the picker (it is logged there) and not
+// here: a model's presence in a group is the whole question this answers.
+func catalogOffersModel(policy productclient.Policy, id string) bool {
+	groups, _ := projectCatalog(policy)
+	for _, g := range groups {
+		for _, m := range g.Models {
+			if m.ID == id {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+// CatalogOffers answers whether the signed catalog in hand still offers a model
+// id, and whether that question can be answered at all (PR-5e / L-C7).
+//
+// WHY TWO ANSWERS RATHER THAN ONE BOOLEAN. "We hold no catalog", "ours is
+// damaged", "ours will not decode" and "ours does not list this model" are not
+// the same fact, and only the last of them means the model is gone. Collapsing
+// them would put 「该模型已下架，请重新选择」 in front of every turn of a fresh
+// installation - a false statement about the user's session - and B4/B9 already
+// own the sentences for the missing-catalog family (catalogNoticeKey's first
+// three values). known=false therefore means "do not judge, keep today's
+// behaviour": the turn goes to the gateway and the platform answers for it.
+//
+// WHY MEMBERSHIP IS ASKED OF projectCatalog. "Is this model selectable" has to
+// have exactly one definition (开发规范 §3.8). A model that is present but
+// ineligible, or carried by a transport that is not the gateway, is not offered,
+// so a session bound to one is in the same position as a session whose model was
+// deleted: the user has to pick again. Re-deriving that filter here would be the
+// second definition of eligibility, and the two would drift the first time the
+// rule changed.
+//
+// The id is the catalog's own bare id, not the composite <endpoint>::<model>
+// binding: the prefix belongs to internal/server, which is where
+// GatewayModelPrefix is read.
+func (rt *Runtime) CatalogOffers(id string) (offers, known bool) {
+	if id == "" || rt.deps.Catalog == nil {
+		return false, false
+	}
+	entry, err := rt.deps.Catalog.Load()
+	if err != nil {
+		// Absence is the ordinary case on a fresh installation and is not worth
+		// a warning; a damaged cache is, for the same reason handleChatModes
+		// logs it - something is wrong and the user sees nothing.
+		if !errors.Is(err, catalogstore.ErrNoCache) {
+			slog.Warn("product: the catalog could not be read for the turn guard", "err", err)
+		}
+		return false, false
+	}
+	// Verified before it was written, so this parses rather than re-verifies -
+	// the same reasoning as handleChatModes.
+	policy, err := entry.Envelope.DecodePolicy()
+	if err != nil {
+		slog.Warn("product: cached catalog could not be read back for the turn guard", "err", err, "catalogVersion", entry.CatalogVersion)
+		return false, false
+	}
+	return catalogOffersModel(policy, id), true
+}
+
 // transportGateway is the only transport the catalog may name for a selectable
 // model (中台交付包 §4.3: "只有 eligible=true 且 transport=gateway"). Anything
 // else - including a provider-direct transport a future contract adds - is not

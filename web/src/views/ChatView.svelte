@@ -70,8 +70,7 @@
   } from '../lib/stores'
   import { ws, wsState, wsReconnect } from '../lib/ws'
   import * as api from '../lib/api'
-  import { canStartTurn } from '../lib/product'
-  import { catalogNoticeKey } from '../lib/chatMode'
+  import { canStartTurn, catalogNoticeKey } from '../lib/chatMode'
   import { observeArtifact, resetArtifacts } from '../lib/artifacts'
   import { renderMarkdown, escapeHtml, setupCopyButtons } from '../lib/markdown'
   import { applyToolToggle, buildExportConversation, exportConversationStyles, hasRenderableTurn, TOOL_RESULT_CHARS } from '../lib/exportTranscript'
@@ -2336,9 +2335,13 @@ import QuestionModal from '../components/overlays/QuestionModal.svelte'
     // The message is handed back to the composer rather than dropped. The user
     // typed it to send it; discarding it to make a refusal look tidy is the same
     // loss the `!active` branch above refuses to accept.
-    if (!canStartTurn()) {
+    // Both halves are asked of the same session: "may a turn start" and "why
+    // not" are one judgement with one owner (chatMode.ts), so the sentence can
+    // never describe a state the gate did not check (PR-5e).
+    const sid = get(activeSessionId)
+    if (!canStartTurn(sid)) {
       composer?.restore(text, files)
-      showToast(tr(catalogNoticeKey()), 'error')
+      showToast(tr(catalogNoticeKey(sid)), 'error')
       return
     }
     const active = await ensureActiveSession()

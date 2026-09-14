@@ -237,6 +237,19 @@ type Config struct {
 	// HasTrustedKeys) and are already read at assembly time; this field forwards
 	// the answer rather than re-deciding what "configured" means.
 	ControlPlaneReady bool
+	// OCTO-FORK: a session whose catalog model was withdrawn — see
+	// dev-docs-usdable/需求/20260911/开发计划.md §PR-5e
+	//
+	// CatalogOffers answers, for a bare catalog id, whether the signed catalog this
+	// build holds still offers it — and whether that can be answered at all. The
+	// second answer is load-bearing: "no catalog" and "does not list this model"
+	// must not collapse into one boolean, or a fresh installation refuses every
+	// turn with a statement about a model nobody withdrew. known=false means "do
+	// not judge, keep today's behaviour".
+	//
+	// nil means unchanged upstream behavior: the CLI, `octo serve` and every test
+	// that predates this field.
+	CatalogOffers func(id string) (offers, known bool)
 }
 
 // Server is the HTTP server skeleton. It owns the mux, the agent factory,
@@ -1883,6 +1896,16 @@ func (s *Server) senderForSession(sess *agent.Session) (agent.Sender, string) {
 		if s.cfg.GatewaySender == nil {
 			return failingSender{err: errNoGatewaySender(model)}, bare
 		}
+		// OCTO-FORK: PR-5e — refused HERE, before the factory runs, because
+		// building the sender can exchange a token (GatewayEndpoint.Sender); the
+		// order is the requirement, not a detail. After the nil check, because a
+		// build with no gateway is a fault the catalog cannot explain. known=false
+		// falls through — see the field. Nothing is sent on this path (L-C7).
+		if s.cfg.CatalogOffers != nil {
+			if offers, known := s.cfg.CatalogOffers(bare); known && !offers {
+				return failingSender{err: errModelNotListed(bare)}, bare
+			}
+		}
 		// OCTO-FORK: PR-5b1 — the reasoning preferences are read HERE, per turn,
 		// and handed to the factory: both change at run time (PATCH
 		// /api/config/show_reasoning, PATCH /api/sessions/{id}/reasoning_effort),
@@ -1933,6 +1956,22 @@ func (s *Server) senderForSession(sess *agent.Session) (agent.Sender, string) {
 func errNoGatewaySender(model string) error {
 	return fmt.Errorf(
 		"model %q is served by the built-in gateway, which this build does not have yet — the turn was not started and nothing was sent",
+		model)
+}
+
+// errModelNotListed is PR-5e's refusal (L-C7): the session is bound to a catalog
+// model the catalog no longer offers, so there is nothing to send to and no model
+// may be substituted (B8 forbids the silent switch).
+//
+// It says "pick one from the list" rather than "this model was withdrawn" because
+// internal/server cannot see whether the list still has models in it, and a user
+// whose catalog came back empty needs a different sentence from one whose single
+// model was retired. Both of those have owners — the distinction in
+// internal/productruntime, the wording in the frontend's i18n, for which this is
+// the backstop when there is no UI (开发计划 §PR-5e).
+func errModelNotListed(model string) error {
+	return fmt.Errorf(
+		"model %q is no longer in the model list this build was given — pick one from the list; the turn was not started and nothing was sent",
 		model)
 }
 

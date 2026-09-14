@@ -485,14 +485,18 @@ func startHub(app *application.App, bridge *nativeBridge, settings desktopSettin
 	// long-running "desktop hub" instance the housekeeping is for.
 	server.StartUploadsHousekeeping()
 
-	// One assembly, two seams (PR-5a): the local product API's routes and the
-	// built-in gateway's sender factory. Built together because they must share
-	// one CredentialHolder — the gateway presents the token the platform client
-	// refreshed, so two holders would mean it kept presenting a stale one.
-	// Either can be nil, and that means "not wired in this build" to
+	// One assembly, three seams (PR-5a + PR-5e): the local product API's routes,
+	// the built-in gateway's sender factory, and the turn guard's catalog
+	// predicate. Built together because they must share one CredentialHolder — the
+	// gateway presents the token the platform client refreshed, so two holders
+	// would mean it kept presenting a stale one — and because the predicate reads
+	// the very catalog store whose routes are mounted here.
+	//
+	// Any of the three can be nil, and that means "not wired in this build" to
 	// internal/server rather than "no gateway": see mountProductAPI's fail-closed
-	// branches.
-	mountProduct, gatewaySender := mountProductAPI()
+	// branches and the nil-means-unchanged-upstream-behavior contracts on
+	// GatewaySender and CatalogOffers.
+	mountProduct, gatewaySender, catalogOffers := mountProductAPI()
 
 	// Immutable for the life of the process, and the owner of both facts the
 	// turn-path policy needs (see RequireGateway below), so it is read once.
@@ -538,6 +542,11 @@ func startHub(app *application.App, bridge *nativeBridge, settings desktopSettin
 		// working there.
 		RequireGateway:    profile.RequiresControlPlane(),
 		ControlPlaneReady: profile.ControlPlaneConfigured() && profile.HasTrustedKeys(),
+		// OCTO-FORK: a session whose catalog model was withdrawn — see
+		// dev-docs-usdable/需求/20260911/开发计划.md §PR-5e. The predicate is the
+		// runtime's own, so "which models exist" keeps one owner; the shell only
+		// forwards it.
+		CatalogOffers: catalogOffers,
 	})
 	if err != nil {
 		bridge.showError(L().errTitle, fmt.Sprintf(L().errStartFmt, err))

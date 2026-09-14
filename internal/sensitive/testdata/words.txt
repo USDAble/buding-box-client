@@ -1,0 +1,3 @@
+# User dictionary used by package tests.
+测试词
+票管

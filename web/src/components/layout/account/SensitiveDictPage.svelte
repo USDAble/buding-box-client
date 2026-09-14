@@ -2,6 +2,7 @@
   import { t } from '../../../lib/i18n'
   import { showToast } from '../../../lib/stores'
   import { confirmDialog } from '../../../lib/confirm'
+  import { RequestError } from '../../../lib/api'
   import {
     fetchDict, saveDict, importWords, exportDict,
     normalizeWord, isUsableWord, containsWord, parseDictText,
@@ -41,7 +42,14 @@
       dict = { ...dict, user: res.user }
       showToast($t('product.dict.saved'))
     } catch (e) {
-      showToast((e as Error)?.message ?? $t('product.send_failed'), 'error')
+      // V-76: the server's business refusal is a machine code, not an
+      // error/message string — render it as copy, never leak the HTTP status
+      // line ("400 Bad Request" / "500 Internal Server Error").
+      if (e instanceof RequestError && e.code === 'invalid_word') {
+        showToast($t('product.dict.invalid_word'), 'error')
+      } else {
+        showToast($t('product.send_failed'), 'error')
+      }
     } finally {
       saving = false
     }

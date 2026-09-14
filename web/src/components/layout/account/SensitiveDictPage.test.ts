@@ -1,8 +1,11 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { flushSync, mount, unmount } from 'svelte'
+import { get } from 'svelte/store'
 import { locale } from '../../../lib/i18n'
-import { fetchDict, importWords } from '../../../lib/sensitiveDict'
+import { fetchDict, importWords, saveDict } from '../../../lib/sensitiveDict'
+import { RequestError } from '../../../lib/api'
 import { confirmDialog } from '../../../lib/confirm'
+import { toasts } from '../../../lib/stores'
 import SensitiveDictPage from './SensitiveDictPage.svelte'
 
 // PR-6c / L-D4a+b+c 前端半边：词库页读回的三层（内置 / 用户）要上屏，导入要
@@ -33,9 +36,11 @@ let app: Record<string, unknown> | null = null
 
 beforeEach(() => {
   locale.set('zh')
+  toasts.set([])
   target = document.createElement('div')
   document.body.appendChild(target)
   vi.mocked(fetchDict).mockClear()
+  vi.mocked(saveDict).mockClear()
   vi.mocked(importWords).mockClear()
   vi.mocked(confirmDialog).mockClear()
 })
@@ -44,6 +49,7 @@ afterEach(() => {
   if (app) unmount(app)
   app = null
   target.remove()
+  toasts.set([])
 })
 
 function render() {
@@ -57,6 +63,10 @@ async function settle() {
   await new Promise((r) => setTimeout(r, 0))
   await new Promise((r) => setTimeout(r, 0))
   flushSync()
+}
+
+function toastMessages(): string[] {
+  return get(toasts).map((e) => e.msg)
 }
 
 describe('SensitiveDictPage', () => {
@@ -96,5 +106,46 @@ describe('SensitiveDictPage', () => {
     expect(msg).toContain('2')
     expect(msg).toContain('1')
     expect(importWords).toHaveBeenNthCalledWith(2, ['词A', '词B', '词C'], false)
+  })
+
+  // 判据 6（V-76）：saveDict 被服务端以 invalid_word 拒绝 ⇒ 页面显示「该词无效」，
+  // 而不是「400 Bad Request」。反钉：文案里没有「400」。
+  it('shows the invalid_word copy when the server refuses the word (V-76)', async () => {
+    vi.mocked(fetchDict).mockResolvedValueOnce({ builtin: [], user: [] })
+    vi.mocked(saveDict).mockRejectedValueOnce(
+      new RequestError('400 Bad Request', 'invalid_word', null, '！@#'),
+    )
+    render()
+    await settle()
+
+    const input = target.querySelector<HTMLInputElement>('.add-row input')!
+    input.value = '新词'
+    input.dispatchEvent(new Event('input', { bubbles: true }))
+    flushSync()
+    target.querySelector<HTMLButtonElement>('.add-btn')!.click()
+    await settle()
+
+    expect(saveDict).toHaveBeenCalled()
+    expect(toastMessages()).toContain('该词无效')
+    expect(toastMessages().join(' ')).not.toContain('400')
+  })
+
+  // 判据 6（V-76 的另一半）：非业务失败（500）不再泄漏 HTTP 状态行，而是回
+  // 「发送失败，请重试」。
+  it('shows the generic copy instead of the HTTP status line on a 500 (V-76)', async () => {
+    vi.mocked(fetchDict).mockResolvedValueOnce({ builtin: [], user: [] })
+    vi.mocked(saveDict).mockRejectedValueOnce(new RequestError('500 Internal Server Error'))
+    render()
+    await settle()
+
+    const input = target.querySelector<HTMLInputElement>('.add-row input')!
+    input.value = '新词'
+    input.dispatchEvent(new Event('input', { bubbles: true }))
+    flushSync()
+    target.querySelector<HTMLButtonElement>('.add-btn')!.click()
+    await settle()
+
+    expect(toastMessages()).toContain('发送失败，请重试')
+    expect(toastMessages().join(' ')).not.toContain('500')
   })
 })

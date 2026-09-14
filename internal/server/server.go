@@ -43,6 +43,7 @@ import (
 	"github.com/open-octo/octo-agent/internal/permission"
 	"github.com/open-octo/octo-agent/internal/prompt"
 	"github.com/open-octo/octo-agent/internal/scheduler"
+	"github.com/open-octo/octo-agent/internal/sensitive"
 	"github.com/open-octo/octo-agent/internal/skills"
 	"github.com/open-octo/octo-agent/internal/tasks"
 	"github.com/open-octo/octo-agent/internal/tools"
@@ -276,6 +277,8 @@ type Server struct {
 	provider string
 	system   string
 	skillReg *skills.Registry
+	// OCTO-FORK: one compliance-word engine per server (PR-6a) — see sensitive.go.
+	sensitiveEngine *sensitive.Engine
 	// skillsManifest is recomposed when skills are toggled/imported (write) and
 	// read on every turn's prompt.Compose; skillsMu guards the two against a
 	// data race between the mutation handlers and concurrent turns.
@@ -655,6 +658,7 @@ func New(cfg Config) (*Server, error) {
 		provider:            provName,
 		system:              cfg.System,
 		skillReg:            skillReg,
+		sensitiveEngine:     newSensitiveEngine(),
 		skillsManifest:      skillsManifest,
 		cwd:                 cwd,
 		envCtx:              envCtx,
@@ -774,7 +778,8 @@ func (s *Server) enableSubAgentTools() {
 		slog.Warn("sub-agent tools not registered: this build has no default sender")
 		return
 	}
-	template := agent.New(defaultSender, model)
+	// OCTO-FORK: a sub-agent's text reaches the user too (PR-6a) — see sensitive.go.
+	template := agent.New(s.wrapSensitive(defaultSender), model)
 	// Refresh before reading MemoryBackendGuidance() below — enableSubAgentTools
 	// runs at server startup (before any turn has ever called this) and once
 	// more after onboarding, so without this the sub-agent template's baked-in
@@ -1520,7 +1525,9 @@ func (s *Server) projectHooksTrusted(cwd string) bool {
 
 func (s *Server) buildAgent(sess *agent.Session) *agent.Agent {
 	sender, model := s.senderForSession(sess)
-	a := agent.New(sender, model)
+	// OCTO-FORK: the output filter goes on HERE, not inside senderForSession (PR-6a)
+	// — see sensitive.go for why, and for what senderForSession's callers pin.
+	a := agent.New(s.wrapSensitive(sender), model)
 	cwd, envCtx := s.sessionCwdEnv(sess)
 	a.CWD = cwd
 	a.MaxTokens = s.cfg.MaxTokens
@@ -2140,6 +2147,9 @@ func (s *Server) invalidateEndpointSenders(endpointID string) {
 // model) pair for compaction, or (nil, "") when none is configured or it
 // can't be built — the agent then compacts on its primary sender.
 //
+// OCTO-FORK: the resolved sender carries the compliance filter too (PR-6a) —
+// its output is user-visible (session titles, compaction summaries); see
+// sensitive.go for why it is a model-text path like any other.
 // PR4 note: this currently passes cfg.LiteModel (the legacy bare-model
 // field) as the cache ref, so the lite sender's cache key has no
 // "<endpointID>::" prefix — invalidateEndpointSenders can't reach it even
@@ -2156,7 +2166,7 @@ func (s *Server) liteSenderFromConfig(cfg config.Config) (agent.Sender, string) 
 	if err != nil {
 		return nil, ""
 	}
-	return sender, entry.Model
+	return s.wrapSensitive(sender), entry.Model
 }
 
 // senderForEntry builds a sender from one config entry: env key first (same
@@ -2990,7 +3000,8 @@ func (s *Server) buildChannelAgent(profile *agentprofile.Profile) *agent.Agent {
 				"profile", profile.ID, "model", profile.Model, "err", err)
 		}
 	}
-	a := agent.New(defaultSender, model)
+	// OCTO-FORK: IM replies are model text shown to a user (PR-6a) — see sensitive.go.
+	a := agent.New(s.wrapSensitive(defaultSender), model)
 	a.MaxTokens = s.cfg.MaxTokens
 	if cfg, err := config.Load(); err == nil {
 		// IM attachments are a primary reason this feature exists — a channel

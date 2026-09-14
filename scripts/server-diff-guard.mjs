@@ -150,15 +150,54 @@ export const ROUTE_TABLE_CEILING = 1
 //       the ceiling was touched (−17). The remaining 37 are not slack: they are
 //       the feature's floor for this file.
 //
+//   server.go 517 → 531 for the compliance filter's assembly (PR-6a,
+//   2026-09-14). The fifth raise, judged by the same three points:
+//
+//   (a) what the 14 lines are: one import, one `*sensitive.Engine` field, its
+//       assignment in the constructor, three one-line changes at the places a
+//       turn's agent is built (each now goes through `s.wrapSensitive`), and the
+//       same wrap on the resolved lite sender. Three of the fourteen are a
+//       modified line, which counts as a fork line. No logic was added to
+//       upstream's own control flow: the wrapper, the engine and the reasoning
+//       all live in fork-owned files (internal/app/sensitive_sender.go,
+//       internal/server/sensitive.go, internal/sensitive/).
+//   (b) no smaller form: an agent is built where it is built, and the three sites
+//       are server.go's own. The seam one level up — `senderForSession` — was
+//       rejected for a measured reason: four upstream assertions pin that
+//       function's IDENTITY (server_test.go:1970/:1980 assert the plain path
+//       hands back `srv.sender` itself; gateway_route_test.go:72 asserts the
+//       gateway path hands back the injected sender; gateway_model_guard_test.go
+//       :153 asserts the opposite), and those tests are about ROUTING, so
+//       accommodating a filter would mean editing four tests to say something
+//       they do not mean. The other alternative — wrapping at the sender's
+//       source — is a silent hole rather than a smaller form: the product's own
+//       turn path does not use the startup sender at all (a gateway-bound turn
+//       gets one built per turn, GatewayEndpoint.Sender), so wrapping there would
+//       leave every product turn unfiltered while the whole suite stayed green.
+//   (c) what was moved out first: the engine, its construction, the data-root
+//       resolution and the explanation are in the fork-owned
+//       internal/server/sensitive.go; the prose at the four call sites was cut to
+//       one to three lines each (−19 measured before the ceiling was touched), so
+//       what the ceiling records is the wiring and not the argument for it.
+//
+//   NOTE ON THE PR-5e PRECEDENT. That raise rejected a fork-side wrapper sender
+//   because forwarding the capability stack by hand can silently downgrade
+//   streaming. This wrapper is the same shape and is still the right answer,
+//   because that failure mode is excluded by construction rather than promised:
+//   `filteringSender` carries compile-time assertions for all six sender
+//   interfaces (internal/app/sensitive_sender.go), so failing to forward one is a
+//   build error instead of a runtime degradation.
+//
 //   A raise that cannot answer those three points should be a fold instead.
 export const DEBT_CEILINGS = [
   {
     file: 'internal/server/server.go',
-    ceiling: 517,
+    ceiling: 531,
     why:
       'the product seam and the data-root migration: Config.MountAPI/WindowToken/RequireGateway/ControlPlaneReady plumbing, the productAPI registrar (a method value, not a call site), V-36/PR-5c/PR-5b1 gates on the turn path, and Config.CatalogOffers + its guard (PR-5e, L-C7). ' +
       'Measured 2026-09-14 at 533 after excluding marker lines (see the marker note in forkDiffLines) and after trimming the PR-5e prose to pointers into 开发计划 §PR-5e; of the added lines the large majority are prose explaining those seams. ' +
-      'PR-5d3 folded 16 of them out: errModelNotListed and its doc comment moved to internal/server/turn_refusal.go when the refusal gained a code (G3), and the ceiling came down with the fold rather than keeping the headroom',
+      'PR-5d3 folded 16 of them out: errModelNotListed and its doc comment moved to internal/server/turn_refusal.go when the refusal gained a code (G3), and the ceiling came down with the fold rather than keeping the headroom. ' +
+      'PR-6a added 14: the import, the sensitiveEngine field, its assignment, the three agent-construction sites that now go through s.wrapSensitive, and the same wrap on the resolved lite sender — see the fifth raise note above for why no smaller form exists',
     convergence:
       'P0-01A C (the apiProduct fold is dead — see the R1 note; what remains is the registrar and the product-state move, P0-01A D). PR-5e adds nothing to fold: its 37 lines are the floor for a turn-path guard, and they shrink only if upstream grows a pre-send hook',
   },

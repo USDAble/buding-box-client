@@ -1,0 +1,38 @@
+# scripts/brand-allowlist.txt
+#
+# Files (or directories) allowed to contain branding/brand.json's copy strings
+# — the product names and the about/copy text — as literals in source. Every
+# other product file must interpolate {brand}/{brandShort} instead; the
+# unlicensed case is what scripts/brand-guard.mjs fails on.
+#
+# One entry per line: <path>  <reason>
+# A trailing "/" means the directory matches recursively. Blank lines and
+# lines starting with "#" are ignored. scripts/brand-guard.mjs reads this file
+# through scripts/datapath-guard.mjs's parser; keep the two in step. Each entry
+# must carry a written reason (see dev-docs-usdable/开发规范.md §3.2).
+#
+# Not needed here: *.md (documents may name the product), _test.go and
+# *.test.* (a test pins the value it asserts), branding/ (the origin), and the
+# six files `make brand` generates (its --check mode owns them). Those are
+# exclusions in the guard, not licences.
+#
+# V-81 — the entries below are a MARKED DEBT, not a settled exemption. Each one
+# is OS shell metadata for an installer/bundle format that has no brand
+# generator: Windows solved this shape (packaging/windows/octo.iss #includes
+# the generated brand.iss and reads {#BrandAppName}), macOS and Linux have not.
+# The two macOS package scripts already substitute a version token with `sed`
+# (packaging/macos/build.sh, scripts/package-desktop-macos.sh), so the fix is
+# to extend that token set and re-verify a real package build — tracked as V-81
+# in dev-docs-usdable/需求/20260911/需求基线.md §5.6. Removing an entry here is
+# what closing V-81 means.
+
+cmd/octo-desktop/build/darwin/Info.plist  V-81: CFBundleName/CFBundleDisplayName; plist has no build-time interpolation yet.
+cmd/octo-desktop/build/linux/AppRun  V-81: zenity/kdialog dependency + menu-prompt copy in a POSIX shell launcher.
+cmd/octo-desktop/build/linux/octo-desktop.desktop  V-81: freedesktop Name=/Comment= for the app menu.
+packaging/macos/distribution.xml  V-81: installer <title>; packaging/macos/build.sh already sed-substitutes {{VERSION}}.
+
+# NOT a licence-for-a-defect but a correct owner: clienttest is the test
+# double for the mid-end, and §3.8 puts model display names on the server. A
+# fixture that served the real catalog's shape must carry display names, so
+# they belong there and nowhere else.
+internal/productclient/clienttest/sign.go  Serves the fixture catalog; §3.8 makes display names the server's copy, not the client's.

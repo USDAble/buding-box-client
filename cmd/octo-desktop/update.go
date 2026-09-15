@@ -47,7 +47,11 @@ func desktopAssetName() string {
 		// One universal (amd64+arm64) bundle serves both architectures.
 		return "Octo-darwin-universal.zip"
 	case "windows":
-		// OCTO-FORK: 品牌：产品名改为插值 {brand}（硬规则 2） — see dev-docs-usdable/开发规范.md §3.2
+		// OCTO-FORK: 品牌：这个资产名含产品名，但它是**固定数据键**而非文案 —— 必须与
+		// .github/workflows/release.yml 上传的名字逐字相同（那里同样写着 PuddingBox，
+		// 并注释要求与这里的匹配器保持同步）。在打包管线把三处 PuddingBox 收敛为
+		// 从 brand.json 生成之前，单方面插值会让两边静默错位，所以字面量留下、理由
+		// 写明；收敛工作记在 V-81。 — see dev-docs-usdable/开发规范.md §3.2
 		return "PuddingBox-windows-" + runtime.GOARCH + ".exe"
 	}
 	return ""

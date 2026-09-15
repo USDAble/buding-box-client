@@ -79,11 +79,14 @@ export function repositoryRoot(scriptUrl) {
   return path.resolve(path.dirname(fileURLToPath(scriptUrl)), '..')
 }
 
-// loadAllowlist parses scripts/homedir-allowlist.txt. Each entry becomes
-// { prefix, dir } where dir=true means the prefix matches recursively (a
-// trailing "/" in the file). Blank lines and "#" comments are ignored.
-export async function loadAllowlist(root) {
-  const raw = await fs.readFile(path.join(root, ALLOWLIST_REL), 'utf8')
+// loadAllowlist parses an allowlist file — this guard's homedir list by
+// default, or `rel` when another guard passes its own. The shape is shared
+// with scripts/brand-guard.mjs rather than parsed twice: one format, one
+// parser. Each entry becomes { prefix, dir } where dir=true means the prefix
+// matches recursively (a trailing "/" in the file). Blank lines and "#"
+// comments are ignored.
+export async function loadAllowlist(root, rel = ALLOWLIST_REL) {
+  const raw = await fs.readFile(path.join(root, rel), 'utf8')
   const entries = []
   for (const line of raw.split('\n')) {
     const trimmed = line.trim()

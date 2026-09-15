@@ -48,8 +48,14 @@ jobs:
       - name: Check generated brand files are in sync with the source
         run: node scripts/sync-branding.mjs --check
 
+      # 硬规则 2's teeth: a product file that types the name instead of
+      # interpolating {brand}/{brandShort}. See V-79 — before this existed the
+      # job was named Brand Guard but only validated the schema.
+      - name: Fail on unlicensed brand literals in source
+        run: node scripts/brand-guard.mjs
+
       - name: Run branding pipeline tests
-        run: node --test scripts/brand-schema.test.mjs scripts/sync-branding.test.mjs
+        run: node --test scripts/brand-schema.test.mjs scripts/sync-branding.test.mjs scripts/brand-guard.test.mjs
 
   # Guards the portable-data-root rule (开发规范.md §3.1): product code must
   # not write to the host home. Scans internal/, cmd/, shared/ for non-_test.go

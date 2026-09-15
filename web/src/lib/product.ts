@@ -465,7 +465,19 @@ export async function sendCode(phone: string): Promise<number> {
  * ProductError carrying either fieldErrors (round-one format) or a business
  * code + phoneMasked (round two).
  */
-export async function login(input: LoginInput): Promise<ProductStateDTO> {
+export interface DictionaryNotice {
+  state: "degraded" | "recovered";
+  fallbackVersion: string;
+  retryAt?: "next_login";
+  version?: string;
+}
+
+export interface LoginResult {
+  state: ProductStateDTO;
+  dictionaryNotice?: DictionaryNotice;
+}
+
+export async function login(input: LoginInput): Promise<LoginResult> {
   const res = await productFetch("/api/product/login", {
     method: "POST",
     headers: jsonHeaders(),
@@ -486,7 +498,7 @@ export async function login(input: LoginInput): Promise<ProductStateDTO> {
   const state = body.state as ProductStateDTO;
   productState.set(state);
   productPhase.set(state.loggedIn ? "ready" : "blocked");
-  return state;
+  return { state, dictionaryNotice: body.dictionaryNotice as DictionaryNotice | undefined };
 }
 
 /** Persists the UI language before login (PUT /api/product/locale). */

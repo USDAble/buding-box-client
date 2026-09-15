@@ -1092,6 +1092,9 @@ export const en: Record<string, string> = {
   "product.dict.exported": "Exported",
   "product.dict.import_preview": "Will add {added} and skip {skipped} that already exist",
   "product.dict.import_confirm": "Import words",
+  "product.dict.sync_degraded_cached": "Server dictionary update failed. Version {version} remains active; retrying at the next login.",
+  "product.dict.sync_degraded_builtin": "Server dictionary update failed. Built-in and personal words remain active; retrying at the next login.",
+  "product.dict.sync_recovered": "Server dictionary recovered to version {version}.",
   // OCTO-FORK: P6 hidden entries + credits — see
   // dev-docs-usdable/需求/2260906/技术方案/P6-入口隐藏与积分.md.
   "feature.not_available": "This entry isn't available in this version",
@@ -2205,6 +2208,9 @@ export const zh: Record<string, string> = {
   "product.dict.exported": "已导出",
   "product.dict.import_preview": "将新增 {added} 条，跳过 {skipped} 条已存在",
   "product.dict.import_confirm": "导入词库",
+  "product.dict.sync_degraded_cached": "服务器词库更新失败，当前继续使用版本 {version}；下次登录时重试。",
+  "product.dict.sync_degraded_builtin": "服务器词库更新失败，当前仅使用内置词和用户词；下次登录时重试。",
+  "product.dict.sync_recovered": "服务器词库已恢复至版本 {version}。",
   // OCTO-FORK: P6 入口隐藏与积分 — see
   // dev-docs-usdable/需求/2260906/技术方案/P6-入口隐藏与积分.md.
   "feature.not_available": "本期不提供此入口",

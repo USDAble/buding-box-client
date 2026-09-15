@@ -45,14 +45,17 @@ type fileStamp struct {
 // Engine loads a dictionary and safely serves concurrent filtering calls.
 type Engine struct {
 	dictPath string
+	server   *ServerStore
 	matcher  matcher
-	builtin  *dictionary
 
-	mu         sync.Mutex
-	dict       *dictionary
-	stamp      fileStamp
-	loaded     bool
-	unreadable bool
+	mu            sync.Mutex
+	dict          *dictionary
+	userWords     []string
+	serverWords   []string
+	serverVersion string
+	stamp         fileStamp
+	loaded        bool
+	unreadable    bool
 }
 
 type normalizedMatch struct {
@@ -96,12 +99,22 @@ func (substringMatcher) findAll(text normalizedText, words []string) []normalize
 // New constructs an engine for dictPath. An empty path explicitly selects the
 // built-in dictionary without reporting a file error.
 func New(dictPath string) *Engine {
-	builtin := buildDictionary(nil)
+	return newEngine(dictPath, nil)
+}
+
+// NewWithServer adds the read-only server layer to the same matcher used by
+// built-in and user words. A missing or damaged server cache is an empty layer,
+// never a reason to disable the other two.
+func NewWithServer(dictPath string, server *ServerStore) *Engine {
+	return newEngine(dictPath, server)
+}
+
+func newEngine(dictPath string, server *ServerStore) *Engine {
 	e := &Engine{
 		dictPath: dictPath,
+		server:   server,
 		matcher:  substringMatcher{},
-		builtin:  builtin,
-		dict:     builtin,
+		dict:     buildDictionary(nil),
 	}
 	e.dictionarySnapshot()
 	return e

@@ -52,6 +52,9 @@ const FixturePolicyVersion = "2026-09-11.1"
 // fixture with only one of them set would not exercise the rule.
 const FixtureCatalogTTLSec = 3600
 
+// FixtureDictionaryVersion is the first signed server-dictionary snapshot.
+const FixtureDictionaryVersion = "43"
+
 // fixtureSigningKey decodes the seed once. A malformed compile-time constant is
 // a programming error, not a runtime condition, so it panics at init exactly
 // like the embedded runtime profiles do.
@@ -186,6 +189,34 @@ func signedPolicyFor(now time.Time, version, audience string, tamper bool, ttlSe
 		upperFirstLetter(raw)
 	}
 	return productclient.PolicyEnvelope{Policy: raw, Signature: sig}, nil
+}
+
+func signedDictionary(now time.Time, version, keyID string, words []string, digest string, tamper bool) (productclient.SensitiveDictionaryEnvelope, error) {
+	if digest == "" {
+		digest = productclient.SensitiveDictionarySHA256(words)
+	}
+	dictionary := productclient.SensitiveDictionary{
+		Version:   version,
+		Mode:      "full",
+		Words:     words,
+		SHA256:    digest,
+		KeyID:     keyID,
+		Audience:  FixturePolicyAudience,
+		IssuedAt:  now.UTC().Add(-time.Minute).Format(time.RFC3339),
+		ExpiresAt: now.UTC().Add(time.Hour).Format(time.RFC3339),
+	}
+	raw, err := json.Marshal(dictionary)
+	if err != nil {
+		return productclient.SensitiveDictionaryEnvelope{}, fmt.Errorf("clienttest: marshal fixture dictionary: %w", err)
+	}
+	sig, err := productclient.SignPayload(raw, keyID, fixtureSigningKey)
+	if err != nil {
+		return productclient.SensitiveDictionaryEnvelope{}, fmt.Errorf("clienttest: sign fixture dictionary: %w", err)
+	}
+	if tamper {
+		upperFirstLetter(raw)
+	}
+	return productclient.SensitiveDictionaryEnvelope{Dictionary: raw, DictionarySignature: sig}, nil
 }
 
 // upperFirstLetter changes exactly one byte inside an otherwise valid policy.

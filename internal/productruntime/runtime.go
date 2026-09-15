@@ -74,6 +74,9 @@ type Deps struct {
 	// nil means the build did not wire it. The nickname route then refuses the
 	// edit instead of storing an unchecked name — see account.go.
 	Sensitive *sensitive.Engine
+	// ServerDictionary owns the last verified server layer. A nil store removes
+	// only that layer; built-in and user words remain active.
+	ServerDictionary *sensitive.ServerStore
 }
 
 // CatalogTrust is the trust anchor a fetched policy is checked against.
@@ -113,6 +116,8 @@ type Runtime struct {
 	// unanswerable from the disk and would otherwise degrade to "no cache"
 	// (开发计划 PR-4c 缺口 ①).
 	lastCatalogOutcome catalogOutcome
+	dictionaryMu       sync.Mutex
+	dictionaryFailed   bool
 }
 
 // New builds a Runtime.
@@ -468,7 +473,23 @@ func (rt *Runtime) handleLogin(w http.ResponseWriter, r *http.Request) {
 		slog.Warn("login: the balance was not refreshed", "error", err)
 	}
 
-	writeJSON(w, http.StatusOK, map[string]any{"state": rt.deps.State.PublicState()})
+	var dictionaryNotice *dictionaryNoticeDTO
+	if notice, err := rt.refreshServerDictionary(r.Context()); err != nil {
+		if IsSessionExpired(err) {
+			rt.failPlatform(w, err)
+			return
+		}
+		dictionaryNotice = notice
+		slog.Warn("login: the server dictionary was not refreshed", "error", err)
+	} else {
+		dictionaryNotice = notice
+	}
+
+	response := map[string]any{"state": rt.deps.State.PublicState()}
+	if dictionaryNotice != nil {
+		response["dictionaryNotice"] = dictionaryNotice
+	}
+	writeJSON(w, http.StatusOK, response)
 }
 
 // handleLogout ends the session on this installation.

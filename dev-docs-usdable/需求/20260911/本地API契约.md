@@ -162,7 +162,7 @@
   ```
   首启传 **五个字段**；二次登录只传 `phone` / `code` / `nickname`（`activationCode`、`boxCode` 省略）。
 - **两个凭证是一对，可选**（2026-09-13 更正，`V-45` / `PQ28`）：**要么都给、要么都不给**，本地只查这个**形状**；"这次是不是首启"**不由客户端判定**（`开发规范` §3.8）—— 用本地 `activated` 推断首启，正是把丢 `data/` 的用户（激活码已一次性用掉）逼到"只能联系客服"的那条规则。半填仍然本地拒绝（`invalid_activation` / `invalid_box_code`），所以用户不必为了"少填一个"跑一趟中台。**无凭证的登录是否被接受，由中台答**：若该手机号已有可用授权，就签发令牌并回带激活记录（客户端据此回填 `boxCode`，见 `E1` 规则 2 / `PQ28`）；若没有，回 `activation_required`。
-- **应答 `200`**：`{"state": ProductStateDTO}`
+- **应答 `200`**：`{"state": ProductStateDTO, "dictionaryNotice"?: DictionaryNotice}`。`dictionaryNotice` 仅在服务器词库同步发生降级或从本进程已知降级中恢复时出现：降级为 `{"state":"degraded","fallbackVersion":"43"或"","retryAt":"next_login"}`（空版本表示仅保留内置词 + 用户词），恢复为 `{"state":"recovered","fallbackVersion":"","version":"44"}`。词库失败不阻断已成功的登录；`internal/productruntime` 是是否提示及回落版本的 owner，前端只做状态到 i18n 文案的映射（`D5` / `L-D5`）。
 - **错误**：
   - 字段级 `400 {"fieldErrors": {...}}`：
     | code | 归属字段 | 含义 |

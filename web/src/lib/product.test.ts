@@ -295,6 +295,15 @@ describe("login", () => {
     expect(get(productState)?.loggedIn).toBe(true);
   });
 
+  it("returns the bounded server-dictionary degradation notice", async () => {
+    const notice = { state: "degraded", fallbackVersion: "43", retryAt: "next_login" } as const;
+    vi.stubGlobal("fetch", fetchReturning(200, { state: stateDTO, dictionaryNotice: notice }));
+
+    const result = await login({ phone: "13800001234", code: "123456", nickname: "用户1234" });
+
+    expect(result.dictionaryNotice).toEqual(notice);
+  });
+
   it("throws fieldErrors from round-one format errors", async () => {
     vi.stubGlobal("fetch", fetchReturning(400, { fieldErrors: { phone: "invalid_phone", nickname: "nickname_format" } }));
 

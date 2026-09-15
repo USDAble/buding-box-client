@@ -4,9 +4,11 @@
 // write to the host home. It scans internal/, cmd/, shared/ for non-_test.go
 // Go files and fails on two classes of hit:
 //
-//   - the ".octo" string literal — zero exceptions. It was the pre-fork data
-//     root and no longer exists in the product (CLI included), so any
-//     occurrence is a regression.
+//   - the ".octo" string literal — the pre-fork data root, gone from the
+//     product (CLI included). A hit fails unless the same line, or the line
+//     directly above it, carries an `octo-literal-allow:` marker with a reason.
+//     Only two sites are licensed, both naming the *project's* directory rather
+//     than the data root (see OCTO_LITERAL below).
 //   - os.UserHomeDir() — fails unless the file is in scripts/homedir-allowlist.txt
 //     (the real-host-home access list; one written reason per entry).
 //
@@ -42,9 +44,28 @@ const PROMPT_DIRS = ['internal/prompt', 'internal/skills']
 const ALLOWLIST_REL = 'scripts/homedir-allowlist.txt'
 
 // The pre-fork data-root segment as a Go string literal. Match the exact
-// double-quoted ".octo" so ".octo-hooks.yml" (the renamed project-level hooks
-// file), ".octorules", and the ".octo" path name in prose never trip it.
+// double-quoted ".octo" so ".octorules" and the bare directory name in prose
+// never trip it.
+//
+// A hit fails UNLESS that same line carries an `octo-literal-allow:` marker with
+// a reason. That is deliberately narrower than a file allowlist:
+// `internal/hooks/trust.go` legitimately names the *project's* .octo directory
+// (a user's own repo file, not the data root), and a file-level exception would
+// blind the guard to a `~/.octo` write landing in that same file on the next
+// upstream merge. It is narrower than a "line above" rule too: a marker licenses
+// the line it is written on and nothing else, so an unmarked occurrence added
+// anywhere — including immediately after a marked one — still fails.
+//
+// Both allowed sites restore upstream's path rather than renaming it, because
+// renaming is what the marker exists to avoid: upstream's own docs
+// (docs/src/content/docs/guides/hooks.md) and the runtime skill doc
+// (internal/skills/defaults/product-help/HOOKS.md) both name .octo/hooks.yml,
+// so a renamed directory made the shipped documentation wrong. See PQ31.
 export const OCTO_LITERAL = /"\.octo"/
+
+// The marker that licenses one line's ".octo" literal. The reason is not parsed
+// — grep-ability is the point, and a reason-free marker is caught in review.
+export const OCTO_LITERAL_ALLOW = /octo-literal-allow:\s*\S+/
 
 // "~/.octo/…" — an explicit host-home data path, not the bare directory-name
 // literal. Banned in runtime prompt/skill text (see check's second pass).
@@ -148,6 +169,20 @@ export async function collectPromptFiles(root) {
   }
 }
 
+// octoLiteralViolations returns the 1-based line numbers whose ".octo" literal is
+// unlicensed. Exported so the marker's central property is testable: it licenses
+// the line it is written on and nothing else.
+export function octoLiteralViolations(content) {
+  const lines = content.split('\n')
+  const bad = []
+  for (let i = 0; i < lines.length; i++) {
+    if (!OCTO_LITERAL.test(lines[i])) continue
+    if (OCTO_LITERAL_ALLOW.test(lines[i])) continue
+    bad.push(i + 1)
+  }
+  return bad
+}
+
 // check returns a list of human-readable problems; an empty list means clean.
 export async function check(root) {
   const entries = await loadAllowlist(root)
@@ -156,8 +191,11 @@ export async function check(root) {
 
   for (const rel of files) {
     const content = await fs.readFile(path.join(root, rel), 'utf8')
-    if (OCTO_LITERAL.test(content)) {
-      problems.push(`${rel}: contains the forbidden ".octo" string literal (zero exceptions)`)
+    for (const line of octoLiteralViolations(content)) {
+      problems.push(
+        `${rel}:${line}: contains the ".octo" string literal without an octo-literal-allow marker ` +
+          'naming a reason (the literal is the pre-fork data root; a project-level path is not)',
+      )
     }
     if (USER_HOME_DIR.test(content) && !isAllowed(rel, entries)) {
       problems.push(`${rel}: calls os.UserHomeDir() and is not in ${ALLOWLIST_REL}`)
@@ -186,7 +224,7 @@ async function main() {
     process.exitCode = 1
     return
   }
-  console.log('datapath-guard passed: no ".octo" literals, no "~/.octo" in prompt/skill text, all os.UserHomeDir() calls allowlisted.')
+  console.log('datapath-guard passed: no unlicensed ".octo" literals, no "~/.octo" in prompt/skill text, all os.UserHomeDir() calls allowlisted.')
 }
 
 // Only run the CLI when invoked directly, so importing check/loadAllowlist for

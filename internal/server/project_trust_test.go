@@ -22,7 +22,12 @@ func TestSourceDirHooks_MountIsTheTrustGrant(t *testing.T) {
 	t.Setenv("OCTO_HOOK_POST_TURN", "")
 
 	src := t.TempDir()
-	if err := os.WriteFile(filepath.Join(src, ".octo-hooks.yml"), []byte("hooks:\n  Stop:\n    - command: \"echo hi\"\n"), 0o600); err != nil {
+	// The project hooks file lives in a .octo directory (upstream's layout), so
+	// the fixture has to create it — octo only ever reads this file.
+	if err := os.MkdirAll(filepath.Join(src, ".octo"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(src, ".octo", "hooks.yml"), []byte("hooks:\n  Stop:\n    - command: \"echo hi\"\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
 

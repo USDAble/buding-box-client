@@ -8,6 +8,7 @@ import {
   check,
   isAllowed,
   loadAllowlist,
+  octoLiteralViolations,
   repositoryRoot,
 } from './datapath-guard.mjs'
 
@@ -20,11 +21,47 @@ test('the committed tree passes the guard', async () => {
 test('the ".octo" literal matches only the exact double-quoted string', () => {
   assert.equal(OCTO_LITERAL.test(`filepath.Join(home, ".octo", "sessions")`), true)
   assert.equal(OCTO_LITERAL.test(`".octo"`), true)
-  // The renamed project-level hooks file and .octorules must never trip it.
-  assert.equal(OCTO_LITERAL.test(`filepath.Join(cwd, ".octo-hooks.yml")`), false)
+  // .octorules must never trip it, and prose mentioning the path name is not a
+  // Go string literal.
   assert.equal(OCTO_LITERAL.test(`".octorules"`), false)
-  // Prose mentioning the path name is not a Go string literal.
   assert.equal(OCTO_LITERAL.test(`// the ~/.octo data root is gone`), false)
+})
+
+test('an unlicensed ".octo" literal is reported with its line number', () => {
+  const src = ['package p', '', '\thome, _ := os.UserHomeDir()', '\tp := filepath.Join(home, ".octo", "sessions")'].join('\n')
+  assert.deepEqual(octoLiteralViolations(src), [4])
+})
+
+test('a marker licenses the line it is written on and nothing else', () => {
+  const licensed = '\treturn filepath.Join(cwd, ".octo", "hooks.yml") // octo-literal-allow: project dir, not the data root'
+  assert.deepEqual(octoLiteralViolations(licensed), [])
+
+  // A second, unmarked occurrence in the same file still fails — the marker is
+  // per-line, not per-file, which is the whole point of it.
+  const twoSites = [licensed, '\tp := filepath.Join(home, ".octo", "sessions")'].join('\n')
+  assert.deepEqual(octoLiteralViolations(twoSites), [2])
+})
+
+test('a marker on a neighbouring line licenses nothing', () => {
+  // Adjacency is not special: were it, a new occurrence inserted right after a
+  // marked line would be silently licensed — exactly the hole the marker exists
+  // to close.
+  const above = [
+    '// octo-literal-allow: project-level directory in the user repo',
+    '\treturn filepath.Join(cwd, ".octo", "hooks.yml")',
+  ].join('\n')
+  assert.deepEqual(octoLiteralViolations(above), [2])
+
+  const below = [
+    '\treturn filepath.Join(cwd, ".octo", "hooks.yml")',
+    '// octo-literal-allow: project-level directory in the user repo',
+  ].join('\n')
+  assert.deepEqual(octoLiteralViolations(below), [1])
+})
+
+test('a marker with no reason is not a marker', () => {
+  const src = '\treturn filepath.Join(cwd, ".octo", "hooks.yml") // octo-literal-allow:'
+  assert.deepEqual(octoLiteralViolations(src), [1])
 })
 
 test('the "~/.octo" path regex matches a host-home reference', () => {

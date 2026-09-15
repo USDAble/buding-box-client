@@ -166,7 +166,7 @@ func projectRunDir(cwd, resumeID string, lookup func(string) string) string {
 	return dir
 }
 
-// resolveProjectHooksTrust decides whether the project-level <cwd>/.octo-hooks.yml
+// resolveProjectHooksTrust decides whether the project-level <cwd>/.octo/hooks.yml
 // should be loaded, implementing trust-on-first-use. It returns false (skip)
 // when there is no project file. For an untrusted or changed file it prompts
 // once (when interactive, i.e. stdin is a TTY — works for both the TUI and a

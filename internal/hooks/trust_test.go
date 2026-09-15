@@ -31,7 +31,7 @@ func TestFingerprint_StableAndContentSensitive(t *testing.T) {
 
 func TestTrustStore_RoundTrip(t *testing.T) {
 	tempHome(t)
-	path := "/some/repo/.octo-hooks.yml"
+	path := "/some/repo/.octo/hooks.yml"
 	fp := Fingerprint([]byte("x"))
 
 	if IsTrusted(path, fp) {
@@ -51,7 +51,13 @@ func TestTrustStore_RoundTrip(t *testing.T) {
 
 func writeProjectHooks(t *testing.T, cwd, body string) {
 	t.Helper()
-	if err := os.WriteFile(filepath.Join(cwd, ".octo-hooks.yml"), []byte(body), 0o644); err != nil {
+	// The project hooks file lives in a .octo directory (upstream's layout), so
+	// the fixture has to create it — octo only ever reads this file.
+	path := filepath.Join(cwd, ".octo", "hooks.yml")
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(path, []byte(body), 0o644); err != nil {
 		t.Fatal(err)
 	}
 }
@@ -74,7 +80,7 @@ func TestEngineFromEnvAndFiles_ProjectLoadGatedByFlag(t *testing.T) {
 }
 
 func TestProjectConfigPath(t *testing.T) {
-	if got := ProjectConfigPath("/repo"); got != filepath.Join("/repo", ".octo-hooks.yml") {
+	if got := ProjectConfigPath("/repo"); got != filepath.Join("/repo", ".octo/hooks.yml") {
 		t.Errorf("ProjectConfigPath = %q", got)
 	}
 	if ProjectConfigPath("") != "" {

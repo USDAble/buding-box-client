@@ -13,7 +13,7 @@ import (
 // FileConfig is the on-disk hooks.yml schema. It maps each event to a list of
 // hooks, so an event can fan out to several commands (unlike the env shim's one
 // command per event). The user-level file lives at data/hooks.yml; a
-// project-level <cwd>/.octo-hooks.yml layers on top.
+// project-level <cwd>/.octo/hooks.yml layers on top.
 //
 //	hooks:
 //	  UserPromptSubmit:
@@ -106,14 +106,14 @@ func parseTimeout(s string) time.Duration {
 
 // EngineFromEnvAndFiles builds the production engine: the OCTO_HOOK_* env shim,
 // the user-level data/hooks.yml, and — when loadProject is true — the
-// project-level <cwd>/.octo-hooks.yml, layered in that order (append semantics,
+// project-level <cwd>/.octo/hooks.yml, layered in that order (append semantics,
 // so project hooks run after user hooks). The caller decides loadProject: the
 // CLI resolves trust-on-first-use (prompting for an untrusted project file); a
 // server auto-trusts its operator-chosen cwd. A missing file is fine; a
 // malformed file or bad entry surfaces via Notify and is otherwise ignored, so
 // one broken hook never blocks the session.
 //
-// sourceDirs are a project's mounted folders, whose .octo-hooks.yml files load
+// sourceDirs are a project's mounted folders, whose .octo/hooks.yml files load
 // after the cwd's, in mount order — deterministic, never map-ordered. No trust
 // flag per folder: mounting a folder into a project is itself the trust grant,
 // made by the person who added it.

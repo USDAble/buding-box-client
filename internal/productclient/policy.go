@@ -9,10 +9,18 @@ import (
 // contract's dynamic half (中台交付包 §4.3). Field names live here and nowhere
 // else, exactly like the rest of this package.
 //
-// Only what PR-4a needs to verify is modelled in full. The catalog and
-// capabilities are carried as types because they travel inside the signature
-// and the verifier must not lose them, but consuming them (projection into the
-// picker, entry visibility) is later work.
+// Only what this client consumes is modelled. The envelope may carry more than
+// is declared here and that is fine — encoding/json ignores unknown fields — so
+// an extra platform field is never a reason to reject a policy.
+//
+// `capabilities[]` is deliberately NOT modelled (2026-09-15, 人工拍板). The
+// capability matrix is permanently unimplemented (需求基线 B7, 待解决问题 D-009):
+// entry visibility is decided by web/src/lib/features.ts's static list and the
+// tool gate is upstream's internal/permission engine, so nothing would read it.
+// A type with no consumer is worse than an absent one — it reads as "we parse
+// this and act on it", which invites the platform to implement a field that
+// changes nothing on this side (that is what 中台交付包 §4.4 was deleted for).
+// If the matrix is ever reopened, the type comes back with its consumer.
 
 // DisplayName is a model's name in each UI language. The platform owns the
 // values; the client renders the entry matching the current UI language and
@@ -56,33 +64,19 @@ type Catalog struct {
 	Modes   []CatalogMode  `json:"modes"`
 }
 
-// Capability is one entry of the capability matrix. It governs whether a
-// feature is offered at all, not merely whether its menu entry is drawn:
-// available is architecture, visible is presentation, entitled is the account's
-// right to use it, and PermissionPolicy is the runtime gate.
-type Capability struct {
-	ID               string `json:"id"`
-	Available        bool   `json:"available"`
-	Visible          bool   `json:"visible"`
-	Entitled         bool   `json:"entitled"`
-	PermissionPolicy string `json:"permissionPolicy"`
-	MinClientVersion string `json:"minClientVersion"`
-}
-
 // Policy is the signed envelope's payload.
 //
 // The validity window is part of the signature on purpose: an unscrupulous
 // intermediary can rewrite any field the signature does not cover, which would
 // defeat both version monotonicity and policy revocation at once.
 type Policy struct {
-	PolicyVersion    string       `json:"policyVersion"`
-	IssuedAt         string       `json:"issuedAt"`
-	ExpiresAt        string       `json:"expiresAt"`
-	MinClientVersion string       `json:"minClientVersion"`
-	Audience         string       `json:"audience"`
-	KeyID            string       `json:"keyId"`
-	Catalog          Catalog      `json:"catalog"`
-	Capabilities     []Capability `json:"capabilities"`
+	PolicyVersion    string  `json:"policyVersion"`
+	IssuedAt         string  `json:"issuedAt"`
+	ExpiresAt        string  `json:"expiresAt"`
+	MinClientVersion string  `json:"minClientVersion"`
+	Audience         string  `json:"audience"`
+	KeyID            string  `json:"keyId"`
+	Catalog          Catalog `json:"catalog"`
 }
 
 // PolicySignature is the detached signature over Policy's raw bytes.

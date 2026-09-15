@@ -39,7 +39,7 @@ internal/productprofile/profiles/developer.json
 
 因此**被该标签排除的代码必须单独编译与测试**，否则它会静默腐烂到出包才暴露：`make test-production`（= `go build/vet/test -tags product_production`），CI 在 `go.yml` 的 Ubuntu job 跑同一组命令。`package-portable.mjs` 还会对**已构建的 exe** 断言 P11 假模型 marker 不存在（`checkProductionBinary()`）—— `release-profile-guard` 只证明标签写进了构建命令，它证明标签到达了编译器。
 
-`data/config.yml` 仍是上游的用户偏好与模型配置，供 developer、自动化测试和既有功能兼容使用，**绝不**保存或覆盖 Profile。production 是否显示相关入口由能力矩阵决定；中台下发的目录、策略、词库和协议版本也不是 Profile 配置：它们各自验签、缓存并受版本语义约束。
+`data/config.yml` 仍是上游的用户偏好与模型配置，供 developer、自动化测试和既有功能兼容使用，**绝不**保存或覆盖 Profile。production 下**模型的可选资格**由签名目录的 `eligible` 决定（`需求基线` `B7` 保留的那一半）；中台下发的目录、策略、词库和协议版本也不是 Profile 配置：它们各自验签、缓存并受版本语义约束。
 
 ## 3. 配置 schema
 
@@ -82,7 +82,7 @@ internal/productprofile/profiles/developer.json
 
 **这两项是发布前必须替换的发布动作，不是代码改动 —— 由 `release-config-guard` 在出包时把关。** 打包前必须把真实地址与公钥填入 `production.json`；`scripts/release-config-guard.mjs`（`make release-config-check`，并作为 `scripts/preflight.mjs` 的 advisory 项随每条出包路径运行）会报出未替换的 `.invalid` 占位与空的 `trustedKeyIDs`。它**只告警不阻断**：B0/B1 期间打内部测试包是合法的，且 `.invalid` 永不解析，运行时不会把流量发到任何地方 —— 这与 `server-diff-guard` 在 preflight 里同属 advisory 层是同一个理由。
 
-`production.json` 必须把所有 `allow*` 值设为 `false`。这组字段只约束开发 WebView、环境模型来源与数据根覆盖，不能被 WebView、模型输出、环境变量或本地配置开启。用户模型配置和 local provider 不在 Profile schema 中：它们是既有功能，正式会话的模型来源边界由 P0-05 的 gateway sender 实现，不能用未接入的 Profile 字段假装关闭。`startup` 保留上游已有能力；菜单显示、用户资格和实际执行权限分别由 P0-04 的能力矩阵与本地 PEP 决定，不能将隐藏误当成删除。`developer.json` 明确列出其允许的开发入口，避免“未设置即默认开放”。
+`production.json` 必须把所有 `allow*` 值设为 `false`。这组字段只约束开发 WebView、环境模型来源与数据根覆盖，不能被 WebView、模型输出、环境变量或本地配置开启。用户模型配置和 local provider 不在 Profile schema 中：它们是既有功能，正式会话的模型来源边界由 P0-05 的 gateway sender 实现，不能用未接入的 Profile 字段假装关闭。`startup` 保留上游已有能力；**菜单显示**由前端的静态入口清单决定（`web/src/lib/features.ts` 的 `HIDDEN_VIEWS`），**实际执行权限**由本地上游权限引擎（`internal/permission`）决定，不能将隐藏误当成删除。**2026-09-15 更正**：这里原本写"由 P0-04 的能力矩阵与本地 PEP 决定" —— 能力矩阵已拍板**永久不实现**（`待解决问题` `D-009`），可见性从来没有、也不会有第二个来源。`developer.json` 明确列出其允许的开发入口，避免“未设置即默认开放”。
 
 新增、删除或改变字段时，必须同时更新本文件、两份 JSON、解析/校验测试，以及受影响的打包脚本；任何安全语义变化还须回写 P0 需求基线。
 

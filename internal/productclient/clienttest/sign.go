@@ -85,21 +85,29 @@ func FixtureSigningPublicKey() string {
 // (every eligibility and degradation state) belongs with the catalog projection
 // work, not with signature verification.
 func FixturePolicy(now time.Time) productclient.Policy {
-	return fixturePolicy(now, FixturePolicyVersion, FixturePolicyAudience, FixtureCatalogTTLSec)
+	return fixturePolicy(now, FixturePolicyVersion, FixturePolicyAudience, FixtureCatalogTTLSec, "")
 }
 
-// fixturePolicy is FixturePolicy with the three fields a fault injection moves:
-// the catalog version (a rollback), the audience (a policy addressed to another
-// product), and the catalog's own freshness claim (an absurd ttlSec). Everything
+// fixturePolicy is FixturePolicy with the fields a fault injection moves: the
+// catalog version (a rollback), the audience (a policy addressed to another
+// product), the catalog's own freshness claim (an absurd ttlSec), and the id of
+// one model to mark ineligible (a model the platform has taken away). Everything
 // else stays fixed so a failure can only come from the field the test moved.
 //
 // ttlSec <= 0 means FixtureCatalogTTLSec, the same bound FixturePolicy carries.
-func fixturePolicy(now time.Time, version, audience string, ttlSec int) productclient.Policy {
+// ineligibleModel == "" means the healthy catalog, where every model is offered.
+func fixturePolicy(now time.Time, version, audience string, ttlSec int, ineligibleModel string) productclient.Policy {
 	if ttlSec <= 0 {
 		ttlSec = FixtureCatalogTTLSec
 	}
 	issued := now.UTC().Add(-time.Minute).Format(time.RFC3339)
 	expires := now.UTC().Add(time.Hour).Format(time.RFC3339)
+
+	// offered is the eligibility rule for one fixture model id. It is written
+	// once so the three catalog entries cannot disagree about it, and so
+	// "no model is withdrawn" (ineligibleModel == "") needs no special case: the
+	// empty id names nothing, so every real id is offered.
+	offered := func(id string) bool { return id != ineligibleModel }
 
 	return productclient.Policy{
 		PolicyVersion: version,
@@ -119,7 +127,7 @@ func fixturePolicy(now time.Time, version, audience string, ttlSec int) productc
 					Capabilities:     map[string]bool{"stream": true, "tools": true},
 					MaxContextTokens: 32000,
 					MaxOutputTokens:  4096,
-					Eligible:         true,
+					Eligible:         offered("buding-privacy-1"),
 					PricingVersion:   "2026-09-a",
 				},
 				{
@@ -130,7 +138,7 @@ func fixturePolicy(now time.Time, version, audience string, ttlSec int) productc
 					Capabilities:     map[string]bool{"stream": true, "tools": true, "vision": true},
 					MaxContextTokens: 128000,
 					MaxOutputTokens:  8192,
-					Eligible:         true,
+					Eligible:         offered("buding-cloud-pro"),
 					PricingVersion:   "2026-09-a",
 				},
 				{
@@ -141,7 +149,7 @@ func fixturePolicy(now time.Time, version, audience string, ttlSec int) productc
 					Capabilities:     map[string]bool{"stream": true},
 					MaxContextTokens: 32000,
 					MaxOutputTokens:  4096,
-					Eligible:         true,
+					Eligible:         offered("buding-cloud-fast"),
 					PricingVersion:   "2026-09-a",
 				},
 			},
@@ -159,13 +167,14 @@ func fixturePolicy(now time.Time, version, audience string, ttlSec int) productc
 // receives. Marshalling once matters — signing one encoding and sending another
 // is the failure this whole scheme is designed to avoid.
 func signedPolicy(now time.Time) (productclient.PolicyEnvelope, error) {
-	return signedPolicyFor(now, FixturePolicyVersion, FixturePolicyAudience, false, FixtureCatalogTTLSec)
+	return signedPolicyFor(now, FixturePolicyVersion, FixturePolicyAudience, false, FixtureCatalogTTLSec, "")
 }
 
 // signedPolicyFor signs a policy with the given identity fields, optionally
-// tampering with the payload afterwards (Server.TamperPolicy).
-func signedPolicyFor(now time.Time, version, audience string, tamper bool, ttlSec int) (productclient.PolicyEnvelope, error) {
-	raw, err := json.Marshal(fixturePolicy(now, version, audience, ttlSec))
+// tampering with the payload afterwards (Server.TamperPolicy) and optionally
+// withdrawing one model (Server.SetModelIneligible).
+func signedPolicyFor(now time.Time, version, audience string, tamper bool, ttlSec int, ineligibleModel string) (productclient.PolicyEnvelope, error) {
+	raw, err := json.Marshal(fixturePolicy(now, version, audience, ttlSec, ineligibleModel))
 	if err != nil {
 		return productclient.PolicyEnvelope{}, fmt.Errorf("clienttest: marshal fixture policy: %w", err)
 	}

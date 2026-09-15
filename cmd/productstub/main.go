@@ -83,6 +83,8 @@ func main() {
 	upstream := flag.String("upstream", "", "forward model turns to a real OpenAI-compatible provider at this base URL instead of answering from the fixture, e.g. https://api.deepseek.com/v1")
 	upstreamKey := flag.String("key", "", "the provider's API key (defaults to $"+upstreamKeyEnv+"); required with -upstream and never forwarded to the control plane")
 	upstreamModel := flag.String("model", "", "send this model id upstream instead of the catalog id; a real provider rejects the fixture ids, so this is required in practice")
+	var inj inject
+	registerInject(flag.CommandLine, &inj)
 	flag.Parse()
 	addr := defaultAddr
 	if rest := flag.Args(); len(rest) > 1 {
@@ -127,8 +129,9 @@ func main() {
 	if *toolName != "" {
 		stub.RequestToolCall(*toolName, toolArguments[*toolName])
 	}
+	inj.apply(stub)
 
-	printFixtures(ln.Addr().String(), *toolName, gateway)
+	printFixtures(ln.Addr().String(), *toolName, gateway, inj)
 
 	if err := http.Serve(ln, withRequestLog(withUpstreamGateway(stub.Handler(), stub, gateway))); err != nil {
 		log.Fatalf("productstub: serve: %v", err)
@@ -196,7 +199,7 @@ func (r *statusRecorder) WriteHeader(code int) {
 // walkthrough that does not say whether the gateway will ask for a tool is a
 // walkthrough that cannot tell "the tool loop is broken" from "the switch is
 // off" - and an unexplained approval prompt is worse than a missing one.
-func printFixtures(addr, toolName string, gateway gatewayFlags) {
+func printFixtures(addr, toolName string, gateway gatewayFlags, inj inject) {
 	base := "http://" + addr
 	toolLine := "  tool calls   OFF - the gateway will not ask for any tool (the healthy shape)"
 	if toolName != "" {
@@ -208,6 +211,8 @@ func printFixtures(addr, toolName string, gateway gatewayFlags) {
 
   apiHost      %s/v1
   gatewayHost  %s        (either shape works; this one matches the client default)
+
+%s
 
 %s
 
@@ -235,6 +240,7 @@ func printFixtures(addr, toolName string, gateway gatewayFlags) {
 `,
 		addr, base, base,
 		describeGateway(gateway),
+		inj.describe(),
 		clienttest.FixtureSMSCode,
 		clienttest.FixtureActivationCode, clienttest.FixtureBoxCode,
 		clienttest.FixtureSecondActivationCode,

@@ -98,6 +98,27 @@ jobs:
       - name: Run docs table guard tests
         run: node --test scripts/docs-table-guard.test.mjs
 
+  # Guards requirement D6 / G4 (需求基线.md): the web bundle keeps a second copy
+  # of the normalization symbol table (the dictionary page pre-checks duplicates
+  # and emptiness without a round trip), and nothing compared the two until
+  # D-010. They are equal today, so no other test would notice a drift — this is
+  # the assertion, not a description of it. No npm dependencies.
+  sensitive-norm-guard:
+    name: Sensitive Norm Guard
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '22'
+
+      - name: Run sensitive norm guard
+        run: node scripts/sensitive-norm-guard.mjs
+
+      - name: Run sensitive norm guard tests
+        run: node --test scripts/sensitive-norm-guard.test.mjs
+
   reuse-guard:
     name: Reuse Guard
     runs-on: ubuntu-latest

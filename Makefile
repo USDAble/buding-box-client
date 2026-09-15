@@ -62,6 +62,7 @@ RG_EMBED_BIN := $(RG_EMBED_DIR)/rg
 .PHONY: all build install test test-production cover vet fmt fmt-check tidy clean \
         brand brand-check datapath-check norms-check agents agents-check \
         docs-table-check \
+        sensitive-norm-check \
         reuse-check server-diff-check release-profile-check release-config-check \
         preflight-check \
         eval-build eval-list eval \
@@ -282,6 +283,15 @@ marker-check:
 docs-table-check:
 	node scripts/docs-table-guard.mjs
 	node --test scripts/docs-table-guard.test.mjs
+
+# Guards requirement D6 / G4 (需求基线.md): the web bundle carries a second copy
+# of the normalization symbol table for the dictionary page's pre-check, and
+# nothing compared it against the Go owner until D-010 was registered. Order is
+# deliberately not asserted (no side observes it) and neither is the rest of the
+# algorithm — see the script header for what is and is not covered.
+sensitive-norm-check:
+	node scripts/sensitive-norm-guard.mjs
+	node --test scripts/sensitive-norm-guard.test.mjs
 
 # ── remaining fork guards (TODO-02 / V-1) ────────────────────────────────────
 # OCTO-FORK: 四条守卫的 Makefile 接线（此前只有 CI 与本文件的注释声称它们在跑） — see

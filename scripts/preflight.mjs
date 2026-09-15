@@ -22,7 +22,9 @@
 //     norms-guard              every AI-tool entry point points at the fork spec
 //     agents-guard             AGENTS.md matches .octorules and still carries
 //                              the fork's three hard rules
-//     All five are pure source scans with no external refs.
+//     sensitive-norm-guard     the web copy of the normalization symbol table
+//                              still drops the same characters as the Go owner
+//     All six are pure source scans with no external refs.
 //
 //   ADVISORY (warn, do not fail)
 //     release-config-guard     the embedded production profile's values are real
@@ -61,6 +63,7 @@ import { check as checkReleaseProfile } from './release-profile-guard.mjs'
 import { check as checkReuse } from './reuse-guard.mjs'
 import { check as checkNorms } from './norms-guard.mjs'
 import { check as checkAgents } from './sync-agents.mjs'
+import { check as checkSensitiveNorm } from './sensitive-norm-guard.mjs'
 import { check as checkServerDiff, resolveUpstream } from './server-diff-guard.mjs'
 import { check as checkReleaseConfig } from './release-config-guard.mjs'
 import { check as checkForkMarker } from './fork-marker-guard.mjs'
@@ -84,6 +87,9 @@ export async function runHardChecks(root) {
 
   const { problems: agents } = await checkAgents(root)
   for (const p of agents) problems.push(`agents-guard: ${p}`)
+
+  const sensitiveNorm = await checkSensitiveNorm(root)
+  for (const p of sensitiveNorm) problems.push(`sensitive-norm-guard: ${p}`)
 
   return problems
 }

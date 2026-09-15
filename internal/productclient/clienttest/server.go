@@ -123,6 +123,7 @@ type Server struct {
 	catalogVersion   string  // "" means FixturePolicyVersion
 	policyAudience   string  // "" means FixturePolicyAudience
 	catalogTTLSec    int     // 0 means FixtureCatalogTTLSec
+	ineligibleModel  string  // "" means every fixture model is offered
 	refuseSessionsAt bool    // hand out tokens the server will not recognise
 
 	// The gateway's own refusal (L-C4c). Zero means the stand-in serves turns the
@@ -219,6 +220,27 @@ func (s *Server) RevokeSessions() {
 // FailBootstrap makes every bootstrap attempt fail with the given status and
 // business code, which is how the transport and upstream failure tiers are
 // produced (本地API契约 §2.13 的四档失败面).
+//
+// THE GATE RULE, WHICH ALL FOUR Fail* SWITCHES SHARE (2026-09-15): a switch is
+// armed when its STATUS is non-zero, and the code is optional metadata. The four
+// used to disagree — this one, FailLogout and FailLedger tested the CODE, while
+// FailCompletions tested the STATUS — so the same call meant two different
+// things depending on the family member: FailCompletions(502, "") produced a
+// 502, and FailBootstrap(502, "") was a silent no-op that left the fixture
+// healthy. A hand walkthrough is exactly where that bites, because there is no
+// compile error and no failing test to say the injection did not happen.
+//
+// STATUS IS THE RIGHT GATE. The contract's envelope always carries a code, so
+// "code non-empty" reads as "the platform always sends one" — but that is not
+// true of the tier the client already models: catalogTransport is a proxy's 502
+// with no business code in it (需求基线 B4). Keying on the code made that case
+// inexpressible: no call could produce a code-less refusal. Status is also the
+// only field that means "there is a refusal at all"; a code without a status is
+// not a response.
+//
+// No call site depended on the old rule: every one in the tree passes a non-zero
+// status AND a non-empty code (the sole exception is FailLedger(0, "") in
+// credits_test.go, an explicit reset that reads the same either way).
 func (s *Server) FailBootstrap(status int, code string) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -373,6 +395,27 @@ func (s *Server) SetCatalogTTL(ttlSec int) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.catalogTTLSec = ttlSec
+}
+
+// SetModelIneligible marks one catalog model eligible=false, which is how a
+// platform takes a model away: the entry is still IN the catalog, it is just no
+// longer offered (L-C7 / PR-5e).
+//
+// WHY IT IS NOT SetModelAbsent. Removing the entry would produce a different
+// situation with a different client answer: an absent model is one the catalog
+// never mentions, while an ineligible one is present and withheld. The client
+// projects both the same way (internal/productruntime projectCatalog keeps only
+// eligible && transport == gateway), but only the second goes through the
+// projection, so only the second asserts that the filter is what turns a
+// withdrawal into the "pick another model" prompt.
+//
+// id == "" restores the healthy catalog. The ids are the fixture's own
+// (`buding-*`), which are fixed ASCII data keys rather than brand copy
+// (开发规范 §3.1 规则 2).
+func (s *Server) SetModelIneligible(id string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.ineligibleModel = id
 }
 
 // BootstrapCount reports how many bootstrap attempts the stand-in has seen,
@@ -804,7 +847,8 @@ func (s *Server) handleLogout(w http.ResponseWriter, r *http.Request) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	if s.logoutCode != "" {
+	// ARMED-BY-STATUS: see the gate rule on FailBootstrap.
+	if s.logoutStatus != 0 {
 		writeError(w, s.logoutStatus, s.logoutCode, "")
 		return
 	}
@@ -846,7 +890,8 @@ func (s *Server) handleBootstrap(w http.ResponseWriter, r *http.Request) {
 	defer s.mu.Unlock()
 
 	s.bootstrapCount++
-	if s.bootstrapCode != "" {
+	// ARMED-BY-STATUS: see the gate rule on FailBootstrap.
+	if s.bootstrapStatus != 0 {
 		writeError(w, s.bootstrapStatus, s.bootstrapCode, "")
 		return
 	}
@@ -902,7 +947,8 @@ func (s *Server) handleCreditsLedger(w http.ResponseWriter, r *http.Request) {
 	defer s.mu.Unlock()
 
 	s.ledgerCount++
-	if s.ledgerCode != "" {
+	// ARMED-BY-STATUS: see the gate rule on FailBootstrap.
+	if s.ledgerStatus != 0 {
 		writeError(w, s.ledgerStatus, s.ledgerCode, "")
 		return
 	}
@@ -1258,7 +1304,22 @@ func (s *Server) policyEnvelope() (productclient.PolicyEnvelope, error) {
 	if audience == "" {
 		audience = FixturePolicyAudience
 	}
-	return signedPolicyFor(s.now(), s.version(), audience, s.tamperPolicy, s.catalogTTLSec)
+	return signedPolicyFor(s.now(), s.version(), audience, s.tamperPolicy, s.catalogTTLSec, s.ineligibleModel)
+}
+
+// Policy returns the envelope the next answer will carry, with every armed
+// switch applied.
+//
+// WHY AN ACCESSOR RATHER THAN A HANDLER CALL. The switch it was added for is
+// SetModelIneligible, and the only other way to read the result is a signed-in
+// bootstrap — which signs in, mints a catalog and then needs the very model list
+// under test to check anything. This answers the same question directly, and it
+// matches the accessors the rest of this package already exposes for exactly
+// this reason (Balance, LedgerReads, BootstrapCount).
+func (s *Server) Policy() (productclient.PolicyEnvelope, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.policyEnvelope()
 }
 
 // version is the catalog version the next answer carries. The caller holds s.mu.

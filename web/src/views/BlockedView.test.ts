@@ -3,6 +3,7 @@ import { flushSync, mount, unmount } from 'svelte'
 import { get } from 'svelte/store'
 import { locale } from '../lib/i18n'
 import { blockedPage, productPhase, productState } from '../lib/product'
+import { toasts } from '../lib/stores'
 import BlockedView from './BlockedView.svelte'
 
 // The activation form now carries two credentials, not one (需求基线 E1): the
@@ -329,6 +330,133 @@ describe('BlockedView blocked-page selection (L-B2)', () => {
 
     expect(input_('phone')).toBeTruthy()
     expect(target.textContent).not.toContain('这个版本还没有配置服务地址')
+  })
+})
+
+// L-D5's second half. 需求基线 D5 rule 2 requires the refused update to keep the
+// accepted cache AND say so — which version is still in force, and that the retry
+// happens at the next login. The keeping half was implemented and tested; the
+// telling half was unreachable, because the notice rides back on a SUCCESSFUL
+// login reply and this view is unmounted the moment login flips the phase.
+//
+// So it goes to the shared toast stack: App.svelte renders <Toast /> outside the
+// phase branch, so the message outlives this page. Asserted on the real toast
+// store, not on this component's DOM, for exactly that reason — a test that read
+// target.textContent would pass on a toast the user never gets to see.
+describe('BlockedView server-dictionary notice (L-D5)', () => {
+  function loginReply(notice?: Record<string, unknown>) {
+    return {
+      ok: true,
+      status: 200,
+      json: async () => ({
+        state: { ...firstActivationState(), loggedIn: true, activated: true },
+        ...(notice ? { dictionaryNotice: notice } : {}),
+      }),
+    }
+  }
+
+  /** Fills the activation form — the shape a fresh data/ starts on. */
+  function signIn() {
+    type('phone', '13800001234')
+    type('code', '123456')
+    type('activationCode', 'BUDING-DEMO-0001')
+    type('boxCode', 'BOX-DEMO-0001')
+    submit()
+  }
+
+  function toastsNow() {
+    return get(toasts)
+  }
+
+  /** Resolves once doSubmit has run to completion.
+   *
+   *  announceDictionary() runs BEFORE the `finally` that re-enables the submit
+   *  button, so this is strictly after the notice would have been sent. Waiting
+   *  on the fetch stub instead is not enough: the stub is called synchronously,
+   *  long before its reply is handled, so a "stays silent" assertion would pass
+   *  without the code under test ever being reached. (Found by mutation: making
+   *  announceDictionary fire unconditionally left that assertion green.) */
+  async function settleLogin() {
+    await vi.waitFor(() => expect(submitButton().disabled).toBe(false))
+  }
+
+  function submitButton(): HTMLButtonElement {
+    const button = target.querySelector<HTMLButtonElement>('button[type="submit"]')
+    if (!button) throw new Error('no submit button')
+    return button
+  }
+
+  beforeEach(() => {
+    toasts.set([])
+  })
+
+  it('names the version still in force when the update was refused', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => loginReply({
+      state: 'degraded',
+      fallbackVersion: '2026-09-14.1',
+      retryAt: 'next_login',
+    })))
+    render()
+    signIn()
+
+    await vi.waitFor(() => expect(toastsNow()).toHaveLength(1))
+    const msg = toastsNow()[0].msg
+    // The version the user is actually running on is the whole point of the
+    // notice: "an update failed" without it leaves them unable to tell whether
+    // the words they rely on are in force.
+    expect(msg).toContain('2026-09-14.1')
+    expect(msg).toContain('下次登录')
+    // A template placeholder that never got substituted is the failure this
+    // catches; the copy ships with {version} in it.
+    expect(msg).not.toContain('{')
+  })
+
+  it('says the built-in and personal words are what is active when nothing is cached', async () => {
+    // An empty fallbackVersion means there is no accepted server cache at all.
+    // That is a different sentence, not the same one with a blank in it — the
+    // server tells the two apart by omitting fallbackVersion (D5 rule 2).
+    vi.stubGlobal('fetch', vi.fn(async () => loginReply({
+      state: 'degraded',
+      fallbackVersion: '',
+      retryAt: 'next_login',
+    })))
+    render()
+    signIn()
+
+    await vi.waitFor(() => expect(toastsNow()).toHaveLength(1))
+    const msg = toastsNow()[0].msg
+    expect(msg).toContain('内置词和用户词')
+    expect(msg).not.toContain('{')
+  })
+
+  it('announces the recovery once the dictionary comes back', async () => {
+    // dictionarySuccess returns a notice only when the previous attempt failed,
+    // so this fires once per recovery rather than on every clean login - which
+    // is what keeps the notice from becoming noise (开发计划 §4.1: 不得重复弹窗轰炸).
+    vi.stubGlobal('fetch', vi.fn(async () => loginReply({
+      state: 'recovered',
+      fallbackVersion: '',
+      version: '2026-09-15.2',
+    })))
+    render()
+    signIn()
+
+    await vi.waitFor(() => expect(toastsNow()).toHaveLength(1))
+    const msg = toastsNow()[0].msg
+    expect(msg).toContain('2026-09-15.2')
+    expect(msg).toContain('已恢复')
+    expect(msg).not.toContain('{')
+  })
+
+  it('stays silent when the dictionary synced normally', async () => {
+    // The reverse pin. A notice on every login would train the user to dismiss
+    // them, and the whole channel is idle when there is nothing to report.
+    vi.stubGlobal('fetch', vi.fn(async () => loginReply()))
+    render()
+    signIn()
+
+    await settleLogin()
+    expect(toastsNow()).toHaveLength(0)
   })
 })
 

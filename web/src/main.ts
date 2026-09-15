@@ -4,6 +4,8 @@ import { mount } from 'svelte'
 import { initTheme } from './lib/theme'
 import { initFramelessDrag } from './lib/framelessDrag'
 import { installArtifactThemeRefresh } from './lib/artifacts'
+import { locale } from './lib/i18n'
+import { brandName } from './lib/brand'
 
 // OCTO-FORK: a comment-only deviation recording where the development stand-in
 // used to be installed, and the two rules learned from it — see
@@ -28,6 +30,16 @@ installArtifactThemeRefresh()
 
 // Desktop shell on Windows/Linux: window drag + edge resize (no-op elsewhere).
 initFramelessDrag()
+
+// The window/tab title is product copy, so it is rendered from
+// branding/brand.json instead of being typed into index.html (硬规则 2, guarded
+// by scripts/brand-guard.mjs). Following the locale store means switching the UI
+// language retitles the window too, and the store's own default is what shows
+// before a preference loads — nothing here reads navigator.language
+// (see lib/localeSource.test.ts).
+locale.subscribe(($locale) => {
+  document.title = brandName($locale)
+})
 
 const app = mount(App, { target: document.getElementById('app')! })
 

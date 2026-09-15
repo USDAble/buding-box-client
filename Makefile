@@ -13,7 +13,7 @@
 #   make tidy       go mod tidy
 #   make clean      remove build artefacts
 #   make brand      regenerate the branding files from branding/brand.json
-#   make brand-check validate brand.json + fail if a generated copy is stale
+#   make brand-check fail if a brand literal is typed into source, or a generated copy is stale
 #   make datapath-check  fail if product code reintroduces a ~/.octo path
 #
 # octo-eval — lightweight eval (manual; needs a model key, NOT in CI):
@@ -225,14 +225,19 @@ clean:
 #
 # Edit branding/brand.json, run `make brand`, commit both. `make brand-check` is
 # what CI's brand-guard job runs; the scripts have zero npm dependencies, so it
-# needs only a Node binary.
+# needs only a Node binary. It has three legs, and all three are the same rule
+# seen from different sides: brand.json is well-formed (brand-schema), every
+# generated copy is current (sync-branding --check), and no product file has
+# typed the copy in instead of interpolating it (brand-guard — 硬规则 2, see
+# V-79 for why the third leg was missing until 2026-09-15).
 brand:
 	node scripts/sync-branding.mjs
 
 brand-check:
 	node scripts/brand-schema.mjs
 	node scripts/sync-branding.mjs --check
-	node --test scripts/brand-schema.test.mjs scripts/sync-branding.test.mjs
+	node scripts/brand-guard.mjs
+	node --test scripts/brand-schema.test.mjs scripts/sync-branding.test.mjs scripts/brand-guard.test.mjs
 
 # ── portable data root guard ──────────────────────────────────────────────────
 # Rejects any reintroduction of the pre-fork ~/.octo data root: a ".octo"

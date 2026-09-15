@@ -9,8 +9,11 @@
   // (nickname / masked phone), language, and the new-session default mode live
   // here; everything else routes to the full settings modal via the button at
   // the bottom. The default-mode value is what P9 reads when creating a
-  // session (出厂 default group). A portable build never shows autostart (P2:
-  // AutostartAvailable() is always false there), so no row for it appears.
+  // session (出厂 default group). Autostart has no row *here*: the full settings
+  // modal owns it, gated on the native shell alone, so a portable build does
+  // still render that switch — 需求 §5.1.2 第 9 条 requires it hidden there
+  // (V-85). Startup rules: P2-启动与生命周期.md §5. This comment used to claim an
+  // AutostartAvailable() helper made it impossible; no such function exists.
 
   const nickname = $derived($productState?.account?.nickname ?? '')
   const currentLocale = $derived($productState?.prefs?.locale || $locale)

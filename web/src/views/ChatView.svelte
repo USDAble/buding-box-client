@@ -2038,8 +2038,14 @@ import QuestionModal from '../components/overlays/QuestionModal.svelte'
   // them.
   const EXPORT_CAPTURE_WIDTH = 960
 
+  // The language the user chose, not the one their browser happens to prefer.
+  // `document.documentElement.lang` is never set, so the previous fallback chain
+  // always bottomed out at the browser's preference: a user who picked 中文 in
+  // Settings while their OS was English got English exports. exportTranscript.ts
+  // already reads the store for the same reason (需求基线 E6.1 / L-E5: the
+  // frontend must not guess; localeSource.test.ts pins that).
   function getExportLocale(): string {
-    return document.documentElement.lang || navigator.language || 'en'
+    return get(locale) || 'en'
   }
 
   function triggerBlobDownload(blob: Blob, filename: string) {

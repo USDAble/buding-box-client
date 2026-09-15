@@ -282,10 +282,16 @@ func main() {
 	})
 	bridge.app = app
 
-	// Configure the in-place updater when this build can swap itself (bundled
-	// release build — see canInplaceUpdate). The flag routes the tray item and
-	// the update toast through app.Updater instead of the download page.
-	bridge.inplaceUpdate.Store(canInplaceUpdate() && initInplaceUpdater(app))
+	// OCTO-FORK: 便携交付物不做更新：原地写回整块不装配，于是 inplaceUpdate 恒为 false，
+	// 即便有路径调到 startUpdateFlow 也只会打开下载页、不会自我替换（需求 §5.1.2 第 13 条；
+	// 理由见 update.go 的 productUpdatesEnabled）。上游这段代码留在原地，只是到不了。
+	// — see dev-docs-usdable/需求/2260906/技术方案/P2-启动与生命周期.md §5（V-86）
+	if productUpdatesEnabled {
+		// Configure the in-place updater when this build can swap itself (bundled
+		// release build — see canInplaceUpdate). The flag routes the tray item and
+		// the update toast through app.Updater instead of the download page.
+		bridge.inplaceUpdate.Store(canInplaceUpdate() && initInplaceUpdater(app))
+	}
 
 	// The updater window's Restart action quits the app so the helper can
 	// swap the binary — flag it for ShouldQuit above. Registered here, before
@@ -346,10 +352,16 @@ func main() {
 		// off the UI thread) — without it every toast silently no-ops.
 		go bridge.requestNotificationAuthorization()
 		startHub(app, bridge, settings)
-		// Surface a newer release in the tray without the user asking: a delayed
-		// first check, then daily. Foreground-suppressed toasts don't matter here
-		// — the tray item is the durable signal.
-		go autoUpdateLoop(bridge)
+		// OCTO-FORK: 便携交付物不做更新：定时自动检查整块不启动（需求 §5.1.2 第 13 条；
+		// 理由见 update.go 的 productUpdatesEnabled）。上游这个 goroutine 留在原地，只是
+		// 永远不被启动 —— 没有它就没有"新版本"通知，托盘的更新项也随之没有来源。
+		// — see dev-docs-usdable/需求/2260906/技术方案/P2-启动与生命周期.md §5（V-86）
+		if productUpdatesEnabled {
+			// Surface a newer release in the tray without the user asking: a delayed
+			// first check, then daily. Foreground-suppressed toasts don't matter here
+			// — the tray item is the durable signal.
+			go autoUpdateLoop(bridge)
+		}
 	})
 
 	// macOS: clicking the dock icon after the window was closed (hidden to the
@@ -517,11 +529,15 @@ func startHub(app *application.App, bridge *nativeBridge, settings desktopSettin
 
 	srv, err := server.New(server.Config{
 		Tools: true,
-		// On: the version badge needs the latest-release lookup to know an update
-		// exists. It reports upgrade_mode "installer" (Native is set), so the web
-		// UI offers a download link; the desktop shell's own in-place update flow
-		// lives in the tray + update toast (see startUpdateFlow), not the badge.
-		UpdateCheck: true,
+		// OCTO-FORK: 便携交付物不做更新：这里**必须**是 false，否则 GET /api/version 会去做
+		// 一次出站的最新发布查询（internal/server 的 latestVersion 以本字段为开关），而
+		// 打开完整设置就会调它 ⇒ 等于"自动检查更新"从 web 半边活着（需求 §5.1.2 第 13 条）。
+		// false 时该端点退化为 latest==current、needs_update=false，全程零出站请求；设置页
+		// 那处更新行同时换成了「即将支持」占位（SettingsModal，钉子见 web/src/lib/updateEntry.test.ts），
+		// 于是界面上不会出现"已是最新版本"这种**没人查过却敢说**的结论（§3.9）。
+		// 上游注释原写"On: the version badge needs the latest-release lookup" —— 那个徽章
+		// （VersionBadge.svelte）在本仓**根本没有被挂载**，全仓只有它自己的测试引用它。
+		UpdateCheck: productUpdatesEnabled,
 		Native:      bridge,
 		// The desktop server runs in-process — there is no supervisor to
 		// respawn it after a restart, so the restart_server tool would just
@@ -694,15 +710,22 @@ func buildTrayMenu(app *application.App, bridge *nativeBridge) *application.Menu
 	m.Add(L().trayShow).OnClick(func(*application.Context) { bridge.showWindow() })
 	m.Add(L().trayNewSession).OnClick(func(*application.Context) { bridge.openNewSession() })
 	m.Add(L().traySettings).OnClick(func(*application.Context) { bridge.openSettings() })
-	// A known-newer release replaces the "check" item with a one-click update
-	// (in-place when this build supports it, else the download page) — the
-	// durable prompt when the toast was suppressed. Otherwise the manual check.
-	if v := bridge.updateAvailable.Load(); v != nil {
-		m.Add(fmt.Sprintf(L().trayUpdateAvailFmt, *v)).OnClick(func(*application.Context) {
-			go startUpdateFlow(bridge)
-		})
-	} else {
-		m.Add(L().trayCheckUpdates).OnClick(func(*application.Context) { go checkForUpdates(bridge) })
+	// OCTO-FORK: 便携交付物不做更新：托盘更新入口整块不挂（需求 §5.1.2 第 13 条；理由见
+	// update.go 的 productUpdatesEnabled）。上游这两个分支留在原地，只是永远走不到 ——
+	// 于是托盘上既没有"更新到 vX"也没有"检查更新…"，用户能看到的更新入口只剩个人中心里
+	// 那个「即将支持」占位（AccountPanel，PQ12 规定的形态）。
+	// — see dev-docs-usdable/需求/2260906/技术方案/P2-启动与生命周期.md §5（V-86）
+	if productUpdatesEnabled {
+		// A known-newer release replaces the "check" item with a one-click update
+		// (in-place when this build supports it, else the download page) — the
+		// durable prompt when the toast was suppressed. Otherwise the manual check.
+		if v := bridge.updateAvailable.Load(); v != nil {
+			m.Add(fmt.Sprintf(L().trayUpdateAvailFmt, *v)).OnClick(func(*application.Context) {
+				go startUpdateFlow(bridge)
+			})
+		} else {
+			m.Add(L().trayCheckUpdates).OnClick(func(*application.Context) { go checkForUpdates(bridge) })
+		}
 	}
 	m.AddSeparator()
 	m.Add(L().trayQuit).OnClick(func(*application.Context) { bridge.requestQuit() })

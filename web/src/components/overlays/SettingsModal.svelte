@@ -298,6 +298,11 @@
     } catch { /* non-critical */ }
   }
 
+  // Unreachable in this fork: the update row in the About card is now a
+  // "coming soon" placeholder (需求 §5.1.2 第 13 条 / PQ12), so nothing calls
+  // this. Left in place rather than deleted (硬规则 3) — see the marker on that
+  // row. Its comment below used to claim the badge is "always mounted"; it is
+  // not mounted anywhere in this fork, only referenced by its own test.
   async function checkUpdate() {
     if (checkingUpdate) return
     checkingUpdate = true
@@ -707,25 +712,22 @@
               </div>
               <span class="setver mono">v{versionStr}</span>
             </div>
+            <!-- OCTO-FORK: 便携交付物不做更新 —— 更新入口常驻但不可用（需求 §5.1.2 第 13 条；
+                 PQ12 规定"界面上更新入口常驻但不可用，点击给「即将支持」，这样将来接入不用改
+                 布局"）。上游这个 checkUpdate 按钮会去查最新发布，而本壳把 server 的
+                 UpdateCheck 关掉之后它只会回答"已是最新版本" —— 那是假话，server 根本没查
+                 （§3.9：回落必须说得出落到哪，不能静默撒一个看不出来的谎）。所以整个活入口
+                 换成占位，文案与个人中心那一处共用同一个键。
+                 AboutPage.svelte 早已记下同一意图（"the check-for-updates entry stays a
+                 disabled placeholder … P2 closes auto-update"），此处是那笔账的收尾。
+                 上游的 checkUpdate/loadVersion 脚本留在原地不动（硬规则 3：宁可到不了，也不删）。
+                 — see dev-docs-usdable/需求/2260906/技术方案/P2-启动与生命周期.md §5（V-86） -->
             <div class="setrow">
               <div class="seti">
                 <span class="setl">{$t('settings.update')}</span>
-                <span class="setd">{$t('settings.update_desc')}</span>
+                <span class="setd">{$t('product.panel.soon')}</span>
               </div>
-              <button class="btns" onclick={checkUpdate} disabled={checkingUpdate}>
-                {checkingUpdate ? $t('settings.update.checking')
-                  : !updateAvail ? $t('settings.update.check')
-                  : upgradeMode === 'installer' ? $t('upgrade.btn.download')
-                  : $t('upgrade.btn.upgrade')}
-              </button>
             </div>
-            {#if updateAvail}
-              <div class="setrow">
-                <div class="seti">
-                  <span class="setl">{$t('settings.update_available')} v{latestStr}</span>
-                </div>
-              </div>
-            {/if}
             <div class="setrow">
               <div class="seti">
                 <span class="setl">{$t('settings.about.firstrun')}</span>

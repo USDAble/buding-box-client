@@ -26,8 +26,35 @@ import (
 	ghprovider "github.com/wailsapp/wails/v3/pkg/updater/providers/github"
 )
 
+// productUpdatesEnabled is the single owner of "does this build offer updates"
+// — the periodic auto-check, the tray's update entry, the in-place write-back,
+// and the outbound latest-release lookup behind GET /api/version. Every update
+// surface reads it, so there is one place to answer the question and one place
+// to change it.
+//
+// OCTO-FORK: 便携交付物不做更新 —— see dev-docs-usdable/需求/2260906/技术方案/P2-启动与生命周期.md §5（V-86）
+//
+// The portable directory is the shipped form (需求 §5.1.1), and 需求 §5.1.2 第 13
+// 条 therefore closes both the automatic check and the tray entry: updating a
+// green build in place is what turns it into an installer. PQ12 fixed the scope
+// at "P0 does no updates at all", and its reason is not the download but the
+// write-back — the program directory may be a read-only U disk or the very image
+// that is running, and a write that cannot be rolled back destroys the user's
+// portable directory, which is worse than offering no update at all.
+//
+// Upstream's machinery stays in the tree and unreachable rather than deleted
+// (硬规则 3), so the fork owes upstream no delete-vs-modify conflict. Re-enabling
+// is a product decision, not this line: PQ12 lists the four things that must
+// exist first (offline signing, a manifest URL in the profile, checksums, and a
+// write-back that rolls back cleanly).
+const productUpdatesEnabled = false
+
 // releaseRepo is the GitHub repository the updater pulls desktop artifacts
 // from — the "owner/repo" form of upgrade.BaseURL.
+//
+// Upstream's repository. Nothing in this build reaches it: productUpdatesEnabled
+// is false, so neither the lookup nor the in-place flow runs. Left as upstream
+// wrote it — see productUpdatesEnabled.
 const releaseRepo = "open-octo/octo-agent"
 
 // desktopChecksumAsset is the release sidecar carrying SHA-256 sums for the
@@ -113,6 +140,10 @@ func (p verifiedOnly) Check(ctx context.Context, req updater.CheckRequest) (*upd
 // UI and ripgrep are go:embed'd), so replacing it alone is a complete
 // upgrade. Linux ships as an AppImage, which runs from a read-only squashfs
 // mount the updater would try to write through — notify-and-open stays.
+//
+// Unreachable in this fork: its only caller is gated on productUpdatesEnabled,
+// which is false, so the Windows "true" below never decides anything. Kept and
+// marked rather than deleted (硬规则 3) — see productUpdatesEnabled.
 func canInplaceUpdate() bool {
 	if upgrade.Eligible() != nil {
 		return false

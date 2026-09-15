@@ -168,6 +168,17 @@ func (c *Client) SendStream(ctx context.Context, req provider.Request, cb provid
 		}
 		sawEvent = true
 
+		// D-002's safety net: a chunk-level field this adapter does not model is
+		// reported rather than dropped in silence. The initialised `continue`
+		// below is what makes it load-bearing — a gateway that starts sending
+		// `retract` would otherwise look exactly like a healthy reply while the
+		// user keeps reading withdrawn content (开发规范 §3.9).
+		if cb.OnUnmodelledChunkFields != nil {
+			if unknown := unmodelledChunkFields([]byte(data)); len(unknown) > 0 {
+				cb.OnUnmodelledChunkFields(unknown)
+			}
+		}
+
 		// An OpenAI-compatible server can report a failure AFTER the 200 status
 		// as a `data: {"error": {...}}` line, then close the stream (often with
 		// no [DONE]). Surface it instead of treating the empty result as success,

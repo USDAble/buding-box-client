@@ -11,6 +11,9 @@ package openai
 import (
 	"encoding/json"
 	"fmt"
+	"reflect"
+	"sort"
+	"strings"
 )
 
 // apiFunction describes the callable function part of a tool.
@@ -260,10 +263,16 @@ type apiError struct {
 //
 // Reference: https://platform.openai.com/docs/api-reference/chat-streaming
 type streamChunk struct {
-	ID      string         `json:"id"`
-	Object  string         `json:"object"`
-	Model   string         `json:"model"`
-	Choices []streamChoice `json:"choices"`
+	ID     string `json:"id"`
+	Object string `json:"object"`
+	// Created and SystemFingerprint are part of the chunk schema real OpenAI
+	// sends on every reply, and are not read by anything here. They are modelled
+	// so the unmodelled-field report below does not fire on a field that is
+	// standard — see knownChunkFields.
+	Created           int64          `json:"created"`
+	Model             string         `json:"model"`
+	Choices           []streamChoice `json:"choices"`
+	SystemFingerprint string         `json:"system_fingerprint,omitempty"`
 	// Usage is populated only on the final chunk when the request was sent
 	// with stream_options.include_usage=true. We don't send that option so
 	// most chunks have Usage zero; we keep the field so an upstream that
@@ -277,6 +286,52 @@ type streamChunk struct {
 		Message string `json:"message"`
 		Type    string `json:"type"`
 	} `json:"error,omitempty"`
+}
+
+// OCTO-FORK: report chunk-level fields this client does not model instead of
+// dropping them in silence — see dev-docs-usdable/需求/20260911/待解决问题.md
+// D-002.
+//
+// WHY THIS EXISTS. The control plane's gateway speaks OpenAI-compatible
+// chat/completions, but its withdrawn-content event (`retract`) and its ledger
+// terminal state are not part of that protocol. A `data: {"retract":{...}}` line
+// parses as a chunk with zero choices and used to be skipped without a word: the
+// user kept reading content the platform had withdrawn, and nothing anywhere
+// said so. A field nobody understands has to be loud, not silent (开发规范 §3.9).
+//
+// knownChunkFields is derived from streamChunk's own tags so there is exactly one
+// definition of "what this struct models". A second, hand-kept list of the same
+// fact drifts the first time someone adds a field (开发规范 §3.8).
+var knownChunkFields = func() map[string]struct{} {
+	keys := make(map[string]struct{})
+	typ := reflect.TypeOf(streamChunk{})
+	for i := 0; i < typ.NumField(); i++ {
+		name, _, _ := strings.Cut(typ.Field(i).Tag.Get("json"), ",")
+		if name == "" || name == "-" {
+			continue
+		}
+		keys[name] = struct{}{}
+	}
+	return keys
+}()
+
+// unmodelledChunkFields returns, sorted, the top-level keys of one chunk that
+// streamChunk does not model. A chunk that fails to parse returns nil: the caller
+// already turned that into a transient stream error, and reporting fields out of
+// bytes we could not read would be noise on top of it.
+func unmodelledChunkFields(data []byte) []string {
+	var all map[string]json.RawMessage
+	if err := json.Unmarshal(data, &all); err != nil {
+		return nil
+	}
+	var unknown []string
+	for key := range all {
+		if _, modelled := knownChunkFields[key]; !modelled {
+			unknown = append(unknown, key)
+		}
+	}
+	sort.Strings(unknown)
+	return unknown
 }
 
 // streamChoice mirrors apiChoice but with Delta in place of Message.

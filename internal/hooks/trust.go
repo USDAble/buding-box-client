@@ -20,18 +20,20 @@ import (
 // never re-prompts until the file changes. The user-level data/hooks.yml is
 // the user's own and needs no such gate.
 
-// ProjectConfigPath returns <cwd>/.octo-hooks.yml, the flat project-level
-// hooks file a repo may carry. It mirrors the .octorules convention of a
-// single repo-local dotfile.
-// OCTO-FORK: upstream used <cwd>/.octo/hooks.yml; the fork flattens it to one
-// dotfile so the `.octo` directory name is gone entirely — datapath-guard
-// treats the `.octo` literal as a zero-exception regression. See
-// dev-docs-usdable/需求/2260906/技术方案/P1-便携数据根.md.
+// ProjectConfigPath returns <cwd>/.octo/hooks.yml, the project-level hooks file
+// a repo may carry, at the same path upstream uses.
+//
+// The path is spelled out rather than renamed because upstream's shipped
+// documentation (docs/src/content/docs/guides/hooks.md) and the runtime skill
+// doc (internal/skills/defaults/product-help/HOOKS.md) both name it — a renamed
+// directory would make both wrong while fixing nothing. See
+// dev-docs-usdable/需求/2260906/技术方案/P1-便携数据根.md §3 and PQ31.
 func ProjectConfigPath(cwd string) string {
 	if cwd == "" {
 		return ""
 	}
-	return filepath.Join(cwd, ".octo-hooks.yml")
+	// The project's own directory in the user's repo — not the data root (<exe dir>/data).
+	return filepath.Join(cwd, ".octo", "hooks.yml") // octo-literal-allow: project-level path in the user's repo, not the data root
 }
 
 // Fingerprint is the content hash a trust decision is keyed on, so editing a

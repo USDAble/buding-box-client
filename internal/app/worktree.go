@@ -52,10 +52,13 @@ func newWorktree(label string) (*worktree, error) {
 		name = "agent"
 	}
 	branch := fmt.Sprintf("octo-wf/%s-%s", name, suffix)
-	// OCTO-FORK: the worktree staging dir is .octo-worktrees (not upstream's
-	// .octo/worktrees) so datapath-guard's zero-exception octo-literal check
-	// stays clean — see dev-docs-usdable/需求/2260906/技术方案/P1-便携数据根.md.
-	dir := filepath.Join(root, ".octo-worktrees", name+"-"+suffix)
+	// The staging directory lives inside the repository being worked on, at
+	// upstream's path. It is not in the data root — see P1 §3 and PQ31.
+	// OCTO-FORK: annotation only — the path itself is upstream's, so this file
+	// carries no behavioural difference. The marker exists because the
+	// octo-literal-allow comment below is our addition; the marker guard counts
+	// any edit to an upstream file. See dev-docs-usdable/需求/2260906/技术方案/P1-便携数据根.md §3.
+	dir := filepath.Join(root, ".octo", "worktrees", name+"-"+suffix) // octo-literal-allow: project-level path in the user's repo, not the data root
 	if err := os.MkdirAll(filepath.Dir(dir), 0o755); err != nil {
 		return nil, fmt.Errorf("worktree dir: %w", err)
 	}

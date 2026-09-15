@@ -1,6 +1,7 @@
 package productclient_test
 
 import (
+	"bytes"
 	"crypto/ed25519"
 	"encoding/json"
 	"errors"
@@ -76,6 +77,58 @@ func verifyOpts(t *testing.T) productclient.VerifyOptions {
 		Audience:    testAudience,
 		Now:         testNow(),
 		Skew:        time.Minute,
+	}
+}
+
+// TestVerifyPolicyIgnoresTheCapabilityMatrix pins the decision that the
+// capability matrix is not modelled (policy.go's header, 需求基线 B7,
+// 待解决问题 D-009).
+//
+// Two properties, and the second is the one that matters. First: a payload
+// carrying `capabilities[]` still verifies — nothing here may treat a field it
+// does not know as suspicious, because the platform is free to send more than
+// this client consumes and rejecting it would turn a platform addition into a
+// client outage. Second: the value is not merely tolerated as a bag of bytes —
+// it survives into the raw envelope intact, so a future consumer can read it
+// from the verified bytes without a re-fetch.
+//
+// What this does NOT assert: anything about `visible` / `entitled` /
+// `permissionPolicy` changing behaviour. That is the point of the decision —
+// there is no behaviour to assert.
+func TestVerifyPolicyIgnoresTheCapabilityMatrix(t *testing.T) {
+	// Build the payload by hand rather than through policyBytes: the whole
+	// subject is a field productclient.Policy has no member for, so it can only
+	// be introduced textually. Inserting after the opening brace keeps the
+	// signature over bytes that really contain it.
+	base := policyBytes(t, nil)
+	policy := make([]byte, 0, len(base)+128)
+	policy = append(policy, base[0])
+	policy = append(policy, []byte(`"capabilities":[{"id":"mcp","available":true,"visible":false,"entitled":false,"permissionPolicy":"deny"}],`)...)
+	policy = append(policy, base[1:]...)
+
+	env := signedEnvelope(t, policy)
+	got, err := env.Verify(verifyOpts(t))
+	if err != nil {
+		t.Fatalf("Verify rejected a policy carrying an unmapped field: %v", err)
+	}
+	// The rest of the payload is still read: a tolerant decoder must not become
+	// a shorter parse.
+	if got.Catalog.Models[0].ID != "buding-cloud-pro" {
+		t.Errorf("catalog did not survive: %+v", got.Catalog.Models)
+	}
+	// The field is still there in the bytes that were signed, unread by anyone.
+	if !bytes.Contains(env.Policy, []byte(`"capabilities"`)) {
+		t.Error("the unmapped field was dropped from the verified bytes; a later consumer would have to re-fetch")
+	}
+
+	// And this package must not claim it either: re-adding the member would put
+	// `capabilities` back into the shape the platform is told this client reads.
+	encoded, err := json.Marshal(productclient.Policy{})
+	if err != nil {
+		t.Fatalf("marshal zero policy: %v", err)
+	}
+	if bytes.Contains(encoded, []byte(`"capabilities"`)) {
+		t.Errorf("productclient.Policy models capabilities again: %s", encoded)
 	}
 }
 

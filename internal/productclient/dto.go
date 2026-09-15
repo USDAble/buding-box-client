@@ -231,10 +231,16 @@ type RefreshData struct {
 
 // BootstrapData is the account summary gathered at startup.
 //
-// Catalog, capabilities and the signed policy envelope are deliberately NOT
-// modelled here yet: they arrive with the signed-catalog work, which is a
-// separate change. Bootstrap without them is a valid state, not an error - the
-// model picker stays empty until the catalog lands (需求基线 B4).
+// The signed policy envelope is deliberately NOT modelled here; the catalog it
+// carries lives in its own store (internal/catalogstore) rather than in the
+// bootstrap answer, because a bootstrap that omits it is a valid state rather
+// than an error - the model picker stays empty until the catalog lands
+// (需求基线 B4).
+//
+// `capabilities[]` (the entitlement matrix) is not modelled here either, and
+// never will be: it is permanently unimplemented (需求基线 B7, 待解决问题 D-009).
+// A platform that sends it anyway is not rejected - see signing_test.go, which
+// pins that an unmapped field is ignored rather than fatal.
 type BootstrapData struct {
 	Account    Account     `json:"account"`
 	Activation *Activation `json:"activation,omitempty"`

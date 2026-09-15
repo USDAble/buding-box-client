@@ -151,9 +151,6 @@ func fixturePolicy(now time.Time, version, audience string, ttlSec int) productc
 				{ID: "default", DefaultModelID: "buding-cloud-fast"},
 			},
 		},
-		Capabilities: []productclient.Capability{
-			{ID: "cloud_chat", Available: true, Visible: true, Entitled: true, PermissionPolicy: "ask"},
-		},
 	}
 }
 

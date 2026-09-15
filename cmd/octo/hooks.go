@@ -50,7 +50,7 @@ func runHooksList(out io.Writer) int {
 		}
 	}
 
-	// Project-level <cwd>/.octo-hooks.yml, annotated with trust status.
+	// Project-level <cwd>/.octo/hooks.yml, annotated with trust status.
 	if cwd, err := os.Getwd(); err == nil {
 		if p := hooks.ProjectConfigPath(cwd); p != "" {
 			if b, rerr := os.ReadFile(p); rerr == nil {

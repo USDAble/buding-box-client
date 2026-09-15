@@ -1,0 +1,95 @@
+# The central platform's wire error codes, and the client-local codes that share
+# their namespace. Read by code_test.go, which asserts every Code* constant in
+# this package appears below.
+#
+# WHY THIS FILE EXISTS (2026-09-15, 人工拍板). Until today the registry was
+# `dev-docs-usdable/需求/20260911/中台交付包.md` §3.2, and code_test.go read that
+# document at test time. The document was deleted because a design-first contract
+# kept generating requirements the code had already outgrown; the interface
+# contract is now regenerated FROM the code instead of ahead of it. The registry
+# could not simply die with it: it is a SUPERSET of what this package implements
+# (`safety_blocked`, `account_restricted`, … arrive with later work), and that
+# superset exists nowhere in Go. So it moved here, next to the code that consumes
+# it, where it is data rather than prose.
+#
+# It is a superset on purpose. The check in code_test.go is forward-only: a code
+# this package knows must be registered here. "Registered here but not yet
+# implemented" is an expected state, not drift.
+#
+# Format: `<http-status> <code>` for codes the platform returns, and
+# `local <code>` for fail-closed codes this client produces itself. Blank lines
+# and `#` comments are ignored. Order within a status group is not significant.
+
+# 400 — the request was malformed or a form field was rejected.
+400 invalid_phone
+400 invalid_code
+400 code_not_sent
+400 activation_invalid
+400 activation_code_used
+400 box_code_unknown
+400 box_code_mismatch
+400 invalid_request
+
+# 401 — the access token is missing, expired or rejected.
+401 unauthorized
+401 token_expired
+
+# 402 — the account cannot pay for this request. The client must never predict
+# this code locally: a free plan at zero balance may still be allowed to send
+# (PQ8), so the entry point stays visible regardless of balance.
+402 insufficient_credits
+
+# 403 — the account is known but not allowed to do this. Kept distinct from 401:
+# the remedy differs per code and none of them is "sign in again".
+403 activation_required
+403 plan_expired
+403 feature_not_entitled
+403 model_not_allowed
+403 phone_mismatch
+403 safety_blocked
+403 content_restricted
+403 account_restricted
+
+# 404
+404 model_not_found
+
+# 409 — a request with this id is already in flight; do not start a second model
+# call, query its status instead.
+409 request_in_progress
+409 duplicate_request
+
+# 429 — cool down for retryAfterSec; never retry concurrently.
+429 rate_limited
+
+# 503
+503 maintenance
+
+# 5xx — retry with bounded backoff, and for a repeated clientRequestId query the
+# request status before deciding whether to resend.
+5xx upstream_unavailable
+5xx internal_error
+
+# Codes this client produces itself. They are not platform responses, yet they
+# share the namespace because the frontend maps them in the same table — a
+# locally-produced refusal without a code would force the UI to match on prose,
+# which fails silently the first time the wording changes (V-55).
+local catalog_signature_invalid
+local policy_expired
+local bootstrap_stale
+local usage_pending
+local network_unavailable
+local model_withdrawn
+local input_sensitive
+
+# Envelope field names. Fixed: these five, and no second naming scheme
+# (`messageKey`, `traceId`). `message` is for humans and must not be rendered;
+# `requestId` is what correlates a client log with a platform ticket.
+# `phoneMasked` accompanies phone_mismatch only, and carries the masked phone the
+# activation code is already bound to — the client cannot know it, and the UI has
+# to be able to say which number the directory is bound to.
+field code
+field message
+field field
+field retryAfterSec
+field requestId
+field phoneMasked

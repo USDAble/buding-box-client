@@ -9,6 +9,7 @@
 #   make vet        go vet ./...
 #   make fmt        gofmt -w on all .go files
 #   make fmt-check  fail if anything would be reformatted
+#   make gate       everything a change must pass before landing on v1 (see below)
 #   make tidy       go mod tidy
 #   make clean      remove build artefacts
 #   make brand      regenerate the branding files from branding/brand.json
@@ -60,6 +61,7 @@ RG_EMBED_DIR := internal/tools/rgembed/binaries
 RG_EMBED_BIN := $(RG_EMBED_DIR)/rg
 
 .PHONY: all build install test test-production cover vet fmt fmt-check tidy clean \
+        gate web-gate \
         brand brand-check datapath-check norms-check agents agents-check \
         docs-table-check \
         sensitive-norm-check \
@@ -335,6 +337,44 @@ release-profile-check:
 release-config-check:
 	node scripts/release-config-guard.mjs
 	node --test scripts/release-config-guard.test.mjs
+
+# gate is the single command a change must pass before it lands on v1. It is
+# dev-docs-usdable/需求/20260911/开发计划.md §1.2.2's local gate, which until now
+# was a list a human had to remember and re-issue by hand:
+#
+#   make test + make fmt-check + make vet + every *-check
+#   + cd web && npm run build && npm test + svelte-check
+#
+# Why it is a target rather than a paragraph: the list was skipped in practice,
+# and the docs record what that cost. V-62 is the headline — until 2026-09-14 CI
+# did not run on v1 at all, so the local gate WAS the only gate on the branch
+# everything ships from, and V-61 is the defect that landed in that blind spot
+# (web tests were green in the worktree while the committed tree did not build).
+# A remembered list cannot be invoked by name; a target can, and it can be made
+# to match what CI runs.
+#
+# Scope note (§3.10): this gates the tree you are standing on, including
+# uncommitted edits. `V-61` was exactly a worktree-vs-committed-tree divergence,
+# so if you are about to land a merge, commit first and run it on the commit.
+gate: fmt-check vet test portable-check \
+      norms-check agents-check brand-check datapath-check marker-check \
+      docs-table-check sensitive-norm-check reuse-check \
+      server-diff-check release-profile-check release-config-check \
+      web-gate
+	@echo ""
+	@echo "gate passed: fmt + vet + go test -race + 12 guards + web build/test/check."
+
+# The web half of `gate`. Kept separate so it can be run on its own (it is the
+# slowest half and the one that needs Node, not Go).
+#
+# Run svelte-check from `web/`, never from the repo root: from the root it picks
+# up no tsconfig for the Svelte sources and reports a wall of false errors (107
+# on 2026-09-15), which reads as "the environment is broken" and gets waved
+# away. From web/ the same tree is 0 errors, 0 warnings. That difference is why
+# this target exists instead of a remembered command.
+web-gate: web-build
+	cd web && npm test
+	cd web && npx svelte-check --threshold error
 
 # preflight-check is the packaging-time tier: a shipped artifact cannot be
 # produced from a tree the guards would reject. CI already runs them on a

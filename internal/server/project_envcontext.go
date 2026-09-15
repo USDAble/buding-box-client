@@ -78,7 +78,7 @@ func sourceRuleDirs(cwd string, p *sessionGroup) []string {
 }
 
 // OCTO-FORK: 数据根：`~/.octo` → `<exe dir>/data`（硬规则 1） — see dev-docs-usdable/需求/2260906/技术方案/P1-便携数据根.md
-// sourceHookDirs are the mounted folders whose .octo-hooks.yml the engine
+// sourceHookDirs are the mounted folders whose .octo/hooks.yml the engine
 // loads: cwd-equal mounts are skipped (same double-load as above), and each
 // remaining folder must pass the SAME fingerprint trust gate a working_dir
 // retarget does. "Mounting is the trust grant" holds only for a mount a

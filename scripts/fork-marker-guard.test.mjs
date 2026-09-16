@@ -21,6 +21,7 @@ import {
   parseAllowlist,
   readMarkerState,
 } from './fork-marker-guard.mjs'
+import { UPSTREAM_BASELINE_PATH, resolvePinnedUpstream } from './server-diff-guard.mjs'
 import { MARKER_PATTERN, isMarkerLine } from './fork-marker.mjs'
 
 // ─── the marker line vs a mention ───────────────────────────────────────────
@@ -250,22 +251,21 @@ test('an uncommitted edit to an upstream file is examined, not just HEAD', (t) =
 
 // The same gathering against this repository, asserting properties rather than
 // a fixed file list so the test does not go stale on the next upstream merge.
+//
+// It measures against the pinned baseline, not `origin/main`: the point is to
+// exercise the same upstream the guard uses, and after 2026-09-16 a ref that
+// moves would make this test agree with the guard only by luck.
 test('the gathering is self-consistent against the real repository', () => {
   const root = path.resolve(import.meta.dirname, '..')
-  const upstream = execFileSync('git', ['rev-parse', '--verify', '--quiet', 'origin/main^{commit}'], {
-    cwd: root,
-    encoding: 'utf8',
-  })
-    .trim()
-    .slice(0, 7) || 'origin/main'
-  const files = listModifiedUpstreamFiles(root, 'origin/main', (r, args) =>
-    execFileSync('git', args, { cwd: r, encoding: 'utf8' }),
-  )
+  const run = (r, args) => execFileSync('git', args, { cwd: r, encoding: 'utf8' })
+  const upstream = resolvePinnedUpstream(root, run)
+  assert.ok(upstream, `the pinned baseline in ${UPSTREAM_BASELINE_PATH} must be in this checkout`)
+
+  const files = listModifiedUpstreamFiles(root, upstream, run)
   assert.ok(files.length > 0, 'the fork must show a diff against upstream')
   for (const f of files) {
     assert.ok(fs.existsSync(path.join(root, f)), `${f} was reported modified but does not exist`)
   }
-  assert.ok(upstream.length > 0)
 })
 
 // ─── marker placement: not inside YAML frontmatter ──────────────────────────

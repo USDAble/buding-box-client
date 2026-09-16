@@ -38,16 +38,18 @@
 //     RFC 6761 `.invalid` placeholder, which cannot resolve — so nothing is
 //     sent anywhere, and the build log is the right place to say so.
 //
-//     server-diff-guard and fork-marker-guard both need an `origin/main` (or
-//     `main`) ref to diff against. A packaging host may legitimately lack it —
-//     a shallow clone, a machine that only ever fetched one branch, a release
-//     runner checking out a tag. Blocking packaging on "you have not fetched
-//     main" would push people to disable the check, which is worse than
-//     warning. When the ref IS present the result is reported either way, so
-//     real drift is still visible in the build log. fork-marker-guard is
-//     tiered with it for the ref reason, NOT because hard rule 3 is optional:
-//     it is a HARD CI job, and the marker census it produces is exactly what an
-//     upstream merge is planned from (开发规范 §3.3).
+//     server-diff-guard and fork-marker-guard both diff against the commit
+//     pinned in scripts/upstream-baseline.txt. A packaging host may legitimately
+//     lack it — a shallow clone, a release runner checking out a tag, a machine
+//     that never fetched upstream. Blocking packaging on "you have not fetched
+//     the baseline" would push people to disable the check, which is worse than
+//     warning. When the pin IS present the result is reported either way, so
+//     real drift is still visible in the build log. (The baseline is a pinned
+//     commit precisely so that these two guards report the same thing on every
+//     host; see that file for the incident that made a moving ref untenable.)
+//     fork-marker-guard is tiered with it for the ref reason, NOT because hard
+//     rule 3 is optional: it is a HARD CI job, and the marker census it produces
+//     is exactly what an upstream merge is planned from (开发规范 §3.3).
 //
 // Usage:
 //   node scripts/preflight.mjs
@@ -64,7 +66,7 @@ import { check as checkReuse } from './reuse-guard.mjs'
 import { check as checkNorms } from './norms-guard.mjs'
 import { check as checkAgents } from './sync-agents.mjs'
 import { check as checkSensitiveNorm } from './sensitive-norm-guard.mjs'
-import { check as checkServerDiff, resolveUpstream } from './server-diff-guard.mjs'
+import { check as checkServerDiff, resolvePinnedUpstream } from './server-diff-guard.mjs'
 import { check as checkReleaseConfig } from './release-config-guard.mjs'
 import { check as checkForkMarker } from './fork-marker-guard.mjs'
 
@@ -95,7 +97,7 @@ export async function runHardChecks(root) {
 }
 
 // ADVISORY: returns { warnings, notes }. Never fails the build.
-export async function runAdvisoryChecks(root, { resolve = resolveUpstream } = {}) {
+export async function runAdvisoryChecks(root, { resolve = resolvePinnedUpstream } = {}) {
   const warnings = []
   const notes = []
 
@@ -107,15 +109,16 @@ export async function runAdvisoryChecks(root, { resolve = resolveUpstream } = {}
   for (const p of releaseConfig) warnings.push(`release-config-guard: ${p}`)
 
   if (!resolve(root)) {
+    const hint =
+      `Fetch the pinned baseline (\`git fetch --no-tags origin $(grep -m1 -oE '[0-9a-f]{40}' ` +
+      `scripts/upstream-baseline.txt)\`) and re-package if you want these checks.`
     warnings.push(
-      'server-diff-guard: no upstream ref (origin/main or main) is fetched — ' +
-        'fork-drift vs upstream was NOT verified for this build. ' +
-        'Run `git fetch origin main` and re-package if you want that check.',
+      'server-diff-guard: the pinned upstream baseline in scripts/upstream-baseline.txt is not ' +
+        `in this checkout — fork drift vs upstream was NOT verified for this build. ${hint}`,
     )
     warnings.push(
-      'fork-marker-guard: no upstream ref (origin/main or main) is fetched — ' +
-        'hard rule 3 compliance was NOT verified for this build. ' +
-        'Run `git fetch origin main` and re-package if you want that check.',
+      'fork-marker-guard: the pinned upstream baseline in scripts/upstream-baseline.txt is not ' +
+        `in this checkout — hard rule 3 compliance was NOT verified for this build. ${hint}`,
     )
     return { warnings, notes }
   }

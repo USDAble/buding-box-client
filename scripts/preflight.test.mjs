@@ -1,7 +1,7 @@
 // Tests for scripts/preflight.mjs. The interesting behaviour is the two tiers:
 // the advisory tier must never fail a build, because a packaging host can
-// legitimately lack the upstream ref — if that blocked packaging, people would
-// disable the check, which is worse than a warning.
+// legitimately lack the pinned upstream baseline — if that blocked packaging,
+// people would disable the check, which is worse than a warning.
 
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
@@ -13,18 +13,21 @@ const ROOT = repositoryRoot(import.meta.url)
 
 // ─── advisory tier ──────────────────────────────────────────────────────────
 
-test('advisory: a missing upstream ref warns instead of failing', async () => {
+test('advisory: a missing pinned baseline warns instead of failing', async () => {
   const { warnings, notes } = await runAdvisoryChecks(ROOT, { resolve: () => null })
   assert.deepEqual(notes, [])
   const upstream = warnings.filter((w) => w.startsWith('server-diff-guard: '))
   assert.equal(upstream.length, 1)
-  assert.match(upstream[0], /no upstream ref/)
+  // The warning has to name the pin, not just say "an upstream is missing":
+  // the fix is a specific fetch, and it is the same sentence a reader will
+  // search the repository for.
+  assert.match(upstream[0], /upstream-baseline\.txt/)
   assert.match(upstream[0], /NOT verified/)
-  // The marker guard needs the same ref, and "not verified" has to be said
+  // The marker guard needs the same baseline, and "not verified" has to be said
   // about it too — silently skipping a guard is how a wiring claim goes stale.
   const marker = warnings.filter((w) => w.startsWith('fork-marker-guard: '))
   assert.equal(marker.length, 1)
-  assert.match(marker[0], /no upstream ref/)
+  assert.match(marker[0], /upstream-baseline\.txt/)
   assert.match(marker[0], /NOT verified/)
 })
 

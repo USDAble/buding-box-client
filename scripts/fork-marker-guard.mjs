@@ -49,10 +49,15 @@ import fs from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 
-import { UPSTREAM_REFS, git, resolveUpstream } from './server-diff-guard.mjs'
+import {
+  git,
+  missingBaselineProblem,
+  readUpstreamBaseline,
+  resolveUpstream,
+} from './server-diff-guard.mjs'
 import { MARKER_PATTERN } from './fork-marker.mjs'
 
-// Measured on 2026-09-13 against origin/main (6a9d040b): 324 modified upstream
+// Measured on 2026-09-13 against the pinned upstream baseline (6a9d040b): 324 modified upstream
 // files, 68 with a marker line, 6 unable to hold one and named in the
 // allowlist — 250 missing. The guard landed at 250 and the 250 markers were
 // added in the same PR, so the ceiling is 0: every modified upstream file is
@@ -222,16 +227,13 @@ export async function check(root, run = git, read) {
   const problems = []
   const notes = []
 
-  const upstream = resolveUpstream(root, UPSTREAM_REFS, run)
+  const { sha, problems: baselineProblems } = readUpstreamBaseline(root, read)
+  if (baselineProblems.length > 0) {
+    return { problems: baselineProblems, notes }
+  }
+  const upstream = resolveUpstream(root, [sha], run)
   if (!upstream) {
-    return {
-      problems: [
-        `cannot find an upstream ref (tried ${UPSTREAM_REFS.join(', ')}) — ` +
-          `this guard compares the fork against upstream, so it needs one fetched. ` +
-          `In CI, check out with fetch-depth: 0 or fetch the branch explicitly.`,
-      ],
-      notes,
-    }
+    return { problems: [missingBaselineProblem(sha)], notes }
   }
 
   const allowlistFile = path.join(root, ALLOWLIST_PATH)

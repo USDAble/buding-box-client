@@ -435,6 +435,9 @@ export interface LoginInput {
  * Requests a verification code. Resolves with the cooldown seconds; throws
  * ProductError with fieldErrors.phone === "invalid_phone" or retryAfterSec on
  * a too-soon resend (429).
+ *
+ * Every other refusal carries a business code and no field (V-94): a platform
+ * fault is not something the user can fix in the phone box.
  */
 export async function sendCode(phone: string): Promise<number> {
   const res = await productFetch("/api/product/send-code", {
@@ -453,11 +456,32 @@ export async function sendCode(phone: string): Promise<number> {
     // no case for it, so the message rendered as an empty paragraph (L-B3). It
     // goes through the business channel instead, where the page can offer the
     // retry that is actually the right next step.
-    if (failureTier(code)) throw new ProductError(res.status, {}, code);
+    //
+    // ONLY A CODE THAT NAMES THE PHONE BELONGS UNDER THE FIELD (V-94). The tier
+    // test above closed the 503 case that was reported, but every other code the
+    // platform can answer with still fell through to the phone box — and
+    // `internal_error` / `maintenance` / `control_plane_unconfigured` have no
+    // field-error case either, so the same empty paragraph came back the moment
+    // the platform answered 5xx. Membership is by name, not by "not a tier":
+    // the field-error switch is the same closed list, and anything outside it
+    // has to reach a surface that renders a sentence.
+    if (failureTier(code) || !(code in PHONE_FIELD_CODES)) {
+      throw new ProductError(res.status, {}, code);
+    }
     throw new ProductError(res.status, { phone: code });
   }
   return body.cooldownSec as number;
 }
+
+/**
+ * The codes that belong under the phone input on this call.
+ *
+ * `invalid_phone` is the only one: it is the one input this endpoint has, and the
+ * local handler answers it as a business-level code precisely so the frontend can
+ * file it (本地API契约 §2.2). The fallback in sendCode above covers the field-error
+ * envelope, whose code is not in the body.
+ */
+const PHONE_FIELD_CODES: Record<string, true> = { invalid_phone: true };
 
 /**
  * Submits the login (or activation+login) form. On success it updates the

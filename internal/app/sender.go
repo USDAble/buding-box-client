@@ -12,6 +12,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log"
 	"strings"
 
 	"github.com/open-octo/octo-agent/internal/agent"
@@ -339,6 +340,29 @@ func (s sender) SendMessages(ctx context.Context, model, system string, msgs []a
 	return replyFromResponse(resp), nil
 }
 
+// OCTO-FORK: report unmodelled stream-chunk fields, so the 中台 gateway's
+// `retract` / ledger-terminal events are loud instead of silently dropped —
+// see dev-docs-usdable/需求/20260911/待解决问题.md D-002 (rule 3) and 需求基线 V-90.
+//
+// WHY IT LIVES HERE AND NOT IN THE PROVIDER. internal/provider/openai already
+// detects the fields and hands them to StreamCallbacks; what was missing was a
+// caller that installs the callback. The provider deliberately reports instead
+// of failing (the protocol for either event is still unpinned, so failing the
+// stream would be inventing one), and the app sender is the one layer every
+// turn passes through — including the gateway, which reaches it via
+// productruntime.GatewayEndpoint.Sender.
+//
+// A WARNING, NOT AN ERROR, AND NOT A FALLBACK. No behaviour changes: the reply
+// still completes. The point is that the first gateway that sends `retract`
+// leaves a trace, because the alternative is a user reading content the
+// platform has withdrawn with nothing anywhere saying so (开发规范 §3.9).
+func reportUnmodelledChunkFields(fields []string) {
+	if len(fields) == 0 {
+		return
+	}
+	log.Printf("provider stream carried fields this build does not model: %s — content they describe was NOT applied", strings.Join(fields, ", "))
+}
+
 // StreamMessages delegates to the provider's SendStream when it implements
 // provider.StreamingProvider, else falls back to the buffered Send path and
 // synthesises a single onChunk call with the full content.
@@ -364,8 +388,9 @@ func (s sender) StreamMessages(
 	}
 	if sp, ok := s.p.(provider.StreamingProvider); ok {
 		resp, err := sp.SendStream(ctx, req, provider.StreamCallbacks{
-			OnText:     onChunk,
-			OnThinking: s.reasoningSink(onThinking),
+			OnText:                  onChunk,
+			OnThinking:              s.reasoningSink(onThinking),
+			OnUnmodelledChunkFields: reportUnmodelledChunkFields,
 		})
 		if err != nil {
 			return agent.Reply{}, err
@@ -436,9 +461,10 @@ func (s sender) StreamMessagesWithTools(
 	}
 	if sp, ok := s.p.(provider.StreamingProvider); ok {
 		resp, err := sp.SendStream(ctx, req, provider.StreamCallbacks{
-			OnText:      onChunk,
-			OnToolDelta: onToolDelta,
-			OnThinking:  s.reasoningSink(onThinking),
+			OnText:                  onChunk,
+			OnToolDelta:             onToolDelta,
+			OnThinking:              s.reasoningSink(onThinking),
+			OnUnmodelledChunkFields: reportUnmodelledChunkFields,
 		})
 		if err != nil {
 			return agent.Reply{}, err

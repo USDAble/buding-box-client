@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"io"
+	"log"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -382,6 +383,168 @@ func TestNewSender_UnknownProvider(t *testing.T) {
 	if _, err := NewSender(SenderOptions{Provider: "nope", APIKey: "k"}); err == nil {
 		t.Error("expected error for unknown provider")
 	}
+}
+
+// OCTO-FORK: 未知流字段的报告必须有人装（`待解决问题.md` D-002 第 3 条 / `需求基线` V-90）
+// — see dev-docs-usdable/需求/20260911/中台接口清单.md §6.2
+//
+// The gateway installs this callback, so a stream chunk carrying a field this
+// build does not model (the 中台 gateway's `retract`, whose semantics are still
+// unpinned - 待解决问题.md D-002 / 需求基线 V-90) must leave a trace instead of
+// being dropped in silence. Before the wiring these tests pin, the report existed
+// at the provider layer but no caller installed it, so the user kept reading
+// withdrawn content with nothing anywhere saying so.
+//
+// The stream still SUCCEEDS in both cases: this is a report, not a refusal.
+// Failing would be inventing a protocol for an event nobody has specified yet.
+func TestSender_ReportsUnmodelledChunkFields(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/event-stream")
+		w.WriteHeader(http.StatusOK)
+		_, _ = io.WriteString(w, `data: {"id":"c1","choices":[{"index":0,"delta":{"content":"withdrawn text"}}]}`+"\n\n")
+		_, _ = io.WriteString(w, `data: {"retract":{"reason":"safety_blocked"}}`+"\n\n")
+		_, _ = io.WriteString(w, "data: [DONE]\n\n")
+		if f, ok := w.(http.Flusher); ok {
+			f.Flush()
+		}
+	}))
+	defer srv.Close()
+
+	// The same shape GatewayEndpoint.Sender builds: custom endpoint, openai
+	// protocol. A sender built any other way would not prove the gateway path.
+	s, err := NewSender(SenderOptions{
+		Provider: ProviderCustom,
+		Protocol: "openai",
+		APIKey:   "token",
+		BaseURL:  srv.URL,
+	})
+	if err != nil {
+		t.Fatalf("NewSender: %v", err)
+	}
+
+	logged := captureLog(t)
+	streamer, ok := s.(sender)
+	if !ok {
+		t.Fatalf("NewSender returned %T, want the in-package sender", s)
+	}
+	reply, err := streamer.StreamMessages(
+		context.Background(), "buding-cloud-pro", "",
+		[]agent.Message{agent.NewUserMessage("hi")}, 0,
+		func(string) {}, nil,
+	)
+	if err != nil {
+		t.Fatalf("StreamMessages: %v", err)
+	}
+	if reply.Content != "withdrawn text" {
+		t.Errorf("Content = %q, want the text that streamed before the unknown field", reply.Content)
+	}
+	if !strings.Contains(logged(), "retract") {
+		t.Errorf("log = %q, want it to name the unmodelled field %q: an unknown top-level field was dropped in silence", logged(), "retract")
+	}
+}
+
+// The reverse nail: a stream real OpenAI would send must not produce the report.
+// Without this, a build that logged on every turn would pass the test above.
+func TestSender_StandardStreamLogsNoUnmodelledFields(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/event-stream")
+		w.WriteHeader(http.StatusOK)
+		_, _ = io.WriteString(w, `data: {"id":"c1","object":"chat.completion.chunk","created":1767225600,"model":"m","choices":[{"index":0,"delta":{"content":"hi"}}]}`+"\n\n")
+		_, _ = io.WriteString(w, `data: {"id":"c1","object":"chat.completion.chunk","created":1767225600,"model":"m","choices":[{"index":0,"delta":{},"finish_reason":"stop"}]}`+"\n\n")
+		_, _ = io.WriteString(w, "data: [DONE]\n\n")
+		if f, ok := w.(http.Flusher); ok {
+			f.Flush()
+		}
+	}))
+	defer srv.Close()
+
+	s, err := NewSender(SenderOptions{
+		Provider: ProviderCustom,
+		Protocol: "openai",
+		APIKey:   "token",
+		BaseURL:  srv.URL,
+	})
+	if err != nil {
+		t.Fatalf("NewSender: %v", err)
+	}
+
+	logged := captureLog(t)
+	streamer, ok := s.(sender)
+	if !ok {
+		t.Fatalf("NewSender returned %T, want the in-package sender", s)
+	}
+	if _, err := streamer.StreamMessages(
+		context.Background(), "buding-cloud-pro", "",
+		[]agent.Message{agent.NewUserMessage("hi")}, 0,
+		func(string) {}, nil,
+	); err != nil {
+		t.Fatalf("StreamMessages: %v", err)
+	}
+	if got := logged(); got != "" {
+		t.Errorf("log = %q, want nothing: every key in that chunk is a standard one", got)
+	}
+}
+
+// The tools path is the one the agent loop actually streams through, so the
+// report has to be installed there too — a wiring that covered only the
+// tool-less convenience method would leave the product path silent.
+func TestSender_ReportsUnmodelledChunkFields_WithTools(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/event-stream")
+		w.WriteHeader(http.StatusOK)
+		_, _ = io.WriteString(w, `data: {"id":"c1","choices":[{"index":0,"delta":{"content":"withdrawn text"}}]}`+"\n\n")
+		_, _ = io.WriteString(w, `data: {"retract":{"reason":"safety_blocked"}}`+"\n\n")
+		_, _ = io.WriteString(w, "data: [DONE]\n\n")
+		if f, ok := w.(http.Flusher); ok {
+			f.Flush()
+		}
+	}))
+	defer srv.Close()
+
+	s, err := NewSender(SenderOptions{
+		Provider: ProviderCustom,
+		Protocol: "openai",
+		APIKey:   "token",
+		BaseURL:  srv.URL,
+	})
+	if err != nil {
+		t.Fatalf("NewSender: %v", err)
+	}
+	streamer, ok := s.(sender)
+	if !ok {
+		t.Fatalf("NewSender returned %T, want the in-package sender", s)
+	}
+
+	logged := captureLog(t)
+	if _, err := streamer.StreamMessagesWithTools(
+		context.Background(), "buding-cloud-pro", "",
+		[]agent.Message{agent.NewUserMessage("hi")}, 0,
+		[]agent.ToolDefinition{{Name: "terminal"}},
+		func(string) {}, func(string, string, string) {}, nil,
+	); err != nil {
+		t.Fatalf("StreamMessagesWithTools: %v", err)
+	}
+	if !strings.Contains(logged(), "retract") {
+		t.Errorf("log = %q, want it to name the unmodelled field %q on the tools path too", logged(), "retract")
+	}
+}
+
+// captureLog redirects the standard logger into a buffer and returns a reader of
+// what has been written so far. A file-level logger rather than a field on
+// sender because reportUnmodelledChunkFields is package-level: the callback is
+// installed by the two streaming call sites, not held per sender.
+func captureLog(t *testing.T) func() string {
+	t.Helper()
+	var buf strings.Builder
+	prevOut := log.Writer()
+	prevFlags := log.Flags()
+	log.SetOutput(&buf)
+	log.SetFlags(0)
+	t.Cleanup(func() {
+		log.SetOutput(prevOut)
+		log.SetFlags(prevFlags)
+	})
+	return func() string { return buf.String() }
 }
 
 func TestTestConnection_Success(t *testing.T) {

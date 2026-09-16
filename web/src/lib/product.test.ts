@@ -553,6 +553,22 @@ describe("control-plane failure tiers (L-B3)", () => {
     expect(err.fieldErrors.phone).toBeUndefined();
   });
 
+  it("keeps a non-tier platform fault out of the phone field too (V-94)", async () => {
+    // The tier test above only closed the case that was reported. Membership is
+    // by NAME, not by "not a tier": `internal_error` / `maintenance` /
+    // `control_plane_unconfigured` have no field-error case either, so filing
+    // them under the phone box brought the same empty paragraph straight back
+    // the next time the platform answered 5xx. This is the doc's own §3.1
+    // failure list — `internal_error` is a code send-code may answer with.
+    vi.stubGlobal("fetch", fetchReturning(503, { code: "internal_error" }));
+
+    const err = await sendCode("13800001234").catch((e) => e);
+    expect(err).toBeInstanceOf(ProductError);
+    expect(err.code).toBe("internal_error");
+    expect(err.fieldErrors.phone).toBeUndefined();
+    expect(err.fieldErrors).toEqual({});
+  });
+
   it("still files a genuinely bad phone number under the field", async () => {
     vi.stubGlobal("fetch", fetchReturning(400, { field: "phone", code: "invalid_phone" }));
 

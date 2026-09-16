@@ -76,8 +76,9 @@ jobs:
     steps:
       - uses: actions/checkout@v7
         with:
-          # package-desktop-macos.sh derives the version from `git describe`;
-          # fetch tags so it isn't just the short SHA.
+          # OCTO-FORK: 注释随 V-103 改正（版本不再来自 `git describe`） — see dev-docs-usdable/需求/20260911/需求基线.md §5.6 V-103
+          # Full history: the packaging preflight's advisory guards diff against
+          # the pinned upstream commit, which a shallow checkout would not have.
           fetch-depth: 0
 
       - uses: actions/setup-go@v7

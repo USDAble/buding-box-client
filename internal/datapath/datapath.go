@@ -164,3 +164,17 @@ func Join(parts ...string) (string, error) {
 	}
 	return filepath.Join(append([]string{root}, parts...)...), nil
 }
+
+// FreeSpace reports the bytes an unprivileged writer can still put on the
+// volume holding path.
+//
+// It is the second half of the data root's "can this product write here?"
+// question. Root probes writability, which a nearly-full volume passes and then
+// fails later, mid-session, as a write error that reads like an unrelated
+// fault — the failure mode 需求20260906 §5.1.2 第 4 条 asks to surface at
+// startup instead. It lives here because the volume holding the data root is a
+// property of the data root, next to the same probe.
+//
+// It resolves and creates nothing, so it is safe while frozen and harmless on a
+// path that has gone away (it reports the error rather than deciding anything).
+func FreeSpace(path string) (uint64, error) { return freeSpace(path) }

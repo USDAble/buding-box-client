@@ -1,6 +1,7 @@
 package main
 
 import (
+	"os"
 	"reflect"
 	"regexp"
 	"strings"
@@ -29,15 +30,132 @@ func fields(t *testing.T, s uiStrings) map[string]string {
 // these are the tray menu and the OS dialogs, the most visible surfaces there
 // are. Capitalised only — the lowercase form is the CLI command and the config
 // directory, which this change deliberately leaves alone.
+//
+// One field is licensed to name it, and the licence is written in the source
+// next to the copy rather than listed here: 需求20260906 §5.1.2 第 6 条 mandates a
+// port-conflict sentence naming the upstream product, because the situation it
+// describes is the user having upstream Octo installed. See upstreamNameLicences
+// — scripts/brand-guard.mjs reads the same marker for the same reason, so the two
+// checks cannot drift apart on what the exception covers.
 var brandLiteral = regexp.MustCompile(`\bOcto\b`)
 
+// markerLine matches the annotation that licenses a field, exactly as
+// scripts/brand-guard.mjs reads it out of the same file.
+var markerLine = regexp.MustCompile(`^\s*//.*brand-exception`)
+
+// fieldAssignment matches a uiStrings field being set in a constructor.
+var fieldAssignment = regexp.MustCompile(`^\s*(\w+):\s`)
+
+// stringsConstructor matches a uiStrings copy-table constructor, so a licence
+// can be attributed to the one table it sits in.
+var stringsConstructor = regexp.MustCompile(`^func (\w+)StringsFor\(`)
+
+// upstreamNameLicences returns, per copy table, the uiStrings fields whose copy
+// is allowed to name the upstream product.
+//
+// Read from lang.go's source on purpose. The alternative — a list of field names
+// in this test — would be a second owner for the exception: adding the copy
+// without the list entry would fail here, and the two could disagree about which
+// fields are licensed. Reading the marker means one annotation serves both this
+// test and brand-guard, and it must sit on the comment directly above the copy,
+// so it stays next to what it licenses.
+//
+// Keyed by table as well as field, and that is not incidental: a licence is
+// granted to one string in one language. Keyed by field alone, the English
+// table's marker would silently cover the Chinese one as well, so removing the
+// marker from either table would still pass here — found exactly that way, by
+// deleting one marker and watching brand-guard fail while this stayed green.
+func upstreamNameLicences(t *testing.T) map[string]map[string]string {
+	t.Helper()
+	src, err := os.ReadFile("lang.go")
+	if err != nil {
+		t.Fatalf("reading lang.go: %v", err)
+	}
+	licences := map[string]map[string]string{}
+	table := ""
+	lines := strings.Split(string(src), "\n")
+	for i := 0; i < len(lines); i++ {
+		if m := stringsConstructor.FindStringSubmatch(lines[i]); m != nil {
+			table = tableName(m[1])
+			continue
+		}
+		if i == 0 || !markerLine.MatchString(lines[i-1]) {
+			continue
+		}
+		field := fieldAssignment.FindStringSubmatch(lines[i])
+		if field == nil {
+			continue
+		}
+		if licences[table] == nil {
+			licences[table] = map[string]string{}
+		}
+		licences[table][field[1]] = strings.TrimSpace(lines[i-1])
+	}
+	return licences
+}
+
+// tableName maps a constructor name to the table key the assertions use.
+func tableName(constructor string) string {
+	if strings.HasPrefix(constructor, "zh") {
+		return "zh"
+	}
+	return "en"
+}
+
 func TestNativeStringsCarryNoBrandLiteral(t *testing.T) {
+	licences := upstreamNameLicences(t)
 	for setName, set := range map[string]uiStrings{"en": enStrings, "zh": zhStrings} {
-		for field, value := range fields(t, set) {
+		values := fields(t, set)
+		for field, value := range values {
+			if _, licensed := licences[setName][field]; licensed {
+				// The licence must be earning its keep: a marker left on copy
+				// that no longer names the upstream product is an exception that
+				// outlived its reason, and it would silently keep covering the
+				// field if the name came back.
+				if !brandLiteral.MatchString(value) {
+					t.Errorf("%s.%s is licensed to name the upstream product but no longer does (%q) — drop the marker",
+						setName, field, value)
+				}
+				continue
+			}
 			if brandLiteral.MatchString(value) {
 				t.Errorf("%s.%s still names the product literally: %q", setName, field, value)
 			}
 		}
+	}
+}
+
+// TestEveryLicenceIsVisibleToBrandGuard keeps the two checks reading the same
+// thing. The Go test derives licences from lang.go's markers; brand-guard
+// derives them from the same markers with its own regex. If the two regexes
+// disagree about what a marker looks like, one guard would enforce an exception
+// the other does not know about — so the shapes are asserted here rather than
+// left to drift.
+func TestEveryLicenceIsVisibleToBrandGuard(t *testing.T) {
+	src, err := os.ReadFile("lang.go")
+	if err != nil {
+		t.Fatalf("reading lang.go: %v", err)
+	}
+	// The JS guard's pattern, transcribed: a leading comment opener, then the
+	// marker word anywhere on the line.
+	jsMarker := regexp.MustCompile(`^\s*(//|#|;|\*|/\*).*brand-exception`)
+	found := 0
+	for _, line := range strings.Split(string(src), "\n") {
+		if !strings.Contains(line, "brand-exception") {
+			continue
+		}
+		if !jsMarker.MatchString(line) {
+			t.Errorf("a marker line is a comment to this test but not to brand-guard: %q", line)
+		}
+		found++
+	}
+	if found == 0 {
+		t.Fatal("no markers found in lang.go; the exception tests above would be vacuous")
+	}
+	// And every marker must sit directly above a copy line, or it licenses
+	// nothing while looking like it does.
+	if len(upstreamNameLicences(t)) == 0 {
+		t.Fatal("mutating lang.go: no marker was read as licensing a field")
 	}
 }
 
@@ -115,6 +233,7 @@ func TestNativeFormatVerbsPreserved(t *testing.T) {
 		"errBindFmt":         "%s%v",
 		"errStopFmt":         "%v",
 		"errStartFmt":        "%v",
+		"errNoSpaceFmt":      "%s%s",
 		"updLatestFmt":       "%s",
 		"updAvailableFmt":    "%s",
 	}

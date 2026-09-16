@@ -113,7 +113,23 @@ export const LEADING_COMMENT = /^\s*(\/\/|#|;|\*|\/\*|<!--)/
 // product's name. The design's own formulation was `rg '\bOcto\b'` — matched
 // here without the shell's comment blindness, since both files legitimately
 // carry an `OCTO-FORK` or history comment naming the old path.
+//
+// One line may name it on purpose, and that line has to say so. 需求20260906
+// §5.1.2 第 6 条 *mandates* the sentence 「若本机正在运行 Octo 或其它程序，请先
+// 退出后再打开布丁盒子」 — there the upstream name is the whole point, because
+// the situation it describes is the user having the upstream Octo installed, so
+// interpolating our brand would tell them to quit the wrong program. That is an
+// exception 硬规则 2 grants ("两个例外须显式注释" — .cursor/rules/dev-norms.mdc),
+// and this is where the annotation is cashed in: the marker must sit on the
+// comment line *immediately above* the copy, so an exemption is visible in the
+// diff next to the string it licenses and cannot be sprinkled somewhere else in
+// the file. Without the marker the line is a defect like any other.
 export const UPSTREAM_NAME = /(?<![A-Za-z])Octo(?![A-Za-z])/
+
+// The annotation. Anchored to a leading comment opener like LEADING_COMMENT, so
+// it is a comment marker and not a way to smuggle the word into a string.
+export const EXCEPTION_MARKER = /^\s*(\/\/|#|;|\*|\/\*)[\s\S]*brand-exception/
+
 export const COPY_TABLES = ['web/src/lib/i18n.ts', 'cmd/octo-desktop/lang.go']
 
 function isTestFile(name) {
@@ -235,13 +251,21 @@ export async function collectFiles(root) {
 // upstreamNameHits returns the 1-based line numbers of copy-table lines naming
 // the upstream product. Comment-led lines are skipped, same as leg 1: both
 // tables carry a comment recording where the old name used to be.
+//
+// A code line is exempt when the comment immediately above it carries the
+// annotation (见上面 EXCEPTION_MARKER 的说明). "Immediately" is the whole
+// mechanism: it keeps the licence next to the string it covers, so a reviewer
+// reads both at once and the marker cannot be dropped at the top of the file to
+// cover every line below it.
 export function upstreamNameHits(content) {
   const hits = []
   const lines = content.split('\n')
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i]
     if (line.trim() === '' || LEADING_COMMENT.test(line)) continue
-    if (UPSTREAM_NAME.test(line)) hits.push(i + 1)
+    if (!UPSTREAM_NAME.test(line)) continue
+    if (i > 0 && EXCEPTION_MARKER.test(lines[i - 1])) continue
+    hits.push(i + 1)
   }
   return hits
 }

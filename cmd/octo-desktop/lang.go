@@ -35,10 +35,16 @@ type uiStrings struct {
 	quitOK     string
 	quitCancel string
 
-	errTitle     string
-	errBindFmt   string // "...%s...%v"
-	errStopFmt   string // "...%v"
-	errStartFmt  string // "...%v"
+	errTitle      string
+	errBindFmt    string // "%s" is the port, "%v" the bind error
+	errStopFmt    string // "...%v"
+	errStartFmt   string // "...%v"
+	errNoSpaceFmt string // "%s" free, "%s" required
+	// dialogOKText is a plain acknowledgement. Currently unreferenced: the only
+	// OK-only dialog the shell had was showError, and every caller of that is a
+	// boot failure whose single action must read as "quit" (需求20260906 §5.1.2
+	// 第 4 条, see bridge.go). Kept rather than deleted so a future non-fatal
+	// dialog has the word already translated (硬规则 3: 不删上游代码).
 	dialogOKText string
 
 	updTitle         string
@@ -86,11 +92,20 @@ func enStringsFor(name, short string) uiStrings {
 		quitOK:     "Quit",
 		quitCancel: "Cancel",
 
-		errTitle:     name,
-		errBindFmt:   "Couldn't bind %s — another program may be using it.\n\n%v",
-		errStopFmt:   "Couldn't stop the running backend: %v",
-		errStartFmt:  "Couldn't start the backend: %v",
-		dialogOKText: "OK",
+		errTitle: name,
+		// 需求20260906 §5.1.2 第 6 条 prescribes this sentence, and its "Octo"
+		// names the UPSTREAM product on purpose: the situation it describes is the
+		// user having upstream Octo installed, so interpolating our brand here
+		// would tell them to quit the wrong program. The explicit exception 硬规则 2
+		// grants, cashed in by the marker below.
+		// brand-exception: 第 6 条规定文案点名上游产品
+		errBindFmt:  "Port %s is already in use. If Octo or another program is running on this computer, quit it and open " + name + " again.\n\n%v",
+		errStopFmt:  "Couldn't stop the running backend: %v",
+		errStartFmt: "Couldn't start the backend: %v",
+		// V-82: names the reason and the two figures, because "not enough space"
+		// on its own gives the user nothing to act on.
+		errNoSpaceFmt: "Not enough room to run. The data folder is on a disk with %s free, and %s is needed.\n\nFree up space, then open " + name + " again.",
+		dialogOKText:  "OK",
 
 		updTitle:         name,
 		updFailed:        "Couldn't check for updates. Please try again later.",
@@ -125,11 +140,18 @@ func zhStringsFor(name, short string) uiStrings {
 		quitOK:     "退出",
 		quitCancel: "取消",
 
-		errTitle:     name,
-		errBindFmt:   "无法绑定 %s —— 可能有其他程序正在占用。\n\n%v",
-		errStopFmt:   "无法停止正在运行的后端：%v",
-		errStartFmt:  "无法启动后端：%v",
-		dialogOKText: "好",
+		errTitle: name,
+		// 需求20260906 §5.1.2 第 6 条 的规定文案，逐字照用（`%s` 是端口，不是地址 ——
+		// 规定句写的是「端口 8088」，端口号的 owner 是 `hubPort`，见 main.go）。
+		// 句中的 "Octo" 指**上游产品**，是硬规则 2 的两个显式例外之一：这条提示描述的
+		// 处境就是"用户装了上游 Octo"，把品牌插值进去会让他去退错的那个程序。
+		// brand-exception: 第 6 条规定文案点名上游产品
+		errBindFmt:  "端口 %s 已被占用。若本机正在运行 Octo 或其它程序，请先退出后再打开" + name + "。\n\n%v",
+		errStopFmt:  "无法停止正在运行的后端：%v",
+		errStartFmt: "无法启动后端：%v",
+		// V-82：点明原因并给出两个数字 —— 只说"空间不足"等于什么都没给。
+		errNoSpaceFmt: "空间不足，无法运行。数据目录所在磁盘剩余 %s，需要 %s。\n\n请清理出空间后重新打开" + name + "。",
+		dialogOKText:  "好",
 
 		updTitle:         name,
 		updFailed:        "检查更新失败,请稍后重试。",

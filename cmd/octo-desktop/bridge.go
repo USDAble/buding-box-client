@@ -909,10 +909,19 @@ func (b *nativeBridge) confirm(title, message, okLabel, cancelLabel string) bool
 	return ok
 }
 
-// showError shows a modal error dialog with a single OK button.
+// showError shows a modal error dialog for a startup failure and hands the user
+// the single action the requirement allows.
+//
+// Every caller is on the boot path and quits immediately afterwards, so the
+// button is labelled with the quit verb rather than "OK" (需求20260906 §5.1.2
+// 第 4 条: 用户只能看懂原因后点「退出」**结束进程**，不是「退出登录」). The rule
+// is emphatic about the wording because a dismissible "OK" invites the reading
+// that the product carried on — and for the failures routed here it does not,
+// so a dialog that looked dismissable would be describing something that never
+// happens.
 func (b *nativeBridge) showError(title, message string) {
 	dlg := b.app.Dialog.Error().SetTitle(title).SetMessage(message)
-	dlg.AddButton(L().dialogOKText).SetAsDefault()
+	dlg.AddButton(L().quitOK).SetAsDefault()
 	dlg.Show()
 }
 

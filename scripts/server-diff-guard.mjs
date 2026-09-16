@@ -60,6 +60,23 @@ export const BASELINE_PATTERN = /^[0-9a-f]{40}$/
 // Directories the guard governs: the upstream runtime the fork must not grow.
 export const GOVERNED_PREFIX = 'internal/server/'
 
+// WHAT IS AND IS NOT RATCHETED — the scope, stated here because the two are
+// easy to conflate and the conflation is silent (开发规范 §3.10).
+//
+//   R1 counts added `s.api(` lines in server.go: one number, ceiling 1.
+//   R2's per-file ceilings cover a *named handful* of files — the ones carrying
+//     product debt that has a convergence plan. Everything else under
+//     GOVERNED_PREFIX is unratcheted *by design*: no drift ceiling, no
+//     comparison, however large the fork's diff against upstream grows.
+//   R2's registration rule covers fork-ADDED files (PRODUCT_FILE_PATTERN): such
+//     a file must be listed in PRODUCT_FILES with a convergence plan.
+//
+// The count of fork-modified upstream files with no ceiling is measured at run
+// time and printed in the coverage note, not written here: a frozen number goes
+// stale on the next change while still reading as current (§3.8), which is the
+// defect V-101 registered. What the guard must not do is let a pass read as a
+// statement about the whole tree — so `main` names the scope in its pass line.
+//
 // R1 — the route table.
 //
 // Measured 2026-09-13: upstream main has 147 `s.api(` calls in server.go and
@@ -544,6 +561,58 @@ export function listGovernedFiles(root, run = git) {
   return out.split('\n').filter((l) => l.trim().length > 0)
 }
 
+// listUpstreamFiles returns the governed files that exist at the upstream ref.
+//
+// The complement of this set is what the fork ADDED. Those are not "modified
+// upstream" files: the R2 registration rule (PRODUCT_FILES) governs them, and a
+// coverage note that counted them as unratcheted upstream drift would name the
+// wrong gap.
+export function listUpstreamFiles(root, ref, run = git) {
+  const out = run(root, ['ls-tree', '-r', '--name-only', ref, GOVERNED_PREFIX])
+  return out.split('\n').filter((l) => l.trim().length > 0)
+}
+
+// summarizeCoverage splits the fork-modified upstream files under the governed
+// prefix into the ones an R2 ceiling governs and the ones it does not.
+//
+// The ceilings are per-file and deliberately name a handful of files — the ones
+// carrying product debt with a convergence plan. The rest of the governed tree
+// is unratcheted *by design*, and that design is fine; what is not fine is a
+// pass message reading "internal/server debt is within the recorded ceilings",
+// which reads as a statement about the whole tree. That over-claim is how the
+// coverage gap stays invisible, and it is the same shape as the two guard
+// defects this file already carries notes about: the counter that could not
+// fail (V-49) and the guard that measured a different upstream than CI (V-101).
+//
+// The numbers are measured at run time rather than written into the header as
+// prose, because a frozen count goes stale on the next change while still
+// reading as current (开发规范 §3.8).
+export function summarizeCoverage({ modified, ceilings }) {
+  const capped = new Set(ceilings.map((c) => c.file))
+  const withCeiling = modified.filter((m) => capped.has(m.file))
+  const without = modified.filter((m) => !capped.has(m.file))
+  const sum = (rows) => rows.reduce((total, r) => total + r.lines, 0)
+  return {
+    withCeilingFiles: withCeiling.length,
+    withCeilingLines: sum(withCeiling),
+    withoutCeilingFiles: without.length,
+    withoutCeilingLines: sum(without),
+    withoutCeiling: without.map((r) => r.file).sort(),
+  }
+}
+
+// formatCoverage renders one coverage sentence, so the note and the pass line
+// cannot disagree about what was measured.
+export function formatCoverage(coverage) {
+  return (
+    `R2 coverage: ${coverage.withCeilingFiles} fork-modified upstream file(s) carry a ceiling ` +
+    `(${coverage.withCeilingLines} lines); ${coverage.withoutCeilingFiles} more are fork-modified upstream ` +
+    `files with no ceiling (${coverage.withoutCeilingLines} lines). The ceilings are per-file and named, ` +
+    `not tree-wide — the uncapped files are unratcheted by design, and their line counts are not compared ` +
+    `against anything.`
+  )
+}
+
 // ─── guard ──────────────────────────────────────────────────────────────────
 
 export async function check(root, run = git, read) {
@@ -589,7 +658,20 @@ export async function check(root, run = git, read) {
     }),
   )
 
-  return { problems, notes }
+  // R2 — what the ceilings above do NOT cover, measured rather than implied.
+  // Only files upstream also has: a file the fork added is governed by the
+  // registration rule above, not by a drift ceiling.
+  const upstreamGoverned = new Set(listUpstreamFiles(root, upstream, run))
+  const modified = []
+  for (const file of found) {
+    if (!upstreamGoverned.has(file)) continue
+    const lines = forkDiffLines(root, upstream, file, run)
+    if (lines > 0) modified.push({ file, lines })
+  }
+  const coverage = summarizeCoverage({ modified, ceilings: DEBT_CEILINGS })
+  notes.push(formatCoverage(coverage))
+
+  return { problems, notes, coverage }
 }
 
 export function repositoryRoot(scriptUrl) {
@@ -598,7 +680,7 @@ export function repositoryRoot(scriptUrl) {
 
 async function main() {
   const root = repositoryRoot(import.meta.url)
-  const { problems, notes } = await check(root)
+  const { problems, notes, coverage } = await check(root)
 
   for (const note of notes) console.log(`server-diff-guard: ${note}`)
 
@@ -608,7 +690,15 @@ async function main() {
     process.exitCode = 1
     return
   }
-  console.log('server-diff-guard passed: internal/server debt is within the recorded ceilings.')
+  // The scope is named rather than implied: this guard ratchets the files listed
+  // in DEBT_CEILINGS, and saying "internal/server debt is within the recorded
+  // ceilings" without the count reads as a statement about the whole tree.
+  console.log(
+    `server-diff-guard passed: the ${coverage.withCeilingFiles} file(s) with a recorded R2 ceiling are within it ` +
+      `(${coverage.withCeilingLines} lines), and no product file is unregistered. ` +
+      `Ceilings are per-file, not tree-wide: ${coverage.withoutCeilingFiles} fork-modified upstream file(s) ` +
+      `carry no ceiling and were not compared against anything.`,
+  )
 }
 
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {

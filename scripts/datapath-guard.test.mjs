@@ -10,6 +10,7 @@ import {
   loadAllowlist,
   octoLiteralViolations,
   repositoryRoot,
+  toPosixPath,
 } from './datapath-guard.mjs'
 
 const root = repositoryRoot(import.meta.url)
@@ -91,6 +92,31 @@ test('isAllowed matches a recursive directory entry at path-segment boundaries',
   assert.equal(isAllowed('internal/datapath', entries), true)
   assert.equal(isAllowed('internal/datapath/sub/file.go', entries), true)
   assert.equal(isAllowed('internal/datapathX/file.go', entries), false)
+})
+
+// The Windows separator form is the case that was actually broken:
+// `path.relative` yields backslashes there, the allowlist is written with
+// slashes, and the comparison used `path.sep` — so every allowlisted file was
+// reported unlicensed on Windows (V-102). These run on the Linux CI leg too,
+// which is why the normalisation is on the path side rather than `path.sep`.
+test('isAllowed matches a Windows-separator path against a "/" directory entry', () => {
+  const entries = [{ prefix: 'internal/datapath', dir: true }]
+  assert.equal(isAllowed('internal\\datapath\\datapath.go', entries), true)
+  assert.equal(isAllowed('internal\\datapath', entries), true)
+  // The segment-boundary rule survives the normalisation: "internal/datapathX"
+  // is not under "internal/datapath", backslashes or not.
+  assert.equal(isAllowed('internal\\datapathX\\file.go', entries), false)
+})
+
+test('isAllowed matches a Windows-separator path against an exact file entry', () => {
+  const entries = [{ prefix: 'internal/tools/read_file.go', dir: false }]
+  assert.equal(isAllowed('internal\\tools\\read_file.go', entries), true)
+  assert.equal(isAllowed('internal\\tools\\other.go', entries), false)
+})
+
+test('toPosixPath leaves a POSIX path alone and converts a Windows one', () => {
+  assert.equal(toPosixPath('internal/datapath/datapath.go'), 'internal/datapath/datapath.go')
+  assert.equal(toPosixPath('internal\\datapath\\datapath.go'), 'internal/datapath/datapath.go')
 })
 
 test('loadAllowlist parses comments, blank lines, exact files, and dir recursion', async () => {

@@ -7,6 +7,10 @@
 /octo
 /octo.exe
 /octo-desktop
+# OCTO-FORK: the shell dev binary `make desktop-dev` writes here — same reason as
+# the others, so it cannot be committed by a `git add -A` and cannot make the
+# tree dirty for the release-goreleaser dirty-tree check.
+/octo-desktop-dev
 # The platform stand-in is built ad hoc while walking the flows by hand; it sits
 # next to the others so `go build ./cmd/productstub` cannot be committed by a
 # `git add -A` (it was, once).

@@ -83,6 +83,7 @@
   // dictionary, not .svelte literals. See 品牌升级方案.md §2.5.
   import { brandName, brandShortName } from '../lib/brand'
   import { insertPendingSend, takeConfirmedSend } from '../lib/pendingSendOrder'
+  import { applySensitiveRejection } from '../lib/sensitive'
   import { inlineSlashCommand } from '../lib/inlineSlash'
   import { exportModeStore, selectedMessagesStore } from '../lib/exportStore'
   import { filenameStem } from '../lib/filename'
@@ -909,10 +910,18 @@ import QuestionModal from '../components/overlays/QuestionModal.svelte'
     // via the check API before sending; this fires only when that client check
     // was skipped or failed and the server rejected the message. Restore the
     // masked text into the input box and surface the same notice.
+    //
+    // The two effects live in applySensitiveRejection (lib/sensitive.ts) because
+    // this view cannot be rendered in a test: the event's consumer half had no
+    // nail at all until V-98, so a wrong event name or a dropped restore went
+    // unnoticed while every server-side nail stayed green. Keep the call — the
+    // scan in sensitive.test.ts fails if this handler grows its own copy again.
     cleanups.push(ws.on('input_sensitive', (ev: any) => {
-      if (ev.session_id && ev.session_id !== sid) return
-      composer?.restore(ev.text ?? '', undefined)
-      showToast($t('sensitive.hit_notice'), 'error')
+      applySensitiveRejection(ev, {
+        sessionID: sid,
+        restore: (masked) => composer?.restore(masked, undefined),
+        notify: () => showToast($t('sensitive.hit_notice'), 'error'),
+      })
     }))
 
     cleanups.push(ws.on('history_user_message', (ev) => {

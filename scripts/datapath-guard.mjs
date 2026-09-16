@@ -101,11 +101,27 @@ export async function loadAllowlist(root, rel = ALLOWLIST_REL) {
   return entries
 }
 
+// The allowlist is written in POSIX form — `internal/datapath/`, the form a
+// human types on any host — while `path.relative`, and so every path a guard
+// hands to isAllowed, yields backslashes on Windows. Comparing with
+// `path.sep` therefore rejected every allowlisted file there: the `Portable
+// package (windows-amd64)` job reported all 15 of them unlicensed on every PR
+// since the guard landed (run 35084091585; see 需求基线 §5.6 V-102).
+// Normalise the path side only — the allowlist never gains a second spelling.
+//
+// It normalises backslashes rather than `path.sep` on purpose: the bug it
+// fixes is the one a Windows runner hits, and a test for it has to run on the
+// Linux CI leg too.
+export function toPosixPath(rel) {
+  return rel.replaceAll('\\', '/')
+}
+
 export function isAllowed(rel, entries) {
+  const posix = toPosixPath(rel)
   for (const { prefix, dir } of entries) {
     if (dir) {
-      if (rel === prefix || rel.startsWith(prefix + path.sep)) return true
-    } else if (rel === prefix) {
+      if (posix === prefix || posix.startsWith(prefix + '/')) return true
+    } else if (posix === prefix) {
       return true
     }
   }

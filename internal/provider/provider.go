@@ -110,6 +110,25 @@ type StreamCallbacks struct {
 	// to form the full trace. Fires before any OnText/OnToolDelta for the turn,
 	// since the thinking block streams first. Nil-safe.
 	OnThinking func(thinkingDelta string)
+
+	// OCTO-FORK: OnUnmodelledChunkFields fires when a stream chunk carries a
+	// top-level field the protocol adapter does not model — see
+	// dev-docs-usdable/需求/20260911/待解决问题.md D-002.
+	//
+	// The control plane's gateway is OpenAI-compatible for content, tool calls and
+	// usage, but its withdrawn-content event (`retract`) and ledger terminal state
+	// are not part of that protocol. A `{"retract":{...}}` chunk has no `choices`
+	// and used to be skipped in silence, so withdrawn content stayed on screen with
+	// no signal anywhere that it had been withdrawn.
+	//
+	// The field is a REPORT, not a handler: the semantics of either event are still
+	// unpinned, so a provider must not fail the stream over one — it names the
+	// fields and the turn carries on. Callers that want to be told when the gateway
+	// starts sending them supply this; nil-safe, and a caller that supplies nothing
+	// simply does not get the report.
+	//
+	// `fields` holds one chunk's unmodelled top-level keys, sorted.
+	OnUnmodelledChunkFields func(fields []string)
 }
 
 // StreamingProvider extends Provider with the ability to stream the

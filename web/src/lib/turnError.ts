@@ -24,15 +24,47 @@
 //     which failure happened.
 import { tr } from './i18n'
 
-// code → i18n key. The code values are the control plane's (中台交付包 §3.2, the
+// code → i18n key. The code values are the control plane's (中台接口清单 §2.4, the
 // single registry): the gateway's own codes and the client-side fail-closed ones.
 //
-// `session.model_withdrawn` is REUSED rather than duplicated: PR-5e's picker already
-// shows that sentence for this exact situation (B8 rule 2), and a second key with the
-// same words is the copy-drifting twin §3.8 forbids.
+// COVERAGE (V-91). The table used to answer for two codes, so everything else in the
+// registry reached the fallback below — and for a gateway refusal that fallback is
+// `openai: HTTP 403: {"code":"safety_blocked",…}`, raw English JSON on a Chinese
+// screen. C8's rule is the client must not use `message` as copy, which rules that out
+// for any code we can name; the fallback stays for codes nobody has seen yet. So every
+// code in §2.4 now answers here, with three deliberate reuses instead of new keys
+// (§3.8 — a second key holding the same sentence is the copy-drifting twin):
+//
+//   - `model_not_found` → `session.model_withdrawn`: the picker already says "this
+//     model is gone, pick another" for the same situation (B8 rule 2 / PR-5e).
+//   - `content_restricted` → `turn_error.safety_blocked`: two platform codes, one fact
+//     and one thing for the user to do (edit the message and send again).
+//   - `upstream_unavailable` → `product.tier.upstream_unavailable`: the control plane's
+//     own 5xx tier sentence, unchanged by the fact that the gateway also returns it.
+//
+// DELIBERATELY ABSENT: `unauthorized` / `token_expired`. On this path their correct
+// answer is not a sentence but a refresh-and-replay, and then clearing the credential
+// and returning to the interception page when the refresh is refused — none of which
+// exists for the gateway (the provider holds a token per turn and has no exchange; see
+// V-92 and 中台接口清单 §3.9). A sentence here would tell the user to retry a turn that
+// cannot succeed, so the honest state is that this path has no copy until it has the
+// behaviour.
 export const TURN_ERROR_KEYS: Record<string, string> = {
   insufficient_credits: 'turn_error.insufficient_credits',
   model_withdrawn: 'session.model_withdrawn',
+  model_not_found: 'session.model_withdrawn',
+  rate_limited: 'turn_error.rate_limited',
+  maintenance: 'turn_error.maintenance',
+  plan_expired: 'turn_error.plan_expired',
+  model_not_allowed: 'turn_error.model_not_allowed',
+  feature_not_entitled: 'turn_error.feature_not_entitled',
+  safety_blocked: 'turn_error.safety_blocked',
+  content_restricted: 'turn_error.safety_blocked',
+  request_in_progress: 'turn_error.request_in_progress',
+  duplicate_request: 'turn_error.duplicate_request',
+  invalid_request: 'turn_error.invalid_request',
+  internal_error: 'turn_error.internal_error',
+  upstream_unavailable: 'product.tier.upstream_unavailable',
 }
 
 // turnErrorKey returns the i18n key for a code, or null when nothing is registered.

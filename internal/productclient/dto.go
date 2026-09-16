@@ -11,6 +11,9 @@
 package productclient
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"fmt"
 )
@@ -143,6 +146,11 @@ const (
 	// 第 6 条). It is the one endpoint that answers a conditional request, which
 	// is why the refresh path goes through it rather than through bootstrap.
 	pathCatalogModels = "/catalog/models"
+	// pathSensitiveDictionary is the read-only compliance dictionary snapshot
+	// (需求基线 D5). Its response fields live in SensitiveDictionaryData below;
+	// keeping the path here prevents the runtime from growing a second copy of
+	// the platform contract.
+	pathSensitiveDictionary = "/dictionaries/sensitive"
 	// pathLogout revokes the current refresh token / session (中台交付包 §4.1 第 4
 	// 条). It has been in the contract since the beginning and had no caller until
 	// V-54: logout was two local acts, so a COPY of data/ kept refreshing after the
@@ -312,4 +320,49 @@ type CatalogModelsData struct {
 	// outcome; Unchanged means it sent none *because ours is current*. Two
 	// different facts, so they get two different tests.
 	Unchanged bool `json:"unchanged"`
+}
+
+// SensitiveDictionary is the signed snapshot or delta. Its raw JSON encoding,
+// not a re-serialization, is the message protected by DictionarySignature.
+type SensitiveDictionary struct {
+	Version     string   `json:"version"`
+	Mode        string   `json:"mode"`
+	BaseVersion string   `json:"baseVersion,omitempty"`
+	Words       []string `json:"words,omitempty"`
+	Add         []string `json:"add,omitempty"`
+	Remove      []string `json:"remove,omitempty"`
+	SHA256      string   `json:"sha256"`
+	KeyID       string   `json:"keyId"`
+	Audience    string   `json:"audience"`
+	IssuedAt    string   `json:"issuedAt"`
+	ExpiresAt   string   `json:"expiresAt"`
+}
+
+// SensitiveDictionaryEnvelope uses the same raw-byte detached-signature shape
+// as PolicyEnvelope. That keeps one signer/verifier mechanism for both signed
+// control-plane artifacts (需求基线 PQ30 取法①).
+type SensitiveDictionaryEnvelope struct {
+	Dictionary          json.RawMessage `json:"dictionary"`
+	DictionarySignature PolicySignature `json:"dictionarySignature"`
+}
+
+// SensitiveDictionaryData is the endpoint data, plus the local 304 spelling.
+type SensitiveDictionaryData struct {
+	SensitiveDictionaryEnvelope
+
+	// Unchanged is the local spelling of a bare 304. It is not a wire field.
+	Unchanged bool `json:"-"`
+}
+
+// SensitiveDictionarySHA256 is the checksum of the complete resulting word
+// list. The code-owned contract is SHA-256 over encoding/json's compact UTF-8
+// array encoding; both full and delta responses carry the checksum of the final
+// snapshot, so a delta cannot be applied to the wrong base unnoticed.
+func SensitiveDictionarySHA256(words []string) string {
+	if words == nil {
+		words = []string{}
+	}
+	raw, _ := json.Marshal(words)
+	sum := sha256.Sum256(raw)
+	return hex.EncodeToString(sum[:])
 }

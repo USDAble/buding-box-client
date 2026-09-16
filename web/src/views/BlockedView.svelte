@@ -1,7 +1,8 @@
 <script lang="ts">
   import { onMount } from 'svelte'
+  import { get } from 'svelte/store'
   import { t, locale, setLocale } from '../lib/i18n'
-  import { productState, blockedPage, sendCode, login, setProductLocale, ProductError, failureTier, tierRetryable, refreshProductState } from '../lib/product'
+  import { productState, blockedPage, sendCode, login, setProductLocale, ProductError, failureTier, tierRetryable, refreshProductState, type DictionaryNotice } from '../lib/product'
   import { normalizePhone } from '../lib/phone'
   import { randomNickname, validateNickname } from '../lib/nickname'
   import { brandName, brandTagline, brandTermsTitle, brandPrivacyTitle, brandText } from '../lib/brand'
@@ -146,6 +147,39 @@
     await doSubmit()
   }
 
+  /**
+   * Reports the server dictionary's outcome after a successful login (D5 rule 2).
+   *
+   * The reply carries a notice when the update was refused, and once more when a
+   * later login succeeds after a failure. Both have to reach the user, but this
+   * view is unmounted the instant login flips the phase to 'ready' — so the
+   * notice goes to the shared toast stack, which App.svelte renders outside the
+   * phase branch and which therefore outlives this page.
+   *
+   * `get(t)` rather than `$t`: an auto-subscribed store is torn down with the
+   * component, and this call can land after that teardown. Reading the store
+   * directly also pins the copy to the language in force when the login happened.
+   *
+   * The two degraded shapes are deliberately different sentences. An empty
+   * fallbackVersion means no server cache was ever accepted — built-in plus
+   * personal words only — and saying "version  is still active" with a blank
+   * would be worse than saying nothing (D5 rule 2, 开发规范 §3.9).
+   */
+  function announceDictionary(notice: DictionaryNotice | undefined) {
+    if (!notice) return
+    const tr = get(t)
+    if (notice.state === 'recovered') {
+      if (!notice.version) return
+      showToast(tr('product.dict.sync_recovered').replaceAll('{version}', notice.version))
+      return
+    }
+    if (notice.fallbackVersion) {
+      showToast(tr('product.dict.sync_degraded_cached').replaceAll('{version}', notice.fallbackVersion), 'warning')
+    } else {
+      showToast(tr('product.dict.sync_degraded_builtin'), 'warning')
+    }
+  }
+
   async function doSubmit() {
     // Round one — format. Every failure is collected and shown at once.
     const errs: Record<string, string> = {}
@@ -162,13 +196,17 @@
     phoneMasked = null
     submitting = true
     try {
-      await login({
+      const result = await login({
         phone,
         code,
         nickname,
         activationCode: activationForm ? activationCode.trim() : undefined,
         boxCode: activationForm ? boxCode.trim() : undefined,
       })
+      // Any notice has to be routed somewhere that outlives this component:
+      // login() has already set productPhase to 'ready' by the time it returns,
+      // so the re-render that unmounts this view is merely pending (L-D5).
+      announceDictionary(result.dictionaryNotice)
       // On success login() flips productPhase to 'ready', so App.svelte boots
       // the main UI and this view unmounts.
     } catch (e) {

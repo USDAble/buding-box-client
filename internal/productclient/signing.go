@@ -9,7 +9,7 @@ import (
 	"time"
 )
 
-// Signing and verification of the policy envelope (中台交付包 §4.3).
+// Signing and verification of raw-byte control-plane envelopes.
 //
 // There is exactly one implementation, used by both the signer side (the
 // stand-in, and tests) and the verifier side (this client). Two implementations
@@ -82,40 +82,11 @@ type VerifyOptions struct {
 // on data the signature actually covers.
 func (e PolicyEnvelope) Verify(opts VerifyOptions) (Policy, error) {
 	var zero Policy
-
-	// Local misconfiguration first: a missing audience or an empty anchor means
-	// the caller cannot answer the question at all, and "no answer" must not
-	// read as "fine".
-	if opts.Audience == "" {
-		return zero, fmt.Errorf("%w: no expected audience configured", ErrPolicyMalformed)
-	}
-	if len(opts.TrustedKeys) == 0 {
-		return zero, fmt.Errorf("%w: no trusted keys configured", ErrUntrustedKey)
-	}
-	if e.Signature.KeyID == "" || e.Signature.Sig == "" {
-		return zero, fmt.Errorf("%w: envelope carries no signature", ErrPolicyMalformed)
-	}
 	if len(e.Policy) == 0 {
 		return zero, fmt.Errorf("%w: envelope carries no policy", ErrPolicyMalformed)
 	}
-
-	pubB64, ok := opts.TrustedKeys[e.Signature.KeyID]
-	if !ok {
-		return zero, fmt.Errorf("%w: %q", ErrUntrustedKey, e.Signature.KeyID)
-	}
-	pub, err := base64.StdEncoding.DecodeString(pubB64)
-	if err != nil || len(pub) != ed25519.PublicKeySize {
-		return zero, fmt.Errorf("%w: %q has an unusable public key", ErrUntrustedKey, e.Signature.KeyID)
-	}
-	sig, err := base64.StdEncoding.DecodeString(e.Signature.Sig)
-	if err != nil || len(sig) != ed25519.SignatureSize {
-		return zero, fmt.Errorf("%w: signature is not a valid ed25519 value", ErrBadSignature)
-	}
-
-	// The signature is checked before anything it covers is interpreted: the
-	// window and audience below are attacker-writable until this passes.
-	if !ed25519.Verify(ed25519.PublicKey(pub), e.Policy, sig) {
-		return zero, ErrBadSignature
+	if err := verifyDetached(e.Policy, e.Signature, opts); err != nil {
+		return zero, err
 	}
 
 	var policy Policy
@@ -123,31 +94,80 @@ func (e PolicyEnvelope) Verify(opts VerifyOptions) (Policy, error) {
 		return zero, fmt.Errorf("%w: %v", ErrPolicyMalformed, err)
 	}
 
-	// The policy names a key and the detached signature names one too. They
-	// must agree; if they do not, one of them is not what its author signed.
-	if policy.KeyID != e.Signature.KeyID {
-		return zero, fmt.Errorf("%w: policy names key %q, signature names %q",
-			ErrBadSignature, policy.KeyID, e.Signature.KeyID)
-	}
-
-	if policy.Audience != opts.Audience {
-		return zero, fmt.Errorf("%w: %q", ErrAudience, policy.Audience)
-	}
-
-	issuedAt, err := time.Parse(time.RFC3339, policy.IssuedAt)
-	if err != nil {
-		return zero, fmt.Errorf("%w: issuedAt %q", ErrPolicyMalformed, policy.IssuedAt)
-	}
-	expiresAt, err := time.Parse(time.RFC3339, policy.ExpiresAt)
-	if err != nil {
-		return zero, fmt.Errorf("%w: expiresAt %q", ErrPolicyMalformed, policy.ExpiresAt)
-	}
-	if opts.Now.Before(issuedAt.Add(-opts.Skew)) || opts.Now.After(expiresAt.Add(opts.Skew)) {
-		return zero, fmt.Errorf("%w: valid %s..%s, now %s (skew %s)",
-			ErrClockWindow, policy.IssuedAt, policy.ExpiresAt, opts.Now.Format(time.RFC3339), opts.Skew)
+	if err := verifyClaims(policy.KeyID, policy.Audience, policy.IssuedAt, policy.ExpiresAt, e.Signature, opts); err != nil {
+		return zero, err
 	}
 
 	return policy, nil
+}
+
+// Verify authenticates the exact dictionary bytes and only then parses and
+// validates their identity, audience and validity window.
+func (e SensitiveDictionaryEnvelope) Verify(opts VerifyOptions) (SensitiveDictionary, error) {
+	var zero SensitiveDictionary
+	if len(e.Dictionary) == 0 {
+		return zero, fmt.Errorf("%w: envelope carries no dictionary", ErrPolicyMalformed)
+	}
+	if err := verifyDetached(e.Dictionary, e.DictionarySignature, opts); err != nil {
+		return zero, err
+	}
+	var dictionary SensitiveDictionary
+	if err := json.Unmarshal(e.Dictionary, &dictionary); err != nil {
+		return zero, fmt.Errorf("%w: %v", ErrPolicyMalformed, err)
+	}
+	if err := verifyClaims(dictionary.KeyID, dictionary.Audience, dictionary.IssuedAt, dictionary.ExpiresAt, e.DictionarySignature, opts); err != nil {
+		return zero, err
+	}
+	return dictionary, nil
+}
+
+func verifyDetached(raw []byte, signature PolicySignature, opts VerifyOptions) error {
+	if opts.Audience == "" {
+		return fmt.Errorf("%w: no expected audience configured", ErrPolicyMalformed)
+	}
+	if len(opts.TrustedKeys) == 0 {
+		return fmt.Errorf("%w: no trusted keys configured", ErrUntrustedKey)
+	}
+	if signature.KeyID == "" || signature.Sig == "" {
+		return fmt.Errorf("%w: envelope carries no signature", ErrPolicyMalformed)
+	}
+	pubB64, ok := opts.TrustedKeys[signature.KeyID]
+	if !ok {
+		return fmt.Errorf("%w: %q", ErrUntrustedKey, signature.KeyID)
+	}
+	pub, err := base64.StdEncoding.DecodeString(pubB64)
+	if err != nil || len(pub) != ed25519.PublicKeySize {
+		return fmt.Errorf("%w: %q has an unusable public key", ErrUntrustedKey, signature.KeyID)
+	}
+	sig, err := base64.StdEncoding.DecodeString(signature.Sig)
+	if err != nil || len(sig) != ed25519.SignatureSize {
+		return fmt.Errorf("%w: signature is not a valid ed25519 value", ErrBadSignature)
+	}
+	if !ed25519.Verify(ed25519.PublicKey(pub), raw, sig) {
+		return ErrBadSignature
+	}
+	return nil
+}
+
+func verifyClaims(keyID, audience, issued, expires string, signature PolicySignature, opts VerifyOptions) error {
+	if keyID != signature.KeyID {
+		return fmt.Errorf("%w: payload names key %q, signature names %q", ErrBadSignature, keyID, signature.KeyID)
+	}
+	if audience != opts.Audience {
+		return fmt.Errorf("%w: %q", ErrAudience, audience)
+	}
+	issuedAt, err := time.Parse(time.RFC3339, issued)
+	if err != nil {
+		return fmt.Errorf("%w: issuedAt %q", ErrPolicyMalformed, issued)
+	}
+	expiresAt, err := time.Parse(time.RFC3339, expires)
+	if err != nil {
+		return fmt.Errorf("%w: expiresAt %q", ErrPolicyMalformed, expires)
+	}
+	if opts.Now.Before(issuedAt.Add(-opts.Skew)) || opts.Now.After(expiresAt.Add(opts.Skew)) {
+		return fmt.Errorf("%w: valid %s..%s, now %s (skew %s)", ErrClockWindow, issued, expires, opts.Now.Format(time.RFC3339), opts.Skew)
+	}
+	return nil
 }
 
 // SignPolicy produces the detached signature for policy. It is the other half
@@ -156,12 +176,17 @@ func (e PolicyEnvelope) Verify(opts VerifyOptions) (Policy, error) {
 // keyID is recorded beside the signature but is also expected to appear inside
 // the policy; Verify rejects an envelope where the two disagree.
 func SignPolicy(policy []byte, keyID string, priv ed25519.PrivateKey) (PolicySignature, error) {
+	return SignPayload(policy, keyID, priv)
+}
+
+// SignPayload is the signer half shared by every raw-byte signed artifact.
+func SignPayload(payload []byte, keyID string, priv ed25519.PrivateKey) (PolicySignature, error) {
 	if len(priv) != ed25519.PrivateKeySize {
 		return PolicySignature{}, fmt.Errorf("productclient: signing key must be %d bytes, got %d",
 			ed25519.PrivateKeySize, len(priv))
 	}
 	return PolicySignature{
 		KeyID: keyID,
-		Sig:   base64.StdEncoding.EncodeToString(ed25519.Sign(priv, policy)),
+		Sig:   base64.StdEncoding.EncodeToString(ed25519.Sign(priv, payload)),
 	}, nil
 }

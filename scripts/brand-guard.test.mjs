@@ -138,6 +138,56 @@ test('a copy-table line naming the upstream product is a hit, a comment is not',
   assert.deepEqual(COPY_TABLES, ['web/src/lib/i18n.ts', 'cmd/octo-desktop/lang.go'])
 })
 
+test('the upstream name is licensed by a marker on the comment directly above', () => {
+  // 需求20260906 §5.1.2 第 6 条 mandates a sentence naming the upstream product,
+  // so that one line is an exception 硬规则 2 grants — but (per
+  // .cursor/rules/dev-norms.mdc) "两个例外须显式注释", and this is the annotation.
+  const licensed =
+    '    // brand-exception: 第 6 条 mandates naming the upstream product\n' +
+    '    errBindFmt: "端口 %s 已被占用。若本机正在运行 Octo 或其它程序…",'
+  assert.deepEqual(upstreamNameHits(licensed), [])
+
+  // The same copy with the annotation removed is a defect — that is what makes
+  // the marker load-bearing rather than decorative. Splitting drops the comment,
+  // so the copy is now line 1.
+  assert.deepEqual(upstreamNameHits(licensed.split('\n')[1]), [1])
+})
+
+test('the marker only licenses the line it sits directly on', () => {
+  // "Immediately above" is the whole mechanism: it keeps the licence beside the
+  // string it covers, so a reviewer sees both together. Two lines up leaves the
+  // copy unlicensed…
+  assert.deepEqual(
+    upstreamNameHits(
+      '    // brand-exception: 第 6 条 mandates this\n' +
+        '    errTitle: "1",\n' +
+        '    errBindFmt: "若本机正在运行 Octo…",',
+    ),
+    [3],
+  )
+
+  // …and a blank line in between does not help either, because the marker is
+  // then not the comment above the copy.
+  assert.deepEqual(
+    upstreamNameHits(
+      '    // brand-exception: 第 6 条 mandates this\n' +
+        '\n' +
+        '    errBindFmt: "若本机正在运行 Octo…",',
+    ),
+    [3],
+  )
+
+  // A string is not a comment: putting the marker inside the copy itself must
+  // not license anything, or the exemption would be self-granting.
+  assert.deepEqual(
+    upstreamNameHits(
+      '    errBindFmt: "brand-exception 若本机正在运行 Octo…" + errTitle,\n' +
+        '    errStopFmt: "运行 Octo 时出错",',
+    ),
+    [1, 2],
+  )
+})
+
 test('every allowlist entry carries a written reason', async () => {
   const { readFile } = await import('node:fs/promises')
   const { join } = await import('node:path')

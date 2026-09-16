@@ -81,7 +81,7 @@ local network_unavailable
 local model_withdrawn
 local input_sensitive
 
-# Envelope field names. Fixed: these five, and no second naming scheme
+# Envelope field names. Fixed: these six, and no second naming scheme
 # (`messageKey`, `traceId`). `message` is for humans and must not be rendered;
 # `requestId` is what correlates a client log with a platform ticket.
 # `phoneMasked` accompanies phone_mismatch only, and carries the masked phone the

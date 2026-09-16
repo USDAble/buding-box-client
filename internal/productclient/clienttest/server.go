@@ -137,6 +137,14 @@ type Server struct {
 
 	catalogRefreshCount int  // refresh endpoint hits, so "exactly once" is checkable
 	unchangedInBody     bool // spell "nothing new" as {"unchanged":true} instead of 304
+	dictionaryVersion   string
+	dictionaryWords     []string
+	dictionaryKeyID     string
+	dictionaryDigest    string
+	tamperDictionary    bool
+	dictionaryStatus    int
+	dictionaryCode      string
+	dictionaryCount     int
 
 	// Tool-call injection (PR-5b2). Empty name means the stand-in never asks
 	// for a tool, which is the default and the healthy shape.
@@ -362,6 +370,51 @@ func (s *Server) TamperPolicy() {
 	s.tamperPolicy = true
 }
 
+// SetDictionary changes the complete snapshot served by the signed dictionary
+// endpoint. The input is copied so tests cannot mutate the fixture concurrently.
+func (s *Server) SetDictionary(version string, words []string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.dictionaryVersion = version
+	s.dictionaryWords = append([]string(nil), words...)
+}
+
+// TamperDictionary changes one signed payload byte after signing.
+func (s *Server) TamperDictionary() {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.tamperDictionary = true
+}
+
+// SetDictionaryKeyID makes the next dictionary name a particular signing key.
+func (s *Server) SetDictionaryKeyID(keyID string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.dictionaryKeyID = keyID
+}
+
+// SetDictionaryDigest overrides the signed final-snapshot checksum.
+func (s *Server) SetDictionaryDigest(digest string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.dictionaryDigest = digest
+}
+
+// FailDictionary makes the dictionary endpoint return an error envelope.
+func (s *Server) FailDictionary(status int, code string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.dictionaryStatus = status
+	s.dictionaryCode = code
+}
+
+// DictionaryReads reports how many conditional dictionary requests arrived.
+func (s *Server) DictionaryReads() int {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.dictionaryCount
+}
+
 // OmitPolicy answers bootstrap without a policy envelope, which is how the
 // "no catalog in this build" degradation is produced without breaking the
 // account half of the response.
@@ -559,6 +612,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("POST "+"/v1/auth/logout", s.handleLogout)
 	mux.HandleFunc("GET "+"/v1/client/bootstrap", s.handleBootstrap)
 	mux.HandleFunc("GET "+"/v1/catalog/models", s.handleCatalogModels)
+	mux.HandleFunc("GET "+"/v1/dictionaries/sensitive", s.handleSensitiveDictionary)
 	// The ledger read (中台交付包 §4.1 第 9 条). It was missing until L-C4a
 	// because the balance had no reader at all: no code path called the endpoint,
 	// and the projection it feeds was written only by the login handler handing
@@ -1014,6 +1068,42 @@ func (s *Server) handleCatalogModels(w http.ResponseWriter, r *http.Request) {
 		productclient.PolicyEnvelope
 		Unchanged bool `json:"unchanged"`
 	}{PolicyEnvelope: envelope})
+}
+
+func (s *Server) handleSensitiveDictionary(w http.ResponseWriter, r *http.Request) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.dictionaryCount++
+	if s.dictionaryStatus != 0 {
+		writeError(w, s.dictionaryStatus, s.dictionaryCode, "")
+		return
+	}
+	if _, ok := s.access[bearer(r)]; !ok {
+		writeError(w, http.StatusUnauthorized, productclient.CodeUnauthorized, "")
+		return
+	}
+	version := s.dictionaryVersion
+	if version == "" {
+		version = FixtureDictionaryVersion
+	}
+	if r.URL.Query().Get("version") == version {
+		w.WriteHeader(http.StatusNotModified)
+		return
+	}
+	words := s.dictionaryWords
+	if words == nil {
+		words = []string{"server-fixture-word"}
+	}
+	keyID := s.dictionaryKeyID
+	if keyID == "" {
+		keyID = FixtureSigningKeyID
+	}
+	envelope, err := signedDictionary(s.now(), version, keyID, words, s.dictionaryDigest, s.tamperDictionary)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, productclient.CodeInternalError, "")
+		return
+	}
+	writeData(w, http.StatusOK, envelope)
 }
 
 // handleCompletions is the stand-in gateway: an OpenAI-protocol chat endpoint

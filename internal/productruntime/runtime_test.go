@@ -18,7 +18,6 @@ import (
 	"github.com/open-octo/octo-agent/internal/productruntime"
 	"github.com/open-octo/octo-agent/internal/productstate"
 	"github.com/open-octo/octo-agent/internal/sensitive"
-	"github.com/open-octo/octo-agent/internal/server"
 )
 
 // harness wires the local runtime to the platform stand-in, which is the same
@@ -33,7 +32,8 @@ type harness struct {
 	// engine is the one compliance-word engine this harness assembled, held so a
 	// test can assert that the mounted server received the SAME instance rather
 	// than building a second one (PR-6b1 判据 10).
-	engine *sensitive.Engine
+	engine     *sensitive.Engine
+	serverDict *sensitive.ServerStore
 }
 
 func newHarness(t *testing.T) *harness {
@@ -82,15 +82,23 @@ func newHarnessWithControlPlane(t *testing.T, status productruntime.ControlPlane
 	// resolves its dictionary through OCTO_DATA_ROOT, which this harness has
 	// already pointed at the temp data root, so a test can write
 	// sensitive-words.txt and have the routes see it.
-	engine := server.NewSensitiveEngine()
+	serverDict, err := sensitive.OpenServerStore()
+	if err != nil {
+		t.Fatalf("sensitive.OpenServerStore: %v", err)
+	}
+	engine, err := sensitive.NewFromDataRoot(serverDict)
+	if err != nil {
+		t.Fatalf("sensitive.NewFromDataRoot: %v", err)
+	}
 
 	rt := productruntime.New(productruntime.Deps{
-		State:        state,
-		Creds:        creds,
-		Platform:     client,
-		ControlPlane: status,
-		Catalog:      catalog,
-		Sensitive:    engine,
+		State:            state,
+		Creds:            creds,
+		Platform:         client,
+		ControlPlane:     status,
+		Catalog:          catalog,
+		Sensitive:        engine,
+		ServerDictionary: serverDict,
 		// Explicit fixture facts rather than productprofile.Current(): the
 		// profile is chosen by a build tag, and a production-tagged run would
 		// make these tests fail for a reason that has nothing to do with them.
@@ -103,7 +111,7 @@ func newHarnessWithControlPlane(t *testing.T, status productruntime.ControlPlane
 	local := httptest.NewServer(rt.Handler())
 	t.Cleanup(local.Close)
 
-	return &harness{t: t, rt: rt, local: local, platform: platform, platformSrv: platformSrv, root: root, engine: engine}
+	return &harness{t: t, rt: rt, local: local, platform: platform, platformSrv: platformSrv, root: root, engine: engine, serverDict: serverDict}
 }
 
 // do issues a request against the local service and returns status plus the

@@ -67,45 +67,83 @@ func (e *Engine) dictionarySnapshot() *dictionary {
 }
 
 func (e *Engine) refreshLocked() {
-	if e.dictPath == "" {
-		e.dict = e.builtin
-		e.loaded = true
-		e.unreadable = false
+	userChanged := e.refreshUserLocked()
+	serverChanged := e.refreshServerLocked()
+	if e.loaded && !userChanged && !serverChanged {
 		return
+	}
+	words := make([]string, 0, len(e.userWords)+len(e.serverWords))
+	words = append(words, e.userWords...)
+	words = append(words, e.serverWords...)
+	e.dict = buildDictionary(words)
+	e.loaded = true
+}
+
+func (e *Engine) refreshUserLocked() bool {
+	if e.dictPath == "" {
+		changed := !e.loaded || e.unreadable || len(e.userWords) != 0
+		e.userWords = nil
+		e.unreadable = false
+		e.stamp = fileStamp{}
+		return changed
 	}
 
 	info, err := os.Stat(e.dictPath)
 	if err != nil {
-		e.useBuiltinLocked(true)
-		return
+		return e.clearUserLocked(true)
 	}
 	stamp := fileStamp{modTime: info.ModTime().UnixNano(), size: info.Size()}
 	if e.loaded && !e.unreadable && stamp == e.stamp {
-		return
+		return false
 	}
 
 	data, err := os.ReadFile(e.dictPath)
 	if err != nil {
-		e.useBuiltinLocked(true)
-		return
+		return e.clearUserLocked(true)
 	}
 	words, err := parseUserWords(data)
 	if err != nil {
-		e.useBuiltinLocked(true)
-		return
+		return e.clearUserLocked(true)
 	}
 
-	e.dict = buildDictionary(words)
+	e.userWords = words
 	e.stamp = stamp
-	e.loaded = true
 	e.unreadable = false
+	return true
 }
 
-func (e *Engine) useBuiltinLocked(unreadable bool) {
-	e.dict = e.builtin
+func (e *Engine) clearUserLocked(unreadable bool) bool {
+	changed := !e.loaded || e.unreadable != unreadable || len(e.userWords) != 0
+	e.userWords = nil
 	e.stamp = fileStamp{}
-	e.loaded = true
 	e.unreadable = unreadable
+	return changed
+}
+
+func (e *Engine) refreshServerLocked() bool {
+	if e.server == nil {
+		if e.serverVersion == "" && len(e.serverWords) == 0 {
+			return false
+		}
+		e.serverVersion = ""
+		e.serverWords = nil
+		return true
+	}
+	entry, err := e.server.Load()
+	if err != nil {
+		if e.serverVersion == "" && len(e.serverWords) == 0 {
+			return false
+		}
+		e.serverVersion = ""
+		e.serverWords = nil
+		return true
+	}
+	if entry.Version == e.serverVersion {
+		return false
+	}
+	e.serverVersion = entry.Version
+	e.serverWords = append([]string(nil), entry.Words...)
+	return true
 }
 
 // BuiltinWords returns a copy of the read-only built-in dictionary. It is the

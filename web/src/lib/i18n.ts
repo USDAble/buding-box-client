@@ -1092,6 +1092,9 @@ export const en: Record<string, string> = {
   "product.dict.exported": "Exported",
   "product.dict.import_preview": "Will add {added} and skip {skipped} that already exist",
   "product.dict.import_confirm": "Import words",
+  "product.dict.sync_degraded_cached": "Server dictionary update failed. Version {version} remains active; retrying at the next login.",
+  "product.dict.sync_degraded_builtin": "Server dictionary update failed. Built-in and personal words remain active; retrying at the next login.",
+  "product.dict.sync_recovered": "Server dictionary recovered to version {version}.",
   // OCTO-FORK: P6 hidden entries + credits — see
   // dev-docs-usdable/需求/2260906/技术方案/P6-入口隐藏与积分.md.
   "feature.not_available": "This entry isn't available in this version",
@@ -1120,7 +1123,25 @@ export const en: Record<string, string> = {
   // PR-5d3 / G3 (需求基线 C8): turn_error now carries the platform's error `code`,
   // and the UI copy is keyed on it. The server sentence stays as the fallback for
   // codes with no key here — so a missing entry shows English, not a blank notice.
+  //
+  // The registry this table covers is 中台接口清单 §2.4 (the platform's codes) plus
+  // the two the client raises itself. C8's rule is that a code the client KNOWS must
+  // never render the server's sentence — for a gateway refusal that sentence is
+  // `openai: HTTP 4xx: {"code":…}`, which is raw English JSON on a Chinese screen.
+  // The fallback is for codes nobody has seen yet, not for the ones in the registry.
   "turn_error.insufficient_credits": "Not enough points. Top up and try again.",
+  // The gateway throttles the turn (429). Distinct from the control plane's tier
+  // copy: there is no retryAfterSec on turn_error, so this one promises no countdown.
+  "turn_error.rate_limited": "Too many requests. Please wait a moment and try again.",
+  "turn_error.maintenance": "The service is under maintenance. Please try again later.",
+  "turn_error.plan_expired": "Your plan has expired. Renew it to continue.",
+  "turn_error.model_not_allowed": "Your plan doesn't cover this model. Pick another one.",
+  "turn_error.feature_not_entitled": "Your plan doesn't include this feature.",
+  "turn_error.safety_blocked": "Your message didn't pass the safety check. Edit it and try again.",
+  "turn_error.request_in_progress": "The previous request is still being handled. Please wait and try again.",
+  "turn_error.duplicate_request": "This message was already sent. Don't send it again.",
+  "turn_error.invalid_request": "The request was malformed. Please try once more.",
+  "turn_error.internal_error": "Something went wrong on the service side. Please try again later.",
   "turn_error.unknown": "request failed",
   // OCTO-FORK: P10 隐私模式与 PII 处理 — see
   // dev-docs-usdable/需求/2260906/技术方案/P10-隐私模式与PII.md.
@@ -2205,6 +2226,9 @@ export const zh: Record<string, string> = {
   "product.dict.exported": "已导出",
   "product.dict.import_preview": "将新增 {added} 条，跳过 {skipped} 条已存在",
   "product.dict.import_confirm": "导入词库",
+  "product.dict.sync_degraded_cached": "服务器词库更新失败，当前继续使用版本 {version}；下次登录时重试。",
+  "product.dict.sync_degraded_builtin": "服务器词库更新失败，当前仅使用内置词和用户词；下次登录时重试。",
+  "product.dict.sync_recovered": "服务器词库已恢复至版本 {version}。",
   // OCTO-FORK: P6 入口隐藏与积分 — see
   // dev-docs-usdable/需求/2260906/技术方案/P6-入口隐藏与积分.md.
   "feature.not_available": "本期不提供此入口",
@@ -2227,6 +2251,18 @@ export const zh: Record<string, string> = {
   // PR-5e / L-C7：目录本身是好的，但**本会话**绑定的模型已不在其中。
   "session.model_withdrawn": "该模型已下架，请重新选择。",
   "turn_error.insufficient_credits": "余额不足，请充值后重试。",
+  // 网关这一侧的 429。与拦截页那一档不同：turn_error 上没有 retryAfterSec，
+  // 所以这句话不许诺倒计时（中台接口清单 §2.4 的 `rate_limited` 行）。
+  "turn_error.rate_limited": "请求过于频繁，请稍后再试。",
+  "turn_error.maintenance": "服务维护中，请稍后再试。",
+  "turn_error.plan_expired": "套餐已到期，请续费后继续使用。",
+  "turn_error.model_not_allowed": "当前套餐不能使用该模型，请换一个模型。",
+  "turn_error.feature_not_entitled": "当前套餐不包含该功能。",
+  "turn_error.safety_blocked": "内容未通过安全校验，请修改后重试。",
+  "turn_error.request_in_progress": "上一次请求还在处理中，请稍候再试。",
+  "turn_error.duplicate_request": "这条消息刚刚已经发过了，请勿重复发送。",
+  "turn_error.invalid_request": "请求格式有误，请重试一次。",
+  "turn_error.internal_error": "服务出错了，请稍后重试。",
   "turn_error.unknown": "请求失败",
   // OCTO-FORK: P10 隐私模式与 PII 处理 — see
   // dev-docs-usdable/需求/2260906/技术方案/P10-隐私模式与PII.md.

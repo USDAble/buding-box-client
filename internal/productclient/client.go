@@ -251,6 +251,28 @@ func (c *Client) CatalogModels(ctx context.Context, knownVersion string) (*Catal
 	return &out, nil
 }
 
+// SensitiveDictionary fetches the server-owned compliance dictionary,
+// conditionally on the last validated version held by the caller (需求基线 D5).
+//
+// Verification remains an explicit caller step because only the runtime owns
+// the trust anchor. The response preserves Dictionary as json.RawMessage, so
+// SensitiveDictionaryEnvelope.Verify checks the exact bytes that arrived.
+func (c *Client) SensitiveDictionary(ctx context.Context, knownVersion string) (*SensitiveDictionaryData, error) {
+	path := pathSensitiveDictionary
+	if knownVersion != "" {
+		path += "?version=" + url.QueryEscape(knownVersion)
+	}
+	var out SensitiveDictionaryData
+	err := c.doAuthorized(ctx, http.MethodGet, path, nil, &out)
+	if errors.Is(err, ErrNotModified) {
+		return &SensitiveDictionaryData{Unchanged: true}, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	return &out, nil
+}
+
 // EnsureToken makes sure an access token is held, exchanging the held refresh
 // token for one when memory has none.
 //

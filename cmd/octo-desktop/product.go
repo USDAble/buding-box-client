@@ -135,7 +135,7 @@ func mountProductAPI() (mount func(api func(pattern string, h http.HandlerFunc))
 	productruntime.RestoreSession(state, creds, tokens)
 	platform := newPlatformClient(state.InstallID(), tokens)
 
-	// The one compliance-word engine this process uses (PR-6b1). It is built
+	// The one compliance-word engine this process uses (PR-6b1 / L-D5). It is built
 	// HERE, at the single point that already assembles the four objects below,
 	// and handed to both consumers: the runtime's routes (input check, nickname,
 	// dictionary — PR-6b1/PR-6b2) and internal/server's turn-path masking
@@ -146,13 +146,24 @@ func mountProductAPI() (mount func(api func(pattern string, h http.HandlerFunc))
 	// internal/server therefore no longer builds its own when this build gives
 	// it one; it keeps its fallback for `octo serve`, which has no product
 	// assembly at all.
-	engine = server.NewSensitiveEngine()
+	serverDict, dictErr := sensitive.OpenServerStore()
+	if dictErr != nil {
+		// A path failure removes only the server layer. The built-in and user
+		// layers still run through the existing fallback, so sync setup cannot
+		// fail-open the whole content gate (需求基线 D4/D5).
+		slog.Warn("product: server dictionary cache unavailable; continuing with built-in and user words", "err", dictErr)
+		engine = server.NewSensitiveEngine()
+	} else if engine, dictErr = sensitive.NewFromDataRoot(serverDict); dictErr != nil {
+		slog.Warn("product: dictionary paths unavailable; continuing with built-in words", "err", dictErr)
+		engine = sensitive.NewWithServer("", serverDict)
+	}
 
 	rt := productruntime.New(productruntime.Deps{
-		State:     state,
-		Creds:     creds,
-		Platform:  platform,
-		Sensitive: engine,
+		State:            state,
+		Creds:            creds,
+		Platform:         platform,
+		Sensitive:        engine,
+		ServerDictionary: serverDict,
 		ControlPlane: productruntime.ControlPlaneStatus{
 			Configured:     profile.ControlPlaneConfigured(),
 			HasTrustedKeys: profile.HasTrustedKeys(),

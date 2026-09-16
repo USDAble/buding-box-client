@@ -57,10 +57,53 @@ var trayTemplateIcon []byte
 //go:embed build/linux/icon.png
 var trayColorIcon []byte
 
-// hubAddr is the fixed loopback address the hub owns — the same default
+// hubPort is the fixed loopback port the hub owns — the same default
 // `octo serve` binds, so every existing client (Web, VS Code, Obsidian, CLI)
 // finds it without configuration. LAN exposure stays a CLI concern.
-const hubAddr = "127.0.0.1:8088"
+//
+// Split out from hubAddr because 需求20260906 §5.1.2 第 6 条 prescribes a
+// port-conflict message that names the port ("端口 8088 已被占用") while the
+// bind error names the address. Both readings must come off one number, or the
+// message and the socket could disagree.
+const hubPort = "8088"
+
+// hubAddr is the fixed loopback address the hub owns.
+const hubAddr = "127.0.0.1:" + hubPort
+
+// minFreeBytes is the room the data root must have before this product is worth
+// starting (需求20260906 §5.1.2 第 4 条's 空间不足 arm).
+//
+// The figure is derived, not chosen: the rotating logs' worst-case on-disk
+// footprint — the one number in the tree that already describes how much room
+// this program needs just to keep running (see internal/logfile's DefaultMaxBytes
+// /DefaultBackups, 10 MiB × 4). Below it the log writer starts discarding its own
+// history immediately and every write is racing a full volume.
+//
+// It is deliberately small. The check exists to catch a volume that cannot
+// serve this product at all, not to enforce a data-retention policy — a product
+// that refuses to start because a disk is "only" 1 GiB free would be worse than
+// the failure it prevents. Whether the floor should be higher (to leave room for
+// uploads and sessions) is a product call, registered alongside V-82.
+var minFreeBytes = uint64(logfile.DefaultMaxBytes * (logfile.DefaultBackups + 1))
+
+// humanBytes renders a byte count for a dialog: one decimal, in the largest
+// unit that keeps the number readable. Exact values are pointless here — the
+// user is deciding whether to free up space, not auditing a filesystem.
+func humanBytes(n uint64) string {
+	const unit = 1024
+	if n < unit {
+		return fmt.Sprintf("%d B", n)
+	}
+	value := float64(n)
+	units := []string{"KiB", "MiB", "GiB", "TiB"}
+	for _, suffix := range units {
+		value /= unit
+		if value < unit {
+			return fmt.Sprintf("%.1f %s", value, suffix)
+		}
+	}
+	return fmt.Sprintf("%.1f PiB", value/unit)
+}
 
 // isBundled reports whether we're running inside a .app. The Wails
 // notifications service needs a bundle identifier and hard-fails startup
@@ -228,7 +271,21 @@ func main() {
 		Services:    services,
 		SingleInstance: &application.SingleInstanceOptions{
 			UniqueID: cfg.Identifier(brand.IdentifierSingleInstanceID),
-			OnSecondInstanceLaunch: func(application.SecondInstanceData) {
+			// OCTO-FORK: publish the launching copy's own program directory, so a
+			// second launch from a different folder can be told from a repeat one
+			// (V-83) — see second_instance.go for why AdditionalData is the only
+			// channel that carries it.
+			AdditionalData: publishProgramDir(),
+			OnSecondInstanceLaunch: func(data application.SecondInstanceData) {
+				// OCTO-FORK: 需求20260906 §5.1.2 第 5 条 — a second launch from
+				// another program directory is not the same event as double-clicking
+				// this one, and must not be silently turned into "your window is
+				// back" (V-83).
+				ours, _ := datapath.ProgramDir()
+				if secondInstanceActionFrom(data, ours) == warnOtherCopy {
+					bridge.warnOtherCopy()
+					return
+				}
 				bridge.showWindow()
 			},
 		},
@@ -372,6 +429,12 @@ func main() {
 
 	err := app.Run()
 
+	// OCTO-FORK: stop the data-root watchdog before the process tears down — see
+	// watchdog.go and dev-docs-usdable/需求/20260911/开发计划0911/ 的 L-E3.
+	if wd := bridge.watchdog.Load(); wd != nil {
+		wd.Stop()
+	}
+
 	// The app has quit: release our pid-file entry (only if it's still ours —
 	// a successor that took the port over must keep its own) and shut the
 	// server down cleanly.
@@ -447,6 +510,45 @@ func hubLogLevel() slog.Level {
 // daemon), starts the in-process server, and opens the window. It runs inside
 // the ApplicationStarted hook so its dialogs have a live event loop.
 func startHub(app *application.App, bridge *nativeBridge, settings desktopSettings) {
+	// L-E3: an unusable data root means there is nothing this process can
+	// safely do. Every path it writes goes through internal/datapath, which
+	// refuses rather than falling back to a host directory (P1 §3.2) — so the
+	// product would come up with a window and no working storage. Fail closed
+	// here, before any of the launch side effects below, and in particular
+	// before the takeover prompt: stopping a running daemon on behalf of a
+	// process that is about to quit would take a working backend down for
+	// nothing (§4.2: 启动时数据根不可用 = fail-closed，不进主界面).
+	//
+	// The %v carries datapath's own reason, so the user learns the cause: the
+	// probe distinguishes "the path is not there" from "it is there but not
+	// writable" (需求20260906 §5.1.2 第 4 条).
+	// OCTO-FORK: portable-delivery boot gate — see
+	// dev-docs-usdable/需求/20260911/开发计划0911/ 的 L-E3. The free-space half
+	// below is V-82.
+	root, err := datapath.Root()
+	if err != nil {
+		bridge.showError(L().errTitle, fmt.Sprintf(L().errStartFmt, err))
+		app.Quit()
+		return
+	}
+
+	// V-82: a writable but nearly-full volume passes the probe above and then
+	// fails later, mid-session, as a write error that reads like an unrelated
+	// fault (需求20260906 §5.1.2 第 4 条). Refuse to start instead, and say how
+	// much room there is — the user cannot act on "not enough space" without it.
+	//
+	// A failure to *measure* is not treated as a failure to start: the
+	// directory was just created and probed successfully, so the volume is
+	// there, and refusing to come up because a statistic could not be read
+	// inverts the point of the check (bounded degradation, 开发规范 §3.9 —
+	// target: no space pre-check at all; the user is not told; it recovers as
+	// soon as the reading works, i.e. it is silent and one-sided by design).
+	if free, err := datapath.FreeSpace(root); err == nil && free < minFreeBytes {
+		bridge.showError(L().errTitle, fmt.Sprintf(L().errNoSpaceFmt, humanBytes(free), humanBytes(minFreeBytes)))
+		app.Quit()
+		return
+	}
+
 	// If another backend already owns the port, ask before displacing it.
 	tookOver := false
 	if pid, ok := serveproc.Running(); ok {
@@ -471,7 +573,8 @@ func startHub(app *application.App, bridge *nativeBridge, settings desktopSettin
 	}
 	ln, err := listenHub(hubAddr, grace)
 	if err != nil {
-		bridge.showError(L().errTitle, fmt.Sprintf(L().errBindFmt, hubAddr, err))
+		// OCTO-FORK: 规定文案点名端口而非地址（V-84）—— 见 lang.go 的 errBindFmt。
+		bridge.showError(L().errTitle, fmt.Sprintf(L().errBindFmt, hubPort, err))
 		app.Quit()
 		return
 	}
@@ -603,6 +706,41 @@ func startHub(app *application.App, bridge *nativeBridge, settings desktopSettin
 	}()
 
 	bridge.showWindow()
+
+	// L-E3: arm the data-root watchdog. A portable product lives on media that
+	// can be pulled out mid-session, and while the root is gone every write must
+	// be refused — above all the creation of a fresh, empty data/ beside the
+	// executable, which is indistinguishable from a clean install and would
+	// present onboarding while the user's real data sat on the disconnected disk
+	// (§4.2).
+	//
+	// The watchdog owns detection and flips datapath's process-wide gate, which
+	// is what every directory-creating path already consults (Root, Sub) — so
+	// this is a real write stop, not a frozen screen with writers still running.
+	//
+	// The callbacks only log, and that is deliberate. The user-visible half of
+	// the freeze already exists and is owned elsewhere: App.svelte subscribes to
+	// the hub's datastore:lost / datastore:restored, a `frozen` store drives
+	// FrozenOverlay.svelte, and the copy is written (i18n `frozen.title/desc`).
+	// What is missing is the *producer* of those two events, and its payload,
+	// replay and ordering semantics are G1's to settle — so no event is emitted
+	// here (§4.2: 未拍板前不发布自造协议). A second wording typed into the native
+	// dialogs would be a second owner of the same message, going stale on the
+	// next edit (§3.8); until the events land, the honest report is this log
+	// line plus the write refusals themselves.
+	//
+	// Armed after the window is up so there is a running product to notify; a
+	// root that is already unusable never reaches here (see the startup check
+	// above, which fails closed instead).
+	// OCTO-FORK: arm the portable data-root watchdog — see
+	// dev-docs-usdable/需求/20260911/开发计划0911/ 的 L-E3.
+	if root, err := datapath.Root(); err == nil {
+		bridge.watchdog.Store(StartWatchdog(root, func() {
+			slog.Error("the data root is gone; writes are frozen", "root", root)
+		}, func() {
+			slog.Info("the data root is back; writes are released", "root", root)
+		}))
+	}
 }
 
 // checkForUpdates is the tray "Check for updates…" action — a manual check that

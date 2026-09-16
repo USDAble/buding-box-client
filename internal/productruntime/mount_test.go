@@ -39,6 +39,10 @@ import (
 type mountedHarness struct {
 	*harness
 	baseURL string
+	// serverDone closes when the goroutine serving this harness has returned.
+	// The V-105 nail reads it to prove the harness's cleanup waited; nothing
+	// else in this package has a reason to.
+	serverDone <-chan struct{}
 }
 
 // newMountedHarness reuses the unit-test harness for its platform stand-in and
@@ -65,7 +69,20 @@ func newMountedHarnessWithControlPlane(t *testing.T, status productruntime.Contr
 	return mountHarness(t, newHarnessWithControlPlane(t, status), "")
 }
 
+// newMountedHarnessWithLateStart exists for the V-105 nail: it makes the
+// server's startup goroutine land after the test body has already returned,
+// which is what CI load does on its own and what a laptop never does.
+func newMountedHarnessWithLateStart(t *testing.T, delay time.Duration) *mountedHarness {
+	t.Helper()
+	return mountHarnessDelayed(t, newHarness(t), "", delay)
+}
+
 func mountHarness(t *testing.T, h *harness, windowToken string) *mountedHarness {
+	t.Helper()
+	return mountHarnessDelayed(t, h, windowToken, 0)
+}
+
+func mountHarnessDelayed(t *testing.T, h *harness, windowToken string, startDelay time.Duration) *mountedHarness {
 	t.Helper()
 
 	// The harness's own bare-handler server is redundant here; the point is to
@@ -91,14 +108,61 @@ func mountHarness(t *testing.T, h *harness, windowToken string) *mountedHarness 
 	if err != nil {
 		t.Fatalf("listen: %v", err)
 	}
-	go func() { _ = srv.ServeOn(ln) }()
+	// The startup passes are not in New(): serveOn runs initScheduler and
+	// reconcileRegistry, and each of them resolves the data root when it runs.
+	// That goroutine is therefore the only thing that has to finish before the
+	// root goes away, so it is tracked and waited on below.
+	served := make(chan struct{})
+	go func() {
+		defer close(served)
+		time.Sleep(startDelay)
+		_ = srv.ServeOn(ln)
+	}()
 	t.Cleanup(func() {
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
 		_ = srv.Shutdown(ctx)
+		// Shutdown stops the listener; it does not wait for ServeOn's startup
+		// passes, which run on this goroutine *before* it starts serving. The
+		// harness's data root is a t.TempDir(), and OCTO_DATA_ROOT is read when
+		// a pass runs rather than when the server is built - so a start that is
+		// scheduled late creates sessions/, tasks/ and session-groups.json.lock
+		// in whichever root is current then, i.e. in the NEXT test's root, whose
+		// TempDir cleanup then fails with "directory not empty" (ubuntu) or
+		// "Access is denied" (windows). Measured, not theorised: with a 300ms
+		// late start those four entries land in the following test's root, and
+		// CI reported the failure against three different test names (V-105).
+		select {
+		case <-served:
+		case <-time.After(5 * time.Second):
+			t.Errorf("the mounted server's startup goroutine had not returned 5s after Shutdown; it will write into the next test's data root")
+		}
 	})
 
-	return &mountedHarness{harness: h, baseURL: "http://" + ln.Addr().String()}
+	return &mountedHarness{harness: h, baseURL: "http://" + ln.Addr().String(), serverDone: served}
+}
+
+// TestTheHarnessWaitsForItsServerStartup is V-105's nail. A start scheduled
+// after the test body has returned must still finish before the data root is
+// removed: the root is a t.TempDir(), OCTO_DATA_ROOT is read when the startup
+// passes run rather than when the server is built, and those passes create
+// sessions/, tasks/ and session-groups.json.lock. Left un-waited, they land in
+// the next test's root and its cleanup fails - "directory not empty" on ubuntu,
+// "Access is denied" on windows, against whichever test happens to be running
+// when the late start fires (which is why CI named three different tests).
+//
+// The cleanup below is registered BEFORE the mount, so it runs AFTER the
+// harness's own cleanup and can see whether that cleanup really waited.
+func TestTheHarnessWaitsForItsServerStartup(t *testing.T) {
+	var m *mountedHarness
+	t.Cleanup(func() {
+		select {
+		case <-m.serverDone:
+		default:
+			t.Error("the mounted harness returned before its server finished starting; its startup passes will write into the next test's data root (V-105)")
+		}
+	})
+	m = newMountedHarnessWithLateStart(t, 200*time.Millisecond)
 }
 
 // request issues a request over the real socket (not the harness's bare handler).

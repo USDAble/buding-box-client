@@ -275,6 +275,8 @@ export const PRODUCT_FILES = [
   { file: 'internal/server/product_sensitive_test.go', convergence: 'P0-01A B' },
   { file: 'internal/server/product_account_panel_test.go', convergence: 'P0-01A B' },
   { file: 'internal/server/product_credits_test.go', convergence: 'P0-01A E (credit path deleted, not moved)' },
+  { file: 'internal/server/product_events.go', convergence: 'P0-01A B' },
+  { file: 'internal/server/product_events_test.go', convergence: 'P0-01A B' },
   { file: 'internal/server/sensitive_dict_handlers.go', convergence: 'P0-01A B + P0-06' },
   { file: 'internal/server/sensitive_dict_handlers_test.go', convergence: 'P0-01A B + P0-06' },
   { file: 'internal/server/chatmode_handlers.go', convergence: 'P0-01A D + P0-04' },

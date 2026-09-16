@@ -15,10 +15,12 @@
 package datapath
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
+	"sync/atomic"
 )
 
 // dataRootEnv overrides the data root for tests, development, and a CLI
@@ -29,6 +31,36 @@ const dataRootEnv = "OCTO_DATA_ROOT"
 // exePath returns the absolute path of the current executable. It is a
 // package variable so tests can point it at a fake program directory.
 var exePath = os.Executable
+
+// ErrFrozen is returned by the directory-creating entry points (Root, Sub)
+// while the data root is frozen. The desktop shell's watchdog freezes writes
+// when data/ vanishes (a removable disk pulled out, a folder renamed), so a
+// write refuses instead of silently recreating an empty data/ beside the
+// executable — a directory indistinguishable from a clean install, which would
+// look like success while the user's real data sat on the disconnected disk.
+// See dev-docs-usdable/需求/20260911/开发计划0911/ 的 L-E3 与 P2-启动与生命周期.md §3.4.
+var ErrFrozen = errors.New("datapath: the data root is frozen (unavailable)")
+
+// frozen is the process-wide write gate. Freeze/Thaw flip it; the
+// directory-creating entry points check it before touching the filesystem.
+//
+// It is deliberately one bit for the whole process rather than per-path state:
+// there is exactly one data root, and the product's "may I write?" question has
+// one answer. That is also what keeps the freeze from being a UI-only effect —
+// every write goes through Root or Sub, so a frozen product refuses at the
+// filesystem boundary however it was reached (§3.8 single source of truth).
+var frozen atomic.Bool
+
+// Freeze blocks Root/Sub from creating directories. Called by the desktop
+// watchdog when the data root disappears.
+func Freeze() { frozen.Store(true) }
+
+// Thaw clears the freeze gate, restoring writes. Called when the data root is
+// usable again.
+func Thaw() { frozen.Store(false) }
+
+// Frozen reports whether the data root is currently frozen.
+func Frozen() bool { return frozen.Load() }
 
 // resolveExeDir returns the directory of the executable with symlinks
 // resolved. A packaged .app on macOS runs through a symlink; without the
@@ -69,7 +101,14 @@ func resolveRoot() (string, error) {
 // Root returns the absolute data root path, creating it if necessary.
 // Resolution order: $OCTO_DATA_ROOT if set, otherwise <program dir>/data.
 // An unusable root is an error — never a fallback to a host directory.
+//
+// While the root is frozen it returns ErrFrozen without touching the
+// filesystem: creating the directory is precisely the harm the freeze exists to
+// prevent (see Freeze).
 func Root() (string, error) {
+	if frozen.Load() {
+		return "", ErrFrozen
+	}
 	root, err := resolveRoot()
 	if err != nil {
 		return "", err
@@ -112,6 +151,12 @@ func Sub(parts ...string) (string, error) {
 
 // Join returns a path under the data root without creating anything.
 // Prefer it for read-only lookups so opening a file cannot create state.
+//
+// Join is deliberately exempt from the freeze gate: it is the read path, and
+// reading a directory that never actually went away must keep working while
+// frozen (see Freeze). It creates nothing, so it cannot recreate an empty data/
+// — the harm the gate exists to prevent. A caller that resolves with Join and
+// then writes is the freeze's blind spot, which is why write paths use Sub.
 func Join(parts ...string) (string, error) {
 	root, err := resolveRoot()
 	if err != nil {

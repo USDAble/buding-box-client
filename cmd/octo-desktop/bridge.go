@@ -36,6 +36,14 @@ type nativeBridge struct {
 	// atomic like srv.
 	closeLog atomic.Pointer[func()]
 
+	// watchdog is the data-root watcher armed at the end of startHub, and
+	// stopped after the app's event loop exits. It is stored on the bridge so
+	// the shutdown path can reach it across goroutines, hence atomic.
+	// OCTO-FORK: the portable data root can vanish mid-session (removable
+	// media), so the desktop shell needs a freeze signal — see watchdog.go and
+	// dev-docs-usdable/需求/20260911/开发计划0911/ 的 L-E3.
+	watchdog atomic.Pointer[Watchdog]
+
 	// allowQuit gates the app's ShouldQuit on Windows/Linux, where closing the
 	// last window would otherwise terminate the app (and the hub with it). It
 	// starts false when KeepRunningInBackground is on, so a window close hides

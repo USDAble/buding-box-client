@@ -372,6 +372,12 @@ func main() {
 
 	err := app.Run()
 
+	// OCTO-FORK: stop the data-root watchdog before the process tears down — see
+	// watchdog.go and dev-docs-usdable/需求/20260911/开发计划0911/ 的 L-E3.
+	if wd := bridge.watchdog.Load(); wd != nil {
+		wd.Stop()
+	}
+
 	// The app has quit: release our pid-file entry (only if it's still ours —
 	// a successor that took the port over must keep its own) and shut the
 	// server down cleanly.
@@ -447,6 +453,28 @@ func hubLogLevel() slog.Level {
 // daemon), starts the in-process server, and opens the window. It runs inside
 // the ApplicationStarted hook so its dialogs have a live event loop.
 func startHub(app *application.App, bridge *nativeBridge, settings desktopSettings) {
+	// L-E3: an unusable data root means there is nothing this process can
+	// safely do. Every path it writes goes through internal/datapath, which
+	// refuses rather than falling back to a host directory (P1 §3.2) — so the
+	// product would come up with a window and no working storage. Fail closed
+	// here, before any of the launch side effects below, and in particular
+	// before the takeover prompt: stopping a running daemon on behalf of a
+	// process that is about to quit would take a working backend down for
+	// nothing (§4.2: 启动时数据根不可用 = fail-closed，不进主界面).
+	//
+	// The copy is deliberately the generic start-failure string rather than a
+	// data-root-specific paragraph. That paragraph is V-82's to own (§4.4A), and
+	// V-84 already owns the port-conflict line on this same startup-failure
+	// path — a second author here would mean two owners for one message (§3.8).
+	// The %v carries datapath's own reason, so the user still learns the cause.
+	// OCTO-FORK: portable-delivery boot gate — see
+	// dev-docs-usdable/需求/20260911/开发计划0911/ 的 L-E3.
+	if _, err := datapath.Root(); err != nil {
+		bridge.showError(L().errTitle, fmt.Sprintf(L().errStartFmt, err))
+		app.Quit()
+		return
+	}
+
 	// If another backend already owns the port, ask before displacing it.
 	tookOver := false
 	if pid, ok := serveproc.Running(); ok {
@@ -603,6 +631,41 @@ func startHub(app *application.App, bridge *nativeBridge, settings desktopSettin
 	}()
 
 	bridge.showWindow()
+
+	// L-E3: arm the data-root watchdog. A portable product lives on media that
+	// can be pulled out mid-session, and while the root is gone every write must
+	// be refused — above all the creation of a fresh, empty data/ beside the
+	// executable, which is indistinguishable from a clean install and would
+	// present onboarding while the user's real data sat on the disconnected disk
+	// (§4.2).
+	//
+	// The watchdog owns detection and flips datapath's process-wide gate, which
+	// is what every directory-creating path already consults (Root, Sub) — so
+	// this is a real write stop, not a frozen screen with writers still running.
+	//
+	// The callbacks only log, and that is deliberate. The user-visible half of
+	// the freeze already exists and is owned elsewhere: App.svelte subscribes to
+	// the hub's datastore:lost / datastore:restored, a `frozen` store drives
+	// FrozenOverlay.svelte, and the copy is written (i18n `frozen.title/desc`).
+	// What is missing is the *producer* of those two events, and its payload,
+	// replay and ordering semantics are G1's to settle — so no event is emitted
+	// here (§4.2: 未拍板前不发布自造协议). A second wording typed into the native
+	// dialogs would be a second owner of the same message, going stale on the
+	// next edit (§3.8); until the events land, the honest report is this log
+	// line plus the write refusals themselves.
+	//
+	// Armed after the window is up so there is a running product to notify; a
+	// root that is already unusable never reaches here (see the startup check
+	// above, which fails closed instead).
+	// OCTO-FORK: arm the portable data-root watchdog — see
+	// dev-docs-usdable/需求/20260911/开发计划0911/ 的 L-E3.
+	if root, err := datapath.Root(); err == nil {
+		bridge.watchdog.Store(StartWatchdog(root, func() {
+			slog.Error("the data root is gone; writes are frozen", "root", root)
+		}, func() {
+			slog.Info("the data root is back; writes are released", "root", root)
+		}))
+	}
 }
 
 // checkForUpdates is the tray "Check for updates…" action — a manual check that

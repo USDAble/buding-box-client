@@ -11,13 +11,19 @@ import {
   analyzeCeiling,
   analyzeProductFiles,
   analyzeRouteTable,
+  check,
   countAddedRouteLines,
   countRouteLines,
   forkDiffLines,
+  missingBaselineProblem,
+  parseUpstreamBaseline,
+  readUpstreamBaseline,
+  resolvePinnedUpstream,
   resolveUpstream,
   listGovernedFiles,
   PRODUCT_FILE_PATTERN,
   GOVERNED_PREFIX,
+  UPSTREAM_BASELINE_PATH,
 } from './server-diff-guard.mjs'
 
 // ─── R1: the route table ────────────────────────────────────────────────────
@@ -116,6 +122,103 @@ test('product file pattern matches exactly the product-layer names', () => {
   ]) {
     assert.ok(!PRODUCT_FILE_PATTERN.test(name), `${name} should not match`)
   }
+})
+
+// ─── the pinned upstream baseline ───────────────────────────────────────────
+//
+// These are the tests for the 2026-09-16 incident: the ratchets resolved their
+// upstream from a ref that CI kept fresh, so upstream advancing at 04:29Z turned
+// every branch red — including three PRs that never touched internal/server —
+// while the same job on the same base SHA had passed at 04:27Z. The pin is what
+// makes the verdict a property of the branch, and these tests are what stop it
+// from silently becoming a ref again.
+
+const PIN = '6a9d040b317104df8f29c08c6b8657fde840ffc0'
+const OTHER = 'ee1b7743deadbeefdeadbeefdeadbeefdeadbeef'
+
+test('the baseline is the first commit id, and comments are ignored', () => {
+  const { sha, problems } = parseUpstreamBaseline(
+    ['# why this file exists', '', `   ${PIN}   `, `# ${OTHER} was a decoy`].join('\n'),
+  )
+  assert.deepEqual(problems, [])
+  assert.equal(sha, PIN)
+})
+
+test('a baseline file with no commit id stops the guard', () => {
+  const { sha, problems } = parseUpstreamBaseline('# only prose, no pin\n\n')
+  assert.equal(sha, null)
+  assert.equal(problems.length, 1)
+  assert.match(problems[0], new RegExp(UPSTREAM_BASELINE_PATH))
+})
+
+test('a short or malformed id is rejected rather than used', () => {
+  // Short ids are the tempting form (every log and PR body shows seven
+  // characters), and a pin that can be ambiguous is not a pin.
+  for (const bad of ['6a9d040', 'origin/main', 'main', `${PIN}^{commit}`]) {
+    const { sha, problems } = parseUpstreamBaseline(`${bad}\n`)
+    assert.equal(sha, null, `${bad} must not be accepted as a baseline`)
+    assert.equal(problems.length, 1)
+  }
+})
+
+test('the baseline is read from the file, and a missing file is a problem', () => {
+  const root = '/repo'
+  const read = (p) => {
+    assert.equal(p, path.join(root, UPSTREAM_BASELINE_PATH))
+    return `# comment\n${PIN}\n`
+  }
+  assert.deepEqual(readUpstreamBaseline(root, read), { sha: PIN, problems: [] })
+
+  const missing = readUpstreamBaseline(root, () => {
+    throw new Error('ENOENT')
+  })
+  assert.equal(missing.sha, null)
+  assert.equal(missing.problems.length, 1)
+  assert.match(missing.problems[0], new RegExp(UPSTREAM_BASELINE_PATH))
+})
+
+test('the pinned baseline is resolved, and nothing else is tried', () => {
+  const tried = []
+  const run = (_root, args) => {
+    tried.push(args[args.length - 1])
+    if (args.includes(`${PIN}^{commit}`)) return `${PIN}\n`
+    throw new Error(`unexpected ref: ${args.join(' ')}`)
+  }
+  const read = () => `# c\n${PIN}\n`
+  assert.equal(resolvePinnedUpstream('/repo', run, read), PIN)
+  assert.deepEqual(tried, [`${PIN}^{commit}`], 'only the pin may be asked for')
+
+  // With the pin absent from the checkout the resolver reports null; it must
+  // not reach for `origin/main`, which is exactly how the drift got in.
+  const absent = resolvePinnedUpstream('/repo', () => {
+    throw new Error('no such ref')
+  }, read)
+  assert.equal(absent, null)
+})
+
+test('check fails closed on an unresolvable pin and does not touch a moving ref', async () => {
+  const seen = []
+  const run = (_root, args) => {
+    seen.push(args.join(' '))
+    throw new Error('git failed')
+  }
+  const read = () => `# c\n${PIN}\n`
+
+  const { problems } = await check('/repo', run, read)
+  assert.equal(problems.length, 1)
+  assert.match(problems[0], /pinned upstream baseline/)
+  assert.match(problems[0], new RegExp(PIN))
+  assert.ok(
+    !seen.some((c) => c.includes('origin/main') || c.includes(' main^{commit}')),
+    `the guard reached for a moving ref: ${seen.join(' | ')}`,
+  )
+})
+
+test('missingBaselineProblem names the fetch command and the reason', () => {
+  const message = missingBaselineProblem(PIN)
+  assert.match(message, new RegExp(PIN))
+  assert.match(message, /git fetch/)
+  assert.match(message, new RegExp(UPSTREAM_BASELINE_PATH))
 })
 
 // ─── git-backed gathering, driven by a fake runner ─────────────────────────

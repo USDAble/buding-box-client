@@ -416,6 +416,12 @@ type Server struct {
 	// in New rather than in startStoreWatch so a shutdown that races the start
 	// still has something to close.
 	watchStop chan struct{}
+	// watchDone closes when the watcher returns; joinStoreWatch joins on it (V-105).
+	watchDone chan struct{}
+	// watchStarted lets the join skip itself when the watch never ran.
+	watchStarted atomic.Bool
+	// storeSampleBarrier is the V-105 nail's hook, nil in production.
+	storeSampleBarrier func()
 
 	// interrupt cancellation per session.
 	interrupts  map[string]context.CancelFunc
@@ -711,6 +717,7 @@ func New(cfg Config) (*Server, error) {
 		confirmations:       make(map[string]chan string),
 		questionChans:       make(map[string]chan tools.AskResponse),
 		watchStop:           make(chan struct{}),
+		watchDone:           make(chan struct{}),
 		pendingQuestions:    make(map[string]wsEventRequestUserQuestion),
 		pendingConfirms:     make(map[string]wsEventRequestConfirmation),
 		askSlots:            make(map[string]chan struct{}),
@@ -972,6 +979,10 @@ func (s *Server) doShutdown(ctx context.Context) error {
 	if s.watchStop != nil {
 		close(s.watchStop)
 	}
+	// Upstream's close only asks. These are the joins: once Shutdown returns,
+	// nothing this server started may touch the data root again (V-105).
+	s.joinStoreWatch(ctx)
+	s.stopScheduler(ctx)
 	s.stopChannels()
 	// Kill background processes started via web/IM sessions so they don't
 	// outlive the daemon — the same orphan-prevention the CLI/TUI do on exit.

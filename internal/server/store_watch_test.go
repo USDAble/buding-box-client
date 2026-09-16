@@ -1,9 +1,11 @@
 package server
 
 import (
+	"context"
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"sync"
 	"testing"
 	"time"
 )
@@ -198,5 +200,58 @@ func TestStoreWatch_SampleCreatesNothing(t *testing.T) {
 			names = append(names, e.Name())
 		}
 		t.Errorf("a sample materialised %s (entries: %v); the watch must read the root, not create it", root, names)
+	}
+}
+
+// TestStoreWatch_ShutdownWaitsForASampleInFlight is the other half of V-105.
+//
+// Closing watchStop tells the watch to stop; it does not wait for it. A sample
+// already running when the close lands keeps resolving the data root — and it
+// resolves it late, so it writes into whatever root is current by the time it
+// gets there. That is the cross-test write the harness saw: the test that owned
+// the root had already finished, its cleanup had already returned, and the
+// removal was reported against a different test's name each run.
+//
+// So the property is an ordering, and an ordering needs a barrier to observe at
+// all: the test holds a sample open (storeSampleBarrier), then requires that
+// Shutdown has not returned while it is still held, and that it does return once
+// it is released. Both directions fail on a revert — the first select fires if
+// Shutdown stops waiting, the second hits its timeout if the wait deadlocks.
+func TestStoreWatch_ShutdownWaitsForASampleInFlight(t *testing.T) {
+	srv := groupTestServer(t)
+
+	inSample := make(chan struct{})
+	release := make(chan struct{})
+	var once sync.Once
+	srv.storeSampleBarrier = func() {
+		once.Do(func() { close(inSample) })
+		<-release
+	}
+	srv.startStoreWatch()
+	select {
+	case <-inSample: // a sample is now running and will not finish on its own
+	case <-time.After(2 * time.Second):
+		t.Fatal("the watch never sampled; the barrier was not reached, so this test would prove nothing")
+	}
+
+	shutdownDone := make(chan struct{})
+	go func() {
+		defer close(shutdownDone)
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		_ = srv.Shutdown(ctx)
+	}()
+
+	select {
+	case <-shutdownDone:
+		t.Error("Shutdown returned while a store sample was still in flight; that sample writes into the data root after the caller has released it (V-105)")
+	case <-time.After(200 * time.Millisecond):
+	}
+
+	close(release)
+	select {
+	case <-shutdownDone:
+	case <-time.After(5 * time.Second):
+		t.Error("Shutdown never returned after the in-flight sample finished")
 	}
 }

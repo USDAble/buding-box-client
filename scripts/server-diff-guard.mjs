@@ -190,6 +190,29 @@ export const ROUTE_TABLE_CEILING = 1
 //       one to three lines each (−19 measured before the ceiling was touched), so
 //       what the ceiling records is the wiring and not the argument for it.
 //
+//   server.go 565 → 576 for the shutdown joins (V-105, 2026-09-16). The ninth
+//   raise, judged by the same three points:
+//
+//   (a) what the 11 lines are: three `Server` fields — the channel the store
+//       watch closes when it returns, the `atomic.Bool` that lets a join skip
+//       itself when the watch never ran, and the nil-in-production test seam
+//       that makes the ordering observable at all — plus their three comment
+//       lines, the one `make(chan struct{})` in `New`, and the two call lines in
+//       `doShutdown`. Six lines of Go, five of prose.
+//   (b) no smaller form: the fields have to be declared on `Server`, which is
+//       declared here, and `Config` is the only construction channel — the same
+//       argument as P0-01 B1 and the PR-5e raise. `doShutdown` is upstream's own
+//       method, so a fork-side wrapper cannot reach it. `watchStop` is the ask;
+//       a join needs the second channel that answers, and "the watcher has
+//       returned" is not learnable from a channel whose only writer is the side
+//       doing the waiting. Measured: stripping every comment still leaves six
+//       lines (571), so even the comment-free form breaches the old 565.
+//   (c) the bulk was moved out first: the substance of these two joins is in
+//       `internal/server/store_watch.go` (+48) and
+//       `internal/server/tasks_handlers.go` (+34), neither of which this guard
+//       ratchets. What reaches this file is the wiring that has nowhere else to
+//       go.
+//
 //   NOTE ON THE PR-5e PRECEDENT. That raise rejected a fork-side wrapper sender
 //   because forwarding the capability stack by hand can silently downgrade
 //   streaming. This wrapper is the same shape and is still the right answer,
@@ -202,7 +225,7 @@ export const ROUTE_TABLE_CEILING = 1
 export const DEBT_CEILINGS = [
   {
     file: 'internal/server/server.go',
-    ceiling: 565,
+    ceiling: 576,
     why:
       'the product seam and the data-root migration: Config.MountAPI/WindowToken/RequireGateway/ControlPlaneReady plumbing, the productAPI registrar (a method value, not a call site), V-36/PR-5c/PR-5b1 gates on the turn path, and Config.CatalogOffers + its guard (PR-5e, L-C7). ' +
       'Measured 2026-09-14 at 533 after excluding marker lines (see the marker note in forkDiffLines) and after trimming the PR-5e prose to pointers into 开发计划 §PR-5e; of the added lines the large majority are prose explaining those seams. ' +
@@ -214,9 +237,12 @@ export const DEBT_CEILINGS = [
       'PR-6b3 added 19 (eighth raise), all of it Config.SensitiveInputGate: the field and its documentation. ' +
       'WHY IT CANNOT BE FOLDED OUT: the gate has to fire where the three turn entry points are, and those live in this package; the same shape as SensitiveEngine above, and for the same reason — a Config field is where a build hands this package a dependency it may not import. The alternative the archived implementation used, letting internal/server hold a *productstate.Store and read the switch itself, is forbidden twice over: this package may not import a fork package, and a user preference is not this package\'s fact to own (开发规范 §3.8). The other alternative, decorating the sender, was rejected by measurement, not taste: the WS path broadcasts AND persists the user message before buildAgent runs, so a refusal at send time would leave a question in the transcript that was never asked (开发计划 §PR-6b3). ' +
       'WHAT WAS MOVED OUT FIRST: the three verdict helpers (sensInputVerdict, refuseSensitiveInput, broadcastInputSensitive) went into the fork-owned internal/server/sensitive.go rather than beside their call sites, and the call-site prose was cut to one to four lines each; what is left here is the field plus the doc answering the three header questions. ' +
-      'WHY NO SMALLER FORM: the field is one line and the doc is where the next reader learns that a nil gate is the CLI shape and that the ORDER (refuse before broadcast/persist) is the requirement rather than an implementation detail — the PR-6b1 precedent for the same seam.',
+      'WHY NO SMALLER FORM: the field is one line and the doc is where the next reader learns that a nil gate is the CLI shape and that the ORDER (refuse before broadcast/persist) is the requirement rather than an implementation detail — the PR-6b1 precedent for the same seam. ' +
+      'V-105 added 11 (ninth raise), all of it the shutdown joins: the watchDone channel the store watch closes on its way out, the watchStarted flag that skips the join when the watch never ran, the test seam that makes the ordering observable, the make() for the channel, the two call lines in doShutdown, and five lines of prose — see the ninth raise note above. ' +
+      'WHY NO SMALLER FORM: the fields are on Server because that is where the struct is declared and Config is the only construction channel; doShutdown is upstream\'s own method, so no fork-side wrapper reaches it; and watchStop is the ask, while a join needs the channel that answers. Stripping every comment still measures 571, over the previous 565 — so this raise could not have been avoided by trimming prose. ' +
+      'WHAT WAS MOVED OUT FIRST: both joins themselves live in internal/server/store_watch.go (+48) and internal/server/tasks_handlers.go (+34), neither of which this guard ratchets. Only the wiring lands here.',
     convergence:
-      'P0-01A C (the apiProduct fold is dead — see the R1 note; what remains is the registrar and the product-state move, P0-01A D). PR-5e adds nothing to fold: its 37 lines are the floor for a turn-path guard, and they shrink only if upstream grows a pre-send hook',
+      'P0-01A C (the apiProduct fold is dead — see the R1 note; what remains is the registrar and the product-state move, P0-01A D). PR-5e adds nothing to fold: its 37 lines are the floor for a turn-path guard, and they shrink only if upstream grows a pre-send hook. The 11 V-105 lines shrink only if upstream joins its own background goroutines on Shutdown — the join belongs upstream, and this is the fork paying for it in the meantime',
   },
   {
     file: 'internal/server/handlers.go',

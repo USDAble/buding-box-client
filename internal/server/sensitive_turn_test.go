@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/open-octo/octo-agent/internal/agent"
 	"github.com/open-octo/octo-agent/internal/config"
@@ -62,6 +63,41 @@ func newFilteredServer(t *testing.T, sender agent.Sender) *Server {
 	return srv
 }
 
+// turnEvents returns every event the tab received for a turn, after waiting for
+// the hub to finish delivering them.
+//
+// hub.broadcast only QUEUES the event on h.events; the hub's own goroutine
+// copies it to each subscriber's send channel afterwards. So "doAgentTurn
+// returned" does not mean "conn.send holds the turn", and draining right here is
+// a race that the loaded runner loses: these three nails failed in CI as
+// `streamed = ""` (V-95) while passing on an idle developer machine, where the
+// hub reliably wins the very same race.
+//
+// The wait target is the turn's own completion signal — the
+// session_update{status:idle} the browser uses to drop its spinner. h.events is
+// FIFO with h.run() as its only consumer, so once idle is out of conn.send every
+// text_delta queued before it has been delivered too. Reaching the deadline
+// fails the test instead of returning a short transcript that reads like a
+// product bug: a turn-end that never arrives IS a product bug (the spinner would
+// hang forever), so it must not be reported as this.
+func turnEvents(t *testing.T, conn *wsConn, sessionID string) []map[string]any {
+	t.Helper()
+	var events []map[string]any
+	deadline := time.Now().Add(10 * time.Second)
+	for {
+		events = append(events, drainConn(t, conn)...)
+		for _, ev := range events {
+			if ev["type"] == "session_update" && ev["session_id"] == sessionID && ev["status"] == "idle" {
+				return events
+			}
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("the turn's session_update{status:idle} did not arrive within 10s (%d event(s) buffered): either the turn-end broadcast is gone or the hub stopped delivering", len(events))
+		}
+		time.Sleep(time.Millisecond)
+	}
+}
+
 // runTurn drives one turn and returns the text the browser saw streamed, the
 // text of the persisted reply, and the session's path on disk.
 //
@@ -75,12 +111,12 @@ func runTurn(t *testing.T, srv *Server, sess *agent.Session) (onScreen, stored, 
 	srv.wsHub.subscribe(conn, sess.ID)
 
 	// doAgentTurn runs the turn to completion before returning (the crash-reminder
-	// nails rely on the same), so the broadcast buffer and the session file are
-	// both final below.
+	// nails rely on the same), so the session file is final below. The events are
+	// not: see turnEvents.
 	srv.doAgentTurn(sess, "你好", nil, nil)
 
 	var parts []string
-	for _, ev := range drainConn(t, conn) {
+	for _, ev := range turnEvents(t, conn, sess.ID) {
 		if ev["type"] != "text_delta" {
 			continue
 		}

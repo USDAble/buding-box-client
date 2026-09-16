@@ -271,7 +271,21 @@ func main() {
 		Services:    services,
 		SingleInstance: &application.SingleInstanceOptions{
 			UniqueID: cfg.Identifier(brand.IdentifierSingleInstanceID),
-			OnSecondInstanceLaunch: func(application.SecondInstanceData) {
+			// OCTO-FORK: publish the launching copy's own program directory, so a
+			// second launch from a different folder can be told from a repeat one
+			// (V-83) — see second_instance.go for why AdditionalData is the only
+			// channel that carries it.
+			AdditionalData: publishProgramDir(),
+			OnSecondInstanceLaunch: func(data application.SecondInstanceData) {
+				// OCTO-FORK: 需求20260906 §5.1.2 第 5 条 — a second launch from
+				// another program directory is not the same event as double-clicking
+				// this one, and must not be silently turned into "your window is
+				// back" (V-83).
+				ours, _ := datapath.ProgramDir()
+				if secondInstanceActionFrom(data, ours) == warnOtherCopy {
+					bridge.warnOtherCopy()
+					return
+				}
 				bridge.showWindow()
 			},
 		},

@@ -40,11 +40,12 @@ type uiStrings struct {
 	errStopFmt    string // "...%v"
 	errStartFmt   string // "...%v"
 	errNoSpaceFmt string // "%s" free, "%s" required
-	// dialogOKText is a plain acknowledgement. Currently unreferenced: the only
-	// OK-only dialog the shell had was showError, and every caller of that is a
-	// boot failure whose single action must read as "quit" (需求20260906 §5.1.2
-	// 第 4 条, see bridge.go). Kept rather than deleted so a future non-fatal
-	// dialog has the word already translated (硬规则 3: 不删上游代码).
+
+	// otherCopyTitle / otherCopyMsg are the "you opened a second copy" notice
+	// (需求20260906 §5.1.2 第 5 条). The message is the prescribed sentence.
+	otherCopyTitle string
+	otherCopyMsg   string
+
 	dialogOKText string
 
 	updTitle         string
@@ -105,7 +106,12 @@ func enStringsFor(name, short string) uiStrings {
 		// V-82: names the reason and the two figures, because "not enough space"
 		// on its own gives the user nothing to act on.
 		errNoSpaceFmt: "Not enough room to run. The data folder is on a disk with %s free, and %s is needed.\n\nFree up space, then open " + name + " again.",
-		dialogOKText:  "OK",
+
+		// V-83: the prescribed sentence, in the English table's voice. It names the
+		// product because the user may have two folders on screen at once.
+		otherCopyTitle: name,
+		otherCopyMsg:   name + " is already running. Quit it first, then open the other copy.",
+		dialogOKText:   "OK",
 
 		updTitle:         name,
 		updFailed:        "Couldn't check for updates. Please try again later.",
@@ -151,7 +157,12 @@ func zhStringsFor(name, short string) uiStrings {
 		errStartFmt: "无法启动后端：%v",
 		// V-82：点明原因并给出两个数字 —— 只说"空间不足"等于什么都没给。
 		errNoSpaceFmt: "空间不足，无法运行。数据目录所在磁盘剩余 %s，需要 %s。\n\n请清理出空间后重新打开" + name + "。",
-		dialogOKText:  "好",
+
+		// V-83：规定句（§5.1.2 第 5 条），产品名插值 —— 规定句里写的是「布丁盒子」，
+		// 但那是品牌值、不是可以抄进代码的字面量（硬规则 2）。
+		otherCopyTitle: name,
+		otherCopyMsg:   name + "已在运行，请先退出再打开另一份。",
+		dialogOKText:   "好",
 
 		updTitle:         name,
 		updFailed:        "检查更新失败,请稍后重试。",

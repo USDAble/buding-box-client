@@ -25,6 +25,13 @@ on:
       - 'scripts/package-portable.test.mjs'
       - 'scripts/pe-info.mjs'
       - 'scripts/pe-info.test.mjs'
+      # The packaging preflight runs the fork guards (and `desktop-portable`
+      # depends on brand-check), so any change under scripts/ is a change to what
+      # this job exercises. Enumerating individual guard files is what let V-102
+      # stay red on Windows unnoticed: the guard changed and nothing that runs it
+      # did.
+      - 'scripts/*.mjs'
+      - 'scripts/*.txt'
       - 'cmd/generate-brand-assets/**'
       - 'scripts/package-desktop-macos.sh'
       - 'packaging/portable/**'
@@ -42,6 +49,13 @@ on:
       - 'scripts/package-portable.test.mjs'
       - 'scripts/pe-info.mjs'
       - 'scripts/pe-info.test.mjs'
+      # The packaging preflight runs the fork guards (and `desktop-portable`
+      # depends on brand-check), so any change under scripts/ is a change to what
+      # this job exercises. Enumerating individual guard files is what let V-102
+      # stay red on Windows unnoticed: the guard changed and nothing that runs it
+      # did.
+      - 'scripts/*.mjs'
+      - 'scripts/*.txt'
       - 'cmd/generate-brand-assets/**'
       - 'scripts/package-desktop-macos.sh'
       - 'packaging/portable/**'

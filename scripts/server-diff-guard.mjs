@@ -27,9 +27,12 @@
 // real number. All three were tightened to the measured value on 2026-09-13
 // (V-49), which is the direction the ratchet only ever allows.
 //
-// Why compare against a local branch rather than a remote: this repo
-// deliberately does not configure an `upstream` remote (问题盘点 §G1). `main`
-// is the upstream-tracking branch, and it is what the fork merges from.
+// Why a pinned commit rather than a fetched branch: a ref that moves makes the
+// verdict a function of when the job ran, which is how every branch in the repo
+// went red on 2026-09-16 without any of them touching internal/server. The pin
+// lives in scripts/upstream-baseline.txt, with the incident and the procedure
+// for advancing it written next to the value. `main` is still the branch the
+// fork merges from; the pin is what it is measured against.
 //
 // Usage:
 //   node scripts/server-diff-guard.mjs
@@ -38,14 +41,21 @@
 // server-diff-guard job) and locally via `make server-diff-check`.
 
 import { execFileSync } from 'node:child_process'
+import fs from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 import { isMarkerLine } from './fork-marker.mjs'
 
-// The upstream-tracking ref. Falls back to a local `main` when there is no
-// remote (developer checkouts, CI on a fresh clone of a single branch).
-export const UPSTREAM_REFS = ['origin/main', 'main']
+// The upstream commit the ratchets are measured against. It is a *pin*, not a
+// ref: resolving `origin/main` at run time made the verdict depend on when the
+// job ran rather than on the branch under review — see the header of
+// scripts/upstream-baseline.txt for the 2026-09-16 incident that proved it.
+export const UPSTREAM_BASELINE_PATH = 'scripts/upstream-baseline.txt'
+
+// A commit id, full length and lowercase, as `git rev-parse` prints it. Short
+// ids are rejected: a pin that can be ambiguous is not a pin.
+export const BASELINE_PATTERN = /^[0-9a-f]{40}$/
 
 // Directories the guard governs: the upstream runtime the fork must not grow.
 export const GOVERNED_PREFIX = 'internal/server/'
@@ -357,8 +367,86 @@ export function git(root, args) {
   return execFileSync('git', args, { cwd: root, encoding: 'utf8' })
 }
 
-// resolveUpstream returns the first upstream ref that exists, or null.
-export function resolveUpstream(root, refs = UPSTREAM_REFS, run = git) {
+// ─── the pinned upstream baseline ───────────────────────────────────────────
+
+// parseUpstreamBaseline reads the pin. The first line matching
+// BASELINE_PATTERN is the baseline; blank lines and `#` comments are ignored,
+// which is what lets the file carry the reasoning for its own existence next to
+// the value.
+//
+// A file with no commit id is a problem rather than an empty result: an
+// unreadable pin must not become "measure against something else" (the failure
+// mode the moving ref had) and must not become "nothing to compare, report
+// success" (V-49).
+export function parseUpstreamBaseline(text) {
+  const lines = text.split('\n')
+  for (const [index, raw] of lines.entries()) {
+    const line = raw.trim()
+    if (line.length === 0 || line.startsWith('#')) continue
+    if (!BASELINE_PATTERN.test(line)) {
+      return {
+        sha: null,
+        problems: [
+          `${UPSTREAM_BASELINE_PATH}:${index + 1}: expected a 40-character lowercase commit id, got: ${line}`,
+        ],
+      }
+    }
+    return { sha: line, problems: [] }
+  }
+  return {
+    sha: null,
+    problems: [
+      `${UPSTREAM_BASELINE_PATH}: no commit id — the fork's ratchets are measured against the pin ` +
+        `in this file, so an empty one stops the guard rather than letting it choose a ref.`,
+    ],
+  }
+}
+
+// readUpstreamBaseline reads and parses the pin from disk.
+export function readUpstreamBaseline(root, read = (p) => fs.readFileSync(p, 'utf8')) {
+  let text = ''
+  try {
+    text = read(path.join(root, UPSTREAM_BASELINE_PATH))
+  } catch {
+    return {
+      sha: null,
+      problems: [
+        `${UPSTREAM_BASELINE_PATH} is missing — it names the upstream commit the fork's ratchets ` +
+          `are measured against (the file's header says why it is a pin and not a ref).`,
+      ],
+    }
+  }
+  return parseUpstreamBaseline(text)
+}
+
+// resolvePinnedUpstream returns the pinned commit if this checkout has it, else
+// null. Both guards go through here, so "which upstream" has exactly one answer
+// (开发规范 §3.8) and neither can quietly fall back to a moving ref.
+export function resolvePinnedUpstream(root, run = git, read) {
+  const { sha, problems } = readUpstreamBaseline(root, read)
+  if (problems.length > 0) return null
+  return resolveUpstream(root, [sha], run)
+}
+
+// missingBaselineProblem explains an unresolvable pin, naming the exact command
+// that fixes it — an unresolvable pin is a checkout problem, not a verdict on
+// the branch under review.
+export function missingBaselineProblem(sha) {
+  return (
+    `the pinned upstream baseline ${sha} (${UPSTREAM_BASELINE_PATH}) is not in this checkout — ` +
+    `the fork's ratchets are measured against it, so this guard cannot run. ` +
+    `Fetch it (\`git fetch --no-tags origin ${sha}\`) or use a full clone; CI checks out with ` +
+    `fetch-depth: 0, which already contains it. ` +
+    `Do NOT point this guard at a moving ref instead — that is what made every branch red on ` +
+    `2026-09-16, see ${UPSTREAM_BASELINE_PATH}'s header.`
+  )
+}
+
+// resolveUpstream returns the first ref that exists, or null.
+//
+// `refs` has no default on purpose: the only caller that decides which upstream
+// the fork is measured against is resolvePinnedUpstream above.
+export function resolveUpstream(root, refs, run = git) {
   for (const ref of refs) {
     try {
       run(root, ['rev-parse', '--verify', '--quiet', `${ref}^{commit}`])
@@ -436,20 +524,17 @@ export function listGovernedFiles(root, run = git) {
 
 // ─── guard ──────────────────────────────────────────────────────────────────
 
-export async function check(root, run = git) {
+export async function check(root, run = git, read) {
   const problems = []
   const notes = []
 
-  const upstream = resolveUpstream(root, UPSTREAM_REFS, run)
+  const { sha, problems: baselineProblems } = readUpstreamBaseline(root, read)
+  if (baselineProblems.length > 0) {
+    return { problems: baselineProblems, notes }
+  }
+  const upstream = resolveUpstream(root, [sha], run)
   if (!upstream) {
-    return {
-      problems: [
-        `cannot find an upstream ref (tried ${UPSTREAM_REFS.join(', ')}) — ` +
-          `this guard compares the fork against upstream, so it needs one fetched. ` +
-          `In CI, check out with fetch-depth: 0 or fetch the branch explicitly.`,
-      ],
-      notes,
-    }
+    return { problems: [missingBaselineProblem(sha)], notes }
   }
 
   // R1 — route-table ratchet.

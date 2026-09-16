@@ -1,0 +1,53 @@
+# The upstream commit this fork's divergence ratchets are measured against.
+#
+# Format: the first line matching ^[0-9a-f]{40}$ is the baseline. Everything
+# else is a comment. `scripts/server-diff-guard.mjs` and
+# `scripts/fork-marker-guard.mjs` both read this file; neither one falls back to
+# a moving ref.
+#
+# ─── WHY A PIN AND NOT `origin/main` ────────────────────────────────────────
+#
+# Until 2026-09-16 both guards resolved their upstream at run time
+# (`origin/main`, else `main`) and CI kept that ref fresh with
+# `git fetch --no-tags origin main`. That made the ratchets a function of *when
+# the job ran* rather than of the branch under review. Upstream advanced to
+# ee1b7743 at 04:29Z on 2026-09-16 and re-shaped internal/server, so from that
+# moment every job charged upstream's own churn to the fork:
+#
+#   internal/server/server.go       ceiling 565, measured 566
+#   internal/server/handlers.go     ceiling 101, measured 120
+#   internal/server/ws_handlers.go  ceiling  23, measured 131
+#
+# The same job on the same base SHA (34be4cad) passed at 04:27Z and failed at
+# 05:29Z. All four open PRs went red — none of them having touched
+# internal/server at all, three of them being a single commit off v1 — and v1
+# itself was one push away from failing for the same reason. Note what 131
+# means: the fork's real debt in ws_handlers.go is 23 lines; the other 108 are
+# upstream's rewrite being counted against us. A ratchet whose verdict depends
+# on the clock is not a check (V-49, one layer down), and a ceiling inflated by
+# someone else's refactor is a budget nobody can trust (V-49's own finding).
+#
+# The pin makes the verdict a property of the branch. It also puts the mistake
+# in the right place: if upstream's churn is to be absorbed, that is a merge,
+# and a merge is a deliberate, reviewable act — not a side effect of the hour a
+# job happened to run.
+#
+# ─── HOW TO ADVANCE IT ──────────────────────────────────────────────────────
+#
+# Advancing the baseline belongs in the same change as the re-measurement it
+# invalidates, and that change is an explicit one:
+#
+#   1. bump the SHA below;
+#   2. run `make server-diff-check` and `make marker-check`;
+#   3. update every ceiling in scripts/server-diff-guard.mjs that legitimately
+#      moved, with the reason written into its `why` field, and every
+#      modification of an upstream file that now needs a marker.
+#
+# Step 3 is the point of the file: a number that changed *because upstream
+# moved* must be looked at by a human once, on the commit that moved it, rather
+# than discovered by whoever's PR happens to run after the fact.
+#
+# 6a9d040b is upstream/main as of 2026-09-13 — the revision every recorded
+# ceiling in scripts/server-diff-guard.mjs was measured against, and the one
+# this fork's drift inventory was built from (开发规范 §3.3).
+6a9d040b317104df8f29c08c6b8657fde840ffc0

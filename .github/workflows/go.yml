@@ -141,10 +141,12 @@ jobs:
       - name: Run reuse guard tests
         run: node --test scripts/reuse-guard.test.mjs
 
-  # Same two quirks as fork-marker-guard below: the guard compares against the
-  # upstream-tracking branch, so `main` must exist as a ref (a PR checkout is a
-  # detached merge commit), and today's fork debt is recorded as a ratchet that
-  # may only shrink.
+  # The guard measures against the commit pinned in
+  # scripts/upstream-baseline.txt, not against a fetched branch: a moving ref
+  # made every branch in the repo red on 2026-09-16 (that file's header has the
+  # incident). `fetch-depth: 0` above already brings the whole history, so the
+  # step below only verifies the pin is present — a guard that cannot resolve
+  # its upstream must fail loudly rather than measure against something else.
   server-diff-guard:
     name: Server Diff Guard
     runs-on: ubuntu-latest
@@ -153,8 +155,13 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Fetch the upstream-tracking branch
-        run: git fetch --no-tags origin main:refs/remotes/origin/main
+      - name: Verify the pinned upstream baseline
+        run: |
+          SHA="$(grep -m1 -oE '[0-9a-f]{40}' scripts/upstream-baseline.txt)"
+          test -n "$SHA" || { echo "scripts/upstream-baseline.txt names no commit"; exit 1; }
+          git rev-parse --verify --quiet "${SHA}^{commit}" >/dev/null \
+            || { echo "the pinned upstream baseline $SHA is not in this checkout"; exit 1; }
+          echo "measuring against the pinned upstream baseline $SHA"
 
       - uses: actions/setup-node@v7
         with:
@@ -277,7 +284,7 @@ jobs:
     steps:
       - uses: actions/checkout@v7
         with:
-          # The guard diffs this branch against the upstream-tracking branch, so
+          # The guard diffs this branch against the pinned upstream baseline, so
           # it needs more than the single-commit checkout.
           fetch-depth: 0
 
@@ -285,8 +292,13 @@ jobs:
         with:
           node-version: '22'
 
-      - name: Fetch the upstream-tracking branch
-        run: git fetch --no-tags origin main:refs/remotes/origin/main
+      - name: Verify the pinned upstream baseline
+        run: |
+          SHA="$(grep -m1 -oE '[0-9a-f]{40}' scripts/upstream-baseline.txt)"
+          test -n "$SHA" || { echo "scripts/upstream-baseline.txt names no commit"; exit 1; }
+          git rev-parse --verify --quiet "${SHA}^{commit}" >/dev/null \
+            || { echo "the pinned upstream baseline $SHA is not in this checkout"; exit 1; }
+          echo "measuring against the pinned upstream baseline $SHA"
 
       - name: Run fork-marker guard
         run: node scripts/fork-marker-guard.mjs

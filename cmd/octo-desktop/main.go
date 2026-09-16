@@ -718,16 +718,16 @@ func startHub(app *application.App, bridge *nativeBridge, settings desktopSettin
 	// is what every directory-creating path already consults (Root, Sub) — so
 	// this is a real write stop, not a frozen screen with writers still running.
 	//
-	// The callbacks only log, and that is deliberate. The user-visible half of
-	// the freeze already exists and is owned elsewhere: App.svelte subscribes to
-	// the hub's datastore:lost / datastore:restored, a `frozen` store drives
-	// FrozenOverlay.svelte, and the copy is written (i18n `frozen.title/desc`).
-	// What is missing is the *producer* of those two events, and its payload,
-	// replay and ordering semantics are G1's to settle — so no event is emitted
-	// here (§4.2: 未拍板前不发布自造协议). A second wording typed into the native
-	// dialogs would be a second owner of the same message, going stale on the
-	// next edit (§3.8); until the events land, the honest report is this log
-	// line plus the write refusals themselves.
+	// The callbacks do two separate jobs: a log line for the operator, and the
+	// datastore:lost / datastore:restored event for the user. The user-visible
+	// half of the freeze is owned elsewhere — App.svelte subscribes to those
+	// events, a `frozen` store drives FrozenOverlay.svelte, and the copy is
+	// written (i18n `frozen.title/desc`) — so nothing is worded here: a second
+	// wording typed into the native dialogs would be a second owner of the same
+	// message, going stale on the next edit (§3.8). The trigger, scope and
+	// replay semantics were G1/N-5's to settle and were settled on 2026-09-16
+	// (开发计划 §4.1 第 45 行): global, one event per transition, and replayed to
+	// a window that connects while frozen (internal/server/product_events.go).
 	//
 	// Armed after the window is up so there is a running product to notify; a
 	// root that is already unusable never reaches here (see the startup check
@@ -737,9 +737,25 @@ func startHub(app *application.App, bridge *nativeBridge, settings desktopSettin
 	if root, err := datapath.Root(); err == nil {
 		bridge.watchdog.Store(StartWatchdog(root, func() {
 			slog.Error("the data root is gone; writes are frozen", "root", root)
+			broadcastProductState(bridge, "datastore:lost")
 		}, func() {
 			slog.Info("the data root is back; writes are released", "root", root)
+			broadcastProductState(bridge, "datastore:restored")
 		}))
+	}
+}
+
+// broadcastProductState tells the windows about a product-wide state change.
+//
+// Both ends of the lifetime are tolerated on purpose: the watchdog is armed
+// while startup is still running, so the server may not be constructed yet, and
+// it is stopped during shutdown, when the server may already be gone. Neither
+// is worth a failure — the log line is the operator's record of the transition
+// and the event is the user's, so one of them arriving late must not take the
+// other with it.
+func broadcastProductState(bridge *nativeBridge, eventType string) {
+	if srv := bridge.srv.Load(); srv != nil {
+		srv.BroadcastProductEvent(map[string]any{"type": eventType})
 	}
 }
 

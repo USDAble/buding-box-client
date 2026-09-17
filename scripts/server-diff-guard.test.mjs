@@ -5,7 +5,9 @@
 
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
+import { execFileSync } from 'node:child_process'
 import path from 'node:path'
+import { fileURLToPath } from 'node:url'
 
 import {
   analyzeCeiling,
@@ -21,6 +23,9 @@ import {
   resolvePinnedUpstream,
   resolveUpstream,
   listGovernedFiles,
+  listUpstreamFiles,
+  summarizeCoverage,
+  formatCoverage,
   PRODUCT_FILE_PATTERN,
   GOVERNED_PREFIX,
   UPSTREAM_BASELINE_PATH,
@@ -323,4 +328,95 @@ test('listGovernedFiles keeps only the governed prefix', () => {
   const files = listGovernedFiles('/repo', run)
   assert.deepEqual(files, ['internal/server/a.go', 'internal/server/b_test.go'])
   assert.ok(files.every((f) => f.startsWith(GOVERNED_PREFIX)))
+})
+
+test('listUpstreamFiles reads the tree at the ref, not the working tree', () => {
+  const seen = []
+  const run = (root, args) => {
+    seen.push(args)
+    return 'internal/server/upstream.go\n'
+  }
+  assert.deepEqual(listUpstreamFiles('/repo', 'abc123', run), ['internal/server/upstream.go'])
+  assert.deepEqual(seen[0], ['ls-tree', '-r', '--name-only', 'abc123', GOVERNED_PREFIX])
+})
+
+// ─── R2 coverage: the ceilings are per-file, so most of the tree is uncapped ─
+
+test('summarizeCoverage separates capped from uncapped fork-modified files', () => {
+  const coverage = summarizeCoverage({
+    modified: [
+      { file: 'internal/server/server.go', lines: 576 },
+      { file: 'internal/server/store_watch.go', lines: 58 },
+      { file: 'internal/server/session_groups.go', lines: 49 },
+    ],
+    ceilings: [{ file: 'internal/server/server.go', ceiling: 576 }],
+  })
+  assert.equal(coverage.withCeilingFiles, 1)
+  assert.equal(coverage.withCeilingLines, 576)
+  assert.equal(coverage.withoutCeilingFiles, 2)
+  assert.equal(coverage.withoutCeilingLines, 107)
+  assert.deepEqual(coverage.withoutCeiling, ['internal/server/session_groups.go', 'internal/server/store_watch.go'])
+})
+
+test('summarizeCoverage counts nothing, rather than everything, when no file is modified', () => {
+  const coverage = summarizeCoverage({
+    modified: [],
+    ceilings: [{ file: 'internal/server/server.go', ceiling: 576 }],
+  })
+  assert.equal(coverage.withCeilingFiles, 0)
+  assert.equal(coverage.withoutCeilingFiles, 0)
+  assert.equal(coverage.withoutCeilingLines, 0)
+})
+
+test('a ceiling on a file that is NOT fork-modified is not counted as capped', () => {
+  // The ceiling and the measurement are different sets. A file listed in
+  // DEBT_CEILINGS but unchanged (or renamed away) must not inflate the capped
+  // count — the number the pass line prints is "files this run actually
+  // compared", not "files the table mentions".
+  const coverage = summarizeCoverage({
+    modified: [{ file: 'internal/server/store_watch.go', lines: 58 }],
+    ceilings: [
+      { file: 'internal/server/server.go', ceiling: 576 },
+      { file: 'internal/server/gone.go', ceiling: 4 },
+    ],
+  })
+  assert.equal(coverage.withCeilingFiles, 0)
+  assert.equal(coverage.withCeilingLines, 0)
+  assert.equal(coverage.withoutCeilingFiles, 1)
+  assert.equal(coverage.withoutCeilingLines, 58)
+})
+
+test('formatCoverage says the ceilings are not tree-wide', () => {
+  const text = formatCoverage({
+    withCeilingFiles: 5,
+    withCeilingLines: 738,
+    withoutCeilingFiles: 79,
+    withoutCeilingLines: 884,
+    withoutCeiling: [],
+  })
+  assert.match(text, /5 fork-modified upstream file\(s\) carry a ceiling \(738 lines\)/)
+  assert.match(text, /79 more are fork-modified upstream files with no ceiling \(884 lines\)/)
+  assert.match(text, /not tree-wide/)
+})
+
+test('the real repository reports coverage consistent with its own results', async () => {
+  // fileURLToPath, not import.meta.dirname: the latter is undefined before Node
+  // 20.11, and this repository's local Node is 20.0.0 while CI runs 22 — the two
+  // revisions then disagree about whether the guard's tests pass, which is the
+  // gap V-101 registered. A new test must not reintroduce it.
+  const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
+  const run = (r, args) => execFileSync('git', args, { cwd: r, encoding: 'utf8' })
+  const { coverage } = await check(root, run)
+  assert.ok(coverage, 'check must return the coverage it printed')
+  // The guard examined nothing would be the failure mode this pins: a coverage
+  // note reading "0 capped, 0 uncapped" is indistinguishable from a guard whose
+  // gathering broke, and the two print the same sentence (V-49).
+  assert.ok(
+    coverage.withCeilingFiles > 0,
+    'the ceilings must govern at least one fork-modified upstream file, or the guard measured nothing',
+  )
+  assert.ok(
+    coverage.withoutCeilingFiles > 0,
+    'the fork modifies far more of internal/server than the ceilings cover; 0 here means the gathering broke',
+  )
 })

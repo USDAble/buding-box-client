@@ -1,6 +1,7 @@
 package server
 
 import (
+	"context"
 	"log/slog"
 	"os"
 	"strings"
@@ -98,14 +99,22 @@ func sampleStore() storeFingerprint {
 
 // startStoreWatch begins sampling the data root for changes made outside this
 // process, broadcasting the events an open sidebar already knows how to act
-// on. Started by serveOn; stopped by doShutdown closing watchStop.
+// on. Started by serveOn; stopped by doShutdown (which closes watchStop),
+// then joined by joinStoreWatch.
+//
+// The join is the half that was missing (V-105): a channel close is not a join,
+// so a sample already running when the close landed still resolved the data
+// root — and did it into whatever root was current by the time it got there,
+// which for a test harness is the next test's.
 //
 // The first sample is a baseline and announces nothing — otherwise every start
 // would tell every tab to refetch for no reason.
 func (s *Server) startStoreWatch() {
+	s.watchStarted.Store(true)
 	go func() {
 		defer s.recoverBg("store watch")
-		prev := sampleStore()
+		defer close(s.watchDone)
+		prev := s.sample()
 		t := time.NewTicker(storeWatchInterval)
 		defer t.Stop()
 		for {
@@ -119,6 +128,39 @@ func (s *Server) startStoreWatch() {
 	}()
 }
 
+// joinStoreWatch waits for the watcher goroutine to return, after doShutdown
+// closed watchStop.
+//
+// A close only asks. The join is what makes "shut down" mean "and it will not
+// touch the data root again": a sample already running when the close landed
+// still resolves data/sessions and the registry file, so a caller that releases
+// the root (a test's TempDir, an unmounted drive) would otherwise lose a race
+// with a write nobody is waiting for (V-105).
+//
+// Skipped when the watch never ran: a server shut down without serving has
+// nothing to join, and waiting would burn the whole ctx.
+// OCTO-FORK: the join Scheduler/store-watch shutdown never had — see dev-docs-usdable/需求/20260911/需求基线.md §5.6.
+func (s *Server) joinStoreWatch(ctx context.Context) {
+	if !s.watchStarted.Load() {
+		return
+	}
+	select {
+	case <-s.watchDone:
+	case <-ctx.Done():
+	}
+}
+
+// sample reads the current fingerprint. Split out from sampleStore so the V-105
+// nail can hold a sample open across Shutdown and see whether Shutdown waited
+// for it — an ordering a test cannot observe any other way. The barrier is nil
+// in production.
+func (s *Server) sample() storeFingerprint {
+	if s.storeSampleBarrier != nil {
+		s.storeSampleBarrier()
+	}
+	return sampleStore()
+}
+
 // pollStoreOnce samples once, broadcasts what changed, and returns the new
 // fingerprint. Split out so a test can drive iterations without waiting on the
 // ticker.
@@ -130,7 +172,7 @@ func (s *Server) startStoreWatch() {
 // watcher can recognise its own) is a large amount of easily-stale machinery
 // for a cost that is already bounded by the sampling interval.
 func (s *Server) pollStoreOnce(prev storeFingerprint) storeFingerprint {
-	cur := sampleStore()
+	cur := s.sample()
 	if cur.sessionCount != prev.sessionCount || !cur.sessionsModTime.Equal(prev.sessionsModTime) {
 		slog.Debug("store watch: transcripts changed",
 			"count", cur.sessionCount, "was", prev.sessionCount)

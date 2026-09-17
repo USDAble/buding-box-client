@@ -1,7 +1,10 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import { get } from "svelte/store";
-import { checkSensitive } from "./sensitive";
+import { applySensitiveRejection, checkSensitive } from "./sensitive";
 import { WINDOW_TOKEN_HEADER, productState, productPhase } from "./product";
+import { SRC, filesMentioning, stripComments } from "../test/sourceScan";
 
 function fetchReturning(status: number, body: unknown) {
   return vi.fn(async () => ({
@@ -69,5 +72,68 @@ describe("checkSensitive", () => {
     await expect(checkSensitive("hi")).rejects.toThrow();
     expect(get(productState)?.loggedIn).toBe(false);
     expect(get(productPhase)).toBe("blocked");
+  });
+});
+
+// V-98: the other half of the same gate. The server side has nails (a hit is
+// refused, the masked text comes back as the payload, the session file never
+// sees the message — PR-6b3), but the half that turns that event into "the
+// masked text is back in the box and the user is told" had none: it lived in
+// ChatView.svelte, a 3000-line view no test renders. So the server could emit a
+// perfectly correct event while the view listened for the wrong name, or
+// dropped the restore, and every nail stayed green — the shape L-D2 was burned
+// by. The effects are injected into the function so that at least the decisions
+// are reachable from a test; the scan below is what keeps the view using it.
+describe("applySensitiveRejection", () => {
+  function effects() {
+    return { sessionID: "s1", restore: vi.fn(), notify: vi.fn() };
+  }
+
+  it("puts the masked text back and says why", () => {
+    const t = effects();
+
+    expect(applySensitiveRejection({ session_id: "s1", text: "增值税***管理" }, t)).toBe(true);
+    expect(t.restore).toHaveBeenCalledWith("增值税***管理");
+    expect(t.notify).toHaveBeenCalledTimes(1);
+  });
+
+  it("leaves a rejection addressed to another session alone", () => {
+    const t = effects();
+
+    expect(applySensitiveRejection({ session_id: "s2", text: "增值税***管理" }, t)).toBe(false);
+    expect(t.restore).not.toHaveBeenCalled();
+    expect(t.notify).not.toHaveBeenCalled();
+  });
+
+  it("empties the box when the event carries no text, rather than leaving the refused text in it", () => {
+    const t = effects();
+
+    applySensitiveRejection({ session_id: "s1" }, t);
+    expect(t.restore).toHaveBeenCalledWith("");
+  });
+});
+
+describe("the rejection's consumer half has one owner", () => {
+  // A second consumer is not a style problem: two handlers for one event mean
+  // two restores and two notices, and neither test above would notice.
+  it("the event has exactly one consumer under web/src", () => {
+    expect(filesMentioning("'input_sensitive'")).toEqual(["views/ChatView.svelte"]);
+  });
+
+  it("that consumer decides nothing itself — it only supplies the two effects", () => {
+    const chatView = stripComments(
+      readFileSync(join(SRC, "views", "ChatView.svelte"), "utf8"),
+    );
+    const start = chatView.indexOf("ws.on('input_sensitive'");
+    const handler = chatView.slice(start, chatView.indexOf("}))", start));
+
+    expect(start).toBeGreaterThan(-1);
+    expect(handler).toContain("applySensitiveRejection(");
+    // The addressee check and the empty-text fallback are the two decisions the
+    // function owns. Seeing either spelled out again here means the view grew a
+    // second copy of the behaviour, which is what makes the nails above stop
+    // covering the real path.
+    expect(handler).not.toContain("session_id");
+    expect(handler).not.toContain("ev.text");
   });
 });

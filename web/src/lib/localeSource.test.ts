@@ -13,35 +13,10 @@
 // Comments are stripped before scanning: prose may discuss the browser's
 // preference (that is how the reasoning stays in the tree) without being a read.
 import { describe, expect, it } from 'vitest'
-import { readdirSync, readFileSync, statSync } from 'node:fs'
-import { extname, join } from 'node:path'
+import { readFileSync } from 'node:fs'
+import { SRC, sourceFiles, stripComments } from '../test/sourceScan'
 
-// Same convention as i18n.coverage.test.ts: vitest's root is web/, so this is
-// web/src regardless of which file the test lives in.
-const SRC = join(process.cwd(), 'src')
 const FORBIDDEN = 'navigator.language'
-
-function sourceFiles(dir: string): string[] {
-  const out: string[] = []
-  for (const name of readdirSync(dir)) {
-    const path = join(dir, name)
-    if (statSync(path).isDirectory()) {
-      out.push(...sourceFiles(path))
-      continue
-    }
-    if (!['.svelte', '.ts'].includes(extname(name))) continue
-    // Sibling tests describe behaviour, they are not shipped code.
-    if (name.endsWith('.test.ts')) continue
-    out.push(path)
-  }
-  return out
-}
-
-// stripComments removes line and block comments without trying to be a parser:
-// it only needs to be good enough that a comment cannot hide a read or fake one.
-function stripComments(source: string): string {
-  return source.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/[^\n]*/g, '')
-}
 
 describe('the app language has exactly one source', () => {
   it('nothing under web/src reads the browser language', () => {

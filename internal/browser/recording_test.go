@@ -417,14 +417,19 @@ func TestGenerateRecordingDistill(t *testing.T) {
 		{Type: "change", Selector: "#q", Tag: "INPUT", Value: "ORDER-123"},
 	}
 
-	// A generator that returns a cleaned recording (drops the detour, params the value).
+	// A generator that returns a cleaned recording (drops the detour, params the
+	// value). It writes the empty list fields as `{}` — the shape that used to
+	// fail parsing and discard the whole refinement (#2406).
 	clean := func(_ context.Context, _, _ string) (string, error) {
-		return "name: x\nsteps:\n" +
+		return "name: x\nparams: {}\noutputs: {}\nsteps:\n" +
 			"  - {action: navigate, url: 'https://x/start'}\n" +
 			"  - {action: click, selector: '#search'}\n" +
 			"  - {action: type, selector: '#q', value: '{{order}}'}\n", nil
 	}
-	s := GenerateRecording(ctx, "demo", "https://x/start", events, clean)
+	s, fallback := GenerateRecording(ctx, "demo", "https://x/start", "", events, clean)
+	if fallback != "" {
+		t.Fatalf("a usable refinement must not report a fallback, got %q", fallback)
+	}
 	if len(s.Steps) != 3 { // navigate + search + type (detour dropped)
 		t.Fatalf("distill should drop the detour; got %d steps: %+v", len(s.Steps), s.Steps)
 	}
@@ -438,7 +443,7 @@ func TestGenerateRecordingDistill(t *testing.T) {
 	cheat := func(_ context.Context, _, _ string) (string, error) {
 		return "name: x\ndescription: open the search page\nsteps:\n  - {action: click, selector: '#invented'}\n", nil
 	}
-	s2 := GenerateRecording(ctx, "demo", "https://x/start", events, cheat)
+	s2, fallback := GenerateRecording(ctx, "demo", "https://x/start", "", events, cheat)
 	for _, st := range s2.Steps {
 		if st.Selector == "#invented" {
 			t.Fatal("precision guard failed: accepted an invented selector")
@@ -447,18 +452,189 @@ func TestGenerateRecordingDistill(t *testing.T) {
 	if s2.Description != "open the search page" {
 		t.Fatalf("guard fallback should keep the distilled description, got %q", s2.Description)
 	}
+	if !strings.Contains(fallback, "#invented") {
+		t.Fatalf("the fallback reason must name the rejected selector, got %q", fallback)
+	}
 
 	// A generator whose output has a description but no usable steps -> baseline
 	// steps, distilled description.
 	descOnly := func(_ context.Context, _, _ string) (string, error) {
 		return "name: x\ndescription: search for an order\n", nil
 	}
-	s3 := GenerateRecording(ctx, "demo", "https://x/start", events, descOnly)
+	s3, fallback := GenerateRecording(ctx, "demo", "https://x/start", "", events, descOnly)
 	if len(s3.Steps) == 0 {
 		t.Fatal("steps-empty fallback should keep the baseline steps")
 	}
 	if s3.Description != "search for an order" {
 		t.Fatalf("steps-empty fallback should keep the distilled description, got %q", s3.Description)
+	}
+	if !strings.Contains(fallback, "no steps") {
+		t.Fatalf("the fallback reason must say the output had no steps, got %q", fallback)
+	}
+
+	// Output that does not parse at all: baseline steps, and a reason that
+	// carries the parse error. No generator at all is a fallback too.
+	broken := func(_ context.Context, _, _ string) (string, error) {
+		return "name: x\nparams: {a: 1}\noutputs: {b: 2}\nsteps: []\n", nil
+	}
+	if s4, fallback := GenerateRecording(ctx, "demo", "https://x/start", "", events, broken); len(s4.Steps) == 0 || !strings.Contains(fallback, "not a valid recording") || strings.Contains(fallback, "\n") {
+		t.Fatalf("unparseable output: steps=%d fallback=%q (must name the parse error on one line)", len(s4.Steps), fallback)
+	}
+	if _, fallback := GenerateRecording(ctx, "demo", "https://x/start", "", events, nil); !strings.Contains(fallback, "no model") {
+		t.Fatalf("nil generator must report why the baseline was kept, got %q", fallback)
+	}
+}
+
+// TestGenerateRecordingPromptCarriesGoal (#2406): the user's stated goal is
+// the only intent signal the distiller has — it must lead the user prompt,
+// verbatim; an empty goal adds no Goal line.
+func TestGenerateRecordingPromptCarriesGoal(t *testing.T) {
+	events := []RecordedEvent{{Type: "click", Selector: "#a", Tag: "A", Text: "Go"}}
+	var system, captured string
+	gen := func(_ context.Context, sys, user string) (string, error) {
+		system, captured = sys, user
+		return "", fmt.Errorf("stop")
+	}
+	_, _ = GenerateRecording(context.Background(), "demo", "https://x/start", "  进笔记管理，找到最新一篇，点开它的评论  ", events, gen)
+	if !strings.HasPrefix(captured, "Goal (what the user set out to do, in their own words): 进笔记管理，找到最新一篇，点开它的评论\n") {
+		t.Fatalf("goal must lead the prompt verbatim:\n%s", captured)
+	}
+	if !strings.Contains(system, "stated goal") || !strings.Contains(system, "detour") {
+		t.Fatalf("system prompt must tie rule (2) to the goal:\n%s", system)
+	}
+	_, _ = GenerateRecording(context.Background(), "demo", "https://x/start", "", events, gen)
+	if strings.Contains(captured, "Goal (") {
+		t.Fatalf("no goal given, no Goal line:\n%s", captured)
+	}
+}
+
+// TestRenderTraceEffects: the distill trace carries each gesture's URL, its
+// effects summary and the likely_noop marker — the evidence rule (2) judges by.
+func TestRenderTraceEffects(t *testing.T) {
+	events := []RecordedEvent{
+		{Type: "click", Selector: "#go", Tag: "A", Text: "笔记管理", URL: "https://x/home", Effects: &Effects{URLAfter: "https://x/notes", Requests: map[string]int{"GET": 1}}},
+		{Type: "click", Selector: "#cancel", Tag: "BUTTON", Text: "取消", URL: "https://x/notes", Effects: &Effects{}, LikelyNoop: true},
+		{Type: "click", Selector: "#legacy", Tag: "A", Text: "old"},
+	}
+	tr := renderTrace(events)
+	for _, want := range []string{
+		`url="https://x/home"  effects: url→https://x/notes GET×1`,
+		`text="取消" value="" url="https://x/notes"  effects: none  [likely_noop]`,
+	} {
+		if !strings.Contains(tr, want) {
+			t.Fatalf("trace missing %q:\n%s", want, tr)
+		}
+	}
+	if strings.Contains(strings.SplitN(tr, "\n", 3)[2], "effects:") {
+		t.Fatalf("an event without Effects (older recorder) must render no effects column:\n%s", tr)
+	}
+}
+
+// TestLikelyNoopReachesPlan: the marker rides from the events onto the compiled
+// steps, survives distillation onto refined steps with the same target, and
+// SummarizeRecording asks about exactly those steps — while a distiller that
+// dropped them leaves no question to ask.
+func TestLikelyNoopReachesPlan(t *testing.T) {
+	events := []RecordedEvent{
+		{Type: "click", Selector: "#notes", Tag: "SPAN", Text: "笔记管理", Effects: &Effects{URLAfter: "https://x/notes"}},
+		{Type: "click", Selector: "#reply", Tag: "SPAN", Text: "说点什么...", Effects: &Effects{}, LikelyNoop: true},
+		{Type: "click", Selector: "#cancel", Tag: "BUTTON", Text: "取消", Effects: &Effects{}, LikelyNoop: true},
+	}
+	base := CompileRecording("x", "", "https://x/", events)
+	if !base.Steps[2].likelyNoop || !base.Steps[3].likelyNoop || base.Steps[1].likelyNoop {
+		t.Fatalf("compile must carry the marker onto the flagged clicks only: %+v", base.Steps)
+	}
+	plan := SummarizeRecording(base)
+	if !strings.Contains(plan, "要保留吗") || !strings.Contains(plan, "3. 点击「说点什么...」") || !strings.Contains(plan, "4. 点击「取消」") || strings.Contains(plan, "2. 点击「笔记管理」\n  ") {
+		t.Fatalf("plan must list the flagged steps as a question:\n%s", plan)
+	}
+	if y, _ := MarshalRecording(base); strings.Contains(string(y), "noop") {
+		t.Fatalf("the marker must never reach the YAML:\n%s", y)
+	}
+
+	keep := func(_ context.Context, _, _ string) (string, error) {
+		return "name: x\nsteps:\n  - {action: navigate, url: 'https://x/'}\n  - {action: click, selector: '#notes'}\n  - {action: click, selector: '#reply'}\n  - {action: click, selector: '#cancel'}\n", nil
+	}
+	refined, fb := GenerateRecording(context.Background(), "x", "https://x/", "", events, keep)
+	if fb != "" || len(refined.Steps) != 4 || !refined.Steps[2].likelyNoop || !refined.Steps[3].likelyNoop || refined.Steps[1].likelyNoop {
+		t.Fatalf("marker must be re-attached onto kept refined steps: fb=%q %+v", fb, refined.Steps)
+	}
+	drop := func(_ context.Context, _, _ string) (string, error) {
+		return "name: x\nsteps:\n  - {action: navigate, url: 'https://x/'}\n  - {action: click, selector: '#notes'}\n", nil
+	}
+	refined, fb = GenerateRecording(context.Background(), "x", "https://x/", "", events, drop)
+	if fb != "" || strings.Contains(SummarizeRecording(refined), "要保留吗") {
+		t.Fatalf("nothing to ask when the distiller dropped the no-ops: fb=%q\n%s", fb, SummarizeRecording(refined))
+	}
+}
+
+// TestBackfillNoopHintsStaysTailOnly: the same element clicked legitimately
+// mid-flow and again by mistake at the end shares a selector, so the lookup
+// alone would flag both refined steps. The marker is a tail property; the
+// mid-flow click must come out unflagged, and a key step reads as a key press.
+func TestBackfillNoopHintsStaysTailOnly(t *testing.T) {
+	base := Recording{Steps: []Step{
+		{Action: "click", Selector: "#tab", Label: "评论"},
+		{Action: "click", Selector: "#note", Label: "最新笔记"},
+		{Action: "wait", Network: true},
+		{Action: "click", Selector: "#tab", Label: "评论", likelyNoop: true},
+		{Action: "key", Selector: "#q", Label: "搜索框", Value: "enter", likelyNoop: true},
+	}}
+	refined := Recording{Steps: []Step{
+		{Action: "click", Selector: "#tab", Label: "评论"},
+		{Action: "click", Selector: "#note", Label: "最新笔记"},
+		{Action: "wait", Network: true},
+		{Action: "click", Selector: "#tab", Label: "评论"},
+		{Action: "key", Selector: "#q", Label: "搜索框", Value: "enter"},
+	}}
+	backfillNoopHints(&refined, base)
+	got := []bool{}
+	for _, st := range refined.Steps {
+		got = append(got, st.likelyNoop)
+	}
+	if want := []bool{false, false, false, true, true}; fmt.Sprint(got) != fmt.Sprint(want) {
+		t.Fatalf("likelyNoop per step = %v, want %v", got, want)
+	}
+	plan := SummarizeRecording(refined)
+	if !strings.Contains(plan, "4. 点击「评论」") || !strings.Contains(plan, "5. 在「搜索框」中按 enter") || strings.Contains(plan, "1. 点击「评论」\n  ") {
+		t.Fatalf("plan must list only the tail, with action-aware wording:\n%s", plan)
+	}
+}
+
+// TestParseRecordingAcceptsEmptyMapLists (#2406): `params: {}` / `outputs: {}`
+// decode as empty lists, like the null / bare-key spellings always did — a
+// model writes any of these for "none". A populated mapping is still a shape
+// error, `steps: {}` is still rejected (steps are deliberately not relaxed),
+// a null inside a Param is untouched, and a real list still parses.
+func TestParseRecordingAcceptsEmptyMapLists(t *testing.T) {
+	for _, src := range []string{
+		"name: x\nparams: {}\noutputs: {}\nsteps:\n  - {action: click, selector: '#a'}\n",
+		"name: x\nparams: null\noutputs: ~\nsteps:\n  - {action: click, selector: '#a'}\n",
+		"name: x\nparams:\noutputs:\nsteps:\n  - {action: click, selector: '#a'}\n",
+	} {
+		s, err := ParseRecording([]byte(src))
+		if err != nil {
+			t.Fatalf("parse %q: %v", src, err)
+		}
+		if len(s.Params) != 0 || len(s.Outputs) != 0 || len(s.Steps) != 1 || s.Steps[0].Selector != "#a" {
+			t.Fatalf("parse %q: %+v", src, s)
+		}
+	}
+	s, err := ParseRecording([]byte("name: x\nparams:\n  - {name: order, default: '1'}\noutputs:\n  - {name: files, type: 'file[]'}\nsteps: []\n"))
+	if err != nil || len(s.Params) != 1 || s.Params[0].Name != "order" || len(s.Outputs) != 1 || s.Outputs[0].Type != "file[]" {
+		t.Fatalf("real lists must still parse: %+v (err %v)", s, err)
+	}
+	if _, err := ParseRecording([]byte("name: x\nparams: {order: {default: '1'}}\nsteps: []\n")); err == nil {
+		t.Fatal("a populated mapping is not a list and must still be rejected")
+	}
+	if _, err := ParseRecording([]byte("name: x\nparams: []\nsteps: {}\n")); err == nil {
+		t.Fatal("steps: {} must still be rejected — only params/outputs are relaxed")
+	}
+	if s, err := ParseRecording([]byte("name: x\nparams:\n  - {name: order, default: ~}\nsteps: []\n")); err != nil || len(s.Params) != 1 || s.Params[0].Name != "order" || s.Params[0].Default != "" {
+		t.Fatalf("a null inside a Param must decode as before: %+v (err %v)", s, err)
+	}
+	if s, err := ParseRecording(nil); err != nil || s.Name != "" {
+		t.Fatalf("empty input: %+v (err %v)", s, err)
 	}
 }
 
@@ -736,12 +912,12 @@ func TestReplayDismissesOverlayDeterministically(t *testing.T) {
 
 // TestReplayHealBypassesStaleAnchors: a step whose recorded fingerprint no
 // longer matches the page (garbage neighbor text) fails anchored resolution;
-// the healer supplies the correct selector. The retry must TRUST the healed
-// selector instead of re-gating it through the same dead fingerprint —
-// otherwise an anchored step can never heal (observed on Zhihu: every heal
-// round was rejected by the drifted fingerprint and replay failed). The stale
-// anchors must also be dropped from the step so the write-back persists a
-// replayable repair.
+// the healer supplies the correct selector. The retry must not re-gate the
+// healed selector through the same dead fingerprint — otherwise an anchored
+// step can never heal (observed on Zhihu: every heal round was rejected by the
+// drifted fingerprint and replay failed). The stale anchors must be replaced
+// (here the bare button offers no anchor signal, so by none) and the written-
+// back step must replay on its own.
 func TestReplayHealBypassesStaleAnchors(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 180*time.Second)
 	defer cancel()
@@ -781,12 +957,227 @@ func TestReplayHealBypassesStaleAnchors(t *testing.T) {
 	if recording.Steps[0].Selector != "#real" {
 		t.Fatalf("step not corrected: %q", recording.Steps[0].Selector)
 	}
-	if recording.Steps[0].Anchors != nil {
-		t.Fatal("stale anchors must be dropped with the healed selector — keeping them re-deadlocks the next replay")
+	if a := recording.Steps[0].Anchors; a != nil && a.NeighborText == "text that exists nowhere on this page" {
+		t.Fatal("stale anchors must not survive the heal — keeping them re-deadlocks the next replay")
 	}
 	var clicks int
 	if err := page.Eval(ctx, "window.clicks", &clicks); err != nil || clicks < 1 {
 		t.Fatalf("healed step did not actually click (clicks=%d, err=%v)", clicks, err)
+	}
+	// The written-back step must stand on its own: replay it again with no
+	// healer wired.
+	if _, _, _, err := ReplayRecording(ctx, page, recording, nil, ReplayOptions{StepTimeout: 2 * time.Second, Browser: b}); err != nil {
+		t.Fatalf("healed recording must replay without a healer, got: %v", err)
+	}
+	if err := page.Eval(ctx, "window.clicks", &clicks); err != nil || clicks < 2 {
+		t.Fatalf("second replay did not click (clicks=%d, err=%v)", clicks, err)
+	}
+}
+
+// healVerifyFixture is the page shape from #2404: a menu whose entries are
+// click-handled spans (no interactive tag or role), a second element with the
+// same visible text elsewhere, and a recorded fingerprint whose selector and
+// neighbor text are both stale — so anchored resolution ties on the label
+// alone and fails into the healer.
+const healVerifyFixture = `<!doctype html><title>t</title>
+<div class="nav"><div class="item"><span class="section">首页</span><span class="menu-title-wrapper">笔记管理</span></div></div>
+<div class="tabs"><div class="item"><span class="tab-title">笔记管理</span></div></div>
+<script>window.hits=[];
+document.querySelector('.menu-title-wrapper').addEventListener('click',function(){window.hits.push('nav')});
+document.querySelector('.tab-title').addEventListener('click',function(){window.hits.push('tab')});</script>`
+
+func healVerifyStep() Step {
+	return Step{
+		Action:   "click",
+		Selector: "div.list > div.nav-v2 > div.nav-item:nth-of-type(2) > span.nav-title > span.title-wrapper",
+		Label:    "笔记管理",
+		Anchors:  &Anchors{Selectors: []string{"div > div.nav-v2 > div > span > span"}, Tag: "span", NeighborText: "旧栏目"},
+	}
+}
+
+// TestReplayHealRejectsUnverifiedSelector (#2404): the healer proposes a
+// selector that matches nothing on the page — the tail of the dead selector,
+// echoed back. Before, that proposal reached the retry with the anchors
+// dropped, the label fallback clicked the right element on its own, and the
+// write-back persisted the phantom selector minus the fingerprint. Now the
+// proposal must be verified against the page first: rejected, the step is left
+// exactly as recorded (selector AND anchors), nothing is clicked, the
+// rejection reason feeds the next heal round, and replay fails honestly once
+// the rounds run out.
+func TestReplayHealRejectsUnverifiedSelector(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 180*time.Second)
+	defer cancel()
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Write([]byte(healVerifyFixture))
+	}))
+	defer srv.Close()
+
+	b := newBrowser(t, ctx)
+	defer b.Close()
+	page, err := b.NewPage(ctx, srv.URL)
+	if err != nil {
+		t.Fatalf("new page: %v", err)
+	}
+	if err := page.WaitFor(ctx, ".tab-title", testWaitTimeout); err != nil {
+		t.Fatalf("wait: %v", err)
+	}
+
+	recording := &Recording{Name: "x", Steps: []Step{healVerifyStep()}}
+	want := healVerifyStep()
+	var causes []string
+	heal := func(_ context.Context, _ *Page, step *Step, cause error) error {
+		causes = append(causes, cause.Error())
+		step.Selector = "span.title-wrapper"
+		return nil
+	}
+	modified, _, _, err := ReplayRecording(ctx, page, recording, nil, ReplayOptions{StepTimeout: 2 * time.Second, Healer: heal, Browser: b})
+	if err == nil {
+		t.Fatal("replay must fail: every proposal matched nothing, and the label fallback must not rescue an unverified heal")
+	}
+	if !strings.Contains(err.Error(), "self-heal") || !strings.Contains(err.Error(), `"span.title-wrapper"`) || !strings.Contains(err.Error(), "matches no element") {
+		t.Fatalf("error must name the rejected proposal and why, got: %v", err)
+	}
+	if modified {
+		t.Fatal("a rejected heal must not mark the recording modified — nothing verified may reach the YAML")
+	}
+	got := recording.Steps[0]
+	if got.Selector != want.Selector {
+		t.Fatalf("selector must stay as recorded, got %q", got.Selector)
+	}
+	if got.Anchors == nil || got.Anchors.NeighborText != want.Anchors.NeighborText || len(got.Anchors.Selectors) != 1 || got.Anchors.Selectors[0] != want.Anchors.Selectors[0] {
+		t.Fatalf("anchors must survive a rejected heal untouched, got %+v", got.Anchors)
+	}
+	if len(causes) != maxHealRounds {
+		t.Fatalf("expected %d heal rounds, got %d", maxHealRounds, len(causes))
+	}
+	if !strings.Contains(causes[1], "rejected") || !strings.Contains(causes[1], "span.title-wrapper") {
+		t.Fatalf("the rejection must feed the next round as its cause, got: %s", causes[1])
+	}
+	var hits []string
+	if err := page.Eval(ctx, "window.hits", &hits); err != nil {
+		t.Fatal(err)
+	}
+	if len(hits) != 0 {
+		t.Fatalf("nothing may be clicked on an unverified proposal, got %v", hits)
+	}
+}
+
+// TestReplayHealRejectsWrongElement: a proposal that resolves — but to an
+// element whose text is not the step's recorded label (the neighbouring menu
+// entry) — is rejected on that ground, named as such, and nothing is clicked.
+// The existence check alone would have let a wrong-element heal through.
+func TestReplayHealRejectsWrongElement(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 180*time.Second)
+	defer cancel()
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Write([]byte(healVerifyFixture))
+	}))
+	defer srv.Close()
+
+	b := newBrowser(t, ctx)
+	defer b.Close()
+	page, err := b.NewPage(ctx, srv.URL)
+	if err != nil {
+		t.Fatalf("new page: %v", err)
+	}
+	if err := page.WaitFor(ctx, ".tab-title", testWaitTimeout); err != nil {
+		t.Fatalf("wait: %v", err)
+	}
+
+	recording := &Recording{Name: "x", Steps: []Step{healVerifyStep()}}
+	heal := func(_ context.Context, _ *Page, step *Step, _ error) error {
+		step.Selector = "span.section" // exists, reads 首页 — not the intended entry
+		return nil
+	}
+	modified, _, _, err := ReplayRecording(ctx, page, recording, nil, ReplayOptions{StepTimeout: 2 * time.Second, Healer: heal, Browser: b})
+	if err == nil {
+		t.Fatal("replay must fail: the proposal resolves to the wrong element")
+	}
+	if !strings.Contains(err.Error(), "does not contain the recorded label") || !strings.Contains(err.Error(), "首页") {
+		t.Fatalf("error must say the element's text does not carry the label, got: %v", err)
+	}
+	if modified || recording.Steps[0].Selector != healVerifyStep().Selector {
+		t.Fatalf("a rejected heal must leave the step untouched (modified=%v, selector=%q)", modified, recording.Steps[0].Selector)
+	}
+	var hits []string
+	if err := page.Eval(ctx, "window.hits", &hits); err != nil || len(hits) != 0 {
+		t.Fatalf("nothing may be clicked, got %v (err %v)", hits, err)
+	}
+}
+
+// TestReplayHealRefingerprintsVerifiedElement (#2404): a proposal that does
+// resolve to an element carrying the recorded label is accepted — and instead
+// of the stale anchors being dropped, the verified element is fingerprinted
+// afresh with the recorder's own strategies (alternate selectors, tag, the
+// neighbor text actually beside it now). The retry clicks the intended element
+// even though a second one shares its text, and the written-back step replays
+// with no healer at all.
+func TestReplayHealRefingerprintsVerifiedElement(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 180*time.Second)
+	defer cancel()
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Write([]byte(healVerifyFixture))
+	}))
+	defer srv.Close()
+
+	b := newBrowser(t, ctx)
+	defer b.Close()
+	page, err := b.NewPage(ctx, srv.URL)
+	if err != nil {
+		t.Fatalf("new page: %v", err)
+	}
+	if err := page.WaitFor(ctx, ".tab-title", testWaitTimeout); err != nil {
+		t.Fatalf("wait: %v", err)
+	}
+
+	recording := &Recording{Name: "x", Steps: []Step{healVerifyStep()}}
+	const proposed = "div.nav > div.item > span:nth-of-type(2)" // digest-style: what the healer's list would carry
+	heal := func(_ context.Context, _ *Page, step *Step, _ error) error {
+		step.Selector = proposed
+		return nil
+	}
+	modified, _, _, err := ReplayRecording(ctx, page, recording, nil, ReplayOptions{StepTimeout: 2 * time.Second, Healer: heal, Browser: b})
+	if err != nil {
+		t.Fatalf("replay should succeed via the verified selector, got: %v", err)
+	}
+	if !modified {
+		t.Fatal("expected modified=true after a verified heal")
+	}
+	got := recording.Steps[0]
+	if got.Selector != proposed {
+		t.Fatalf("step not corrected: %q", got.Selector)
+	}
+	a := got.Anchors
+	if a == nil {
+		t.Fatal("verified heal must re-fingerprint the element, not drop the anchors")
+	}
+	if a.Tag != "span" || a.NeighborText != "首页" {
+		t.Fatalf("fresh fingerprint must describe the element as it is now (tag span, neighbor 首页), got %+v", a)
+	}
+	if len(a.Selectors) == 0 {
+		t.Fatalf("fresh fingerprint must carry alternate selectors, got %+v", a)
+	}
+	for _, s := range a.Selectors {
+		if s == proposed || s == "div > div.nav-v2 > div > span > span" {
+			t.Fatalf("alternates must be fresh strategies, not the primary or the stale alternate: %+v", a.Selectors)
+		}
+	}
+	var hits []string
+	if err := page.Eval(ctx, "window.hits", &hits); err != nil {
+		t.Fatal(err)
+	}
+	if len(hits) != 1 || hits[0] != "nav" {
+		t.Fatalf("the healed step must click the intended menu entry, got %v", hits)
+	}
+	// The written-back step must stand on its own — replay again, no healer.
+	if _, _, _, err := ReplayRecording(ctx, page, recording, nil, ReplayOptions{StepTimeout: 2 * time.Second, Browser: b}); err != nil {
+		t.Fatalf("healed recording must replay without a healer, got: %v", err)
+	}
+	if err := page.Eval(ctx, "window.hits", &hits); err != nil {
+		t.Fatal(err)
+	}
+	if len(hits) != 2 || hits[1] != "nav" {
+		t.Fatalf("second replay must click the same entry via the fresh fingerprint, got %v", hits)
 	}
 }
 
@@ -1407,7 +1798,7 @@ func TestGenerateRecordingDistillKeepsSecretFlag(t *testing.T) {
 			"  - {action: type, selector: '#pw', value: '{{password}}'}\n" +
 			"  - {action: click, selector: '#go'}\n", nil
 	}
-	s := GenerateRecording(ctx, "demo", "", events, dropSecret)
+	s, _ := GenerateRecording(ctx, "demo", "", "", events, dropSecret)
 	var user, pw *Param
 	for i := range s.Params {
 		switch s.Params[i].Name {
@@ -1447,7 +1838,7 @@ func TestGenerateRecordingDistillRestoresDroppedSecretParam(t *testing.T) {
 			"  - {action: type, selector: '#pw', value: '{{password}}'}\n" +
 			"  - {action: click, selector: '#go'}\n", nil
 	}
-	s := GenerateRecording(ctx, "demo", "", events, dropDecl)
+	s, _ := GenerateRecording(ctx, "demo", "", "", events, dropDecl)
 	var pw *Param
 	for i := range s.Params {
 		if s.Params[i].Name == "password" {
@@ -1730,13 +2121,87 @@ func TestGenerateRecordingBackfillsAnchors(t *testing.T) {
 		// A refined recording using only baseline selectors but WITHOUT anchors.
 		return "name: demo\ndescription: picks a date\nsteps:\n  - action: click\n    selector: td.cell\n    label: \"20\"\n", nil
 	}
-	out := GenerateRecording(context.Background(), "demo", "", events, gen)
+	out, _ := GenerateRecording(context.Background(), "demo", "", "", events, gen)
 	if out.Description != "picks a date" {
 		t.Fatalf("distilled description lost: %+v", out)
 	}
 	a := out.Steps[0].Anchors
 	if a == nil || a.Role != "gridcell" || a.NeighborText != "开始日期" {
 		t.Fatalf("anchors not backfilled from baseline: %+v", a)
+	}
+}
+
+// TestGenerateRecordingBackfillsLabelAndHint: the distiller returned steps
+// with no label / hint (observed live on qwen: every step bare) and one with
+// a reworded label. Both fields are restored from the baseline step with the
+// same selector — they are matched literally by the fingerprint scorer, the
+// drifted-click fallback and the heal verifier, so the recorded text wins
+// over the model's rewording; a model label survives only where the baseline
+// has none. Anchors ride along on the same step.
+func TestGenerateRecordingBackfillsLabelAndHint(t *testing.T) {
+	events := []RecordedEvent{
+		{Type: "click", Selector: "#notes", Tag: "SPAN", Text: "笔记管理", Role: "menuitem"},
+		{Type: "change", Selector: "#q", Tag: "INPUT", Field: "搜索关键词", Value: "octo"},
+		{Type: "click", Selector: "#go", Tag: "BUTTON", Text: "搜索"},
+		{Type: "click", Selector: "#icon", Tag: "I"}, // no visible text
+	}
+	gen := func(_ context.Context, _, _ string) (string, error) {
+		return "name: demo\nsteps:\n" +
+			"  - {action: click, selector: '#notes'}\n" +
+			"  - {action: type, selector: '#q', value: '{{搜索关键词}}', hint: 关键词}\n" +
+			"  - {action: click, selector: '#go', label: 搜索按钮}\n" +
+			"  - {action: click, selector: '#icon', label: 设置图标}\n", nil
+	}
+	out, fb := GenerateRecording(context.Background(), "demo", "", "", events, gen)
+	if fb != "" || len(out.Steps) != 4 {
+		t.Fatalf("refinement not applied: fb=%q steps=%+v", fb, out.Steps)
+	}
+	if out.Steps[0].Label != "笔记管理" || out.Steps[0].Anchors == nil || out.Steps[0].Anchors.Role != "menuitem" {
+		t.Fatalf("bare click must get label and anchors back: %+v", out.Steps[0])
+	}
+	if out.Steps[1].Hint != "搜索关键词" {
+		t.Fatalf("recorded hint must win over the model's rewording: %+v", out.Steps[1])
+	}
+	if out.Steps[2].Label != "搜索" {
+		t.Fatalf("recorded label must win over the model's rewording: %+v", out.Steps[2])
+	}
+	if out.Steps[3].Label != "设置图标" {
+		t.Fatalf("with no recorded text the model's label may stand: %+v", out.Steps[3])
+	}
+	if !strings.Contains(SummarizeRecording(out), "点击「笔记管理」") {
+		t.Fatalf("plan must name the step by its restored label:\n%s", SummarizeRecording(out))
+	}
+}
+
+// TestBackfillTargetFactsMergesSharedTargets: several baseline steps can share
+// a selector — a wait-for-element on the button just clicked (no facts at
+// all), or the type + key pair an Enter produces (hint on one, not the other).
+// Each fact comes from the last baseline step that HAS it, so a fact-less
+// later step cannot blank out an earlier one; navigate steps are untouched.
+func TestBackfillTargetFactsMergesSharedTargets(t *testing.T) {
+	base := Recording{Steps: []Step{
+		{Action: "navigate", URL: "https://x/"},
+		{Action: "click", Selector: "#save", Label: "保存", Anchors: &Anchors{Tag: "button"}},
+		{Action: "wait", Selector: "#save"}, // element-wait: selector, no facts
+		{Action: "type", Selector: "#q", Hint: "q", Value: "{{q}}"},
+		{Action: "key", Selector: "#q", Value: "enter"}, // Enter's key step: no hint
+	}}
+	refined := Recording{Steps: []Step{
+		{Action: "navigate", URL: "https://x/"},
+		{Action: "click", Selector: "#save"},
+		{Action: "type", Selector: "#q", Value: "{{q}}"},
+		{Action: "key", Selector: "#q", Value: "enter"},
+		{Action: "click", Selector: "#unknown", Label: "?"}, // not in the baseline: left alone
+	}}
+	backfillTargetFacts(&refined, base)
+	if s := refined.Steps[1]; s.Label != "保存" || s.Anchors == nil || s.Anchors.Tag != "button" {
+		t.Fatalf("the fact-less wait must not blank the click's facts: %+v", s)
+	}
+	if refined.Steps[2].Hint != "q" || refined.Steps[3].Hint != "q" {
+		t.Fatalf("hint must reach both steps on the shared input: %+v", refined.Steps[2:4])
+	}
+	if refined.Steps[0].Label != "" || refined.Steps[4].Label != "?" {
+		t.Fatalf("navigate and unknown-target steps must be untouched: %+v", refined.Steps)
 	}
 }
 
@@ -1841,7 +2306,7 @@ func TestGenerateRecordingDistillRetriesOnInvalidSelector(t *testing.T) {
 		secondPrompt = user
 		return "name: x\nsteps:\n  - {action: click, selector: '#search'}\n", nil
 	}
-	s := GenerateRecording(ctx, "demo", "", events, gen)
+	s, _ := GenerateRecording(ctx, "demo", "", "", events, gen)
 	if calls != 2 {
 		t.Fatalf("expected exactly one retry (2 calls), got %d", calls)
 	}

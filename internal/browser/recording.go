@@ -57,8 +57,10 @@ type Output struct {
 }
 
 // Step is one action. Selector is within its document; Frame (a same-origin
-// iframe selector) scopes it via the " >>> " convention. Label is a human note;
-// replay ignores it.
+// iframe selector) scopes it via the " >>> " convention. Label is the target's
+// visible text as recorded — replay re-locates a drifted click by it, the
+// fingerprint scorer and the self-heal verifier match it literally, and the
+// plan names the step by it — so it must stay the element's real text.
 type Step struct {
 	Action   string `yaml:"action"` // navigate | click | type | select | upload | wait | download | extract | key
 	URL      string `yaml:"url,omitempty"`
@@ -82,8 +84,14 @@ type Step struct {
 	// URL put; replay then retries the click, waiting between attempts, until
 	// the URL advances or the attempts run out.
 	expectEndURL string
-	Value        string `yaml:"value,omitempty"`
-	Label        string `yaml:"label,omitempty"`
+	// likelyNoop is a plan-time hint (never serialized): the recorder found
+	// this trailing gesture changed nothing observable (RecordedEvent.LikelyNoop).
+	// SummarizeRecording lists such steps for the user to keep or drop; the
+	// distiller sees the same fact in the trace. Re-attached onto refined steps
+	// by backfillNoopHints, like anchors.
+	likelyNoop bool
+	Value      string `yaml:"value,omitempty"`
+	Label      string `yaml:"label,omitempty"`
 	// Hint is a form field's accessible name (placeholder/name/aria-label/id or
 	// its <label> text). It's the deterministic fallback for type/select/upload:
 	// when the positional Selector drifts, replay re-locates the field by Hint
@@ -128,8 +136,10 @@ type Verify struct {
 }
 
 // Healer is called when a step fails. It may inspect the page and mutate *step
-// to repair it (e.g. fix a drifted selector); returning nil means "retry now".
-// A non-nil return aborts replay. Provided by the caller (the tool layer wires
+// to repair it (e.g. fix a drifted selector); returning nil means "retry" — a
+// changed selector is first verified against the live page (recoverStep) and
+// only retried if it resolves to the intended element. A non-nil return aborts
+// replay. Provided by the caller (the tool layer wires
 // an LLM-backed healer); the engine itself stays LLM-free.
 type Healer func(ctx context.Context, page *Page, step *Step, cause error) error
 
@@ -283,7 +293,7 @@ func CompileRecording(name, description, startURL string, events []RecordedEvent
 		if e.Selector == "" {
 			continue
 		}
-		st := Step{Frame: e.Frame, Selector: e.Selector, Label: e.Text, Hint: e.Field, Anchors: eventAnchors(e)}
+		st := Step{Frame: e.Frame, Selector: e.Selector, Label: e.Text, Hint: e.Field, Anchors: eventAnchors(e), likelyNoop: e.LikelyNoop}
 		switch {
 		case e.Type == "click":
 			st.Action = "click"
@@ -559,6 +569,25 @@ func SummarizeRecording(r Recording) string {
 		b.WriteString("\n")
 		b.WriteString(stepSummaryLine(i, s))
 	}
+	// Steps the recorder found changed nothing observable are the user's call,
+	// not the engine's: list them as a question. The recording on disk matches
+	// the plan shown — the user removes, nothing is pre-deleted.
+	var noops []string
+	for i, s := range r.Steps {
+		if !s.likelyNoop {
+			continue
+		}
+		switch s.Action {
+		case "key":
+			noops = append(noops, fmt.Sprintf("  %d. 在「%s」中按 %s", i+1, lineLabel(s), s.Value))
+		default:
+			noops = append(noops, fmt.Sprintf("  %d. 点击「%s」", i+1, lineLabel(s)))
+		}
+	}
+	if len(noops) > 0 {
+		b.WriteString("\n\n以下步骤没有改变页面状态（没有跳转、没有写入请求、没有下载），可能是误点。要保留吗？\n")
+		b.WriteString(strings.Join(noops, "\n"))
+	}
 	b.WriteString("\n\n请确认以上步骤是否正确、检验环节是否充分，或告诉我哪里需要修改。")
 	return b.String()
 }
@@ -683,37 +712,60 @@ type RecordingGenerator func(ctx context.Context, system, user string) (string, 
 // inputs, labeling — but is constrained to the captured selectors; any output
 // that fails to parse or invents a selector falls back to the baseline. So the
 // LLM only ever cleans up real events, never hallucinates targets.
-func GenerateRecording(ctx context.Context, name, startURL string, events []RecordedEvent, gen RecordingGenerator) Recording {
+//
+// goal is what the user said they set out to do, in their words (may be
+// empty). Without it rule (2) — "keep the intended linear path" — has nothing
+// to judge intent by: a stray "open the reply box → cancel" reads as part of
+// the flow when the recording is named "check comments" and the model only
+// sees the event list (#2406). With it, the model can tell a detour from a
+// step the goal needs.
+//
+// fallback is non-empty when the returned steps are the deterministic baseline
+// rather than the model's refinement, and says why. record_stop surfaces it:
+// the log line alone left both the model and the user believing a recording
+// had been cleaned when its stray clicks were all still there (#2406).
+func GenerateRecording(ctx context.Context, name, startURL, goal string, events []RecordedEvent, gen RecordingGenerator) (rec Recording, fallback string) {
 	base := CompileRecording(name, "", startURL, events)
 	if gen == nil {
-		return base
+		return base, "no model is available for the cleanup pass"
 	}
 	baseYAML, err := MarshalRecording(base)
 	if err != nil {
-		return base
+		return base, "the baseline could not be rendered for the model: " + err.Error()
 	}
 	const system = "You clean a recorded browser workflow into a minimal, correct, replayable recording. " +
 		"RULES: (1) Use ONLY CSS selectors that appear in the provided baseline — never invent or alter a selector. " +
-		"(2) Drop redundant back-and-forth and retries; keep the intended linear path. " +
+		"(2) Drop redundant back-and-forth and retries; keep the intended linear path — the steps the stated goal needs. A step that opens, expands or focuses something the goal does not need, and a later step that closes, cancels or dismisses it, are a detour: drop both. Each raw event lists its effects (URL change, new tab, download, requests by HTTP method); events marked [likely_noop] changed nothing observable and contributed nothing to the end state — they are CANDIDATES to drop: drop one when the Goal clearly does not need it, keep it when the Goal names it or when the Goal is missing or too vague to tell. " +
 		"(3) Replace user-specific input values with {{param}} and declare each in params (keep upload's {{file}}, every declared param name, and any secret: true marker unchanged). " +
 		"(4) Preserve step order and all navigate steps. " +
 		"(5) Preserve every download step and its bind (keep every declared output name and its type: file[] unchanged — do not drop or rename outputs). " +
 		"(6) Write description as a short statement of what the workflow does. " +
 		"(7) You may omit each step's anchors block — it is re-attached automatically; never invent one. " +
-		"Output ONLY the recording as YAML (keys: name, description, params, outputs, steps), no prose, no code fences."
-	user := fmt.Sprintf("Baseline (the only valid selectors are those here):\n%s\n\nRaw events in order:\n%s\n\nReturn the cleaned recording YAML.", baseYAML, renderTrace(events))
+		"Output ONLY the recording as YAML (keys: name, description, params, outputs, steps), no prose, no code fences. " +
+		"params and outputs are LISTS: when there are none, write `params: []` / `outputs: []` — never `{}`."
+	intent := ""
+	if g := strings.TrimSpace(goal); g != "" {
+		intent = fmt.Sprintf("Goal (what the user set out to do, in their own words): %s\n\n", g)
+	}
+	user := fmt.Sprintf("%sBaseline (the only valid selectors are those here):\n%s\n\nRaw events in order:\n%s\n\nReturn the cleaned recording YAML.", intent, baseYAML, renderTrace(events))
 
 	prompt := user
 	for attempt := 0; ; attempt++ {
 		out, err := gen(ctx, system, prompt)
 		if err != nil {
 			slog.Warn("browser: recording distill failed, keeping deterministic baseline", "recording", name, "err", err)
-			return base
+			return base, "the model call failed: " + err.Error()
 		}
 		refined, err := ParseRecording([]byte(stripFences(out)))
 		if err != nil || len(refined.Steps) == 0 {
 			slog.Warn("browser: recording distill output unusable, keeping deterministic baseline steps", "recording", name, "err", err, "steps", len(refined.Steps))
-			return withDescription(base, refined.Description)
+			reason := "the model's output had no steps"
+			if err != nil {
+				// yaml's unmarshal errors span lines; the reason lands inside a
+				// sentence in the tool result.
+				reason = "the model's output was not a valid recording: " + strings.Join(strings.Fields(err.Error()), " ")
+			}
+			return withDescription(base, refined.Description), reason
 		}
 		refined.Name = name
 		// The distiller rewrites the param list from prose and can drop the secret
@@ -761,32 +813,118 @@ func GenerateRecording(ctx context.Context, name, startURL string, events []Reco
 				continue
 			}
 			slog.Warn("browser: recording distill used a selector not in the recording, keeping deterministic baseline steps", "recording", name)
-			return withDescription(base, refined.Description)
+			return withDescription(base, refined.Description), "the model used selectors that are not in the recording: " + strings.Join(bad, " | ")
 		}
-		backfillAnchors(&refined, base)
+		backfillTargetFacts(&refined, base)
+		backfillNoopHints(&refined, base)
 		refined.EndURL = base.EndURL
-		return refined
+		return refined, ""
 	}
 }
 
-// backfillAnchors re-attaches each refined step's Anchors from the baseline step
-// with the same frame+selector. The distiller routinely drops the anchors block
-// when rewriting steps; since selectorsSubset already guarantees every refined
-// selector came from the baseline, the lookup is deterministic — no reliance on
-// the LLM echoing anchors through. Refined steps that already carry anchors are
-// left alone.
-func backfillAnchors(refined *Recording, base Recording) {
-	byTarget := map[string]*Anchors{}
-	for i := range base.Steps {
-		st := &base.Steps[i]
-		if st.Anchors != nil && st.Selector != "" {
-			byTarget[st.Frame+"\x00"+st.Selector] = st.Anchors
+// backfillNoopHints re-attaches the likely-no-op hint onto refined steps from
+// the baseline step with the same frame+selector — the hint is not serialized,
+// so it is lost when the distiller's YAML is parsed back. A refined step the
+// distiller kept despite the marker is exactly the one the user must be asked
+// about.
+func backfillNoopHints(refined *Recording, base Recording) {
+	flagged := map[string]bool{}
+	for _, st := range base.Steps {
+		if st.likelyNoop && st.Selector != "" {
+			flagged[st.Frame+"\x00"+st.Selector] = true
 		}
 	}
 	for i := range refined.Steps {
 		st := &refined.Steps[i]
-		if st.Anchors == nil && st.Selector != "" {
-			st.Anchors = byTarget[st.Frame+"\x00"+st.Selector]
+		if st.Selector != "" && flagged[st.Frame+"\x00"+st.Selector] {
+			st.likelyNoop = true
+		}
+	}
+	// The marker is a TAIL property (markLikelyNoop), but the selector lookup
+	// also hits an earlier, legitimate click on the same element (a tab
+	// clicked mid-flow and again by mistake at the end). Re-impose the
+	// invariant on the refined steps: walking back past waits, the first
+	// unflagged step ends the tail and everything before it is unflagged.
+	tail := true
+	for i := len(refined.Steps) - 1; i >= 0; i-- {
+		st := &refined.Steps[i]
+		if st.Action == "wait" {
+			continue
+		}
+		if !st.likelyNoop {
+			tail = false
+			continue
+		}
+		if !tail {
+			st.likelyNoop = false
+		}
+	}
+}
+
+// backfillTargetFacts re-attaches, onto each refined step, what the baseline
+// knew about its target and the distiller routinely drops or rewrites: the
+// Anchors block, the Label and the Hint. Since selectorsSubset already
+// guarantees every refined selector came from the baseline, the lookup by
+// frame+selector is deterministic — no reliance on the LLM echoing the fields
+// through.
+//
+// These are facts about the element, not prose, so the baseline WINS whenever
+// it has a value: Label is matched literally against the element's text by
+// the fingerprint scorer, the drifted-click fallback and the self-heal
+// verifier, and Hint against a field's accessible name — a "clearer" label the
+// model wrote ("搜索按钮" for a button reading "搜索") scores zero, fails a
+// primary selector that still matches, and then defeats every heal. Observed
+// live: one model returned every step without a label, leaving the recording
+// replayable only by bare positional selectors; others reword. A model value
+// survives only where the baseline has none (an input has no visible text).
+//
+// Several baseline steps can share a target (a wait-for-element on the button
+// just clicked, the type + key pair an Enter produces), so each fact is taken
+// from the last baseline step that carries it rather than the last step.
+func backfillTargetFacts(refined *Recording, base Recording) {
+	type facts struct {
+		anchors     *Anchors
+		label, hint string
+	}
+	byTarget := map[string]*facts{}
+	for i := range base.Steps {
+		st := &base.Steps[i]
+		if st.Selector == "" {
+			continue
+		}
+		key := st.Frame + "\x00" + st.Selector
+		f := byTarget[key]
+		if f == nil {
+			f = &facts{}
+			byTarget[key] = f
+		}
+		if st.Anchors != nil {
+			f.anchors = st.Anchors
+		}
+		if st.Label != "" {
+			f.label = st.Label
+		}
+		if st.Hint != "" {
+			f.hint = st.Hint
+		}
+	}
+	for i := range refined.Steps {
+		st := &refined.Steps[i]
+		if st.Selector == "" {
+			continue
+		}
+		f := byTarget[st.Frame+"\x00"+st.Selector]
+		if f == nil {
+			continue
+		}
+		if st.Anchors == nil {
+			st.Anchors = f.anchors
+		}
+		if f.label != "" {
+			st.Label = f.label
+		}
+		if f.hint != "" {
+			st.Hint = f.hint
 		}
 	}
 }
@@ -808,7 +946,19 @@ func renderTrace(events []RecordedEvent) string {
 		if e.Secret {
 			val = "[secret]"
 		}
-		fmt.Fprintf(&sb, "%d. %s selector=%q frame=%q tag=%s text=%q value=%q\n", i+1, e.Type, e.Selector, e.Frame, e.Tag, e.Text, val)
+		fmt.Fprintf(&sb, "%d. %s selector=%q frame=%q tag=%s text=%q value=%q", i+1, e.Type, e.Selector, e.Frame, e.Tag, e.Text, val)
+		if e.URL != "" {
+			fmt.Fprintf(&sb, " url=%q", e.URL)
+		}
+		// The gesture's observable effects are the evidence rule (2) needs:
+		// without them "open the reply box → cancel" reads as part of the flow.
+		if e.Effects != nil {
+			sb.WriteString("  effects: " + e.Effects.String())
+		}
+		if e.LikelyNoop {
+			sb.WriteString("  [likely_noop]")
+		}
+		sb.WriteByte('\n')
 	}
 	return sb.String()
 }
@@ -910,11 +1060,51 @@ func truncRunes(s string, n int) string {
 // MarshalRecording renders the recording to YAML.
 func MarshalRecording(s Recording) ([]byte, error) { return yaml.Marshal(s) }
 
-// ParseRecording parses a recording from YAML.
+// ParseRecording parses a recording from YAML. The list-valued top-level
+// fields (params, outputs) also accept an empty mapping: a model asked for
+// "keys: name, description, params, outputs, steps" writes `params: {}` for
+// "no params" about as readily as `params: []`, and rejecting the former threw
+// the whole distilled recording away (#2406). Only the EMPTY mapping is
+// accepted — a populated one is still a shape error, not something to guess at.
+// (null / a bare key already decode to an empty slice; nothing to do there.)
 func ParseRecording(data []byte) (Recording, error) {
+	var doc yaml.Node
+	if err := yaml.Unmarshal(data, &doc); err != nil {
+		return Recording{}, err
+	}
 	var s Recording
-	err := yaml.Unmarshal(data, &s)
+	if doc.Kind == 0 {
+		return s, nil // empty document, as yaml.Unmarshal into the struct would yield
+	}
+	normalizeEmptyLists(&doc, "params", "outputs")
+	err := doc.Decode(&s)
 	return s, err
+}
+
+// normalizeEmptyLists rewrites, in the document's top-level mapping, each named
+// key whose value is `{}` into an empty sequence, so it decodes into a nil
+// slice instead of failing with "cannot unmarshal !!map into []T".
+func normalizeEmptyLists(doc *yaml.Node, keys ...string) {
+	root := doc
+	if root.Kind == yaml.DocumentNode && len(root.Content) > 0 {
+		root = root.Content[0]
+	}
+	if root.Kind != yaml.MappingNode {
+		return
+	}
+	want := map[string]bool{}
+	for _, k := range keys {
+		want[k] = true
+	}
+	for i := 0; i+1 < len(root.Content); i += 2 {
+		key, val := root.Content[i], root.Content[i+1]
+		if !want[key.Value] {
+			continue
+		}
+		if val.Kind == yaml.MappingNode && len(val.Content) == 0 {
+			root.Content[i+1] = &yaml.Node{Kind: yaml.SequenceNode, Tag: "!!seq"}
+		}
+	}
 }
 
 // SaveRecording writes a recording to a YAML file.
@@ -1079,15 +1269,13 @@ func InteractiveDigest(ctx context.Context, page *Page, frame string, max int) (
 	// []DigestElement.
 	expr := fmt.Sprintf(`(function(){
 	  var d = %s; if(!d) return [];
-	  function sel(el){
-	    if(el.id) return '#'+CSS.escape(el.id);
-	    for(var i=0;i<4;i++){var a=['data-testid','data-test','name','aria-label'][i];var v=el.getAttribute&&el.getAttribute(a);if(v)return el.tagName.toLowerCase()+'['+a+'="'+CSS.escape(v)+'"]';}
-	    var parts=[],node=el,depth=0;
-	    while(node&&node.nodeType===1&&node.tagName!=='BODY'&&depth<5){var part=node.tagName.toLowerCase();var p=node.parentElement;if(p){var same=[].slice.call(p.children).filter(function(c){return c.tagName===node.tagName;});if(same.length>1)part+=':nth-of-type('+(same.indexOf(node)+1)+')';}parts.unshift(part);node=p;depth++;}
-	    return parts.join(' > ');
-	  }
+	  %s
 	  var out=[];
-	  var els=d.querySelectorAll('a,button,input,select,textarea,[role=button],[role=menuitem],[role=tab],label');
+	  // Beyond the conventional controls: anything with an inline click handler
+	  // or made focusable on purpose. A menu built from click-handled div/span
+	  // (common in Chinese admin UIs) is otherwise invisible here, and a healer
+	  // working from this list alone then faces one without the right answer.
+	  var els=d.querySelectorAll('a,button,input,select,textarea,[role=button],[role=menuitem],[role=tab],label,[onclick],[tabindex]:not([tabindex="-1"])');
 	  // Visible = has layout boxes and not visibility:hidden. (The old
 	  // offsetParent===null check also dropped position:fixed controls, which are
 	  // null-offsetParent in Chrome but very much clickable — fixed nav bars and
@@ -1105,7 +1293,70 @@ func InteractiveDigest(ctx context.Context, page *Page, frame string, max int) (
 	    else { t=(el.textContent||el.value||el.getAttribute('aria-label')||el.getAttribute('placeholder')||'').trim().slice(0,50); e={text:t, selector:sel(el)}; }
 	    out.push(e);}
 	  return out;
-	})()`, doc, max)
+	})()`, doc, digestSelJS, max)
+	var digest []DigestElement
+	if err := page.Eval(ctx, expr, &digest); err != nil {
+		return nil, err
+	}
+	return digest, nil
+}
+
+// digestSelJS builds the selector a digest line carries for an element: id →
+// data-testid/name/aria-label attribute → short positional path. Shared by
+// InteractiveDigest and LabelDigest so a healer's candidates all speak the same
+// selector dialect whichever list they came from.
+const digestSelJS = `function sel(el){
+	    if(el.id) return '#'+CSS.escape(el.id);
+	    for(var i=0;i<4;i++){var a=['data-testid','data-test','name','aria-label'][i];var v=el.getAttribute&&el.getAttribute(a);if(v)return el.tagName.toLowerCase()+'['+a+'="'+CSS.escape(v)+'"]';}
+	    var parts=[],node=el,depth=0;
+	    while(node&&node.nodeType===1&&node.tagName!=='BODY'&&depth<5){var part=node.tagName.toLowerCase();var p=node.parentElement;if(p){var same=[].slice.call(p.children).filter(function(c){return c.tagName===node.tagName;});if(same.length>1)part+=':nth-of-type('+(same.indexOf(node)+1)+')';}parts.unshift(part);node=p;depth++;}
+	    return parts.join(' > ');
+	  }`
+
+// LabelDigest lists the visible elements whose own text contains label,
+// whatever their tag — the innermost ones, found through the text nodes that
+// carry the label (an ancestor's textContent contains everything below it, so
+// walking elements would report the whole chain). It complements
+// InteractiveDigest for the healer: the step's recorded text is the strongest
+// clue to the intended element, and the element carrying it is often a
+// click-handled span or div no interactive-control query enumerates. Capped
+// to max (default 8). A label split across text nodes ("笔记<b>管理</b>") is
+// not found — the match is per text node by design (that is what makes the
+// result the innermost carrier); the interactive digest still lists such an
+// element when it is a control.
+func LabelDigest(ctx context.Context, page *Page, frame, label string, max int) ([]DigestElement, error) {
+	label = strings.TrimSpace(label)
+	if label == "" {
+		return nil, nil
+	}
+	if max <= 0 {
+		max = 8
+	}
+	if frame != "" {
+		if cp, ok := page.oopifPage(ctx, frame); ok {
+			return LabelDigest(ctx, cp, "", label, max)
+		}
+	}
+	doc := "document"
+	if frame != "" {
+		doc = fmt.Sprintf("(document.querySelector(%s)||{}).contentDocument", jsString(frame))
+	}
+	expr := fmt.Sprintf(`(function(){
+	  var d = %s; if(!d||!d.body) return [];
+	  %s
+	  var label=%s, out=[], seen=[];
+	  var w=d.createTreeWalker(d.body, NodeFilter.SHOW_TEXT);
+	  var n;
+	  while((n=w.nextNode()) && out.length<%d){
+	    if((n.data||'').indexOf(label)<0) continue;
+	    var el=n.parentElement;
+	    if(!el||seen.indexOf(el)>=0||/^(SCRIPT|STYLE|TEMPLATE|NOSCRIPT)$/.test(el.tagName)) continue;
+	    seen.push(el);
+	    if(el.getClientRects().length===0 || getComputedStyle(el).visibility==='hidden') continue;
+	    out.push({text:(el.textContent||'').trim().slice(0,50), selector:sel(el)});
+	  }
+	  return out;
+	})()`, doc, digestSelJS, jsString(label), max)
 	var digest []DigestElement
 	if err := page.Eval(ctx, expr, &digest); err != nil {
 		return nil, err
@@ -1404,6 +1655,7 @@ func recoverStep(ctx context.Context, opts ReplayOptions, page *Page, step *Step
 	// 2. LLM healer, multi-round. Every exit path names the heal outcome —
 	// returning the bare cause made a failed heal indistinguishable from no
 	// heal ever running.
+	rootCause := cause
 	for round := 0; round < maxHealRounds; round++ {
 		opts.emitProgress(fmt.Sprintf("step failed — self-heal round %d/%d", round+1, maxHealRounds))
 		before := *step
@@ -1411,17 +1663,28 @@ func recoverStep(ctx context.Context, opts ReplayOptions, page *Page, step *Step
 			return page, false, fmt.Errorf("%w (self-heal gave up: %v)", cause, herr)
 		}
 		if step.Selector != before.Selector {
-			opts.emitProgress("self-heal proposed " + step.Selector + " — retrying")
-		}
-		if step.Selector != before.Selector {
-			// The healer's replacement selector is authoritative for this
-			// retry: the recorded fingerprint is exactly what just failed to
-			// match the page, so re-gating the healed selector through
-			// resolveAnchoredTarget would reject every repair — an anchored
-			// step could never heal. Dropping the stale anchors also reaches
-			// the YAML via the caller's write-back, so the healed step stays
-			// replayable next time instead of deadlocking again.
-			step.Anchors = nil
+			// A proposal is only as good as the model behind it, so it earns
+			// the retry — and the YAML — by resolving on the live page to an
+			// element carrying the step's recorded text. Skipping this let an
+			// unverified selector (a fragment of the dead one the model
+			// echoed) reach the retry, where the label fallback clicked the
+			// right element on its own; the step passed and the write-back
+			// persisted a selector nothing on the page matched (#2404).
+			//
+			// The verified element is re-fingerprinted rather than the stale
+			// anchors kept or dropped: kept, they are exactly what just failed
+			// to match, so re-gating the healed selector through them would
+			// reject every repair; dropped, the healed step loses the
+			// alternates and neighbor text that let it survive the next drift.
+			fresh, verr := page.verifyHealedSelector(ctx, step.Frame, step.Selector, step.Label, healVerifyTimeout)
+			if verr != nil {
+				opts.emitProgress("self-heal proposed " + step.Selector + " — rejected: " + verr.Error())
+				cause = fmt.Errorf("%w (self-heal proposed %q, rejected: %v)", rootCause, step.Selector, verr)
+				*step = before
+				continue
+			}
+			opts.emitProgress("self-heal proposed " + step.Selector + " — verified, retrying")
+			step.Anchors = fresh
 		}
 		np, retryErr := runStep(ctx, opts.Browser, page, step, params, opts.StepTimeout, opts.DownloadDir, binds)
 		if retryErr == nil {

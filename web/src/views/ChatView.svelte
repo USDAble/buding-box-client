@@ -419,6 +419,10 @@ import QuestionModal from '../components/overlays/QuestionModal.svelte'
         name: ev.name ?? '',
         args: ev.args ?? '',
         summary: ev.summary ?? '',
+        // Replayed history carries the persisted message timestamp, so a
+        // reloaded transcript can show real durations; absent on sessions
+        // that predate per-message CreatedAt.
+        startedAt: ev.created_at,
         done: false,
         error: null,
         result: null,
@@ -426,7 +430,7 @@ import QuestionModal from '../components/overlays/QuestionModal.svelte'
         diff: null,
       })
     } else if (ev.type === 'tool_result') {
-      updateToolResult(sid, ev.tool_id, ev.result, ev.ui_payload)
+      updateToolResult(sid, ev.tool_id, ev.result, ev.ui_payload, ev.created_at)
       observeArtifact(sid, ev.ui_payload, false)   // history replay — silent
     }
   }
@@ -1003,7 +1007,10 @@ import QuestionModal from '../components/overlays/QuestionModal.svelte'
         name: (ev as any).name ?? '',
         args: (ev as any).args ?? '',
         summary: (ev as any).summary ?? '',
-        startedAt: Date.now(),
+        // Prefer the server-stamped start time: on a mid-turn resubscribe the
+        // replay buffer redelivers this event, and stamping "now" would reset
+        // every finished tool's clock to the replay moment.
+        startedAt: (ev as any).ts ?? Date.now(),
         done: false,
         error: null,
         result: null,
@@ -1014,13 +1021,13 @@ import QuestionModal from '../components/overlays/QuestionModal.svelte'
 
     cleanups.push(ws.on('tool_result', (ev) => {
       if ((ev as any).session_id && (ev as any).session_id !== sid) return
-      updateToolResult(sid, (ev as any).tool_id, (ev as any).result, (ev as any).ui_payload)
+      updateToolResult(sid, (ev as any).tool_id, (ev as any).result, (ev as any).ui_payload, (ev as any).ts)
       observeArtifact(sid, (ev as any).ui_payload, true)   // live turn — may auto-open
     }))
 
     cleanups.push(ws.on('tool_error', (ev) => {
       if ((ev as any).session_id && (ev as any).session_id !== sid) return
-      setToolError(sid, (ev as any).tool_id, (ev as any).error ?? 'error')
+      setToolError(sid, (ev as any).tool_id, (ev as any).error ?? 'error', (ev as any).ts)
     }))
 
     // A text-only model is having an image described for it. "started" shows
@@ -2934,7 +2941,7 @@ import QuestionModal from '../components/overlays/QuestionModal.svelte'
                       <summary class="think-summary">
                         <iconify-icon icon="ant-design:bulb-outlined" width="13"></iconify-icon>
                         <span>{$t('chat.thoughts')}</span>
-                        <iconify-icon icon="lucide:chevron-right" width="13"></iconify-icon>
+                        <iconify-icon icon="lucide:chevron-right" width="13" class="think-chev"></iconify-icon>
                       </summary>
                       <div class="think-body" use:setupAssistantEl>{@html renderMarkdown(msg.thinking)}</div>
                     </details>
@@ -3012,7 +3019,7 @@ import QuestionModal from '../components/overlays/QuestionModal.svelte'
                     <summary class="think-summary">
                       <iconify-icon icon="ant-design:bulb-outlined" width="13"></iconify-icon>
                       <span>{$t('chat.thoughts')}</span>
-                      <iconify-icon icon="lucide:chevron-right" width="13"></iconify-icon>
+                      <iconify-icon icon="lucide:chevron-right" width="13" class="think-chev"></iconify-icon>
                     </summary>
                     <div class="think-body" use:setupAssistantEl>{@html renderMarkdown(msg.thinking)}</div>
                   </details>
@@ -3376,6 +3383,21 @@ import QuestionModal from '../components/overlays/QuestionModal.svelte'
      with no way to recover it. This lets the conversation column itself
      scroll into view when that happens. */
   overflow-y: auto;
+
+  /* The themed conversation surface (see --chat-bg in app.css). The color is
+     the real background; the two image layers are `none` under the default
+     pack, so this reduces to the plain --bg-layout the column had before.
+     The background stays put on its own without background-attachment: the
+     element that scrolls is .messages, a descendant, and a descendant's
+     scrolling never moves an ancestor's background. Leaving it at the default
+     also keeps the painting area this column rather than the viewport, so
+     `cover` frames the wallpaper to the chat column and the sidebar does not
+     crop it. */
+  background-color: var(--bg-layout);
+  background-image: var(--chat-bg-image), var(--chat-bg);
+  background-size: cover;
+  background-position: center;
+  background-repeat: no-repeat;
 }
 .workflows-bar {
   flex: 0 0 auto;
@@ -3602,7 +3624,7 @@ import QuestionModal from '../components/overlays/QuestionModal.svelte'
 .genui-action-json {
   margin: 6px 0 0; padding: 8px 10px; border-radius: var(--radius-xs, 6px);
   background: var(--bg-layout); border: 1px solid var(--border);
-  font-size: 12px; font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 12px; font-family: var(--font-mono);
   white-space: pre-wrap; word-break: break-word; color: var(--text-secondary);
 }
 .pending-spinner {
@@ -3661,7 +3683,7 @@ import QuestionModal from '../components/overlays/QuestionModal.svelte'
 .rich-answer { font-size: 14px; line-height: 1.6; color: var(--text); display: flex; flex-direction: column; gap: 12px; }
 :global(.rich-answer p) { margin: 0; }
 :global(.rich-answer :not(pre) > code), :global(.think-body :not(pre) > code) {
-  font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 13px; font-style: normal;
+  font-family: var(--font-mono); font-size: 13px; font-style: normal;
   background: var(--bg-table-header); border: 1px solid var(--border-table); border-radius: 4px; padding: 1px 5px;
 }
 :global(.rich-answer .code-block), :global(.think-body .code-block) {
@@ -3672,7 +3694,7 @@ import QuestionModal from '../components/overlays/QuestionModal.svelte'
   display: flex; align-items: center; gap: 8px; padding: 6px 8px 6px 12px;
   background: var(--bg-table-header); border-bottom: 1px solid var(--border-table);
 }
-:global(.rich-answer .code-lang), :global(.think-body .code-lang) { font-size: 11px; color: var(--text-tertiary); font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+:global(.rich-answer .code-lang), :global(.think-body .code-lang) { font-size: 11px; color: var(--text-tertiary); font-family: var(--font-mono); }
 :global(.rich-answer .copy-btn), :global(.think-body .copy-btn) {
   margin-left: auto; height: 24px; padding: 0 8px; border: none; background: transparent;
   border-radius: 5px; display: flex; align-items: center; gap: 5px;
@@ -3681,7 +3703,7 @@ import QuestionModal from '../components/overlays/QuestionModal.svelte'
 :global(.rich-answer .copy-btn:hover), :global(.think-body .copy-btn:hover) { background: var(--hover-neutral); color: var(--blue-6); }
 :global(.rich-answer pre), :global(.think-body pre) {
   margin: 0; padding: 12px 14px; overflow-x: auto; font-size: 12.5px; line-height: 1.75;
-  font-family: ui-monospace, SFMono-Regular, Menlo, monospace; color: var(--text); font-style: normal;
+  font-family: var(--font-mono); color: var(--text); font-style: normal;
 }
 :global(.rich-answer .md-bq), :global(.think-body .md-bq) {
   margin: 0; padding: 8px 14px; border-left: 3px solid var(--blue-2);
@@ -3721,6 +3743,8 @@ import QuestionModal from '../components/overlays/QuestionModal.svelte'
 :global(.think-summary > span:first-of-type) { font-weight: 600; color: var(--text); font-size: 13px; }
 :global(.think-summary::-webkit-details-marker) { display: none; }
 :global(.think-summary:hover) { background: var(--hover-neutral); border-radius: 10px; }
+:global(.think-chev) { transition: transform 0.15s ease; flex: 0 0 auto; }
+:global(.think-block[open] > .think-summary .think-chev) { transform: rotate(90deg); }
 :global(.think-body) {
   margin: 0 12px 10px; padding-left: 12px; border-left: 2px solid var(--border-secondary);
   font-size: 13px; line-height: 1.7; color: var(--text-tertiary); font-style: italic;
@@ -3756,7 +3780,7 @@ import QuestionModal from '../components/overlays/QuestionModal.svelte'
   width: 4px; height: 4px; border-radius: 9999px;
   background: var(--text-tertiary); animation: octo-dot 1.2s infinite;
 }
-.think-meta { font-size: 12px; color: var(--text-tertiary); font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+.think-meta { font-size: 12px; color: var(--text-tertiary); font-family: var(--font-mono); }
 
 /* ── Suggestion ──────────────────────────────────────────────────────────── */
 .suggestion-row { display: flex; justify-content: flex-end; }
@@ -3791,7 +3815,7 @@ import QuestionModal from '../components/overlays/QuestionModal.svelte'
 .notice-line[data-level="info"] { color: var(--text-secondary); }
 .notice-line :global(p) { margin: 0; }
 .notice-line :global(code) {
-  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-family: var(--font-mono);
   font-size: 12px; background: var(--bg-table-header); border: 1px solid var(--border-table);
   border-radius: 4px; padding: 1px 4px;
 }
@@ -3842,7 +3866,7 @@ import QuestionModal from '../components/overlays/QuestionModal.svelte'
 
 /* ── Fade-in ─────────────────────────────────────────────────────────────── */
 .fadein { animation: octo-fadein 0.25s ease; }
-.mono { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+.mono { font-family: var(--font-mono); }
 
 /* ── Inline message edit ───────────────────────────────────────────────── */
 .inline-edit-input {

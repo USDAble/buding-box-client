@@ -12,7 +12,6 @@ coding agent 能力对标 Claude Code；作为个人助手，它比 OpenClaw 更
 
 [![Go CI](https://img.shields.io/github/actions/workflow/status/open-octo/octo-agent/go.yml?label=ci&style=flat-square)](https://github.com/open-octo/octo-agent/actions)
 [![Stars](https://img.shields.io/github/stars/open-octo/octo-agent?style=flat-square)](https://github.com/open-octo/octo-agent/stargazers)
-[![Discussions](https://img.shields.io/github/discussions/open-octo/octo-agent?style=flat-square&label=discussions)](https://github.com/open-octo/octo-agent/discussions)
 [![Website](https://img.shields.io/badge/website-octo--agent.dev-4f46e5?style=flat-square)](https://octo-agent.dev)
 [![Go](https://img.shields.io/badge/go-%3E%3D%201.25-00ADD8?style=flat-square)](https://go.dev)
 [![License](https://img.shields.io/badge/license-MIT-lightgrey?style=flat-square)](LICENSE.txt)
@@ -29,7 +28,6 @@ octo 不是又一个需要"养"的 agent 框架。OpenClaw、Hermes 这类项目
 
 ```bash
 curl -fsSL https://octo-agent.dev/install.sh | sh     # 单二进制，无需 Node / Ruby / Python 环境
-octo config                                            # 选 provider，填 key（DeepSeek / Kimi / 百炼 …）
 octo "给 octo config show 加一个 --json 参数并跑测试"   # 一句话 → 完整 agentic 工具循环
 ```
 
@@ -37,7 +35,7 @@ octo 围绕这个定位构建：
 
 - **开箱即用**：shell、文件读写改、搜索、MCP、skills、子代理等能力默认全部打开，装完一条消息就能真正干活。
 - **模型选择权在你手里**：任何 OpenAI / Anthropic 协议兼容的端点都是原生支持，不绑定任何一家厂商。
-- **数据留在你的机器上**：自托管、零遥测，除了你自己配置的模型 API 调用，octo 自身不向外发送任何请求。
+- **数据留在你的机器上**：自托管、零遥测——没有埋点、没有崩溃上报、没有用量回传，不依赖任何 CDN。不需要你开口就会发出的请求只有一个：向 GitHub 查有没有新版本，不携带任何数据。设 `update_check: false` 之后它一个都不发——那时离开这台机器的，就只有你自己配置的模型 API 调用，和你交代的任务里发出的工具调用。
 - **随处可用**：同一个二进制同时提供 TUI、CLI、Web、桌面、IM、编辑器插件、移动端八种入口。
 - **安全默认值**：毁灭性命令硬编码拒绝、删除和覆盖先进回收站，agent 不会把自己改挂，也不会发疯删数据。
 
@@ -48,7 +46,7 @@ octo 围绕这个定位构建：
 - **单个 ~40 MB 的 Go 二进制**：一条命令下载，拷到任何服务器都能立即运行。没有 Node / Python / Ruby 依赖树，没有 npm 镜像、node-gyp 编译失败、依赖版本冲突的烦恼。
 - **缓存不劣化**：针对国产模型逐家做了提示词缓存优化，Kimi、DeepSeek、Qwen 的缓存命中率都能到 **95% 以上**，token 账单可预期。
 - **八种界面**：TUI、CLI、Web UI、桌面应用、IM 桥接、VS Code、Obsidian、移动端——很少有其他 agent 项目能同时覆盖这么多入口。
-- **零遥测**：不收集 IP、机型、模型选择、使用行为，没有任何遥测埋点。
+- **零遥测**：不收集 IP、机型、模型选择、使用行为，没有任何遥测埋点。Web UI 需要的静态资源全部随二进制发布——图标已打包，正文用系统字体——打开界面不碰任何 CDN。octo 唯一会向网络打听自己的事情是「有没有新版本」，改一个配置就能彻底静默。
 - **桌面安装包约 100 MB**：相比之下 Codex 桌面版和 WorkBuddy 动辄 **1 GB 上下**。一个薄薄的 agent harness，没必要占用那么大的空间。
 - **稳定且安全**：自我保护、优雅重启、回收站兜底（详见[核心特性](#核心特性)）。
 
@@ -124,10 +122,19 @@ Go 原生 CDP [录制 / 回放 / 自愈](https://octo-agent.dev/docs/zh/guides/b
 ### 首次运行
 
 ```bash
-octo config                # 一次性设置：选 provider/model，填 API key
+octo serve -d              # 启动本机服务（Web UI + IM 桥接）
+```
+
+浏览器打开 **http://127.0.0.1:8088**，配置面板会带着你走完：选语言、接模型，然后是一段简短的对话——
+它会问清楚你叫什么、希望助手是什么性格、怎么做事。本机回环访问不需要密钥。桌面应用就是同一个服务加一个
+原生窗口，直接启动它，然后从浏览器那一步接着往下看即可。
+
+更喜欢终端？同一个助手，接好 provider 之后不需要额外配置：
+
+```bash
 octo "介绍一下这个仓库"      # headless 单发：prompt → agentic 工具循环 → 退出
 octo                       # 终端交互式 TUI；octo -c 恢复历史 session
-octo serve -d              # Web UI + IM 桥接，http://127.0.0.1:8088
+octo config                # 不碰浏览器，在终端里配 provider
 ```
 
 下一步：[快速上手](https://octo-agent.dev/docs/zh/getting-started/quickstart/) · [选择 provider](https://octo-agent.dev/docs/zh/getting-started/choose-a-provider/) · [CLI 参考](https://octo-agent.dev/docs/zh/reference/cli/)。
@@ -135,10 +142,10 @@ octo serve -d              # Web UI + IM 桥接，http://127.0.0.1:8088
 ## 上手路径
 
 1. 一条命令安装：`curl -fsSL https://octo-agent.dev/install.sh | sh`。
-2. `octo config` 选 provider、填 API key。
-3. `octo "介绍一下这个仓库"` 单发验证一切正常。
-4. `octo` 进入终端 TUI，日常交互。
-5. `octo serve -d` 打开 Web UI（`http://127.0.0.1:8088`），或直接用桌面应用。
+2. 启动服务：`octo serve -d`，或者直接用桌面应用——它就是同一个服务。
+3. 打开 `http://127.0.0.1:8088`，跟着配置走：选语言、接模型，再完成那段引导对话——它会写下助手是谁、你是谁。
+4. 在输入框里交给它一件真事：需要动 shell、动文件或者上网的那种，而不只是问个答案。
+5. 想用终端就 `octo "介绍一下这个仓库"` 单发，或者 `octo` 进 TUI——同一个助手，同一套配置。
 6. 配置 [IM 渠道](https://octo-agent.dev/docs/zh/guides/channels/)，在微信 / 飞书 / Telegram 里继续对话。
 7. 按需加 [skills](https://octo-agent.dev/docs/zh/guides/use-skills/)、[MCP 服务](https://octo-agent.dev/docs/zh/guides/connect-mcp-servers/)、[子代理](https://octo-agent.dev/docs/zh/guides/sub-agents/)。
 
@@ -192,7 +199,6 @@ octo serve -d              # Web UI + IM 桥接，http://127.0.0.1:8088
 ## 社区与交流
 
 - **Bug / 功能建议** —— [GitHub Issues](https://github.com/open-octo/octo-agent/issues)
-- **使用问题 / 讨论** —— [GitHub Discussions](https://github.com/open-octo/octo-agent/discussions)，公开可沉淀，后来的同学能搜到答案
 - **微信交流群** —— 扫码添加个人微信，备注 `octo` 拉你进群，聊使用心得、提需求、围观 roadmap：
 
 <p align="left">

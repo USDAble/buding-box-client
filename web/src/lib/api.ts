@@ -1098,6 +1098,10 @@ export interface ConfigResponse {
   workspace_dir_default?: string
   reasoning_effort?: string   // PR5: global reasoning effort
   permission_mode?: string    // PR6: global permission mode (was per-default-entry)
+  computer_enabled?: string   // tools.computer.enabled: "on" | "off" | "" (off)
+  // update_check: whether octo may query GitHub for the latest release. The
+  // server sends the resolved value (default true), not the raw config pointer.
+  update_check?: boolean
 }
 
 export async function getConfig(): Promise<ConfigResponse> {
@@ -1243,6 +1247,26 @@ export async function updateCoauthor(coauthor: boolean): Promise<{ ok: boolean; 
   return request<{ ok: boolean; coauthor?: boolean }>('/api/config/coauthor', {
     method: 'PUT',
     ...json({ coauthor }),
+  })
+}
+
+// The latest-release lookup is octo's only outbound request that isn't a model
+// call; this turns the automatic side of it off. An explicit `octo upgrade`
+// still works.
+export async function updateUpdateCheck(updateCheck: boolean): Promise<{ ok: boolean; update_check?: boolean }> {
+  return request<{ ok: boolean; update_check?: boolean }>('/api/config/update_check', {
+    method: 'PUT',
+    ...json({ update_check: updateCheck }),
+  })
+}
+
+// Experimental desktop computer-use (tools.computer.enabled). macOS and
+// Windows only — the server refuses the write elsewhere; the toggle itself is
+// only rendered on those desktop shells (SettingsModal experimental tab).
+export async function updateComputerEnabled(enabled: boolean): Promise<{ ok: boolean; computer_enabled?: string }> {
+  return request<{ ok: boolean; computer_enabled?: string }>('/api/config/computer', {
+    method: 'PUT',
+    ...json({ enabled }),
   })
 }
 

@@ -14,7 +14,8 @@
   import * as api from '../../lib/api'
   import { ws } from '../../lib/ws'
   import { t } from '../../lib/i18n'
-  import { nativeShell, localAccess, isDesktopShell } from '../../lib/stores'
+  import { nativeShell, localAccess, isDesktopShell, macosMajor } from '../../lib/stores'
+  import { applyTitlebarLift } from '../../lib/nativeWindow'
 
   type Phase = 'idle' | 'upgrading' | 'needs_restart' | 'reconnecting' | 'restart_failed' | 'done'
 
@@ -36,6 +37,15 @@
   let logEl = $state<HTMLElement | null>(null)
 
   const RECONNECT_TIMEOUT_MS = 30_000
+  // Re-read on a timer, not just on mount. A desktop window stays open for
+  // days, so a mount-only check froze the badge at whatever was true when the
+  // window loaded while the tray kept checking — that is what made the two
+  // disagree. /api/version answers from the server's cache and never performs
+  // the upstream lookup on the request, so a tick is a local round-trip; the
+  // tray re-reads that same cache on the same sort of cadence, which is what
+  // keeps the two showing one answer. How often a lookup actually leaves the
+  // machine is the server's versionRefreshInterval, not this.
+  const RECHECK_MS = 60_000
 
   // The hub reports native=true to every client, but only the desktop-shell
   // webview should behave as native (OS file dialog, OS notifications, header
@@ -46,18 +56,26 @@
   // server is restarting (the flow would keep running with no surface).
   let locked = $derived(phase === 'upgrading' || phase === 'reconnecting')
 
-  async function checkVersion() {
+  async function checkVersion(background = false) {
     try {
       const d = await api.getVersion() as any
+      // The phase machine owns latest/needsUpdate once an upgrade starts. A
+      // background tick already in flight when it started must not overwrite
+      // them on the way back — the tick's own idle guard fired before the
+      // await, not after it.
+      if (!background || phase === 'idle') {
+        latest = d.latest ?? ''
+        needsUpdate = !!d.needs_update
+      }
       current = d.current ?? (d.version ?? '').replace(/^v/, '')
-      latest = d.latest ?? ''
-      needsUpdate = !!d.needs_update
       if (d.cli_command) cliCommand = d.cli_command
       upgradeMode = d.upgrade_mode === 'installer' ? 'installer' : 'cli'
       downloadUrl = d.download_url ?? ''
       selfUpdateAvail = d.self_update === true
       nativeShell.set(d.native === true && isDesktopShell)
       localAccess.set(d.local === true)
+      macosMajor.set(d.os === 'darwin' ? parseInt(d.os_version, 10) || 0 : 0)
+      applyTitlebarLift()
     } catch { /* badge stays minimal */ }
   }
 
@@ -84,6 +102,9 @@
 
   onMount(() => {
     checkVersion()
+    // Only while idle: a tick landing mid-upgrade would overwrite needsUpdate
+    // under the phase machine's feet.
+    const recheck = setInterval(() => { if (phase === 'idle') checkVersion(true) }, RECHECK_MS)
     // upgrade_log / upgrade_complete are global broadcasts (no session_id); the
     // WS dispatch is by type, so these fire regardless of the active session.
     const offLog = ws.on('upgrade_log', (ev: any) => {
@@ -102,7 +123,7 @@
       if (ev.success) { needsUpdate = false; phase = 'needs_restart' }
       else { phase = 'idle' } // failure: badge stays update-available
     })
-    return () => { offLog(); offDone() }
+    return () => { clearInterval(recheck); offLog(); offDone() }
   })
 
   async function startUpgrade() {
@@ -281,14 +302,14 @@
 .vb-arrow { color: var(--text-tertiary); margin: 0 4px; }
 .vb-list { margin: 0 0 12px; padding-left: 18px; font-size: 12px; line-height: 1.7; color: var(--text-secondary); }
 .vb-cmd {
-  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-family: var(--font-mono);
   font-size: 11px; padding: 1px 5px; border-radius: 4px;
   background: var(--hover-neutral); color: var(--text);
 }
 .vb-actions { display: flex; gap: 8px; }
 .vb-btn-primary {
   height: 30px; padding: 0 14px; border: none; background: var(--blue-6);
-  border-radius: 6px; font-size: 12px; color: #fff; cursor: pointer; font-family: inherit;
+  border-radius: 6px; font-size: 12px; color: var(--on-accent); cursor: pointer; font-family: inherit;
 }
 .vb-btn-primary:hover { background: var(--blue-5); }
 .vb-btn-cancel {
@@ -301,7 +322,7 @@
   margin: 0; max-height: 160px; overflow-y: auto;
   padding: 8px 10px; background: var(--terminal-bg); color: var(--terminal-text);
   border-radius: 6px; font-size: 11px; line-height: 1.5;
-  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-family: var(--font-mono);
   white-space: pre-wrap; word-break: break-all;
 }
 .vb-center { display: flex; flex-direction: column; align-items: center; gap: 10px; padding: 6px 0; }

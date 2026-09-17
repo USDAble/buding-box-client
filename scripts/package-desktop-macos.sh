@@ -79,19 +79,28 @@ for arch in amd64 arm64; do
 	# the CI runner's live OS version into the binary's LC_VERSION_MIN load
 	# command — on a runner newer than a user's Mac, launching failed with
 	# "You can't use this version of the application... with this version of
-	# macOS", unrelated to the LSMinimumSystemVersion=11.0 in Info.plist).
-	# 11.0 matches that Info.plist value and Go's own linker default, so it
-	# also fully eliminates the SDK-vs-link-target warning this flag was
-	# added for in the first place.
-	macos_ver="11.0"
-	# OCTO-FORK: CGO_LDFLAGS drops -Wl,-no_warn_duplicate_libraries — the flag is
-	# a warning-only suppression the Xcode 15 ld_prime linker no longer accepts
-	# (ld: unknown option); dropping it only restores the harmless
-	# duplicate-library warning. See P2-启动与生命周期.md §9.
+	# macOS", unrelated to the LSMinimumSystemVersion=12.0 in Info.plist).
+	# 12.0 matches that Info.plist value, Go 1.25's own linker default and the
+	# CLI's DARWIN_MIN_MACOS in .goreleaser.yaml, so it also fully eliminates
+	# the SDK-vs-link-target warning this flag was added for in the first
+	# place. The link flag is the clang-driver spelling (-mmacosx-version-min),
+	# not -Wl,-macos_version_min, so the driver does not also derive a
+	# host-based version and ld does not warn about two min versions.
+	macos_ver="12.0"
+	# OCTO-FORK: CGO_LDFLAGS drops -Wl,-no_warn_duplicate_libraries, which
+	# upstream carries here. The flag is a warning-only suppression, and not
+	# every accepted linker knows it — ld64-530 (Xcode 14.3.1) answers
+	# "ld: unknown option: -no_warn_duplicate_libraries" and fails the link, so
+	# dropping it costs the harmless duplicate-library note and nothing else.
+	# The `product_production` tag below is likewise ours, not upstream's: it
+	# selects the immutable runtime profile, and release-profile-guard fails
+	# any command that ships an artifact without it — taking upstream's
+	# `-tags embedrg` here would package a developer-profile .app.
+	# See P2-启动与生命周期.md §9.
 	( cd "$MOD_DIR" && \
 		GOOS=darwin GOARCH="$arch" CGO_ENABLED=1 CC="clang -arch $cc_arch" \
 		CGO_CFLAGS="-mmacosx-version-min=$macos_ver" \
-		CGO_LDFLAGS="-Wl,-macos_version_min,$macos_ver" \
+		CGO_LDFLAGS="-mmacosx-version-min=$macos_ver" \
 		go build -tags 'embedrg product_production' -ldflags "$LDFLAGS" -o "$out" . )
 	slices+=("$out")
 done

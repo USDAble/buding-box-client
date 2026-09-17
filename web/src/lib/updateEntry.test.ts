@@ -39,6 +39,14 @@ const LIVE_UPDATE_MARKERS = [
   'settings.update.check', // "Check for Updates"
   'settings.update.checking', // "Checking…"
   'settings.update_available',
+  // Upstream's auto-check *preference* row: "Let octo check GitHub for a newer
+  // release on its own". One character off from the button key above (`_`
+  // where the button has `.`), which is how it passed this list unnoticed
+  // through the 2026-09-17 merge of upstream f7ba0793 — the row was live in
+  // SettingsModal.svelte while every marker here stayed silent. It PATCHes
+  // /api/config/update_check, so on this product it is a control that promises
+  // a check the shell can no longer perform.
+  'settings.update_check',
   'upgrade.btn.download',
   'upgrade.btn.upgrade',
   'onclick={checkUpdate}',

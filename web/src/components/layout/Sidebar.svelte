@@ -1,7 +1,13 @@
 <script lang="ts">
   import { onMount, onDestroy } from 'svelte'
   import { get } from 'svelte/store'
-  import { view, sidebar, sessions, sessionGroups, pinnedSessions, collapsedSessions, editGroupId, editGroupDraft, activeSessionId, selMode, sel, menuFor, editId, editDraft, showToast, mcpServers, createNewSession, createSessionInGroup, clearPendingSessionOpts, cmdkOpen, accountPanelOpen, nativeShell, dirLeaf } from '../../lib/stores'
+  // OCTO-FORK: settingsModalOpen is deliberately NOT imported here — this fork moved the
+  // settings entry into AccountPanel (AccountCorner/AccountPanel.svelte) and deleted upstream's
+  // two entry points in this file, so upstream's import of it would be an unused symbol.
+  // isDesktopShell, by contrast, IS upstream's (the URL marker is known at first paint, while
+  // nativeShell waits on /api/version) and both of its uses auto-merged in. — see
+  // dev-docs-usdable/需求/20260911/开发计划.md §PR-5b2b
+  import { view, sidebar, sessions, sessionGroups, pinnedSessions, collapsedSessions, editGroupId, editGroupDraft, activeSessionId, selMode, sel, menuFor, editId, editDraft, showToast, mcpServers, createNewSession, createSessionInGroup, clearPendingSessionOpts, accountPanelOpen, cmdkOpen, nativeShell, isDesktopShell, dirLeaf } from '../../lib/stores'
   import * as api from '../../lib/api'
   import { titlebarDblClick } from '../../lib/nativeWindow'
   import { t, tr, locale } from '../../lib/i18n'
@@ -660,7 +666,10 @@
   <div class="full" style="width:{fullWidth}px">
     <!-- Draggable like the main column's top row, and so it takes the same
          double-click-to-zoom a native title bar would give it. -->
-    <div class="side-header" class:native-inset={$nativeShell && isMac} style="--wails-draggable:drag" ondblclick={titlebarDblClick}>
+    <!-- isDesktopShell, not nativeShell: the URL marker is known at first
+         paint, while nativeShell waits on /api/version and the row would
+         flash un-inset under the traffic lights at startup. -->
+    <div class="side-header" class:native-inset={isDesktopShell && isMac} style="--wails-draggable:drag" ondblclick={titlebarDblClick}>
       <button class="icon-btn" title={$t('header.toggle_left')} aria-pressed={true} onclick={() => sidebar.set('hidden')}>
         <iconify-icon icon="lucide:panel-left" width="16"></iconify-icon>
       </button>
@@ -1116,7 +1125,7 @@
 
   {#if $sidebar === 'rail'}
   <div class="rail">
-    <div class="rail-new" class:native-inset={$nativeShell && isMac}>
+    <div class="rail-new" class:native-inset={isDesktopShell && isMac}>
       <button class="rail-btn primary" title={$t('nav.new_session')} onclick={() => createNewSession()}>
         <iconify-icon icon="ant-design:plus-outlined" width="16"></iconify-icon>
       </button>
@@ -1204,10 +1213,13 @@
    row whenever the sidebar is showing: horizontal room for them, then the same
    axis lift Header applies to the main column, so the brand row and the chat
    title stay on one line. Height pinned for the same reason as there — the
-   padding has to shorten the content box, not grow the row. */
+   padding has to shorten the content box, not grow the row. The padding values
+   are --titlebar-pad-top/--titlebar-pad-bottom for the same reason as there
+   (macOS 26 moved the lights). */
 .side-header.native-inset {
   box-sizing: border-box; max-height: 44px;
-  padding-left: 82px; padding-bottom: 4px;
+  padding-left: 82px;
+  padding-top: var(--titlebar-pad-top, 0px); padding-bottom: var(--titlebar-pad-bottom, 4px);
 }
 .side-header .icon-btn { --wails-draggable: no-drag; }
 .side-header :global(.logo) { color: var(--blue-6); flex: 0 0 auto; }
@@ -1476,6 +1488,6 @@
 }
 .rail-btn:hover { background: var(--hover-neutral); }
 .rail-btn.active { background: var(--active-blue-bg); color: var(--blue-6); }
-.rail-btn.primary { background: var(--blue-6); color: #fff; }
+.rail-btn.primary { background: var(--blue-6); color: var(--on-accent); }
 .rail-btn.primary:hover { background: var(--blue-5); }
 </style>

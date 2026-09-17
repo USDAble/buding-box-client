@@ -1,11 +1,13 @@
 import './app.css'
 import App from './App.svelte'
 import { mount } from 'svelte'
+import { initIcons } from './lib/icons'
 import { initTheme } from './lib/theme'
 import { initFramelessDrag } from './lib/framelessDrag'
 import { installArtifactThemeRefresh } from './lib/artifacts'
 import { locale } from './lib/i18n'
 import { brandName } from './lib/brand'
+import { applyTitlebarLift } from './lib/nativeWindow'
 
 // OCTO-FORK: a comment-only deviation recording where the development stand-in
 // used to be installed, and the two rules learned from it — see
@@ -22,8 +24,19 @@ import { brandName } from './lib/brand'
 // module's top-level statements land in the shipped bundle and run at every
 // start (V-47, verified by a control build).
 
+// Register the <iconify-icon> element and its bundled icon data before first
+// paint — and shut the door on Iconify's API, which the CDN build used to call
+// per icon. Nothing about the UI reaches a third party any more.
+initIcons()
+
 // Apply the persisted theme before first paint so there's no light-mode flash.
 initTheme()
+
+// Desktop shell on macOS: pin the titlebar rows' axis to the traffic lights
+// before first paint — the inset and padding would otherwise wait on
+// /api/version and flash the rows crammed under the lights at startup.
+// No-op elsewhere.
+applyTitlebarLift()
 
 // Rebuild baked-theme artifact previews whenever the resolved theme changes.
 installArtifactThemeRefresh()

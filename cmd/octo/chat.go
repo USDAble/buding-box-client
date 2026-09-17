@@ -283,6 +283,31 @@ func resolveMaxTokensEscalate(flagVal int, provName string) int {
 	return escalateMaxTokensAnthropic
 }
 
+// resolveFallbackContextWindow picks the window assumed for models the built-in
+// table doesn't know: an explicit flag wins, then whatever
+// Config.EffectiveFallbackContextWindow resolves from the environment and the
+// config file. 0 at every layer leaves agent's built-in default in place.
+//
+// Only the flag layer lives here. The env and file layers belong to config so
+// `octo serve` — a separate subcommand that never reaches this function —
+// resolves them the same way.
+func resolveFallbackContextWindow(flagVal int, cfg config.Config, stderr io.Writer) int {
+	switch {
+	case flagVal < 0:
+		fmt.Fprintf(stderr, "octo: ignoring --fallback-context-window %d — negative\n", flagVal)
+	case flagVal == 0: // unset; fall through to env + config
+	case flagVal < config.MinFallbackContextWindow:
+		fmt.Fprintf(stderr, "octo: ignoring --fallback-context-window %d — the value is in tokens, so 32k is 32000, not 32\n", flagVal)
+	default:
+		return flagVal
+	}
+	n, problems := cfg.EffectiveFallbackContextWindow()
+	for _, p := range problems {
+		fmt.Fprintf(stderr, "octo: %s\n", p)
+	}
+	return n
+}
+
 // openMCPLogFile opens data/logs/mcp.log (append) to receive stdio MCP
 // servers' child stderr while the TUI owns the screen, so their diagnostics are
 // recoverable rather than corrupting the frame. Returns nil on any failure; the
@@ -471,7 +496,7 @@ func runChat(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 	args = normalizeBareContinue(args)
 	fs := flag.NewFlagSet("octo", flag.ContinueOnError)
 	fs.SetOutput(stderr)
-	providerName := fs.String("provider", "", "Provider: anthropic | openai (default from `octo config`, else anthropic)")
+	providerName := fs.String("provider", "", "Provider: anthropic | openai | … (default from `octo config` or OCTO_PROVIDER)")
 	model := fs.String("model", "", "Model name (else ANTHROPIC_MODEL/OPENAI_MODEL env, then `octo config`, then the provider's cheapest reasoning model)")
 	system := fs.String("system", "", "System prompt (optional)")
 	maxTokens := fs.Int("max-tokens", 0, "max_tokens for the response (0 = provider default)")
@@ -495,6 +520,7 @@ func runChat(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 	maxTurns := fs.Int("max-turns", 0, "Max provider round-trips per message in the agentic loop (0 = auto: 1000 interactive, unlimited unattended/--prompt-file)")
 	compactThreshold := fs.Int("compact-threshold", 0, "Compact older history once a turn's input crosses this many tokens; 0 = auto (percentage of the model's context window, settable via --compact-auto-pct or config), <0 = disabled")
 	compactAutoPct := fs.Int("compact-auto-pct", 0, "Auto-compaction threshold as a percentage of the model's context window (0 = use `octo config` or built-in default 75). Only used when --compact-threshold=0.")
+	fallbackContextWindow := fs.Int("fallback-context-window", 0, "Context window in tokens to assume for a model whose name matches no built-in entry — a self-hosted or renamed model (0 = use OCTO_FALLBACK_CONTEXT_WINDOW, then `octo config`, else the built-in 128000). Never overrides a model the built-in table knows.")
 	reasoningEffort := fs.String("reasoning-effort", "", "Reasoning intensity: off | low | medium | high | xhigh | max (empty = use `octo config`/default; 'off' forces it off for this run). OpenAI → reasoning_effort; Anthropic → adaptive thinking + effort.")
 	showReasoning := fs.Bool("show-reasoning", false, "Surface the reasoning/thinking trace for the Web UI (octo serve) to display. The terminal never renders it. Default off; also from `octo config`.")
 	useSandbox := fs.Bool("sandbox", false, "Confine terminal commands to the project dir + tmp with no network (OS-enforced; macOS/Linux). Fails closed if unavailable.")
@@ -562,15 +588,26 @@ func runChat(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 		return 2
 	}
 
+	// An unresolvable provider is reported where a sender is actually needed,
+	// not here. The checks between this line and that one — an unknown --agent,
+	// `-c` with no TTY, a session id matching nothing — describe what the user
+	// actually got wrong, and they only ran because provider resolution used to
+	// fall back to anthropic and therefore always succeeded.
 	provName, resolvedModel, entry, ok := resolveProviderModel(*providerName, *model, cfg)
+	providerErr := ""
 	if !ok {
-		fmt.Fprintf(stderr, "octo: unknown provider %q\n", provName)
-		return 2
+		providerErr = providerSetupError(provName)
 	}
 
 	// Install the Tool Search config so DefaultToolsFor can decide whether to
 	// defer MCP schemas behind the search/describe/call bridge for this model.
 	tools.SetToolSearchConfig(toolSearchConfigFrom(cfg.Tools.ToolSearch))
+
+	// Install the assumed window for models the built-in table doesn't know.
+	// Process-wide like the Tool Search config: the compaction threshold, the
+	// Tool Search budget and the TUI's ctx gauge all resolve it from the model
+	// name alone, with no Config in hand.
+	agent.SetFallbackContextWindow(resolveFallbackContextWindow(*fallbackContextWindow, cfg, stderr))
 
 	// Resolve reasoning controls: --reasoning-effort sets the intensity (OpenAI
 	// reasoning_effort / mapped Anthropic budget); --show-reasoning gates whether
@@ -705,6 +742,32 @@ func runChat(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 	// the config wizard below, the manual export-a-key walkthrough would only
 	// duplicate (and contradict) the wizard — it's shown solely when the
 	// wizard can't run.
+	// No provider anywhere is the blank-install case, and on a terminal that
+	// deserves the same wizard a missing key gets below — printing one line and
+	// leaving is a worse first run than octo used to give. Re-resolve after the
+	// wizard writes config.yml.
+	if providerErr != "" {
+		if !stdinIsTTY(stdin) {
+			fmt.Fprintln(stderr, providerErr)
+			return 2
+		}
+		fmt.Fprintln(stderr, "No provider configured — let's set up octo first.")
+		fmt.Fprintln(stderr, "")
+		if runConfigWizard(stdin, stdout, stderr, true) != 0 {
+			return 1
+		}
+		cfg, err = config.Load()
+		if err != nil {
+			fmt.Fprintf(stderr, "octo: %v\n", err)
+			return 1
+		}
+		provName, resolvedModel, entry, ok = resolveProviderModel(*providerName, *model, cfg)
+		if !ok {
+			fmt.Fprintln(stderr, providerSetupError(provName))
+			return 2
+		}
+	}
+
 	var senderDiag bytes.Buffer
 	llmSender, err := buildSender(provName, entry, &senderDiag, senderTuning{
 		thinkingBudget:  anthropicThinkingBudget(resolvedEffort),
@@ -725,7 +788,7 @@ func runChat(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 			cfg, _ = config.Load()
 			provName, resolvedModel, entry, ok = resolveProviderModel(*providerName, *model, cfg)
 			if !ok {
-				fmt.Fprintf(stderr, "octo: unknown provider %q\n", provName)
+				fmt.Fprintln(stderr, providerSetupError(provName))
 				return 2
 			}
 			llmSender, err = buildSender(provName, entry, stderr, senderTuning{

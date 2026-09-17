@@ -1740,3 +1740,98 @@ func TestLoad_NormalizesLegacyOffReasoningEffort(t *testing.T) {
 		t.Errorf("ReasoningEffort = %q, want \"\" (normalized from legacy \"off\")", cfg.ReasoningEffort)
 	}
 }
+
+// The env layer has to live here rather than in cmd/octo: `octo serve` is a
+// separate subcommand that never reaches the CLI's flag resolver, so an
+// env-only implementation there would make OCTO_FALLBACK_CONTEXT_WINDOW a
+// no-op for the server — which is where a self-hosted deployment sets it.
+func TestEffectiveFallbackContextWindow(t *testing.T) {
+	cfg := Config{FallbackContextWindow: 40_000}
+
+	t.Setenv("OCTO_FALLBACK_CONTEXT_WINDOW", "32000")
+	if n, probs := cfg.EffectiveFallbackContextWindow(); n != 32_000 || len(probs) != 0 {
+		t.Errorf("env = (%d, %v), want (32000, no complaints)", n, probs)
+	}
+
+	// An explicit zero means "unset", not "disable" — the file still applies.
+	t.Setenv("OCTO_FALLBACK_CONTEXT_WINDOW", "0")
+	if n, _ := cfg.EffectiveFallbackContextWindow(); n != 40_000 {
+		t.Errorf("env=0 → %d, want the file's 40000", n)
+	}
+
+	t.Setenv("OCTO_FALLBACK_CONTEXT_WINDOW", "")
+	if n, probs := cfg.EffectiveFallbackContextWindow(); n != 40_000 || len(probs) != 0 {
+		t.Errorf("file = (%d, %v), want (40000, no complaints)", n, probs)
+	}
+	if n, probs := (Config{}).EffectiveFallbackContextWindow(); n != 0 || len(probs) != 0 {
+		t.Errorf("unconfigured = (%d, %v), want (0, no complaints)", n, probs)
+	}
+
+	// A rejected layer falls through to the next rather than disabling the
+	// feature, and says why — Validate never sees the environment, and Load
+	// never calls Validate, so this is the only report there is.
+	for _, bad := range []string{"32", "lots", "-1"} {
+		t.Setenv("OCTO_FALLBACK_CONTEXT_WINDOW", bad)
+		n, probs := cfg.EffectiveFallbackContextWindow()
+		if n != 40_000 {
+			t.Errorf("env=%q → %d, want fall-through to the file's 40000", bad, n)
+		}
+		if len(probs) != 1 {
+			t.Errorf("env=%q → %d complaints, want exactly 1", bad, len(probs))
+		}
+	}
+
+	t.Setenv("OCTO_FALLBACK_CONTEXT_WINDOW", "32")
+	if _, probs := cfg.EffectiveFallbackContextWindow(); len(probs) == 0 || !strings.Contains(probs[0], "32000, not 32") {
+		t.Errorf("complaint %v does not explain the units", probs)
+	}
+
+	// The unit mistake in the file itself, with no env to fall back to.
+	t.Setenv("OCTO_FALLBACK_CONTEXT_WINDOW", "")
+	small := Config{FallbackContextWindow: 32}
+	n, probs := small.EffectiveFallbackContextWindow()
+	if n != 0 {
+		t.Errorf("file=32 → %d, want 0 (built-in default), not 32 tokens", n)
+	}
+	if len(probs) != 1 || !strings.Contains(probs[0], "fallback_context_window") {
+		t.Errorf("complaint %v does not name the config field", probs)
+	}
+}
+
+// TestUpdateCheckEnabled_DefaultsOn: an install that never touched the key
+// keeps checking for updates — the toggle is opt-out, not opt-in.
+func TestUpdateCheckEnabled_DefaultsOn(t *testing.T) {
+	setHome(t)
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if !cfg.UpdateCheckEnabled() {
+		t.Error("UpdateCheckEnabled with no config = false, want true")
+	}
+}
+
+// TestUpdateCheckEnabled_RoundTrip: update_check survives Save/Load in both
+// positions. False is the load-bearing one — yaml's omitempty drops a false
+// bool, so the field must stay a *bool or "off" silently reverts to "on".
+func TestUpdateCheckEnabled_RoundTrip(t *testing.T) {
+	for _, want := range []bool{false, true} {
+		t.Run(fmt.Sprintf("%v", want), func(t *testing.T) {
+			setHome(t)
+			cfg := Config{UpdateCheck: &want}
+			if err := cfg.Save(); err != nil {
+				t.Fatalf("Save: %v", err)
+			}
+			got, err := Load()
+			if err != nil {
+				t.Fatalf("Load: %v", err)
+			}
+			if got.UpdateCheck == nil {
+				t.Fatalf("update_check missing after round-trip, want %v", want)
+			}
+			if got.UpdateCheckEnabled() != want {
+				t.Errorf("UpdateCheckEnabled = %v, want %v", got.UpdateCheckEnabled(), want)
+			}
+		})
+	}
+}

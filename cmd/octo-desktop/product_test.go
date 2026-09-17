@@ -2,15 +2,34 @@ package main
 
 import (
 	"encoding/hex"
+	"runtime"
 	"strings"
 	"testing"
+
+	"github.com/open-octo/octo-agent/internal/server"
 )
 
 // The window token reaches the window through the URL, and shellURL is the only
-// place that URL is built (bridge.go:171). Upstream's TestShellURL asserts the
+// place that URL is built (bridge.go:180). Upstream's TestShellURL asserts the
 // exact string shellURL produces, so the token fragment has to be empty until a
 // token actually exists — that is what keeps the upstream contract intact, and
 // it is pinned here too rather than left implicit.
+//
+// The expected string is not a constant since upstream #2414: shellURL now also
+// carries the host's macOS major on darwin (the titlebar rows need it at first
+// paint), and upstream's own TestShellURL builds its expectation the same way.
+// Pinning the pre-#2414 literal here would hold on Linux and Windows and fail
+// only on the host the product actually ships a .app for.
+func shellQueryTail() string {
+	if runtime.GOOS != "darwin" {
+		return ""
+	}
+	major, _, _ := strings.Cut(server.OSVersion(), ".")
+	if major == "" {
+		return ""
+	}
+	return "&macos=" + major
+}
 
 // TestWindowTokenFragmentIsEmptyUntilATokenExists pins the empty case, which is
 // both the CLI path (no window, no token) and the state upstream's own test
@@ -25,7 +44,7 @@ func TestWindowTokenFragmentIsEmptyUntilATokenExists(t *testing.T) {
 	}
 
 	const base = "http://127.0.0.1:8088"
-	if got, want := shellURL(base, ""), base+"/?shell=octo-desktop"; got != want {
+	if got, want := shellURL(base, ""), base+"/?shell=octo-desktop"+shellQueryTail(); got != want {
 		t.Fatalf("shellURL without a token = %q, want the upstream shape %q", got, want)
 	}
 }
@@ -40,7 +59,7 @@ func TestShellURLCarriesTheWindowToken(t *testing.T) {
 	defer func() { windowTokenVal = saved }()
 
 	const base = "http://127.0.0.1:8088"
-	if got, want := shellURL(base, ""), base+"/?shell=octo-desktop&window_token=abc123"; got != want {
+	if got, want := shellURL(base, ""), base+"/?shell=octo-desktop&window_token=abc123"+shellQueryTail(); got != want {
 		t.Fatalf("shellURL = %q, want %q", got, want)
 	}
 

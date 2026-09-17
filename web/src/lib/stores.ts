@@ -105,6 +105,18 @@ export const frozen = writable(false)
 export const isDesktopShell =
   typeof location !== 'undefined' && new URLSearchParams(location.search).get('shell') === 'octo-desktop'
 
+// Major macOS version of the desktop shell's host (e.g. 26), handed over in
+// the shell URL next to the marker (cmd/octo-desktop/bridge.go shellURL); 0
+// outside the mac desktop shell. The window-chrome code needs it at first
+// paint — waiting for /api/version leaves the titlebar rows un-inset under
+// the traffic lights for a second or two at startup — so like isDesktopShell
+// it comes from the URL, no round-trip. VersionBadge re-confirms it into
+// macosMajor from /api/version's os_version once that lands.
+export const shellMacosMajor =
+  typeof location !== 'undefined'
+    ? parseInt(new URLSearchParams(location.search).get('macos') ?? '', 10) || 0
+    : 0
+
 // True when the page runs inside the octo-mobile Capacitor webview. Capacitor
 // injects a global `Capacitor` object with isNativePlatform(); a plain browser
 // has none. Fixed for the page's lifetime, like isDesktopShell. Mobile's
@@ -121,6 +133,14 @@ export const mobileShell =
 // reported by /api/version's `native` flag). Lets the folder picker use the OS
 // dialog instead of the in-app directory tree. False under `octo serve`.
 export const nativeShell = writable(false)
+
+// Major macOS version of the desktop shell's host (e.g. 26). Seeded
+// synchronously from the shell URL (shellMacosMajor above) so window chrome
+// is right at first paint, then re-confirmed by VersionBadge from
+// /api/version's os_version; 0 when the host isn't macOS or isn't known yet.
+// The titlebar rows read it to sit on the traffic lights' axis, which macOS 26
+// moved for windows stamped with the macOS 26 SDK (see titlebarPaddingPx).
+export const macosMajor = writable(shellMacosMajor)
 
 // True when the browser is on the same machine as the server (loopback),
 // reported by /api/version's `local` flag — desktop shell OR localhost web.
@@ -672,7 +692,7 @@ function pickToolIndex(tools: any[], toolId: string | undefined): number {
   return tools.length - 1
 }
 
-export function updateToolResult(sessionId: string, toolId: string | undefined, result: any, uiPayload: any) {
+export function updateToolResult(sessionId: string, toolId: string | undefined, result: any, uiPayload: any, endedAt?: number) {
   chatMessages.update(m => {
     const msgs = [...(m[sessionId] || [])]
     const lastGroup = msgs.findLastIndex((x: any) => x.type === 'tool_group')
@@ -681,7 +701,10 @@ export function updateToolResult(sessionId: string, toolId: string | undefined, 
       const idx = pickToolIndex(tools, toolId)
       if (idx >= 0) {
         const started = tools[idx].startedAt
-        const elapsed = started ? (Date.now() - started) / 1000 : tools[idx].elapsed
+        // endedAt is the server-stamped event time when present (matching a
+        // server-stamped startedAt); Date.now() only when an older server
+        // sent neither, so both ends stay on one clock.
+        const elapsed = started ? Math.max(0, ((endedAt ?? Date.now()) - started) / 1000) : tools[idx].elapsed
         tools[idx] = { ...tools[idx], result, ui_payload: uiPayload, done: true, elapsed }
       }
       msgs[lastGroup] = { ...msgs[lastGroup], tools }
@@ -720,7 +743,7 @@ export function appendToolStdout(sessionId: string, toolId: string | undefined, 
   })
 }
 
-export function setToolError(sessionId: string, toolId: string | undefined, error: string) {
+export function setToolError(sessionId: string, toolId: string | undefined, error: string, endedAt?: number) {
   chatMessages.update(m => {
     const msgs = [...(m[sessionId] || [])]
     const lastGroup = msgs.findLastIndex((x: any) => x.type === 'tool_group')
@@ -729,7 +752,8 @@ export function setToolError(sessionId: string, toolId: string | undefined, erro
       const idx = pickToolIndex(tools, toolId)
       if (idx >= 0) {
         const started = tools[idx].startedAt
-        const elapsed = started ? (Date.now() - started) / 1000 : tools[idx].elapsed
+        // See updateToolResult: prefer the server-stamped end time.
+        const elapsed = started ? Math.max(0, ((endedAt ?? Date.now()) - started) / 1000) : tools[idx].elapsed
         tools[idx] = { ...tools[idx], error, done: true, elapsed }
       }
       msgs[lastGroup] = { ...msgs[lastGroup], tools }

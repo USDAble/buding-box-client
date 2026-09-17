@@ -26,7 +26,7 @@ import fs from 'node:fs/promises'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { execFileSync } from 'node:child_process'
-import os from 'node:os' // still used by V-107's restore path; see the selfCheck call below
+import os from 'node:os'
 
 import { repositoryRoot, loadBrand } from './brand-schema.mjs'
 import { inspectFile } from './pe-info.mjs'
@@ -167,14 +167,91 @@ export function checkDataFiles(files) {
   return failures
 }
 
-export async function checkNoAbsolutePaths(files, forbiddenPaths = []) {
+// Vendored third-party binaries, and the reason the check below can tell whose
+// build-machine path a hit is (V-107).
+//
+// Every one of these is byte-identical to a file on disk at package time, which
+// is what makes a hit attributable by exact bytes rather than by filename or by
+// "the two home directories differ, so it must be theirs". The coincidence that
+// broke this check was `os.homedir()` on the Windows runner being the *same
+// string* as a path inside a vendored binary — a property no check can reason
+// from, and the reason the verdict must not depend on which machine built the
+// package.
+//
+// The list is **discovered, not written down**. A hand-written list of two went
+// stale on the first run: `mruby.wasm` (a wasi-sdk build, embedded by
+// `internal/workflow/runtime.go`) carries `/Users/runner/work/wasi-sdk/...` too,
+// and 14 of the 143 hits were outside ripgrep's payload. Payloads are per-file
+// and the roots are per-convention, so adding a platform or a version needs no
+// edit here.
+const VENDORED_ROOTS = [
+  // Third-party release staged for the target platform before the build.
+  ['internal/tools/rgembed/binaries', () => true],
+  // Every wasm module the build compiles in verbatim (mruby.wasm today).
+  ['internal', (p) => p.endsWith('.wasm')],
+  // Tools copied into the package rather than compiled into it (uv.exe).
+  ['dist/bundled-tools', () => true],
+]
+
+export function bundledUvPath(root, target) {
+  return path.join(root, 'dist', 'bundled-tools', `windows-${target.goarch}`, 'uv.exe')
+}
+
+export async function vendoredBinarySources(root) {
+  const out = []
+  for (const [rel, keep] of VENDORED_ROOTS) {
+    const dir = path.join(root, ...rel.split('/'))
+    let entries
+    try {
+      entries = await fs.readdir(dir, { recursive: true, withFileTypes: true })
+    } catch {
+      continue // not staged in this checkout — nothing to attribute
+    }
+    for (const e of entries) {
+      if (!e.isFile()) continue
+      // Repo metadata that lives beside a payload but is never embedded: keep
+      // the logged set honest so a human can see what was attributed.
+      if (e.name.startsWith('.') || e.name.endsWith('.md')) continue
+      const abs = path.join(e.parentPath ?? e.path, e.name)
+      if (keep(abs)) out.push(abs)
+    }
+  }
+  return out.sort()
+}
+
+export async function checkNoAbsolutePaths(files, forbiddenPaths = [], { vendoredPaths = [] } = {}) {
   const needles = forbiddenPaths.filter((p) => typeof p === 'string' && p !== '').map((p) => Buffer.from(p, 'utf8'))
+  if (needles.length === 0) return []
+
+  // Read the originals once; a payload that is not staged cannot be in the
+  // artefact either, so its absence leaves every hit attributed to us. That is
+  // the fail-closed direction.
+  const vendors = []
+  for (const p of vendoredPaths) {
+    try {
+      const buf = await fs.readFile(p)
+      if (buf.length > 0) vendors.push(buf)
+    } catch {
+      // not staged — e.g. a build without the embedrg tag
+    }
+  }
+
   const failures = []
   for (const f of files) {
     if (f.dir) continue
     const data = await fs.readFile(f.abs)
+    const spans = []
+    for (const v of vendors) {
+      for (let i = data.indexOf(v); i !== -1; i = data.indexOf(v, i + 1)) spans.push([i, i + v.length])
+    }
     for (const needle of needles) {
-      if (data.includes(needle)) failures.push(`${f.rel} contains build-machine path ${needle.toString('utf8')}`)
+      for (let i = data.indexOf(needle); i !== -1; i = data.indexOf(needle, i + 1)) {
+        // One report per needle per file, as before; but every hit is examined,
+        // so a needle that appears both inside and outside a payload still fails.
+        if (spans.some(([a, b]) => a <= i && i < b)) continue
+        failures.push(`${f.rel} contains build-machine path ${needle.toString('utf8')}`)
+        break
+      }
     }
   }
   return failures
@@ -208,7 +285,7 @@ export async function checkSize(baselinePath, files) {
 
 // selfCheck returns { failures, warnings, files }. A non-empty failures means
 // the package must not ship. warnings are advisory (e.g. the size budget).
-export async function selfCheck(dir, { brand, forbiddenPaths = [], baselinePath = null } = {}) {
+export async function selfCheck(dir, { brand, forbiddenPaths = [], vendoredPaths = [], baselinePath = null } = {}) {
   const files = await listFiles(dir)
   const failures = []
   const warnings = []
@@ -245,7 +322,12 @@ export async function selfCheck(dir, { brand, forbiddenPaths = [], baselinePath 
 
   failures.push(...checkDevResiduals(files))
   failures.push(...checkDataFiles(files))
-  failures.push(...(await checkNoAbsolutePaths(files, forbiddenPaths)))
+  // Say what was attributed, so a reader can see the verdict's basis without
+  // re-deriving it (V-107).
+  if (vendoredPaths.length > 0) {
+    console.log(`  按字节归属 ${vendoredPaths.length} 个随包原件：${vendoredPaths.map((p) => path.basename(p)).join(", ")}`)
+  }
+  failures.push(...(await checkNoAbsolutePaths(files, forbiddenPaths, { vendoredPaths })))
 
   if (baselinePath) {
     const { warning } = await checkSize(baselinePath, files)
@@ -425,7 +507,7 @@ async function buildExe({ root, brand, target, dest }) {
 async function assemble({ root, brand, target, dest }) {
   // bin/uv.exe — optional, seeded into data/bin on first launch (P1). Fetched
   // by `make bundle-tools-windows` locally / PowerShell in CI (release.yml).
-  const uvSrc = path.join(root, 'dist', 'bundled-tools', `windows-${target.goarch}`, 'uv.exe')
+  const uvSrc = bundledUvPath(root, target)
   if (await exists(uvSrc)) {
     await fs.mkdir(path.join(dest, 'bin'), { recursive: true })
     await fs.copyFile(uvSrc, path.join(dest, 'bin', 'uv.exe'))
@@ -478,21 +560,24 @@ async function main() {
   console.log(`==> 产物自检 ${dirName}/`)
   const { failures, warnings } = await selfCheck(dest, {
     brand,
-    // OCTO-FORK: 本机 home 这条 needle 在 Windows 打包腿上会假红（V-107） —
-    // see dev-docs-usdable/需求/20260911/需求基线.md §5.6 V-107
-    // The needle list is `[root, os.homedir()]` upstream. `os.homedir()` is
-    // disabled here, not moved: on GitHub's windows-latest runner it IS
-    // `C:\Users\runneradmin`, which is also the build-machine path baked into
-    // the vendored third-party binaries (ripgrep's official Windows release, and
-    // astral's uv.exe) that `embedrg` compiles into the exe. A hit therefore
-    // reports their build machine as ours, and the check cannot tell the two
-    // apart by substring. It never fires on a developer machine only because
-    // that machine's home is not `/Users/runner`.
-    // Restoring this needs more than a narrower needle: assert OUR build paths
-    // are absent (this list) and identify the vendored originals by hash
-    // (sha256 of the extracted binaries against the pinned release), which is
-    // both stronger and deterministic. Tracked as V-107.
-    forbiddenPaths: [root].filter(Boolean),
+    // V-107: the needle list is what upstream had — `root` plus the build
+    // machine's home — and it is restored because the false alarm is fixed
+    // rather than tolerated. On GitHub's windows-latest runner `os.homedir()`
+    // IS `C:\Users\runneradmin`, which is also the path baked into the vendored
+    // third-party binaries (ripgrep's official Windows release, astral's uv.exe)
+    // that `embedrg` compiles into the exe, so substrings alone could not tell
+    // our leak from theirs.
+    //
+    // `vendoredPaths` is what tells them apart: a hit inside one of those
+    // payloads is attributable to the vendor by exact bytes. So the check stays
+    // needle-based and fails on any hit *outside* a payload — including a hit
+    // that is inside one place and outside another.
+    //
+    // The third fact this rests on is `-trimpath`, which is what keeps OUR
+    // build paths out of the artefact at all; if that ever regresses, the hits
+    // land outside the payloads and this check reports them.
+    forbiddenPaths: [root, os.homedir()].filter(Boolean),
+    vendoredPaths: await vendoredBinarySources(root),
     baselinePath: path.join(root, 'dist', '.portable-size-baseline'),
   })
   for (const w of warnings) console.warn(`  警告: ${w}`)

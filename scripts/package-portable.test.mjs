@@ -17,6 +17,7 @@ import {
   checkDevResiduals,
   checkNoAbsolutePaths,
   checkProductionBinary,
+  vendoredBinarySources,
   listFiles,
   crc32,
   buildZipBuffer,
@@ -136,6 +137,87 @@ test('checkNoAbsolutePaths: flags a file containing the build-machine path', asy
   assert.deepEqual(await checkNoAbsolutePaths(files, [os.homedir()]), [
     `leaky.txt contains build-machine path ${os.homedir()}`,
   ])
+})
+
+// The V-107 shape, reproduced without a Windows runner. The coincidence that
+// broke the check is `os.homedir()` on the runner being the same string as the
+// path inside a vendored binary, so these tests pin the property that makes the
+// verdict independent of that: a hit is exempt only if it lies inside a
+// vendored payload's exact bytes.
+const FOREIGN = 'C:\\Users\\runneradmin'
+
+test('checkNoAbsolutePaths: a hit inside a vendored payload is not ours (V-107)', async (t) => {
+  const dir = await tmpdir(t)
+  // A stand-in for ripgrep: a third-party artifact that carries its author's
+  // build path, exactly as the real one carries `C:\Users\runneradmin`.
+  const payload = Buffer.concat([Buffer.from('rustc\x00\x00'), Buffer.from(FOREIGN), Buffer.from('\\.cargo\\registry')])
+  const vendored = path.join(dir, 'vendored-rg')
+  await fs.writeFile(vendored, payload)
+  // An artefact that embeds it verbatim, as go:embed does.
+  await fs.writeFile(path.join(dir, 'app.exe'), Buffer.concat([Buffer.from('PE\x00\x00'), payload, Buffer.from('tail')]))
+
+  const files = await listFiles(dir)
+  assert.deepEqual(await checkNoAbsolutePaths(files, [FOREIGN], { vendoredPaths: [vendored] }), [])
+})
+
+test('checkNoAbsolutePaths: the exemption does not extend past the payload', async (t) => {
+  const dir = await tmpdir(t)
+  const payload = Buffer.from(`prefix${FOREIGN}suffix`)
+  const vendored = path.join(dir, 'vendored-rg')
+  await fs.writeFile(vendored, payload)
+  // Once inside the payload, once outside it: the outside hit is still ours.
+  await fs.writeFile(
+    path.join(dir, 'app.exe'),
+    Buffer.concat([payload, Buffer.from(' ... and again '), Buffer.from(FOREIGN)]),
+  )
+
+  const files = await listFiles(dir)
+  assert.deepEqual(await checkNoAbsolutePaths(files, [FOREIGN], { vendoredPaths: [vendored] }), [
+    `app.exe contains build-machine path ${FOREIGN}`,
+  ])
+})
+
+test('checkNoAbsolutePaths: a payload that is not staged exempts nothing', async (t) => {
+  const dir = await tmpdir(t)
+  await fs.writeFile(path.join(dir, 'app.exe'), `built at ${FOREIGN}/repo`)
+
+  const files = await listFiles(dir)
+  const missing = path.join(dir, 'never-staged')
+  // Fail-closed: an unreadable payload must not turn the check into a pass.
+  assert.deepEqual(await checkNoAbsolutePaths(files, [FOREIGN], { vendoredPaths: [missing] }), [
+    `app.exe contains build-machine path ${FOREIGN}`,
+  ])
+})
+
+test('vendoredBinarySources: discovers payloads by convention, not by list', async (t) => {
+  const root = await tmpdir(t)
+  // The three conventions: an embed dir, any embedded wasm, and the tools
+  // copied into the package. A hand-written list of two went stale on
+  // `mruby.wasm`, which carries `wasi-sdk` build paths of its own.
+  const put = async (rel, body) => {
+    const abs = path.join(root, rel)
+    await fs.mkdir(path.dirname(abs), { recursive: true })
+    await fs.writeFile(abs, body)
+  }
+  await put('internal/tools/rgembed/binaries/rg', 'rg-bytes')
+  await put('internal/tools/rgembed/binaries/README.md', 'not embedded')
+  await put('internal/tools/rgembed/binaries/.gitignore', 'rg')
+  await put('internal/workflow/mruby.wasm', '\0asm')
+  await put('dist/bundled-tools/windows-amd64/uv.exe', 'uv-bytes')
+
+  const found = (await vendoredBinarySources(root)).map((p) => path.relative(root, p))
+  assert.deepEqual(found, [
+    path.join('dist', 'bundled-tools', 'windows-amd64', 'uv.exe'),
+    path.join('internal', 'tools', 'rgembed', 'binaries', 'rg'),
+    path.join('internal', 'workflow', 'mruby.wasm'),
+  ])
+})
+
+test('vendoredBinarySources: a checkout with nothing staged yields an empty set', async (t) => {
+  const root = await tmpdir(t)
+  // Not an error: nothing staged means nothing embedded, so every hit stays
+  // attributed to us.
+  assert.deepEqual(await vendoredBinarySources(root), [])
 })
 
 test('crc32: matches the standard check value', () => {

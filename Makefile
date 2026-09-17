@@ -165,7 +165,7 @@ desktop-portable-all: web-build brand-check desktop-app desktop-portable
 # Node unit tests for the packaging pipeline (self-check predicates, the
 # zero-dependency ZIP writer, the PE reader) — same pattern as brand-check.
 portable-check:
-	node --test scripts/package-portable.test.mjs scripts/pe-info.test.mjs scripts/webdist-clean.test.mjs
+	node --test scripts/package-portable.test.mjs scripts/pe-info.test.mjs scripts/webdist-clean.test.mjs scripts/preflight.test.mjs
 
 install: web-build rg-embed
 	go install $(GOFLAGS) -tags='$(GOTAGS) $(RG_TAGS)' -ldflags='$(LDFLAGS)' ./cmd/octo

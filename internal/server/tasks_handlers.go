@@ -75,6 +75,40 @@ func (s *Server) initScheduler() {
 	s.scheduler = sch
 }
 
+// stopScheduler ends the cron loop initScheduler started, and lives next to it
+// for that reason.
+//
+// Nothing ever stopped it: Scheduler.Stop had no production caller, so the
+// goroutine outlived the server that owned it — and because the tasks directory
+// is a path under the data root rather than a handle held by this server, a
+// Restart left two loops firing the same tasks, while a test binary accumulated
+// one per server it built (V-105).
+//
+// The wait is bounded, and this is the one place in the shutdown path where
+// that matters: Scheduler.Stop also waits for a job already running, and a
+// task's run is a whole agent turn. What must not be negotiated is the part
+// that has already happened by then — Stop's first act ends scheduling, so no
+// new run starts either way.
+// OCTO-FORK: the join Scheduler.Stop never had — see dev-docs-usdable/需求/20260911/需求基线.md §5.6.
+func (s *Server) stopScheduler(ctx context.Context) {
+	s.schedulerMu.Lock()
+	sch := s.scheduler
+	s.scheduler = nil
+	s.schedulerMu.Unlock()
+	if sch == nil {
+		return
+	}
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		sch.Stop()
+	}()
+	select {
+	case <-done:
+	case <-ctx.Done():
+	}
+}
+
 // createCronProject creates the project a task's runs cluster under. The
 // workspace is generated like every other project's (workspaceDirForTask) —
 // cron and regular projects share one shape — and an explicit task directory

@@ -1,10 +1,17 @@
 import assert from 'node:assert/strict'
 import fs from 'node:fs/promises'
+import os from 'node:os'
 import path from 'node:path'
 import test from 'node:test'
 
 import { loadBrand, repositoryRoot } from './brand-schema.mjs'
-import { buildTargets, renderBrandJSON, renderWindowsInstallerBrand } from './sync-branding.mjs'
+import { sameGeneratedText } from './generated-text.mjs'
+import {
+  buildTargets,
+  renderBrandJSON,
+  renderWindowsInstallerBrand,
+  staleTargets,
+} from './sync-branding.mjs'
 
 const root = repositoryRoot(import.meta.url)
 const brand = await loadBrand(root)
@@ -13,10 +20,30 @@ test('every generated target on disk matches what the script would write', async
   for (const target of buildTargets(brand)) {
     const actual = await fs.readFile(path.join(root, target.destination))
     assert.ok(
-      actual.equals(target.content),
+      sameGeneratedText(actual.toString('utf8'), target.content.toString('utf8')),
       `${target.destination} is stale — run: node scripts/sync-branding.mjs`,
     )
   }
+})
+
+// V-104: on Windows the checkout hands these files CRLF while both renderers
+// join with `\n`, so a byte comparison reported all six targets stale for every
+// Windows packager — and regenerating did not converge. Content is the contract;
+// the byte form is the checkout's.
+test('staleTargets tolerates a CRLF checkout but still catches a real edit', async () => {
+  const targets = buildTargets(brand)
+  const repo = await fs.mkdtemp(path.join(os.tmpdir(), 'sync-branding-'))
+  for (const target of targets) {
+    const abs = path.join(repo, target.destination)
+    await fs.mkdir(path.dirname(abs), { recursive: true })
+    await fs.writeFile(abs, target.content.toString('utf8').replaceAll('\n', '\r\n'))
+  }
+  assert.deepEqual(await staleTargets(repo, targets), [])
+
+  const edited = targets.find((t) => t.destination.endsWith('brand.config.json'))
+  const abs = path.join(repo, edited.destination)
+  await fs.writeFile(abs, (await fs.readFile(abs, 'utf8')).replace('en-US', 'en-GB'))
+  assert.deepEqual(await staleTargets(repo, targets), [edited.destination])
 })
 
 test('the Go embed target and the web import target receive identical bytes', () => {

@@ -26,7 +26,7 @@ import fs from 'node:fs/promises'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { execFileSync } from 'node:child_process'
-import os from 'node:os'
+import os from 'node:os' // still used by V-107's restore path; see the selfCheck call below
 
 import { repositoryRoot, loadBrand } from './brand-schema.mjs'
 import { inspectFile } from './pe-info.mjs'
@@ -478,7 +478,21 @@ async function main() {
   console.log(`==> 产物自检 ${dirName}/`)
   const { failures, warnings } = await selfCheck(dest, {
     brand,
-    forbiddenPaths: [root, os.homedir()].filter(Boolean),
+    // OCTO-FORK: 本机 home 这条 needle 在 Windows 打包腿上会假红（V-107） —
+    // see dev-docs-usdable/需求/20260911/需求基线.md §5.6 V-107
+    // The needle list is `[root, os.homedir()]` upstream. `os.homedir()` is
+    // disabled here, not moved: on GitHub's windows-latest runner it IS
+    // `C:\Users\runneradmin`, which is also the build-machine path baked into
+    // the vendored third-party binaries (ripgrep's official Windows release, and
+    // astral's uv.exe) that `embedrg` compiles into the exe. A hit therefore
+    // reports their build machine as ours, and the check cannot tell the two
+    // apart by substring. It never fires on a developer machine only because
+    // that machine's home is not `/Users/runner`.
+    // Restoring this needs more than a narrower needle: assert OUR build paths
+    // are absent (this list) and identify the vendored originals by hash
+    // (sha256 of the extracted binaries against the pinned release), which is
+    // both stronger and deterministic. Tracked as V-107.
+    forbiddenPaths: [root].filter(Boolean),
     baselinePath: path.join(root, 'dist', '.portable-size-baseline'),
   })
   for (const w of warnings) console.warn(`  警告: ${w}`)

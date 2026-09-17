@@ -44,7 +44,12 @@ test('advisory: the fork-marker guard really runs, and says how much it examined
   // examined count is the anti-no-op number: 0 would mean the ref resolved to
   // this tree and the guard checked nothing while reporting success (V-49).
   const { notes } = await runAdvisoryChecks(ROOT)
-  const census = notes.find((n) => n.includes('modified upstream file(s)'))
+  // Match the census shape rather than a substring of it. The substring form
+  // also matched server-diff-guard's R2 coverage note ("5 fork-modified
+  // upstream file(s) carry a ceiling"), which the preflight prints first, so
+  // `find` handed back that note and the count regex below read null. Keying on
+  // the shape also makes the assertion independent of note order (V-106).
+  const census = notes.find((n) => /\d+ modified upstream file\(s\); \d+ marked,/.test(n))
   assert.ok(census, `expected a fork-marker census note, got: ${JSON.stringify(notes)}`)
   const examined = Number.parseInt(/(\d+) modified upstream/.exec(census)[1], 10)
   assert.ok(examined > 0, `expected the guard to examine files, got ${examined}`)

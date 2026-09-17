@@ -17,8 +17,32 @@ MOD_DIR="$ROOT/cmd/octo-desktop"
 # keeps every packaging path (make target, CI job, direct invocation) aligned.
 node "$ROOT/scripts/preflight.mjs"
 
-VERSION="${1:-$(git -C "$ROOT" describe --tags --always 2>/dev/null || echo 0.1.0)}"
+# OCTO-FORK: 版本改走 internal/version（Makefile:34 明文禁止 `git describe`） — see dev-docs-usdable/需求/20260911/需求基线.md §5.6 V-103
+# The version comes from internal/version/version.go, the single source the
+# Makefile names (see its comment at line 34). `git describe` was used here and
+# is deliberately avoided one directory up for a reason that applies doubly:
+# this repo's tags are archive snapshots, so `git describe` yields
+# `archive/base-20260911-245-g3b8413c7` — not a version, and its `/` killed the
+# sed that fills Info.plist ("bad flag in substitute command: 'b'"), which failed
+# every macOS package job at assembly (V-103).
+BASE_VERSION="$(sed -n 's/^var Version = "\(.*\)"/\1/p' "$ROOT/internal/version/version.go")"
+if [ -z "$BASE_VERSION" ]; then
+	echo "cannot read the version out of internal/version/version.go" >&2
+	exit 1
+fi
+# An explicit argument still wins (release builds: `VERSION=0.12.0 ...`), and a
+# dev build keeps the Makefile's `-dev` suffix in the version the binary reports
+# via `octo version` and the in-app update check.
+VERSION="${1:-$BASE_VERSION-dev}"
 VERSION="${VERSION#v}"
+# Info.plist's two version fields are read by LaunchServices and notarization and
+# take period-separated integers only, so they get the bare number: `-dev` is
+# legal for the binary's own string but not for a bundle version.
+PLIST_VERSION="${VERSION%%-*}"
+if ! printf '%s' "$PLIST_VERSION" | grep -qE '^[0-9]+(\.[0-9]+){1,2}$'; then
+	echo "refusing to package: '$PLIST_VERSION' (from VERSION='$VERSION') is not a bundle version" >&2
+	exit 1
+fi
 COMMIT="$(git -C "$ROOT" rev-parse --short HEAD 2>/dev/null || echo unknown)"
 APP="$ROOT/Octo.app"
 CONTENTS="$APP/Contents"
@@ -76,11 +100,26 @@ echo "==> lipo -> universal octo-desktop"
 lipo -create -output "$ROOT/octo-desktop" "${slices[@]}"
 rm -f "${slices[@]}"
 
-echo "==> assembling $APP (version $VERSION)"
+echo "==> assembling $APP (version $VERSION, bundle $PLIST_VERSION)"
 rm -rf "$APP"
 mkdir -p "$CONTENTS/MacOS" "$CONTENTS/Resources"
 mv "$ROOT/octo-desktop" "$CONTENTS/MacOS/octo-desktop"
-sed "s/__VERSION__/$VERSION/g" "$MOD_DIR/build/darwin/Info.plist" > "$CONTENTS/Info.plist"
+# `|` as the delimiter: a version cannot contain it, while the `/` in the string
+# git describe used to produce here was read as the delimiter and aborted the
+# build (V-103).
+sed "s|__VERSION__|$PLIST_VERSION|g" "$MOD_DIR/build/darwin/Info.plist" > "$CONTENTS/Info.plist"
+
+# Self-check the output, the way package-portable.mjs verifies its own: the two
+# version fields are read by LaunchServices and the notary, so shipping a
+# leftover placeholder or a non-version must fail here instead of at install
+# time (V-103 is exactly this class of defect, found only in CI logs).
+for key in CFBundleShortVersionString CFBundleVersion; do
+	got="$(plutil -extract "$key" raw -o - "$CONTENTS/Info.plist" 2>/dev/null || true)"
+	if [ "$got" != "$PLIST_VERSION" ]; then
+		echo "Info.plist $key = '$got', want '$PLIST_VERSION'" >&2
+		exit 1
+	fi
+done
 
 # Make the bundle self-contained: embed the octo CLI (put on PATH by the
 # installer) and uv (seeded into ~/.octo/bin on first launch by the app). Both

@@ -32,3 +32,50 @@ export async function checkSensitive(text: string): Promise<SensitiveCheck> {
   });
   return { hit: !!body.hit, masked: body.masked ?? "" };
 }
+
+/** The `input_sensitive` payload, as the server sends it on the socket. */
+export interface SensitiveRejectionEvent {
+  session_id?: string;
+  text?: string;
+}
+
+/**
+ * What applying a rejection to the UI needs. Both effects are injected rather
+ * than imported: the callers are a component method and a toast, and reaching
+ * for either from here would tie this module to one surface. The sentence stays
+ * with the caller too — i18n has exactly one owner (开发规范 §3.8).
+ */
+export interface SensitiveRejectionTargets {
+  /** The session the event must be for; events for other sessions are ignored. */
+  sessionID: string;
+  /** Put the masked text back where the user can edit it. */
+  restore: (maskedText: string) => void;
+  /** Say why the message did not send. */
+  notify: () => void;
+}
+
+/**
+ * Applies the server's input-gate rejection to the UI.
+ *
+ * This is the other direction of the same gate as checkSensitive, and it fires
+ * for the case that function cannot cover: the composer asks the server before
+ * sending for responsiveness, but the server re-checks authoritatively on the
+ * chat path, so a rejection reaches the UI here — on the socket — when the
+ * pre-check never ran or failed open. Nothing else would put the masked text
+ * back, which is why the two effects live in one place instead of two.
+ *
+ * Returns whether it applied, because "addressed to another session" is a real
+ * outcome: one window subscribes to one session, but the event carries the
+ * session id, and the caller needs the difference to stay testable.
+ */
+export function applySensitiveRejection(
+  ev: SensitiveRejectionEvent,
+  targets: SensitiveRejectionTargets,
+): boolean {
+  if (ev.session_id && ev.session_id !== targets.sessionID) return false;
+  // An absent text still restores an empty box: the box must not be left holding
+  // whatever the user typed, or they would resend the very text that was refused.
+  targets.restore(ev.text ?? "");
+  targets.notify();
+  return true;
+}

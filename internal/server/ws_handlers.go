@@ -1819,6 +1819,10 @@ func (s *Server) doAgentTurn(sess *agent.Session, content string, blocks []agent
 		SessionID: sess.ID,
 		Kind:      "turn_complete",
 	})
+	// OCTO-FORK: the turn that just ended may have moved the balance, and every
+	// window shows that number — see dev-docs-usdable/需求/20260911/开发计划.md
+	// §2 PR-8.
+	s.broadcastCreditsMayHaveMoved()
 
 	_, pm, re, _, _ := s.sessionStatusFields(sess)
 	s.wsHub.broadcast(sess.ID, map[string]any{

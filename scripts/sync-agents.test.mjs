@@ -10,6 +10,7 @@ import path from 'node:path'
 import test from 'node:test'
 
 import { NORMS_PATH, repositoryRoot } from './norms-guard.mjs'
+import { sameGeneratedText } from './generated-text.mjs'
 import {
   AGENTS_PATH,
   BEGIN_MARKER,
@@ -51,6 +52,17 @@ test('renderAgents is stable across trailing whitespace in the source', () => {
   assert.equal(renderAgents(`${goodOctorules}\n\n`), renderAgents(goodOctorules))
 })
 
+// V-104: the generated artifact must not depend on the line-ending form the
+// checkout handed us, or the same commit generates two different files.
+test('renderAgents emits the same text for an LF and a CRLF source', () => {
+  const crlf = `${goodOctorules}\n`.replaceAll('\n', '\r\n')
+  assert.equal(renderAgents(crlf), renderAgents(goodOctorules))
+  assert.ok(
+    !renderAgents(crlf).includes('\r'),
+    'the generated file must be LF-only whatever the source used',
+  )
+})
+
 test('checkOctorules accepts a source carrying every anchor', () => {
   assert.deepEqual(checkOctorules(goodOctorules), [])
 })
@@ -84,9 +96,8 @@ test('the real .octorules still carries every fork-rule anchor', async () => {
 test('the committed AGENTS.md is in sync with .octorules', async () => {
   const octorules = await fs.readFile(path.join(root, OCTORULES_PATH), 'utf8')
   const committed = await fs.readFile(path.join(root, AGENTS_PATH), 'utf8')
-  assert.equal(
-    committed,
-    renderAgents(octorules),
+  assert.ok(
+    sameGeneratedText(committed, renderAgents(octorules)),
     `${AGENTS_PATH} is stale — run \`make agents\` and commit the result`,
   )
 })
@@ -114,6 +125,29 @@ test('check reports a stale generated file', async () => {
   const repo = await fakeRepo({
     [OCTORULES_PATH]: goodOctorules,
     [AGENTS_PATH]: `${renderAgents(goodOctorules)}\nhand-edited\n`,
+  })
+  const { problems } = await check(repo)
+  assert.ok(problems.some((p) => p.includes('不一致')))
+})
+
+const toCrlf = (text) => text.replaceAll('\n', '\r\n')
+
+// V-104: a Windows checkout hands every text file CRLF. The same commit passed
+// the ubuntu Agents Guard job and failed the Windows packaging preflight, so the
+// discrepancy lived in the working tree, not in the file's content.
+test('a CRLF checkout is not drift', async () => {
+  const repo = await fakeRepo({
+    [OCTORULES_PATH]: toCrlf(goodOctorules),
+    [AGENTS_PATH]: toCrlf(renderAgents(goodOctorules)),
+  })
+  const { problems } = await check(repo)
+  assert.deepEqual(problems, [])
+})
+
+test('a CRLF checkout does not hide a real edit', async () => {
+  const repo = await fakeRepo({
+    [OCTORULES_PATH]: toCrlf(goodOctorules),
+    [AGENTS_PATH]: `${toCrlf(renderAgents(goodOctorules))}hand-edited\r\n`,
   })
   const { problems } = await check(repo)
   assert.ok(problems.some((p) => p.includes('不一致')))

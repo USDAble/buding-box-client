@@ -20,6 +20,7 @@ import {
   repositoryRoot,
   validateBrand,
 } from './brand-schema.mjs'
+import { sameGeneratedText } from './generated-text.mjs'
 
 const GENERATED_NOTICE = `Generated from ${BRAND_SOURCE_RELATIVE_PATH} by scripts/sync-branding.mjs. Do not edit directly.`
 
@@ -87,6 +88,25 @@ export function buildTargets(brand) {
   ]
 }
 
+// staleTargets returns the destinations whose on-disk content differs from what
+// buildTargets would write. Exported so a test drives the same comparison the
+// `--check` path does — including the line-ending case (V-104): content is
+// compared, never bytes, because the byte form of a text file belongs to the
+// checkout (`core.autocrlf`) rather than to the repository.
+export async function staleTargets(root, targets) {
+  const stale = []
+  for (const target of targets) {
+    const actual = await readIfPresent(path.join(root, target.destination))
+    if (
+      actual === null ||
+      !sameGeneratedText(actual.toString('utf8'), target.content.toString('utf8'))
+    ) {
+      stale.push(target.destination)
+    }
+  }
+  return stale
+}
+
 async function readIfPresent(absolutePath) {
   try {
     return await fs.readFile(absolutePath)
@@ -121,11 +141,7 @@ async function main(argv) {
   const targets = buildTargets(brand)
 
   if (checkOnly) {
-    const stale = []
-    for (const target of targets) {
-      const actual = await readIfPresent(path.join(root, target.destination))
-      if (actual === null || !actual.equals(target.content)) stale.push(target.destination)
-    }
+    const stale = await staleTargets(root, targets)
     if (stale.length > 0) {
       console.error('以下生成目标与 brand.json 不一致：')
       for (const destination of stale) console.error(`- ${destination}`)

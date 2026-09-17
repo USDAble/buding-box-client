@@ -277,16 +277,18 @@ export const DEBT_CEILINGS = [
     // below rather than letting a 36-line allowance hide them (V-49).
     // Raised 15 → 23 by PR-6b3 (2026-09-15), the second change.
     file: 'internal/server/ws_handlers.go',
-    ceiling: 23,
+    ceiling: 26,
     why:
       'G3 (需求基线 C8): the control plane\'s error code on the turn_error event. Composition at the measured 15 — 2 added + 3 removed are the `errorInput` signature and `error`\'s call line; 3 are the `if code != "" { ev["code"] = code }` that puts the field on the wire; 4 are the two `userError`/`userErrorInput` call lines (each forwards agent.ErrorCodeOf(err)); 3 are prose plus the marker. ' +
       'WHY NO SMALLER FORM: the field can only be added where the event is built, and once a fourth parameter exists the three call sites in this file must pass it — the alternative (a second emitter function) measured 22 lines, not fewer. The code has to be read from the error object, which exists only in the two userError* callers. ' +
       'WHAT WAS MOVED OUT FIRST: nothing was available to move. The file had zero fork lines, so there was no accumulated bulk to fold into internal/server/turn_refusal.go — that is where PR-5e\'s refusal moved TO in the same PR, and it took server.go from 533 to 517 in the same change (see that entry). ' +
       'PR-6b3 added 8: the input-gate call in handleWSUserMessage, before the session binding is taken and before the user message is broadcast or persisted, plus its three-line marker. ' +
       'WHY NO SMALLER FORM for that 8: this is the only WS entry point a typed message passes through, and the position is the requirement — the two lines below it in the same function broadcast `history_user_message` and append to the session, so a gate anywhere later is a refusal of something the transcript already shows (开发计划 §PR-6b3; this is also why the sender-wrapper alternative was measured and rejected). ' +
-      'WHAT WAS MOVED OUT FIRST for it: the verdict and both response shapes (the WS broadcast and the REST refusal writer) are in the fork-owned internal/server/sensitive.go; what is here is the call and the marker.',
+      'WHAT WAS MOVED OUT FIRST for it: the verdict and both response shapes (the WS broadcast and the REST refusal writer) are in the fork-owned internal/server/sensitive.go; what is here is the call and the marker. ' +
+      'PR-8 added 3: the global credits nudge at the turn tail, next to the session_activity companion that already exists there for the same reason (completeEvent reaches only subscribers of this session, while the balance is shown in the sidebar corner and account panel, which live outside every session). ' +
+      'WHY NO SMALLER FORM: the nudge has to fire where a turn is known to be over, and every turn ends in this function; the emitter itself is one line in the fork-owned internal/server/product_events.go, so what is here is the call and its three-line marker.',
     convergence:
-      'shrinks only if upstream grows a code channel on turn_error (or a pre-send hook that carries one); otherwise this is the permanent cost of the requirement that the client must not render `message`',
+      'shrinks only if upstream grows a code channel on turn_error (or a pre-send hook that carries one) and a global companion hook on the turn tail; otherwise this is the permanent cost of the requirement that the client must not render `message` and that the balance refreshes in every window',
   },
   {
     file: 'internal/server/native_handlers.go',
@@ -326,6 +328,8 @@ export const PRODUCT_FILES = [
   { file: 'internal/server/product_sensitive_test.go', convergence: 'P0-01A B' },
   { file: 'internal/server/product_account_panel_test.go', convergence: 'P0-01A B' },
   { file: 'internal/server/product_credits_test.go', convergence: 'P0-01A E (credit path deleted, not moved)' },
+  { file: 'internal/server/product_events.go', convergence: 'P0-01A B' },
+  { file: 'internal/server/product_events_test.go', convergence: 'P0-01A B' },
   { file: 'internal/server/sensitive_dict_handlers.go', convergence: 'P0-01A B + P0-06' },
   { file: 'internal/server/sensitive_dict_handlers_test.go', convergence: 'P0-01A B + P0-06' },
   { file: 'internal/server/chatmode_handlers.go', convergence: 'P0-01A D + P0-04' },

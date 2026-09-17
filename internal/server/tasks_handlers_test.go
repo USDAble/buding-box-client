@@ -1,6 +1,7 @@
 package server
 
 import (
+	"context"
 	"os"
 	"path/filepath"
 	"testing"
@@ -300,6 +301,41 @@ func TestCreateSession_EmptyAgentID_DefaultsToDefault(t *testing.T) {
 	}
 	if got := sess.EffectiveAgentID(); got != "default" {
 		t.Errorf("EffectiveAgentID() = %q, want %q", got, "default")
+	}
+}
+
+// TestShutdownStopsTheScheduler closes the other half of the same hole V-105
+// opened: a stop that is only a sign, with nobody waiting on the thing itself.
+//
+// initScheduler starts a cron loop and Scheduler.Stop had no production caller at
+// all, so the loop outlived the server that started it. The tasks directory is a
+// path resolved under the data root rather than a handle the server holds, so a
+// Restart left two loops firing the same tasks against it, and a test binary
+// accumulated one goroutine per server it built.
+//
+// The assertion is the server giving up its reference, which is what doShutdown
+// does before waiting: it is the state a second shutdown would see, and the one
+// nothing can recover from.
+//
+// OCTO-FORK: fork-side fix, upstream left the scheduler running — see dev-docs-usdable/需求/20260911/需求基线.md §5.6.
+func TestShutdownStopsTheScheduler(t *testing.T) {
+	srv := groupTestServer(t)
+	srv.initScheduler()
+	if srv.scheduler == nil {
+		t.Fatal("initScheduler did not create a scheduler")
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	if err := srv.Shutdown(ctx); err != nil {
+		t.Fatalf("Shutdown: %v", err)
+	}
+
+	srv.schedulerMu.Lock()
+	sch := srv.scheduler
+	srv.schedulerMu.Unlock()
+	if sch != nil {
+		t.Error("Shutdown left the cron scheduler running; it keeps scheduling against the data root after the server is gone (V-105)")
 	}
 }
 

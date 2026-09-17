@@ -60,6 +60,23 @@ export const BASELINE_PATTERN = /^[0-9a-f]{40}$/
 // Directories the guard governs: the upstream runtime the fork must not grow.
 export const GOVERNED_PREFIX = 'internal/server/'
 
+// WHAT IS AND IS NOT RATCHETED — the scope, stated here because the two are
+// easy to conflate and the conflation is silent (开发规范 §3.10).
+//
+//   R1 counts added `s.api(` lines in server.go: one number, ceiling 1.
+//   R2's per-file ceilings cover a *named handful* of files — the ones carrying
+//     product debt that has a convergence plan. Everything else under
+//     GOVERNED_PREFIX is unratcheted *by design*: no drift ceiling, no
+//     comparison, however large the fork's diff against upstream grows.
+//   R2's registration rule covers fork-ADDED files (PRODUCT_FILE_PATTERN): such
+//     a file must be listed in PRODUCT_FILES with a convergence plan.
+//
+// The count of fork-modified upstream files with no ceiling is measured at run
+// time and printed in the coverage note, not written here: a frozen number goes
+// stale on the next change while still reading as current (§3.8), which is the
+// defect V-101 registered. What the guard must not do is let a pass read as a
+// statement about the whole tree — so `main` names the scope in its pass line.
+//
 // R1 — the route table.
 //
 // Measured 2026-09-13: upstream main has 147 `s.api(` calls in server.go and
@@ -190,6 +207,29 @@ export const ROUTE_TABLE_CEILING = 1
 //       one to three lines each (−19 measured before the ceiling was touched), so
 //       what the ceiling records is the wiring and not the argument for it.
 //
+//   server.go 565 → 576 for the shutdown joins (V-105, 2026-09-16). The ninth
+//   raise, judged by the same three points:
+//
+//   (a) what the 11 lines are: three `Server` fields — the channel the store
+//       watch closes when it returns, the `atomic.Bool` that lets a join skip
+//       itself when the watch never ran, and the nil-in-production test seam
+//       that makes the ordering observable at all — plus their three comment
+//       lines, the one `make(chan struct{})` in `New`, and the two call lines in
+//       `doShutdown`. Six lines of Go, five of prose.
+//   (b) no smaller form: the fields have to be declared on `Server`, which is
+//       declared here, and `Config` is the only construction channel — the same
+//       argument as P0-01 B1 and the PR-5e raise. `doShutdown` is upstream's own
+//       method, so a fork-side wrapper cannot reach it. `watchStop` is the ask;
+//       a join needs the second channel that answers, and "the watcher has
+//       returned" is not learnable from a channel whose only writer is the side
+//       doing the waiting. Measured: stripping every comment still leaves six
+//       lines (571), so even the comment-free form breaches the old 565.
+//   (c) the bulk was moved out first: the substance of these two joins is in
+//       `internal/server/store_watch.go` (+48) and
+//       `internal/server/tasks_handlers.go` (+34), neither of which this guard
+//       ratchets. What reaches this file is the wiring that has nowhere else to
+//       go.
+//
 //   NOTE ON THE PR-5e PRECEDENT. That raise rejected a fork-side wrapper sender
 //   because forwarding the capability stack by hand can silently downgrade
 //   streaming. This wrapper is the same shape and is still the right answer,
@@ -202,7 +242,7 @@ export const ROUTE_TABLE_CEILING = 1
 export const DEBT_CEILINGS = [
   {
     file: 'internal/server/server.go',
-    ceiling: 565,
+    ceiling: 576,
     why:
       'the product seam and the data-root migration: Config.MountAPI/WindowToken/RequireGateway/ControlPlaneReady plumbing, the productAPI registrar (a method value, not a call site), V-36/PR-5c/PR-5b1 gates on the turn path, and Config.CatalogOffers + its guard (PR-5e, L-C7). ' +
       'Measured 2026-09-14 at 533 after excluding marker lines (see the marker note in forkDiffLines) and after trimming the PR-5e prose to pointers into 开发计划 §PR-5e; of the added lines the large majority are prose explaining those seams. ' +
@@ -214,9 +254,12 @@ export const DEBT_CEILINGS = [
       'PR-6b3 added 19 (eighth raise), all of it Config.SensitiveInputGate: the field and its documentation. ' +
       'WHY IT CANNOT BE FOLDED OUT: the gate has to fire where the three turn entry points are, and those live in this package; the same shape as SensitiveEngine above, and for the same reason — a Config field is where a build hands this package a dependency it may not import. The alternative the archived implementation used, letting internal/server hold a *productstate.Store and read the switch itself, is forbidden twice over: this package may not import a fork package, and a user preference is not this package\'s fact to own (开发规范 §3.8). The other alternative, decorating the sender, was rejected by measurement, not taste: the WS path broadcasts AND persists the user message before buildAgent runs, so a refusal at send time would leave a question in the transcript that was never asked (开发计划 §PR-6b3). ' +
       'WHAT WAS MOVED OUT FIRST: the three verdict helpers (sensInputVerdict, refuseSensitiveInput, broadcastInputSensitive) went into the fork-owned internal/server/sensitive.go rather than beside their call sites, and the call-site prose was cut to one to four lines each; what is left here is the field plus the doc answering the three header questions. ' +
-      'WHY NO SMALLER FORM: the field is one line and the doc is where the next reader learns that a nil gate is the CLI shape and that the ORDER (refuse before broadcast/persist) is the requirement rather than an implementation detail — the PR-6b1 precedent for the same seam.',
+      'WHY NO SMALLER FORM: the field is one line and the doc is where the next reader learns that a nil gate is the CLI shape and that the ORDER (refuse before broadcast/persist) is the requirement rather than an implementation detail — the PR-6b1 precedent for the same seam. ' +
+      'V-105 added 11 (ninth raise), all of it the shutdown joins: the watchDone channel the store watch closes on its way out, the watchStarted flag that skips the join when the watch never ran, the test seam that makes the ordering observable, the make() for the channel, the two call lines in doShutdown, and five lines of prose — see the ninth raise note above. ' +
+      'WHY NO SMALLER FORM: the fields are on Server because that is where the struct is declared and Config is the only construction channel; doShutdown is upstream\'s own method, so no fork-side wrapper reaches it; and watchStop is the ask, while a join needs the channel that answers. Stripping every comment still measures 571, over the previous 565 — so this raise could not have been avoided by trimming prose. ' +
+      'WHAT WAS MOVED OUT FIRST: both joins themselves live in internal/server/store_watch.go (+48) and internal/server/tasks_handlers.go (+34), neither of which this guard ratchets. Only the wiring lands here.',
     convergence:
-      'P0-01A C (the apiProduct fold is dead — see the R1 note; what remains is the registrar and the product-state move, P0-01A D). PR-5e adds nothing to fold: its 37 lines are the floor for a turn-path guard, and they shrink only if upstream grows a pre-send hook',
+      'P0-01A C (the apiProduct fold is dead — see the R1 note; what remains is the registrar and the product-state move, P0-01A D). PR-5e adds nothing to fold: its 37 lines are the floor for a turn-path guard, and they shrink only if upstream grows a pre-send hook. The 11 V-105 lines shrink only if upstream joins its own background goroutines on Shutdown — the join belongs upstream, and this is the fork paying for it in the meantime',
   },
   {
     file: 'internal/server/handlers.go',
@@ -522,6 +565,58 @@ export function listGovernedFiles(root, run = git) {
   return out.split('\n').filter((l) => l.trim().length > 0)
 }
 
+// listUpstreamFiles returns the governed files that exist at the upstream ref.
+//
+// The complement of this set is what the fork ADDED. Those are not "modified
+// upstream" files: the R2 registration rule (PRODUCT_FILES) governs them, and a
+// coverage note that counted them as unratcheted upstream drift would name the
+// wrong gap.
+export function listUpstreamFiles(root, ref, run = git) {
+  const out = run(root, ['ls-tree', '-r', '--name-only', ref, GOVERNED_PREFIX])
+  return out.split('\n').filter((l) => l.trim().length > 0)
+}
+
+// summarizeCoverage splits the fork-modified upstream files under the governed
+// prefix into the ones an R2 ceiling governs and the ones it does not.
+//
+// The ceilings are per-file and deliberately name a handful of files — the ones
+// carrying product debt with a convergence plan. The rest of the governed tree
+// is unratcheted *by design*, and that design is fine; what is not fine is a
+// pass message reading "internal/server debt is within the recorded ceilings",
+// which reads as a statement about the whole tree. That over-claim is how the
+// coverage gap stays invisible, and it is the same shape as the two guard
+// defects this file already carries notes about: the counter that could not
+// fail (V-49) and the guard that measured a different upstream than CI (V-101).
+//
+// The numbers are measured at run time rather than written into the header as
+// prose, because a frozen count goes stale on the next change while still
+// reading as current (开发规范 §3.8).
+export function summarizeCoverage({ modified, ceilings }) {
+  const capped = new Set(ceilings.map((c) => c.file))
+  const withCeiling = modified.filter((m) => capped.has(m.file))
+  const without = modified.filter((m) => !capped.has(m.file))
+  const sum = (rows) => rows.reduce((total, r) => total + r.lines, 0)
+  return {
+    withCeilingFiles: withCeiling.length,
+    withCeilingLines: sum(withCeiling),
+    withoutCeilingFiles: without.length,
+    withoutCeilingLines: sum(without),
+    withoutCeiling: without.map((r) => r.file).sort(),
+  }
+}
+
+// formatCoverage renders one coverage sentence, so the note and the pass line
+// cannot disagree about what was measured.
+export function formatCoverage(coverage) {
+  return (
+    `R2 coverage: ${coverage.withCeilingFiles} fork-modified upstream file(s) carry a ceiling ` +
+    `(${coverage.withCeilingLines} lines); ${coverage.withoutCeilingFiles} more are fork-modified upstream ` +
+    `files with no ceiling (${coverage.withoutCeilingLines} lines). The ceilings are per-file and named, ` +
+    `not tree-wide — the uncapped files are unratcheted by design, and their line counts are not compared ` +
+    `against anything.`
+  )
+}
+
 // ─── guard ──────────────────────────────────────────────────────────────────
 
 export async function check(root, run = git, read) {
@@ -567,7 +662,20 @@ export async function check(root, run = git, read) {
     }),
   )
 
-  return { problems, notes }
+  // R2 — what the ceilings above do NOT cover, measured rather than implied.
+  // Only files upstream also has: a file the fork added is governed by the
+  // registration rule above, not by a drift ceiling.
+  const upstreamGoverned = new Set(listUpstreamFiles(root, upstream, run))
+  const modified = []
+  for (const file of found) {
+    if (!upstreamGoverned.has(file)) continue
+    const lines = forkDiffLines(root, upstream, file, run)
+    if (lines > 0) modified.push({ file, lines })
+  }
+  const coverage = summarizeCoverage({ modified, ceilings: DEBT_CEILINGS })
+  notes.push(formatCoverage(coverage))
+
+  return { problems, notes, coverage }
 }
 
 export function repositoryRoot(scriptUrl) {
@@ -576,7 +684,7 @@ export function repositoryRoot(scriptUrl) {
 
 async function main() {
   const root = repositoryRoot(import.meta.url)
-  const { problems, notes } = await check(root)
+  const { problems, notes, coverage } = await check(root)
 
   for (const note of notes) console.log(`server-diff-guard: ${note}`)
 
@@ -586,7 +694,15 @@ async function main() {
     process.exitCode = 1
     return
   }
-  console.log('server-diff-guard passed: internal/server debt is within the recorded ceilings.')
+  // The scope is named rather than implied: this guard ratchets the files listed
+  // in DEBT_CEILINGS, and saying "internal/server debt is within the recorded
+  // ceilings" without the count reads as a statement about the whole tree.
+  console.log(
+    `server-diff-guard passed: the ${coverage.withCeilingFiles} file(s) with a recorded R2 ceiling are within it ` +
+      `(${coverage.withCeilingLines} lines), and no product file is unregistered. ` +
+      `Ceilings are per-file, not tree-wide: ${coverage.withoutCeilingFiles} fork-modified upstream file(s) ` +
+      `carry no ceiling and were not compared against anything.`,
+  )
 }
 
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {

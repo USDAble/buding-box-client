@@ -14,7 +14,16 @@ name: Portable
 # leaves no new .octo data in the host home" acceptance item (§3.4).
 on:
   push:
-    branches: [main]
+    # OCTO-FORK: 把集成分支 v1 接进 CI — see dev-docs-usdable/需求/20260911/需求基线.md §5.6 `V-110`
+    #
+    # v1 is the product integration branch and PRs land there as a squash, so the
+    # commit that lands is never the commit the PR leg built. This push trigger
+    # is the only thing that builds the merge result, and without it
+    # `gh run list --workflow=portable.yml --branch=v1` returned zero runs: the
+    # primary deliverable was only ever packaged on PR heads, never on the branch
+    # it ships from (V-110; V-102 is what stayed red inside that blind spot, and
+    # V-108 what a Windows-only failure could hide behind it).
+    branches: [main, v1]
     paths:
       - 'cmd/octo-desktop/**'
       - 'internal/server/**'

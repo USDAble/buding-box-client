@@ -5,6 +5,8 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/open-octo/octo-agent/internal/agent"
@@ -613,5 +615,49 @@ func TestSessionCollapse_CoexistsWithGroupsAndPins(t *testing.T) {
 
 	if col, _ := loadCollapsedSessions(); len(col) != 1 || col[0] != sid {
 		t.Fatalf("collapsed list lost across registry edits, got %v", col)
+	}
+}
+
+// TestReadingTheRegistryCreatesNothing pins the read half of the split V-105
+// opened in sessionGroupsPath: it resolves the file, it does not make the data
+// root. Every listing stats this path — cachedRegistry once per request, the
+// store watch once per tick — and datapath.Root (the creating form) also writes
+// a probe file into the root each time, so a reader resolving through it is a
+// writer in disguise.
+//
+// OCTO-FORK: read/write split of the registry path — see dev-docs-usdable/需求/20260911/需求基线.md §5.6.
+func TestReadingTheRegistryCreatesNothing(t *testing.T) {
+	root := filepath.Join(t.TempDir(), "data") // deliberately absent
+	t.Setenv("OCTO_DATA_ROOT", root)
+
+	groups, err := loadSessionGroups()
+	if err != nil {
+		t.Fatalf("loadSessionGroups on a fresh root: %v", err)
+	}
+	if len(groups) != 0 {
+		t.Fatalf("groups = %d, want 0 on a fresh root", len(groups))
+	}
+	if _, err := os.Stat(root); !os.IsNotExist(err) {
+		t.Errorf("reading the registry created %s; a missing registry is an empty one, not a directory to make", root)
+	}
+}
+
+// TestWritingTheRegistryCreatesTheRoot is the other half: the split must not
+// leave the writers unable to start from nothing. saveRegistry writes its
+// temporary file directly into the data root, so the writer is the one that has
+// to make sure the directory exists.
+func TestWritingTheRegistryCreatesTheRoot(t *testing.T) {
+	root := filepath.Join(t.TempDir(), "data") // deliberately absent
+	t.Setenv("OCTO_DATA_ROOT", root)
+
+	groupMu.LockWrite()
+	err := saveRegistry(groupFile{})
+	groupMu.Unlock()
+	if err != nil {
+		t.Fatalf("saveRegistry with no data root yet: %v", err)
+	}
+
+	if _, err := os.Stat(filepath.Join(root, sessionGroupsFile)); err != nil {
+		t.Errorf("saveRegistry did not write %s under a fresh root: %v", sessionGroupsFile, err)
 	}
 }

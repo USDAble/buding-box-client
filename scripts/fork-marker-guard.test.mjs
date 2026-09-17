@@ -20,6 +20,7 @@ import {
   markerInFrontmatter,
   parseAllowlist,
   readMarkerState,
+  repositoryRoot,
 } from './fork-marker-guard.mjs'
 import { UPSTREAM_BASELINE_PATH, resolvePinnedUpstream } from './server-diff-guard.mjs'
 import { MARKER_PATTERN, isMarkerLine } from './fork-marker.mjs'
@@ -255,8 +256,13 @@ test('an uncommitted edit to an upstream file is examined, not just HEAD', (t) =
 // It measures against the pinned baseline, not `origin/main`: the point is to
 // exercise the same upstream the guard uses, and after 2026-09-16 a ref that
 // moves would make this test agree with the guard only by luck.
+// The root comes from the guard's own `repositoryRoot`, not from
+// `import.meta.dirname`: that property needs Node >= 20.11, and on Node 20.0.0
+// (still on some dev machines) it is undefined, so `path.resolve(undefined, '..')`
+// throws and this suite reports a failure that has nothing to do with the
+// repository. Surfaced while fixing V-102; registered under V-104.
 test('the gathering is self-consistent against the real repository', () => {
-  const root = path.resolve(import.meta.dirname, '..')
+  const root = repositoryRoot(import.meta.url)
   const run = (r, args) => execFileSync('git', args, { cwd: r, encoding: 'utf8' })
   const upstream = resolvePinnedUpstream(root, run)
   assert.ok(upstream, `the pinned baseline in ${UPSTREAM_BASELINE_PATH} must be in this checkout`)

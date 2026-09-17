@@ -116,23 +116,42 @@ build-full: build
 # WebView2). Embeds the web UI first (the in-process server go:embeds webdist).
 # Produces a bare binary; use `wails3 build` inside cmd/octo-desktop for a
 # packaged .app / installer.
-# Fixed at 11.0 (matches cmd/octo-desktop's Info.plist LSMinimumSystemVersion
-# and Go's own linker default) rather than derived from the build machine's
-# live macOS version — deriving it from `sw_vers` bakes whatever OS the
-# builder happens to run into the binary's LC_VERSION_MIN, silently raising
-# the real minimum macOS required to launch it.
-DESKTOP_MACOS_VERSION ?= 11.0
-# OCTO-FORK: CGO_LDFLAGS deliberately omits -Wl,-no_warn_duplicate_libraries.
-# That flag only silences the benign duplicate -lobjc that Go + Wails produce,
-# and not every Apple linker accepts it — ld64-530 (Xcode 14.3.1) answers
-# "ld: unknown option: -no_warn_duplicate_libraries" and fails the link. The
-# SDK-vs-link-target warnings upstream #1785 also set out to silence are already
-# handled by the version-min pair below, so dropping the flag costs only that
-# one benign warning. See dev-docs-usdable/需求/2260906/需求20260906.md §8.
+# Fixed at 12.0 (matches cmd/octo-desktop's Info.plist LSMinimumSystemVersion,
+# Go 1.25's own linker default, and DARWIN_MIN_MACOS in .goreleaser.yaml for
+# the CLI) rather than derived from the build machine's live macOS version —
+# deriving it from `sw_vers` bakes whatever OS the builder happens to run into
+# the binary's LC_BUILD_VERSION, silently raising the real minimum macOS
+# required to launch it. Passed to the link step as -mmacosx-version-min (the
+# clang-driver spelling) rather than -Wl,-macos_version_min, so the driver
+# does not also derive a host-based version and ld does not warn about two.
+#
+# OCTO-FORK: CGO_LDFLAGS deliberately omits -Wl,-no_warn_duplicate_libraries,
+# which upstream carries here. That flag only silences the benign duplicate
+# -lobjc that Go + Wails produce, and not every Apple linker accepts it —
+# ld64-530 (Xcode 14.3.1) answers "ld: unknown option:
+# -no_warn_duplicate_libraries" and fails the link outright, which is a hard
+# failure to trade for one benign warning. Upstream's driver spelling above
+# already removes the two-min-versions warning this flag was originally paired
+# with (ld: "passed two min versions"), so the omission costs only the
+# duplicate-library note.
+#
+# The 12.0 is upstream's, adopted at the 2026-09-17 merge of f7ba0793: Info.plist
+# had already auto-merged to 12.0, Go's own linker default measures 12.0 (otool
+# on a locally linked binary), and .goreleaser.yaml pins the CLI at 12.0 — an
+# 11.0 here would contradict all three at once.
+#
+# Measured 2026-09-17 (otool, LC_BUILD_VERSION) so the next reader does not have
+# to re-derive it: a pure-Go link records 12.0 on its own, but this target is
+# cgo — with no flag the desktop test binary records 11.0 and a bare cgo program
+# records 13.0, because cgo's floor comes from clang, which defaults to the build
+# host's macOS. The pair below is what makes the shipped floor 12.0 rather than
+# whatever the builder happens to run, which is the whole point of pinning it.
+# See dev-docs-usdable/需求/2260906/需求20260906.md §8.
+DESKTOP_MACOS_VERSION ?= 12.0
 desktop: web-build
 	cd cmd/octo-desktop && CGO_ENABLED=1 \
 		CGO_CFLAGS="-mmacosx-version-min=$(DESKTOP_MACOS_VERSION)" \
-		CGO_LDFLAGS="-Wl,-macos_version_min,$(DESKTOP_MACOS_VERSION)" \
+		CGO_LDFLAGS="-mmacosx-version-min=$(DESKTOP_MACOS_VERSION)" \
 		go build -ldflags='$(DESKTOP_LDFLAGS)' -o ../../octo-desktop .
 
 # OCTO-FORK: desktop-dev runs the desktop shell against the Vite dev server so
@@ -150,7 +169,7 @@ desktop: web-build
 desktop-dev:
 	cd cmd/octo-desktop && CGO_ENABLED=1 \
 		CGO_CFLAGS="-mmacosx-version-min=$(DESKTOP_MACOS_VERSION)" \
-		CGO_LDFLAGS="-Wl,-macos_version_min,$(DESKTOP_MACOS_VERSION)" \
+		CGO_LDFLAGS="-mmacosx-version-min=$(DESKTOP_MACOS_VERSION)" \
 		go build -ldflags='$(DESKTOP_LDFLAGS)' -o ../../octo-desktop-dev .
 	OCTO_DESKTOP_DEV_URL="http://localhost:5173" ./octo-desktop-dev
 

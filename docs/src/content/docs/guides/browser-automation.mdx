@@ -77,17 +77,30 @@ The recorder also captures what happens *between* your actions:
   to the single final click.
 
 A model pass then distills the raw capture — dropping dead-end detours, turning your specific
-values into `{{param}}` placeholders, and writing a description — but it can only reorder or rename
-real captured steps, never invent a new target: any refined step whose selector isn't in the
+values into `{{param}}` placeholders, and writing a description. The agent hands it what you said
+you wanted to record (the `goal` on `record_start`, in your own words), which is how it tells a
+step your goal needs from a mis-click you cancelled a moment later — so state the objective before
+you start demonstrating. It also sees what each click actually did — whether the URL moved, a tab or
+download opened, and which requests it fired, counted by HTTP method — and trailing clicks that did
+none of that (no write, no navigation) are flagged as likely no-ops for it to drop unless your goal
+needs them. It can only reorder or rename real captured steps, never invent a new target: any refined step whose selector isn't in the
 original capture is rejected in favor of the raw version (fingerprints are re-attached
-deterministically after the pass).
+deterministically after the pass). When the pass doesn't apply — the model's output can't be
+parsed, uses selectors it wasn't given, or no model is configured — `record_stop` says so and why,
+so you know the steps are the raw capture and can remove any stray clicks yourself.
 
 `record_stop` replies with a numbered run-plan — each step with what it does and what its check
-is — for you to confirm or correct before the recording is used.
+is — and the agent is told to hold there: it presents the plan and waits for you to confirm it or
+name steps to remove or change before the recording is replayed or relied on. Steps flagged as
+likely no-ops that survived the cleanup are listed separately under the plan with the question
+"要保留吗？" — nothing is removed for you; that review is where a stray click gets dropped.
 
-Recordings are saved as plain YAML at `~/.octo/browser-recordings/<name>.yaml` — readable, editable by
-hand, and diffable in git. (Before the recording rename this was `~/.octo/browser-skills/`; an existing
-directory is migrated automatically.)
+Each recording is a directory, `~/.octo/browser-recordings/<name>/`, holding `recording.yaml` — the
+editable steps: readable, hand-editable, diffable in git — and `events.json`, the raw captured events
+the steps were compiled from (diagnostic ground truth when a replay misbehaves; never edited by hand).
+`OCTO_BROWSER_RECORDINGS_DIR` relocates the whole tree. (A flat `<name>.yaml` from an older version is
+still read, and rewritten into the directory layout the next time it is saved; the pre-rename
+`~/.octo/browser-skills/` directory is migrated automatically.)
 
 ## Replay
 
@@ -164,14 +177,22 @@ recording and the param — never the value.
 
 If a step's selector no longer matches anything — and only if a model is configured for this
 purpose — octo takes a **text digest** of the page's currently interactable elements (selector +
-visible text, no screenshot, model-agnostic), and asks the model for a single corrected CSS
-selector given the intended action, the dead selector, and (when the step carries one) the
-recorded fingerprint — role, tag and neighbor text — turning the request from an open guess into
-constrained matching. The fix is retried once and, if it works,
-written back into the recording's YAML — so a heal is durable, not a one-off patch you'd have to
-redo on every future replay. (The write-back re-marshals the YAML, so any hand-written comments in
-the file are dropped on the next healed replay; field values are kept. Version your recordings in
-git if you annotate them.)
+visible text, no screenshot, model-agnostic), puts the elements carrying the step's recorded text
+at the top of it whatever their tag (a menu built from click-handled `span`s is not a control by
+any query), and asks the model for a single corrected CSS selector given the intended action, the
+dead selector, and (when the step carries one) the recorded fingerprint — role, tag and neighbor
+text — turning the request from an open guess into constrained matching. The answer must be a
+selector from that list; anything else is refused. Before it is trusted, the proposal is **verified
+against the live page**: it must resolve to an element whose text contains the step's recorded
+label. A proposal that fails this is rejected — the step stays exactly as recorded and the reason
+feeds the next heal round (up to three) — so a selector nothing on the page matched can never be
+acted on, let alone saved. A verified element is **fingerprinted afresh** (alternate selectors, tag,
+role, the neighbor text beside it now) in place of the stale anchors; then the step is retried and,
+if it works, written back into the recording's YAML — so a heal is durable, not a one-off patch
+you'd have to redo on every future replay, and the healed step keeps the redundancy that lets it
+survive the next drift. (The write-back re-marshals the YAML, so any hand-written comments in the
+file are dropped on the next healed replay; field values are kept. Version your recordings in git
+if you annotate them.)
 
 ## Permissions and vision
 

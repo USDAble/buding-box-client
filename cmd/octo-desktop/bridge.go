@@ -7,6 +7,7 @@ import (
 	"os"
 	"os/exec"
 	"runtime"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -132,6 +133,13 @@ type nativeBridge struct {
 	// menu immediately rather than waiting for refreshTrayLoop's next tick.
 	tray atomic.Pointer[application.SystemTray]
 
+	// pet is the desktop-pet window, nil while it is down. An auxiliary window
+	// with no part in the main window's show/hide/revive machinery — see pet.go.
+	pet atomic.Pointer[application.WebviewWindow]
+	// petState is the pet's current animation state, published by setPetState
+	// and read by the pointer loop, whose hit shapes depend on the pose.
+	petState atomic.Pointer[string]
+
 	settingsMu sync.Mutex
 	settings   desktopSettings
 	// geomTimer debounces persistence of the window geometry to disk: a drag
@@ -185,6 +193,19 @@ func shellURL(base, hash string) string {
 	// token exists, which keeps both this file's upstream TestShellURL and the
 	// octo serve URL byte-identical to upstream.
 	u := base + "/?" + desktopShellQuery + windowTokenFragment()
+	// The shell webview aligns its titlebar rows to the traffic lights, whose
+	// position depends on the host's macOS version (26pt from the window top
+	// on macOS 26 for this window style, 20px through macOS 15) — and it
+	// needs that version at first paint: waiting for /api/version leaves the
+	// rows un-inset under the lights for a second or two at startup. So the
+	// version rides in the URL alongside the shell marker; the frontend seeds
+	// macosMajor from it (web/src/lib/stores.ts) and re-confirms from
+	// /api/version's os_version once that lands.
+	if runtime.GOOS == "darwin" {
+		if major, _, _ := strings.Cut(server.OSVersion(), "."); major != "" {
+			u += "&macos=" + major
+		}
+	}
 	if hash != "" {
 		u += "#" + hash
 	}
@@ -896,17 +917,14 @@ func (b *nativeBridge) Heartbeat(frameAgeMS int64, hidden bool) {
 
 // confirm shows a modal question dialog and reports whether the user chose the
 // affirmative button. The cancel button is the safe default.
+//
+// Both askers reach it while the app may well not be the active one — the
+// tray's "Quit Octo", clicked from whatever the user was in, and the
+// launch-time takeover prompt — and a dialog that comes up behind the active
+// app looks like the click did nothing. Keeping it in sight is a per-platform
+// problem, so the dialog itself lives in platformConfirm.
 func (b *nativeBridge) confirm(title, message, okLabel, cancelLabel string) bool {
-	var ok bool
-	dlg := b.app.Dialog.Question().SetTitle(title).SetMessage(message)
-	yes := dlg.AddButton(okLabel)
-	yes.OnClick(func() { ok = true })
-	no := dlg.AddButton(cancelLabel)
-	no.OnClick(func() { ok = false })
-	dlg.SetDefaultButton(no)
-	dlg.SetCancelButton(no)
-	dlg.Show()
-	return ok
+	return platformConfirm(b.app, title, message, okLabel, cancelLabel)
 }
 
 // showError shows a modal error dialog for a startup failure and hands the user

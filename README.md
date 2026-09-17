@@ -12,7 +12,6 @@ A coding agent on par with Claude Code; as a personal assistant, lighter than Op
 
 [![Go CI](https://img.shields.io/github/actions/workflow/status/open-octo/octo-agent/go.yml?label=ci&style=flat-square)](https://github.com/open-octo/octo-agent/actions)
 [![Stars](https://img.shields.io/github/stars/open-octo/octo-agent?style=flat-square)](https://github.com/open-octo/octo-agent/stargazers)
-[![Discussions](https://img.shields.io/github/discussions/open-octo/octo-agent?style=flat-square&label=discussions)](https://github.com/open-octo/octo-agent/discussions)
 [![Website](https://img.shields.io/badge/website-octo--agent.dev-4f46e5?style=flat-square)](https://octo-agent.dev)
 [![Go](https://img.shields.io/badge/go-%3E%3D%201.25-00ADD8?style=flat-square)](https://go.dev)
 [![License](https://img.shields.io/badge/license-MIT-lightgrey?style=flat-square)](LICENSE.txt)
@@ -29,7 +28,6 @@ octo isn't another agent framework you have to "raise." Projects like OpenClaw o
 
 ```bash
 curl -fsSL https://octo-agent.dev/install.sh | sh     # single binary — no Node / Ruby / Python
-octo config                                            # pick a provider, paste a key (DeepSeek / Kimi / …)
 octo "Add a --json flag to 'octo config show' and run the tests"   # one prompt → full agentic loop
 ```
 
@@ -37,7 +35,7 @@ octo is built around that positioning:
 
 - **Works out of the box**: shell, file read/write/edit, search, MCP servers, skills, and sub-agents are all on by default — one message after install is enough for it to actually do work.
 - **Model choice stays yours**: any OpenAI / Anthropic protocol-compatible endpoint is supported natively; no vendor lock-in.
-- **Data stays on your machine**: self-hosted, zero telemetry — except for the model API calls you configure, octo sends no outbound traffic on its own.
+- **Data stays on your machine**: self-hosted, zero telemetry — no analytics, no crash reporting, no usage pings, no CDN. Exactly one request is made without you asking: a version check against GitHub, carrying no data. Set `update_check: false` and octo makes none at all — what leaves the machine is then only the model API calls you configured and the tool calls you asked for.
 - **Everywhere you are**: the same binary serves eight entry points — TUI, CLI, web, desktop, IM, editor extensions, and mobile.
 - **Safe defaults**: catastrophic commands are hard-coded denies, and deletes and overwrites are backed up to a recycle bin first — the agent won't edit itself dead and won't go rogue on your data.
 
@@ -48,7 +46,7 @@ If you already have reliable access to a Codex or Claude subscription, keep usin
 - **A single ~40 MB Go binary**: one command to download, copy to any server, and run. No Node / Python / Ruby dependency tree; no npm mirror, node-gyp build failure, or version conflict headaches.
 - **No cache degradation**: prompt caching is tuned per provider; measured hit rates for Kimi, DeepSeek, and Qwen are all **95%+**, keeping your token bill predictable.
 - **Eight interfaces**: TUI, CLI, Web UI, desktop app, IM bridge, VS Code, Obsidian, and mobile — few other agent projects cover this many entry points at once.
-- **Zero telemetry**: no IP, device model, model choice, or usage behavior is collected — no telemetry hooks at all.
+- **Zero telemetry**: no IP, device model, model choice, or usage behavior is collected — no telemetry hooks at all. The Web UI ships every asset it needs — icons are bundled, text uses system fonts — so opening it touches no CDN. The only thing octo asks the network about itself is whether a newer release exists, and that is one config switch away from silent.
 - **Desktop installer around 100 MB**: compare that to Codex desktop and WorkBuddy, which often weigh in around **1 GB**. A thin agent harness shouldn't need that much space.
 - **Stable and safe**: self-protection, graceful restarts, and a recycle-bin safety net (see [Core Features](#core-features)).
 
@@ -124,10 +122,20 @@ Upgrade any time with `octo upgrade`. Platform details — Gatekeeper / SmartScr
 ### First run
 
 ```bash
-octo config                # one-time: pick provider/model, paste an API key
+octo serve -d              # start the local server (Web UI + IM bridge)
+```
+
+Open **http://127.0.0.1:8088** and the setup panel walks you through it: pick a language, connect a
+model, then a short chat that learns your name, the assistant's personality, and how you want it to
+behave. Loopback needs no access key. The desktop app is the same server with a native window — run
+it instead and skip straight to the browser step.
+
+Prefer the terminal? Same agent, no extra setup once a provider is connected:
+
+```bash
 octo "explain this repo"   # headless one-shot: prompt → agentic tool loop → exit
 octo                       # interactive TUI in a terminal; octo -c resumes a session
-octo serve -d              # Web UI + IM bridge at http://127.0.0.1:8088
+octo config                # provider setup without touching the browser
 ```
 
 Next steps: [quickstart](https://octo-agent.dev/docs/getting-started/quickstart/) · [choose a provider](https://octo-agent.dev/docs/getting-started/choose-a-provider/) · [CLI reference](https://octo-agent.dev/docs/reference/cli/).
@@ -135,10 +143,12 @@ Next steps: [quickstart](https://octo-agent.dev/docs/getting-started/quickstart/
 ## First Journey
 
 1. Install with one command: `curl -fsSL https://octo-agent.dev/install.sh | sh`.
-2. Run `octo config` to pick a provider and paste an API key.
-3. Verify everything works with a one-shot: `octo "explain this repo"`.
-4. Run `octo` for the interactive terminal TUI.
-5. Run `octo serve -d` for the Web UI (`http://127.0.0.1:8088`), or use the desktop app.
+2. Start the server — `octo serve -d` — or launch the desktop app, which is the same server.
+3. Open `http://127.0.0.1:8088` and follow the setup: language, model, then the onboarding chat that
+   writes who the assistant is and who you are.
+4. Give it a real task from the composer — one that needs shell, files or the web, not just an answer.
+5. Run `octo "explain this repo"` for a headless one-shot, or `octo` for the terminal TUI — same
+   agent, same config.
 6. Configure an [IM channel](https://octo-agent.dev/docs/guides/channels/) and keep the conversation going from WeChat / Feishu / Telegram.
 7. Add [skills](https://octo-agent.dev/docs/guides/use-skills/), [MCP servers](https://octo-agent.dev/docs/guides/connect-mcp-servers/), and [sub-agents](https://octo-agent.dev/docs/guides/sub-agents/) as you need them.
 
@@ -195,7 +205,6 @@ The full documentation lives at **[octo-agent.dev/docs](https://octo-agent.dev/d
 ## Community
 
 - **Bugs / feature requests** — [GitHub Issues](https://github.com/open-octo/octo-agent/issues)
-- **Questions / discussion** — [GitHub Discussions](https://github.com/open-octo/octo-agent/discussions), public and searchable so the next person finds the answer
 - **WeChat group** (Chinese-speaking users) — scan the QR code below, add the personal account, and mention `octo` to be invited into the group:
 
 <p align="left">

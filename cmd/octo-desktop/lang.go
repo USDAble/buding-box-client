@@ -15,15 +15,16 @@ import (
 // startup by the system language. Format strings keep their verbs so call sites
 // can fmt.Sprintf them.
 type uiStrings struct {
-	trayShow, trayQuit string
-	traySettings       string
-	trayNewSession     string
-	trayCheckUpdates   string
-	trayUpdateAvailFmt string // "↑ Update to v%s"
-	trayStarting       string
-	trayBackendFmt     string // "Backend · %s"
-	trayClientsFmt     string // "Connected clients: %d"
-	trayChannelsFmt    string // "Configured channels: %d"
+	trayShow, trayQuit   string
+	traySettings         string
+	trayNewSession       string
+	trayPet, trayPetHide string
+	trayCheckUpdates     string
+	trayUpdateAvailFmt   string // "↑ Update to v%s"
+	trayStarting         string
+	trayBackendFmt       string // "Backend · %s"
+	trayClientsFmt       string // "Connected clients: %d"
+	trayChannelsFmt      string // "Configured channels: %d"
 
 	takeoverTitle  string
 	takeoverMsgFmt string // "...(pid %d)..."
@@ -82,6 +83,11 @@ func enStringsFor(name, short string) uiStrings {
 		trayBackendFmt:     "Backend · %s",
 		trayClientsFmt:     "Connected clients: %d",
 		trayChannelsFmt:    "Configured channels: %d",
+		// OCTO-FORK: upstream #2421 added the desktop pet; its two tray labels are
+		// brand-free, so they land here verbatim from upstream's table — see
+		// dev-docs-usdable/需求/20260911/开发计划.md §PR-3
+		trayPet:     "Show Pet",
+		trayPetHide: "Hide Pet",
 
 		takeoverTitle:  name,
 		takeoverMsgFmt: "A background " + name + " backend is already running (pid %d).\n\nStop it and run " + name + " as the hub for this machine?",
@@ -135,6 +141,8 @@ func zhStringsFor(name, short string) uiStrings {
 		trayBackendFmt:     "后端 · %s",
 		trayClientsFmt:     "已连接客户端：%d",
 		trayChannelsFmt:    "已配置 channel：%d",
+		trayPet:            "显示桌宠",
+		trayPetHide:        "隐藏桌宠",
 
 		takeoverTitle:  name,
 		takeoverMsgFmt: "已有一个" + name + "后端在后台运行（pid %d）。\n\n停止它，并让" + name + "作为本机的后端中枢？",

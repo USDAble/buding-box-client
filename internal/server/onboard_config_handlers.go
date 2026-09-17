@@ -8,6 +8,7 @@ import (
 	"log/slog"
 	"net/http"
 	"os"
+	"runtime"
 	"strings"
 	"time"
 
@@ -107,7 +108,7 @@ func (s *Server) handleOnboardStatus(w http.ResponseWriter, r *http.Request) {
 	// the first load's stale phase from cache and re-launches /onboard even after
 	// the marker is set (#1660). The client also passes cache:'no-store'.
 	w.Header().Set("Cache-Control", "no-store, no-cache, must-revalidate, max-age=0")
-	phase := detectOnboardPhase()
+	phase := detectOnboardPhase(s.cfg.Provider)
 	writeJSON(w, http.StatusOK, map[string]any{
 		"needs_onboard": phase != "",
 		"phase":         phase,
@@ -123,27 +124,32 @@ func (s *Server) handleOnboardStatus(w http.ResponseWriter, r *http.Request) {
 //	               interrupted first attempt must not retrigger on every restart —
 //	               the Profile page's soul/user "Update" buttons stay available
 //	               as the manual path), or any identity file already exists.
-func detectOnboardPhase() string {
+func detectOnboardPhase(flagProvider string) string {
 	cfg, _ := config.Load()
 
-	// Check if any provider key is available. A keyless Custom endpoint
-	// (local Ollama/vLLM) counts as configured — there is no key to set up.
-	hasKey := false
+	// Look for an endpoint that could actually run. Its key may be stored in
+	// config, may live in the provider's environment variable (senderForEntry
+	// and resolveAPIKey both read the environment first), or may not exist at
+	// all for a keyless Custom endpoint (local Ollama/vLLM).
+	//
+	// The environment is only ever consulted per endpoint, never on its own. A
+	// machine that exports ANTHROPIC_API_KEY or DEEPSEEK_API_KEY for some other
+	// tool — common enough — used to be read as "this install is configured"
+	// and skipped setup entirely, on an install with no endpoint and no model
+	// to run. The user landed on a chat that fails at the first message rather
+	// than on the panel that would have fixed it. A key on its own configures
+	// nothing.
+	configured := false
 	for _, ep := range cfg.Endpoints {
-		if ep.APIKey != "" || app.VendorKeyOptional(ep.Provider) {
-			hasKey = true
+		if ep.APIKey != "" || app.VendorKeyOptional(ep.Provider) || os.Getenv(app.VendorAPIKeyEnvVar(ep.Provider)) != "" {
+			configured = true
 			break
 		}
 	}
-	if !hasKey {
-		for _, v := range app.Registry {
-			if os.Getenv(v.APIKeyEnvVar) != "" {
-				hasKey = true
-				break
-			}
-		}
+	if !configured {
+		configured = envOnlyProviderConfigured(flagProvider, cfg)
 	}
-	if !hasKey {
+	if !configured {
 		return "key_setup"
 	}
 
@@ -163,6 +169,31 @@ func detectOnboardPhase() string {
 	}
 
 	return ""
+}
+
+// envOnlyProviderConfigured reports whether the server can reach a model with
+// no endpoint in config.yml — the env-only deployment packaging/systemd and the
+// self-host guide describe, where OCTO_PROVIDER names the vendor and that
+// vendor's key sits in the environment.
+//
+// It follows resolveProviderAndModel's precedence for naming a vendor — the
+// serve --provider flag, then OCTO_PROVIDER — and refuses, as that does, to
+// pick one nobody named: a key in the environment says which vendors are
+// reachable, never which one the user meant. With no vendor named there is
+// nothing configured to run.
+func envOnlyProviderConfigured(flagProvider string, cfg config.Config) bool {
+	provName := firstNonEmpty(flagProvider, os.Getenv("OCTO_PROVIDER"))
+	if provName == "" {
+		return false
+	}
+	if modelFromEnv(provName) == "" && defaultModelFor(provName) == "" {
+		return false
+	}
+	if app.VendorKeyOptional(provName) {
+		return true
+	}
+	key, err := resolveAPIKey(provName, cfg)
+	return err == nil && key != ""
 }
 
 // identityMissing reports whether dir has neither soul.md nor user.md (nor
@@ -222,6 +253,13 @@ type configResponse struct {
 	// carried it). The Composer reads this to seed its no-active-session
 	// fallback.
 	PermissionMode string `json:"permission_mode,omitempty"`
+	// ComputerEnabled is the raw tools.computer.enabled value ("" = off). The
+	// experimental Settings tab renders it as a toggle; off is the default.
+	ComputerEnabled string `json:"computer_enabled,omitempty"`
+	// UpdateCheck is the resolved update_check preference (default true), not
+	// the raw pointer — the Settings toggle shows whether octo will actually
+	// look for new releases.
+	UpdateCheck *bool `json:"update_check,omitempty"`
 }
 
 func (s *Server) handleGetConfig(w http.ResponseWriter, r *http.Request) {
@@ -240,6 +278,7 @@ func (s *Server) handleGetConfig(w http.ResponseWriter, r *http.Request) {
 	if re == "" {
 		re = "off"
 	}
+	effUpdateCheck := cfg.UpdateCheckEnabled()
 	writeJSON(w, http.StatusOK, configResponse{
 		FontSize:            "medium",
 		Language:            cfg.Language,
@@ -249,6 +288,8 @@ func (s *Server) handleGetConfig(w http.ResponseWriter, r *http.Request) {
 		WorkspaceDirDefault: s.curWorkspaceDir(),
 		ReasoningEffort:     re,
 		PermissionMode:      cfg.PermissionMode,
+		ComputerEnabled:     cfg.Tools.Computer.Enabled,
+		UpdateCheck:         &effUpdateCheck,
 	})
 }
 
@@ -384,6 +425,47 @@ func (s *Server) handlePutShowReasoning(w http.ResponseWriter, r *http.Request) 
 	writeJSON(w, http.StatusOK, map[string]any{"ok": true, "show_reasoning": req.ShowReasoning})
 }
 
+// ─── PUT /api/config/computer ───────────────────────────────────────────────
+
+type putComputerRequest struct {
+	Enabled bool `json:"enabled"`
+}
+
+// handlePutComputer flips the experimental computer-use tool
+// (tools.computer.enabled). The substrate exists on macOS and Windows only —
+// refuse the write elsewhere so the Settings toggle can never persist a no-op
+// switch on Linux.
+func (s *Server) handlePutComputer(w http.ResponseWriter, r *http.Request) {
+	if runtime.GOOS != "darwin" && runtime.GOOS != "windows" {
+		writeError(w, http.StatusBadRequest, "computer-use is only available on macOS and Windows")
+		return
+	}
+	var req putComputerRequest
+	if err := readBodyJSON(r, &req); err != nil {
+		writeInvalidJSONBody(w, err)
+		return
+	}
+
+	cfg, err := config.Load()
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, fmt.Sprintf("load config: %v", err))
+		return
+	}
+	if req.Enabled {
+		cfg.Tools.Computer.Enabled = "on"
+	} else {
+		cfg.Tools.Computer.Enabled = "off"
+	}
+	if err := cfg.Save(); err != nil {
+		writeError(w, http.StatusInternalServerError, fmt.Sprintf("save config: %v", err))
+		return
+	}
+	// No sender cache to invalidate: the tool list is rebuilt per turn via
+	// DefaultToolsForCtx → computerEnabled → config.LoadCached (a fresh read).
+
+	writeJSON(w, http.StatusOK, map[string]any{"ok": true, "computer_enabled": cfg.Tools.Computer.Enabled})
+}
+
 // ─── PUT /api/config/coauthor ───────────────────────────────────────────────
 
 type putCoauthorRequest struct {
@@ -417,6 +499,39 @@ func (s *Server) handlePutCoauthor(w http.ResponseWriter, r *http.Request) {
 	}
 
 	writeJSON(w, http.StatusOK, map[string]any{"ok": true, "coauthor": req.Coauthor})
+}
+
+// ─── PUT /api/config/update_check ───────────────────────────────────────────
+
+type putUpdateCheckRequest struct {
+	UpdateCheck bool `json:"update_check"`
+}
+
+// handlePutUpdateCheck updates config.UpdateCheck — whether octo may make the
+// one outbound request that isn't a model call: the latest-release lookup that
+// feeds the version badge (and, on desktop, the tray's daily poll). Like
+// coauthor, nothing caches it: latestVersion reads config fresh on every
+// /api/version, so the next badge refresh honours the new value without a
+// restart or a WS broadcast.
+func (s *Server) handlePutUpdateCheck(w http.ResponseWriter, r *http.Request) {
+	var req putUpdateCheckRequest
+	if err := readBodyJSON(r, &req); err != nil {
+		writeInvalidJSONBody(w, err)
+		return
+	}
+
+	// Mutate, not Load+Save: it holds the file lock across the read-modify-write
+	// so a concurrent settings change (or the agent editing config.yml) can't be
+	// clobbered. Config.Save's own doc points read-modify-write callers here.
+	if err := config.Mutate(func(c *config.Config) error {
+		c.UpdateCheck = &req.UpdateCheck
+		return nil
+	}); err != nil {
+		writeError(w, http.StatusInternalServerError, fmt.Sprintf("save config: %v", err))
+		return
+	}
+
+	writeJSON(w, http.StatusOK, map[string]any{"ok": true, "update_check": req.UpdateCheck})
 }
 
 // ─── PUT /api/config/language ────────────────────────────────────────────────

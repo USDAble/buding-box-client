@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { artifacts, panelContent, panelExpanded, artifactSel, artifactView, lightappSel, lightappOpen, lightapps, lightappHTML, lightappStamp, cacheLightApp, dropLightApp, showToast, nativeShell, localAccess, activeSessionId, savePanelMode, type PanelMode } from '../lib/stores'
+  import { artifacts, panelContent, panelExpanded, artifactSel, artifactView, lightappSel, lightappOpen, lightapps, lightappHTML, lightappStamp, cacheLightApp, dropLightApp, showToast, isDesktopShell, localAccess, activeSessionId, savePanelMode, type PanelMode } from '../lib/stores'
   import { titlebarDblClick } from '../lib/nativeWindow'
   import { t } from '../lib/i18n'
   import { copyArtifact, downloadArtifact, imagePreviewError } from '../lib/artifact-actions'
@@ -13,8 +13,9 @@
 
   // This column never holds the traffic lights, but its top row has to sit on
   // the same axis as the chat title beside it, which Header lifts on mac.
+  // isDesktopShell, not nativeShell — see Header.
   const isMac = typeof navigator !== 'undefined' && /Mac|iPod|iPhone|iPad/.test(navigator.platform)
-  const liftForTrafficLights = $derived($nativeShell && isMac)
+  const liftForTrafficLights = isDesktopShell && isMac
 
   // ── Session artifacts (existing) ──────────────────────────────────────────
   const cur = $derived($artifacts[$artifactSel] ?? $artifacts[0])
@@ -642,8 +643,12 @@
    backdrop, which is a button too. */
 .topbar button { --wails-draggable: no-drag; }
 /* The same axis lift Header and Sidebar apply on mac — see Header.native-lift
-   for why the height has to be pinned for the padding to move anything. */
-.topbar.native-lift { box-sizing: border-box; max-height: 44px; padding-bottom: 4px; }
+   for why the height has to be pinned for the padding to move anything, and
+   for why the padding values are --titlebar-pad-* (macOS 26 moved the lights). */
+.topbar.native-lift {
+  box-sizing: border-box; max-height: 44px;
+  padding-top: var(--titlebar-pad-top, 0px); padding-bottom: var(--titlebar-pad-bottom, 4px);
+}
 .file-name { min-width: 0; font-size: 12px; color: var(--text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .file-meta { font-size: 11px; color: var(--text-tertiary); flex: 0 0 auto; }
 /* A name and the badge beside it are one identity, so they shrink and vanish as
@@ -751,7 +756,7 @@ iframe { border: 0; width: 100%; height: 100%; display: block; }
 .code-view {
   margin: 0; height: 100%; box-sizing: border-box; overflow: auto;
   padding: 14px 16px; background: var(--bg-sidebar); font-size: 12px; line-height: 1.7;
-  font-family: ui-monospace, SFMono-Regular, Menlo, monospace; color: var(--text); white-space: pre;
+  font-family: var(--font-mono); color: var(--text); white-space: pre;
 }
 .switcher {
   flex: 0 0 auto; border-top: 1px solid var(--border-secondary);
@@ -810,7 +815,7 @@ iframe { border: 0; width: 100%; height: 100%; display: block; }
 .la-update span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .la-update button {
   flex: 0 0 auto; height: 24px; padding: 0 10px; border: none; border-radius: 999px;
-  background: var(--blue-6); color: #fff; font: inherit; font-weight: 500; cursor: pointer;
+  background: var(--blue-6); color: var(--on-accent); font: inherit; font-weight: 500; cursor: pointer;
 }
 .la-update button:disabled { opacity: 0.5; cursor: default; }
 

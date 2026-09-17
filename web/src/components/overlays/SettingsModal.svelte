@@ -1,5 +1,6 @@
 <script lang="ts">
   import Segment from '../ui/Segment.svelte'
+  import ThemePackPicker from '../ui/ThemePackPicker.svelte'
   import Switch from '../ui/Switch.svelte'
   import EndpointsSection from '../settings/EndpointsSection.svelte'
   import QrCode from '../ui/QrCode.svelte'
@@ -37,6 +38,14 @@
   let fontSize      = $state(storedFontSize())
   let theme         = $state(modeToThemeLabel[getMode()] ?? 'Light')
   let autostart     = $state(false) // desktop shell only
+  let serverOs      = $state('')    // /api/version's os — gates the experimental tab
+  let computerUse   = $state(false) // tools.computer.enabled toggle (experimental tab)
+  const computerPlatform = $derived(serverOs === 'darwin' || serverOs === 'windows')
+  // macOS prompts for two system grants; Windows has none but blocks input
+  // into elevated apps — the hint under the toggle says which applies.
+  const computerHintKey = $derived(serverOs === 'windows'
+    ? 'settings.experimental.computer_use_hint_windows'
+    : 'settings.experimental.computer_use_hint')
   let versionStr    = $state('')
   let latestStr     = $state('')
   let updateAvail   = $state(false)
@@ -50,7 +59,7 @@
   let upgradeMode   = $state<'cli' | 'installer'>('cli')
   let loading       = $state(true)
 
-  let cat = $state<'general' | 'endpoints' | 'agent' | 'mobile' | 'data' | 'about'>('general')
+  let cat = $state<'general' | 'endpoints' | 'agent' | 'mobile' | 'experimental' | 'data' | 'about'>('general')
   let modalEl = $state<HTMLDivElement | null>(null)
 
   // 数据管理 has its own two-level nav — a list of managed things, and one
@@ -219,6 +228,7 @@
   let permissionMode   = $state('interactive')
   let showReasoningVal = $state(true)
   let coauthorVal      = $state(true)
+  let updateCheckVal   = $state(true)
   let workspaceDir        = $state('')
   // OCTO-FORK: 前端适配（webview 路由/构建/入口隐藏） — see dev-docs-usdable/需求/2260906/技术方案/P6-入口隐藏与积分.md
   // Resolved default new sessions get when workspaceDir is empty (data/workspace/,
@@ -231,14 +241,21 @@
     { value: 'zh', label: '简体中文' },
   ]
 
-  const categories: { key: typeof cat, icon: string, label: string }[] = [
+  const categories: { key: typeof cat, icon: string, label: string }[] = $derived([
     { key: 'general',   icon: 'ant-design:sliders-outlined',       label: 'settings.general' },
     { key: 'endpoints', icon: 'ant-design:api-outlined',           label: 'settings.endpoints.title' },
     { key: 'agent',     icon: 'ant-design:robot-outlined',         label: 'settings.agent' },
     { key: 'mobile',    icon: 'ant-design:mobile-outlined',        label: 'settings.mobile' },
+    // Experimental features (computer-use) need the desktop shell AND a
+    // platform with a substrate — macOS (AX/CGEvent) or Windows (UI
+    // Automation/SendInput). On macOS only the desktop app can hold the
+    // Screen Recording / Accessibility grants.
+    ...($nativeShell && computerPlatform
+      ? [{ key: 'experimental' as const, icon: 'ant-design:experiment-outlined', label: 'settings.experimental' }]
+      : []),
     { key: 'data',      icon: 'ant-design:database-outlined',       label: 'settings.data' },
     { key: 'about',     icon: 'ant-design:info-circle-outlined',   label: 'settings.about' },
-  ]
+  ])
 
   // Re-seed on every open, same as the other global modals — reflects
   // whatever config was saved elsewhere (agent chat, another window) since
@@ -271,6 +288,8 @@
       permissionMode   = cfg.permission_mode ?? 'interactive'
       showReasoningVal = cfg.show_reasoning ?? true
       coauthorVal      = cfg.coauthor ?? true
+      updateCheckVal   = cfg.update_check ?? true
+      computerUse      = (cfg.computer_enabled ?? '') === 'on'
       // Legacy installer-seeded "auto" resolves to the same default as ""
       // (see tools.ResolveWorkspaceDir) — show it as the empty input with
       // the resolved-default placeholder, not as a literal "auto" the user
@@ -291,6 +310,7 @@
     try {
       const v = await api.getVersion() as any
       versionStr = v.current ?? v.version ?? ''
+      serverOs = v.os ?? ''
       latestStr = v.latest ?? ''
       updateAvail = !!v.needs_update
       downloadUrl = v.download_url ?? ''
@@ -393,6 +413,24 @@
       coauthorVal = v
     } catch (e: any) {
       showToast(e.message ?? 'Failed to update coauthor', 'error')
+    }
+  }
+
+  async function saveUpdateCheck(v: boolean) {
+    try {
+      await api.updateUpdateCheck(v)
+      updateCheckVal = v
+    } catch (e: any) {
+      showToast(e.message ?? 'Failed to update update-check', 'error')
+    }
+  }
+
+  async function saveComputerUse(v: boolean) {
+    try {
+      await api.updateComputerEnabled(v)
+      computerUse = v
+    } catch (e: any) {
+      showToast(e.message ?? 'Failed to update computer-use', 'error')
     }
   }
 
@@ -499,6 +537,15 @@
             </div>
             <Segment options={['Small', 'Medium', 'Large']} labels={{ Small: $t('settings.fs_small'), Medium: $t('settings.fs_medium'), Large: $t('settings.fs_large') }} bind:value={fontSize} />
           </div>
+          <!-- Theme before Appearance: the pack is the bigger choice, and
+               appearance reads as a modifier of it rather than the reverse. -->
+          <div class="setrow">
+            <div class="seti">
+              <span class="setl">{$t('settings.pack')}</span>
+              <span class="setd">{$t('settings.pack_desc')}</span>
+            </div>
+            <ThemePackPicker />
+          </div>
           <div class="setrow">
             <div class="seti">
               <span class="setl">{$t('settings.theme')}</span>
@@ -570,6 +617,23 @@
             </div>
             <Switch checked={coauthorVal} onchange={(v) => saveCoauthor(v)} />
           </div>
+          <!-- OCTO-FORK: 便携交付物不做更新 —— 上游 f7ba0793 这一行是"自动检查更新"的
+               实时开关（PATCH /api/config/update_check），而 server 的 UpdateCheck 在本壳
+               恒为 false（cmd/octo-desktop/main.go），且这层偏好自身的默认值是开
+               （internal/config.Config.UpdateCheckEnabled 缺省返回 true）—— 也就是说
+               它是一枚承诺了做不到之事的开关：用户按下去不会发生任何事（§3.9：回落必须
+               说得出落到哪，不能静默撒谎）。换成与 about 分类同一形状的常驻占位，文案复用
+               同一个键，将来接入不用改布局（需求 §5.1.2 第 13 条 / PQ12）。
+               上游 updateCheckVal / saveUpdateCheck 的脚本半边留在原地不动（硬规则 3：
+               宁可到不了，也不删）；钉子见 web/src/lib/updateEntry.test.ts 的
+               LIVE_UPDATE_MARKERS。
+               — see dev-docs-usdable/需求/2260906/技术方案/P2-启动与生命周期.md §5（V-86） -->
+          <div class="setrow">
+            <div class="seti">
+              <span class="setl">{$t('settings.update')}</span>
+              <span class="setd">{$t('product.panel.soon')}</span>
+            </div>
+          </div>
           <div class="setrow">
             <div class="seti">
               <span class="setl">{$t('settings.workspace_dir')}</span>
@@ -582,6 +646,20 @@
               value={workspaceDir}
               onchange={(e) => saveWorkspaceDir(e.currentTarget.value)}
             />
+          </div>
+
+        {:else if cat === 'experimental'}
+          <div class="setrow">
+            <div class="seti">
+              <span class="setl">{$t('settings.experimental.computer_use')}</span>
+              <span class="setd">{$t('settings.experimental.computer_use_desc')}</span>
+            </div>
+            <Switch checked={computerUse} onchange={(v) => saveComputerUse(v)} />
+          </div>
+          <div class="setrow">
+            <div class="seti">
+              <span class="setd">{$t(computerHintKey)}</span>
+            </div>
           </div>
 
         {:else if cat === 'mobile'}
@@ -847,7 +925,7 @@ select.sinput { cursor: pointer; }
 .mobile-meta > div { min-width: 0; }
 .mobile-info .btns { align-self: flex-start; }
 .mobile-disabled { padding: 28px 16px; text-align: center; font-size: 13px; color: var(--text-tertiary); }
-.mono { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+.mono { font-family: var(--font-mono); }
 
 /* ── data management ─────────────────────────────────────────────────────── */
 .data-row {

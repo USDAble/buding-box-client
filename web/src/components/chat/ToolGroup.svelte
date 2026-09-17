@@ -5,6 +5,7 @@
   import { ws } from '../../lib/ws'
   import * as api from '../../lib/api'
   import { toolOpenState, applyToolToggle, keepOpenAction } from '../../lib/toolFold'
+  import { groupElapsed } from '../../lib/groupElapsed'
   import { sanitizeSpec, READ_ONLY_NODE_TYPES } from '../../lib/genui/guard'
   import GenuiBlock from '../genui/GenuiBlock.svelte'
   import AgentTrail from './AgentTrail.svelte'
@@ -301,13 +302,6 @@
     }
   }
 
-  // Group elapsed = sum of per-tool durations (only known for live calls; a
-  // replayed history transcript has no timing so this stays empty there).
-  function groupElapsed(ts: any[]): string {
-    const total = ts.reduce((s, t) => s + (typeof t.elapsed === 'number' ? t.elapsed : 0), 0)
-    return total > 0 ? `${total.toFixed(1)}s` : ''
-  }
-
   // web_fetch returns the page body as a normal result even when the target
   // responded with an HTTP error — the tool succeeded, the page didn't. Detect
   // that "Warning: Target URL returned error NNN" line so the card can show it
@@ -478,8 +472,8 @@
       {@const tErr = terminalFailure(tool)}
       {@const cmdText = terminalCommand(tool)}
       <!-- Full arg text lives in the DOM either way — the CSS only visually
-           ellipsizes it. Surfacing it via `title` + selectable text lets the
-           user read/copy the whole thing despite the truncation. -->
+           ellipsizes it. `title` surfaces the whole thing despite the
+           truncation; the header itself is click-to-fold, not selectable. -->
       {@const argText = tool.summary || (tool.args ? argSummary(tool.name, tool.args) : '')}
       <details open={toolOpenState(toolOpen, tool, lastId, anyRunning) || !!pinnedIds[tool.id]} ontoggle={(e) => onToggle(tool, lastId, anyRunning, (e.currentTarget as HTMLDetailsElement).open)} class="tool-item">
         <summary class="tool-summary">
@@ -495,7 +489,7 @@
                 <span class="tool-title mono">{tool.name}</span>
               {/if}
               {#if argText}
-                <span class="tool-arg mono" title={argText} onclick={(e) => e.stopPropagation()}>{argText}</span>
+                <span class="tool-arg mono" title={argText}>{argText}</span>
               {/if}
             </div>
             {#if meta && !fErr && !tErr}<div class="tool-submeta">{meta}</div>{/if}
@@ -636,9 +630,15 @@
             </button>
           {/if}
         {:else if tool.stdout && tool.stdout.length > 0}
-          {@const full = tool.stdout.join('\n')}
+          <!-- tool.stdout is already one line per array entry (see
+               appendToolStdout in stores.ts) — joining it into a string and
+               immediately re-splitting it on every streamed chunk was pure
+               waste, and on a chatty command re-ran that join/split on the
+               whole buffer for every incoming line. Iterate the array
+               directly, keyed by index so Svelte only patches the new tail
+               instead of re-diffing every line each time. -->
           <div class="term-wrap">
-            <pre class="terminal-output" use:pinBottom>{#each full.split('\n') as line}{line}
+            <pre class="terminal-output" use:pinBottom>{#each tool.stdout as line, i (i)}{line}
 {/each}{#if !tool.done}<span class="blink-caret"></span>{/if}</pre>
           </div>
         {:else if tool.name === 'web_search' && searchResults(tool)}
@@ -737,7 +737,7 @@
 .tool-head { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 1px; }
 .tool-title-row { display: flex; align-items: baseline; gap: 8px; min-width: 0; }
 .tool-title { font-size: 13px; font-weight: 600; color: var(--text); flex: 0 0 auto; }
-.tool-arg { font-size: 11px; color: var(--text-secondary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; user-select: text; cursor: text; min-width: 0; }
+.tool-arg { font-size: 11px; color: var(--text-secondary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
 .tool-submeta { font-size: 11px; color: var(--text-secondary); }
 .tool-status { margin-left: auto; flex: 0 0 auto; display: flex; align-items: center; }
 .st { display: inline-flex; align-items: center; gap: 4px; font-size: 11px; font-weight: 500; }
@@ -749,7 +749,7 @@
 .tool-output {
   margin: 0; padding: 10px 14px; border-top: 1px solid var(--border-table);
   background: var(--bg-sidebar); font-size: 12px; line-height: 1.7;
-  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-family: var(--font-mono);
   color: var(--text-secondary); overflow-x: auto; white-space: pre-wrap; word-break: break-word;
   max-height: 224px; overflow-y: auto;
 }
@@ -784,7 +784,7 @@ details[open] > summary .chev { transform: rotate(90deg); }
   padding: 10px 14px; border-top: 1px solid var(--border-table);
   background: var(--terminal-bg); color: var(--terminal-text);
   font-size: 12px; line-height: 1.6;
-  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-family: var(--font-mono);
 }
 .cmd-text {
   flex: 1 1 auto; min-width: 0; font: inherit;
@@ -827,7 +827,7 @@ details[open] > summary .chev { transform: rotate(90deg); }
 .terminal-output {
   margin: 0; padding: 12px 14px; border-top: 1px solid var(--border-table);
   background: var(--terminal-bg); color: var(--terminal-text); font-size: 12px; line-height: 1.6;
-  font-family: ui-monospace, SFMono-Regular, Menlo, monospace; overflow-x: auto;
+  font-family: var(--font-mono); overflow-x: auto;
   max-height: 216px; overflow-y: auto;
 }
 .blink-caret {
@@ -860,7 +860,7 @@ details[open] > summary .chev { transform: rotate(90deg); }
 .trail-wrap { display: flex; flex-direction: column; gap: 6px; padding: 2px 0; }
 .wf-log {
   font-size: 12px; color: var(--text-secondary); word-break: break-word;
-  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-family: var(--font-mono);
 }
 .wf-agent { border: 1px solid var(--border-table); border-radius: 8px; background: var(--bg-container); }
 .wf-agent-summary {
@@ -869,7 +869,7 @@ details[open] > summary .chev { transform: rotate(90deg); }
 }
 .wf-agent-summary::-webkit-details-marker { display: none; }
 .wf-agent-summary:hover { background: var(--hover-neutral); border-radius: 8px; }
-.wf-agent-id { color: var(--blue-6); font-weight: 600; font-size: 11px; flex: 0 0 auto; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+.wf-agent-id { color: var(--blue-6); font-weight: 600; font-size: 11px; flex: 0 0 auto; font-family: var(--font-mono); }
 .wf-agent-label {
   color: var(--text-heading); font-weight: 500; flex: 1; min-width: 0;
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;

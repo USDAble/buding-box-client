@@ -23,6 +23,7 @@ import (
 // that path can't be unit-tested without a pty.)
 func TestRunChat_NoArgs_NoStdin_Errors(t *testing.T) {
 	t.Setenv("ANTHROPIC_API_KEY", "test-key")
+	t.Setenv("OCTO_PROVIDER", "anthropic") // the anthropic default is gone; say so
 	tmp := t.TempDir()
 	t.Setenv("HOME", tmp)
 	// OCTO-FORK: 数据根：`~/.octo` → `<exe dir>/data`（硬规则 1） — see dev-docs-usdable/需求/2260906/技术方案/P1-便携数据根.md
@@ -172,6 +173,7 @@ func TestResolveResumedModel(t *testing.T) {
 
 func TestRunChat_MissingAPIKey(t *testing.T) {
 	t.Setenv("ANTHROPIC_API_KEY", "")
+	t.Setenv("OCTO_PROVIDER", "anthropic") // the anthropic default is gone; say so
 	t.Setenv("OPENAI_API_KEY", "")
 	// Isolate config so a persisted key doesn't make the test falsely pass.
 	tmp := t.TempDir()
@@ -227,6 +229,7 @@ func TestRunChat_HonoursAnthropicBaseURL(t *testing.T) {
 	t.Setenv("OCTO_DATA_ROOT", tmp)
 	t.Setenv("USERPROFILE", tmp)
 	t.Setenv("ANTHROPIC_API_KEY", "k")
+	t.Setenv("OCTO_PROVIDER", "anthropic") // the anthropic default is gone; say so
 	t.Setenv("ANTHROPIC_BASE_URL", srv.URL)
 
 	var stdout, stderr bytes.Buffer
@@ -305,6 +308,7 @@ func TestRunChat_OneShot_BackgroundSubAgentForcedSync(t *testing.T) {
 	t.Setenv("OCTO_DATA_ROOT", tmp)
 	t.Setenv("USERPROFILE", tmp)
 	t.Setenv("ANTHROPIC_API_KEY", "k")
+	t.Setenv("OCTO_PROVIDER", "anthropic") // the anthropic default is gone; say so
 	t.Setenv("ANTHROPIC_BASE_URL", srv.URL)
 
 	var stdout, stderr bytes.Buffer
@@ -409,6 +413,7 @@ func TestRunChat_PromptFile_SingleTurn(t *testing.T) {
 	t.Setenv("OCTO_DATA_ROOT", tmp)
 	t.Setenv("USERPROFILE", tmp)
 	t.Setenv("ANTHROPIC_API_KEY", "k")
+	t.Setenv("OCTO_PROVIDER", "anthropic") // the anthropic default is gone; say so
 	t.Setenv("ANTHROPIC_BASE_URL", srv.URL)
 
 	prompt := "Fix the bug.\n\n--- ISSUE ---\nStep 1\nStep 2\nStep 3"
@@ -824,6 +829,7 @@ func TestRunChat_Anthropic_StreamingEndToEnd(t *testing.T) {
 	t.Setenv("OCTO_DATA_ROOT", tmp)
 	t.Setenv("USERPROFILE", tmp)
 	t.Setenv("ANTHROPIC_API_KEY", "k")
+	t.Setenv("OCTO_PROVIDER", "anthropic") // the anthropic default is gone; say so
 	t.Setenv("ANTHROPIC_BASE_URL", srv.URL)
 
 	var stdout, stderr bytes.Buffer
@@ -1004,5 +1010,107 @@ func TestResumeModelRef(t *testing.T) {
 	}
 	if got := resumeModelRef(sess); got != "ep-b::deepseek-v4-flash" {
 		t.Errorf("bound session ref = %q, want ep-b::deepseek-v4-flash", got)
+	}
+}
+
+// The documented precedence — flag > env > config — plus the guard on the unit
+// mistake. A rejected layer falls through to the next one rather than
+// disabling the feature: an operator who fat-fingers the flag still gets the
+// window their config file asks for.
+func TestResolveFallbackContextWindow(t *testing.T) {
+	cfg := config.Config{FallbackContextWindow: 40_000}
+	var buf bytes.Buffer
+
+	t.Setenv("OCTO_FALLBACK_CONTEXT_WINDOW", "32000")
+	if got := resolveFallbackContextWindow(24_000, cfg, &buf); got != 24_000 {
+		t.Errorf("flag = %d, want 24000 (flag beats env and config)", got)
+	}
+	if got := resolveFallbackContextWindow(0, cfg, &buf); got != 32_000 {
+		t.Errorf("env = %d, want 32000 (env beats config)", got)
+	}
+
+	t.Setenv("OCTO_FALLBACK_CONTEXT_WINDOW", "")
+	if got := resolveFallbackContextWindow(0, cfg, &buf); got != 40_000 {
+		t.Errorf("config = %d, want 40000", got)
+	}
+	if got := resolveFallbackContextWindow(0, config.Config{}, &buf); got != 0 {
+		t.Errorf("nothing configured = %d, want 0 (leaves the built-in default)", got)
+	}
+
+	// 32 means 32k to a human and 32 tokens to the code. Rejected, with the
+	// units spelled out, and the next layer still applies.
+	buf.Reset()
+	if got := resolveFallbackContextWindow(32, cfg, &buf); got != 40_000 {
+		t.Errorf("flag in k = %d, want 40000 (falls through to config)", got)
+	}
+	if !strings.Contains(buf.String(), "32000, not 32") {
+		t.Errorf("warning %q does not explain the units", buf.String())
+	}
+
+	t.Setenv("OCTO_FALLBACK_CONTEXT_WINDOW", "lots")
+	buf.Reset()
+	if got := resolveFallbackContextWindow(0, cfg, &buf); got != 40_000 {
+		t.Errorf("non-numeric env = %d, want 40000 (falls through to config)", got)
+	}
+	if !strings.Contains(buf.String(), "not a number") {
+		t.Errorf("warning %q does not name the problem", buf.String())
+	}
+}
+
+// TestRunChat_UnconfiguredProvider_DoesNotMaskOtherErrors pins the ordering the
+// removed anthropic fallback used to provide for free. Resolution now fails on
+// a blank install, and that failure is reported where a sender is built — after
+// the checks that can say something more useful. Without the deferral, every
+// one of these would answer "no provider configured" instead.
+func TestRunChat_UnconfiguredProvider_DoesNotMaskOtherErrors(t *testing.T) {
+	// Only the checks that run BEFORE the sender is built can take precedence —
+	// building it is what needs the provider. "no prompt" and session resolution
+	// come after, so on a blank install those still report the provider first,
+	// which is fair: it is the more fundamental thing to fix.
+	cases := []struct {
+		name string
+		args []string
+		want string
+	}{
+		{"unknown agent", []string{"--agent", "nonexistent", "hello"}, "not found"},
+		{"-c with no TTY to pick from", []string{"-c"}, "needs a terminal"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			tmp := t.TempDir()
+			t.Setenv("HOME", tmp)
+			t.Setenv("USERPROFILE", tmp)
+			// Deliberately unconfigured: no provider named anywhere.
+			t.Setenv("OCTO_PROVIDER", "")
+			t.Setenv("ANTHROPIC_API_KEY", "")
+
+			var stdout, stderr bytes.Buffer
+			runChat(tc.args, strings.NewReader(""), &stdout, &stderr)
+			if got := stderr.String(); !strings.Contains(got, tc.want) {
+				t.Errorf("stderr should mention %q, got: %q", tc.want, got)
+			}
+		})
+	}
+}
+
+// A blank install with no terminal to run the wizard on gets the setup hint,
+// not "unknown provider \"\"".
+func TestRunChat_UnconfiguredProvider_NonTTYHint(t *testing.T) {
+	tmp := t.TempDir()
+	t.Setenv("HOME", tmp)
+	t.Setenv("USERPROFILE", tmp)
+	t.Setenv("OCTO_PROVIDER", "")
+	t.Setenv("ANTHROPIC_API_KEY", "")
+
+	var stdout, stderr bytes.Buffer
+	code := runChat([]string{"hello"}, strings.NewReader(""), &stdout, &stderr)
+	if code != 2 {
+		t.Errorf("exit code = %d, want 2; stderr=%q", code, stderr.String())
+	}
+	if got := stderr.String(); !strings.Contains(got, "no provider configured") {
+		t.Errorf("stderr should point at setup, got: %q", got)
+	}
+	if got := stderr.String(); strings.Contains(got, `unknown provider`) {
+		t.Errorf("a blank install is not a typo'd provider, got: %q", got)
 	}
 }

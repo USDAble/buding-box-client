@@ -75,6 +75,10 @@ func TestRunChat_AgentFlagResolvesByID(t *testing.T) {
 	t.Setenv("HOME", home)
 	t.Setenv("OCTO_DATA_ROOT", home)
 	t.Setenv("USERPROFILE", home)
+	// Name a vendor but no key: the point is that a valid --agent gets past
+	// flag handling and fails on the key instead.
+	t.Setenv("OCTO_PROVIDER", "anthropic")
+	t.Setenv("ANTHROPIC_API_KEY", "")
 
 	dir := filepath.Join(home, "agents")
 	if err := os.MkdirAll(dir, 0o755); err != nil {

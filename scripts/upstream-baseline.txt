@@ -47,7 +47,18 @@
 # moved* must be looked at by a human once, on the commit that moved it, rather
 # than discovered by whoever's PR happens to run after the fact.
 #
-# 6a9d040b is upstream/main as of 2026-09-13 — the revision every recorded
-# ceiling in scripts/server-diff-guard.mjs was measured against, and the one
-# this fork's drift inventory was built from (开发规范 §3.3).
-6a9d040b317104df8f29c08c6b8657fde840ffc0
+# ─── HISTORY ────────────────────────────────────────────────────────────────
+#
+# 6a9d040b (2026-09-13) — the revision every recorded ceiling in
+# scripts/server-diff-guard.mjs was measured against, and the one this fork's
+# drift inventory was built from (开发规范 §3.3).
+#
+# f7ba0793 (2026-09-17) — advanced by the merge of upstream/main into v1, which
+# is the act the section above says absorbing upstream's churn has to be. Step 3
+# was carried out on that merge and nothing moved: server-diff-guard reports
+# every recorded ceiling unchanged (server.go 576/576, handlers.go 101/101,
+# ws_handlers.go 26/26, attachments.go 25/25, lightapps_handlers.go 13/13,
+# native_handlers.go 0/0, route table 1/1), and the marker guard's one new
+# entry was web/src/lib/icons.generated.ts — generated, and carrying its marker
+# from the generator's own header rather than from a file edit.
+f7ba079330bfdc99309ccac387edbda4a1cf9aed

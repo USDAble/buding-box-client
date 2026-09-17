@@ -135,11 +135,39 @@ date"), 1 failure, 2 flag errors.
   `Cache-Control: no-store` so browsers and intermediaries do not cache the
   running version.
 
+  Reading the answer and refreshing it are separate. `Server.LatestVersion`
+  (which this endpoint serves, and which the desktop tray calls) only reads
+  the cache — it never performs the lookup on the caller's goroutine, because
+  this response also carries `native`/`local`/`os_version` that the frontend
+  needs promptly and a cold `upgrade.Check` can take the full
+  `versionCheckTimeout`. A stale read instead starts one background refresh
+  (single-flighted by `versionChecking`, joined on shutdown) and answers with
+  what is already known. `RefreshLatestVersion` is the forced, blocking path
+  the tray's manual "Check for updates…" uses.
+
+  That split is what keeps the tray item and the web badge in agreement:
+  reads are free, so both re-read on a short cadence (a minute) and always
+  display the same cached answer, while the network is touched at most once
+  per `versionRefreshInterval` (6h). A failed lookup keeps the last release
+  actually seen rather than reporting current-is-latest — the two surfaces
+  used to disagree precisely because one latched and the other didn't.
+
   The update check is **opt-in via `server.Config.UpdateCheck`**, set only
-  by `octo serve`. Everything else that constructs a `Server` — the whole
-  test suite included — gets no outbound calls, which is what keeps the
-  "no live network in `go test`" rule intact for every existing test that
-  hits `/api/version`. Disabled means the degraded response.
+  by `octo serve` and the desktop hub. Everything else that constructs a
+  `Server` — the whole test suite included — gets no outbound calls, which
+  is what keeps the "no live network in `go test`" rule intact for every
+  existing test that hits `/api/version`. Disabled means the degraded
+  response.
+
+  Above that build-level gate sits the user's `update_check` preference in
+  `~/.octo/config.yml` (default true, editable from Web Settings via
+  `PUT /api/config/update_check`). `latestVersion` consults it **after** the
+  TTL/backoff gate, so a cache hit costs no disk read on this unauthenticated
+  endpoint; the guarantee the switch makes is that no request is *sent*, not
+  that a cached `latest` disappears the instant it is flipped. It reads
+  through `config.LoadCached` so an unparseable hand-edit cannot silently
+  re-enable the check. Explicit `octo upgrade` never consults it — running
+  the command is the consent.
 - **`POST /api/version/upgrade`** (auth required, like restart) replaces
   the stub: it 202s and runs `upgrade.Prepare` + `Install` in a goroutine,
   single-flight — a second POST while one runs gets 409. The download

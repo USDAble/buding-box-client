@@ -409,8 +409,63 @@ preflight-check:
 	node scripts/preflight.mjs
 
 # ── ripgrep embed (build-time only) ──────────────────────────────────────────
-# Downloads the matching rg release for GOOS/GOARCH, extracts the binary,
-# and places it where go:embed will pick it up. No-op if already present.
+# Downloads the matching rg release for GOOS/GOARCH, extracts the binary, and
+# places it where go:embed will pick it up.
+#
+# OCTO-FORK: the target platform joins the up-to-date judgement, and a staged
+# payload is verified before it is trusted — see V-108 in
+# dev-docs-usdable/需求/20260911/需求基线.md. Upstream's `rg-embed: $(RG_EMBED_BIN)`
+# was a pure file target: the payload path is the same for every platform, so
+# the *second* build for a different platform found the file present, skipped
+# the download, and embedded the first platform's binary. `make build` on a mac
+# host stages a Mach-O; the `make desktop-portable` that follows cross-compiles
+# a windows/amd64 exe around that macOS rg. Which platform you got depended only
+# on which build ran first in the checkout, and the exe failed at runtime.
+#
+# Three changes fix it. The first is the bug; the other two are what keep it
+# from coming back through a door the first one does not cover:
+#
+#   1. `.rg-stamp` records `<RG_VERSION> <GOOS>/<GOARCH>`, so a cached payload is
+#      reused only for the target it was staged for. This is also why the
+#      download is keyed on the version — bumping RG_VERSION invalidates it.
+#      File presence is deliberately *not* part of the judgement any more; it is
+#      the whole cause here.
+#
+#      The cache-hit path re-runs the platform check on the bytes it is about to
+#      vouch for. A stamp is a claim, and a claim is only as good as what it
+#      claims about: this way the up-to-date verdict always ends at bytes that
+#      were read, never at a note that says they were fine. (Cheap enough not to
+#      matter — `make build` already pays for a Vite build.)
+#
+#   2. `set -euo pipefail`, `curl -f`, and no `touch` on the failure paths:
+#      upstream ran `curl -sL` and printed "Embedded rg ready" unconditionally,
+#      so a 404 or a failed `cp` left an empty or absent payload and still
+#      reported success. `pipefail` is not decoration: `curl … | tar -xzf -` is
+#      exit-code-blind on its left half, and bsdtar accepts an empty stream as a
+#      valid archive, so without it a connection that died before the first byte
+#      looks like a successful extraction. The stamp is written only after the
+#      bytes are verified, so a failure cannot be mistaken for a valid cache on
+#      the next run.
+#
+#   3. `node scripts/package-portable.mjs --check-payload-platform` asks the
+#      self-check's rule instead of restating it as magic numbers in shell
+#      (§3.8: one definition of "these bytes can run there"). It runs right
+#      after a download, which turns a wrong asset mapping below into a failed
+#      build rather than an `rg` the target cannot exec. `make build` and
+#      `make install` already reach node through `web-build`, so this adds no
+#      dependency to either; a bare `make rg-embed` does gain one, and fails
+#      loudly when node is absent rather than staging unverified bytes.
+#
+# A platform ripgrep does not publish for stages an empty payload — `go:embed`
+# needs the file to exist — and the stamp records that platform too, so the
+# empty file is never mistaken for a real binary by a later supported build.
+#
+# `windows_arm64` is the sixth mapping and is not in upstream's case: upstream
+# let it fall through to the empty-payload branch, so `make rg-embed
+# GOOS=windows GOARCH=arm64` produced a bundle whose grep tool had no `rg` while
+# the CI leg for the same target (desktop.yml's `windows-arm64`, which runs this
+# fork's PowerShell equivalent) got a real one. The asset name follows the
+# convention that script already asserts for arm64.
 
 RG_VERSION := 15.1.0
 
@@ -418,37 +473,54 @@ RG_VERSION := 15.1.0
 _RG_GOOS   := $(or $(GOOS),$(shell go env GOOS))
 _RG_GOARCH := $(or $(GOARCH),$(shell go env GOARCH))
 
-rg-embed: $(RG_EMBED_BIN)
+# Records what the staged payload is, so the next run can tell a cache that
+# matches the target from one staged for another platform.
+RG_EMBED_STAMP := $(RG_EMBED_DIR)/.rg-stamp
 
-$(RG_EMBED_BIN):
-	@echo "Downloading ripgrep $(RG_VERSION) for $(_RG_GOOS)/$(_RG_GOARCH)..."
-	@mkdir -p $(RG_EMBED_DIR)
-	@bash -c ' \
+rg-embed:
+	@bash -c 'set -euo pipefail; \
 		GOOS="$(_RG_GOOS)"; GOARCH="$(_RG_GOARCH)"; RG_VERSION="$(RG_VERSION)"; \
+		want="$${RG_VERSION} $${GOOS}/$${GOARCH}"; \
+		if [ -s "$(RG_EMBED_BIN)" ] \
+		   && [ -f "$(RG_EMBED_STAMP)" ] \
+		   && [ "$$(cat "$(RG_EMBED_STAMP)")" = "$$want" ] \
+		   && node scripts/package-portable.mjs --check-payload-platform "$(RG_EMBED_BIN)" "$${GOOS}" >/dev/null 2>&1; then \
+			echo "rg $${RG_VERSION} for $${GOOS}/$${GOARCH} already staged"; \
+			exit 0; \
+		fi; \
+		mkdir -p "$(RG_EMBED_DIR)"; \
 		case "$${GOOS}_$${GOARCH}" in \
 			darwin_amd64)   asset="ripgrep-$${RG_VERSION}-x86_64-apple-darwin.tar.gz" ;; \
 			darwin_arm64)   asset="ripgrep-$${RG_VERSION}-aarch64-apple-darwin.tar.gz" ;; \
 			linux_amd64)    asset="ripgrep-$${RG_VERSION}-x86_64-unknown-linux-musl.tar.gz" ;; \
 			linux_arm64)    asset="ripgrep-$${RG_VERSION}-aarch64-unknown-linux-gnu.tar.gz" ;; \
 			windows_amd64)  asset="ripgrep-$${RG_VERSION}-x86_64-pc-windows-msvc.zip" ;; \
-			*) echo "Unsupported platform: $${GOOS}/$${GOARCH} — rg embed skipped"; touch '"$(RG_EMBED_BIN)"'; exit 0 ;; \
+			windows_arm64)  asset="ripgrep-$${RG_VERSION}-aarch64-pc-windows-msvc.zip" ;; \
+			*) \
+				echo "rg-embed: no ripgrep release for $${GOOS}/$${GOARCH}; staging an empty payload" >&2; \
+				: > "$(RG_EMBED_BIN)"; \
+				printf "%s\n" "$$want" > "$(RG_EMBED_STAMP)"; \
+				exit 0 ;; \
 		esac; \
+		echo "Staging ripgrep $${RG_VERSION} for $${GOOS}/$${GOARCH}..."; \
 		url="https://github.com/BurntSushi/ripgrep/releases/download/$${RG_VERSION}/$${asset}"; \
-		if [ "$${GOOS}" = "windows" ]; then \
-			curl -sL "$$url" -o /tmp/rg-embed.zip; \
-			unzip -q -o /tmp/rg-embed.zip -d /tmp/rg-embed; \
-			cp /tmp/rg-embed/ripgrep-$${RG_VERSION}-*/rg.exe $(RG_EMBED_BIN); \
-			rm -rf /tmp/rg-embed.zip /tmp/rg-embed; \
-		else \
-			curl -sL "$$url" | tar -xzf - -C /tmp; \
-			cp /tmp/ripgrep-$${RG_VERSION}-*/rg $(RG_EMBED_BIN); \
-			rm -rf /tmp/ripgrep-$${RG_VERSION}-*; \
-		fi; \
-		echo "Embedded rg ready for $${GOOS}/$${GOARCH}" \
+		work="$$(mktemp -d)"; trap "rm -rf \"$$work\"" EXIT; \
+		case "$${asset##*.}" in \
+			zip) curl -fsSL "$$url" -o "$$work/rg.zip"; \
+			     unzip -q "$$work/rg.zip" -d "$$work/x"; \
+			     cp "$$work"/x/ripgrep-$${RG_VERSION}-*/rg.exe "$(RG_EMBED_BIN)" ;; \
+			gz)  curl -fsSL "$$url" | tar -xzf - -C "$$work"; \
+			     cp "$$work"/ripgrep-$${RG_VERSION}-*/rg "$(RG_EMBED_BIN)" ;; \
+		esac; \
+		chmod +x "$(RG_EMBED_BIN)"; \
+		node scripts/package-portable.mjs --check-payload-platform "$(RG_EMBED_BIN)" "$${GOOS}"; \
+		printf "%s\n" "$$want" > "$(RG_EMBED_STAMP)"; \
+		echo "Embedded rg $${RG_VERSION} for $${GOOS}/$${GOARCH}" \
 	'
 
+# OCTO-FORK: also drops the stamp, so a clean is a clean — see V-108.
 rg-embed-clean:
-	rm -f $(RG_EMBED_BIN) $(RG_EMBED_BIN).exe
+	rm -f $(RG_EMBED_BIN) $(RG_EMBED_BIN).exe $(RG_EMBED_STAMP)
 
 # ── bundled tools (installer-only): uv ───────────────────────────────────────
 # Fetches upstream release binaries for uv (astral-sh/uv) and stages them

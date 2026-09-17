@@ -9,6 +9,8 @@ import { test } from 'node:test'
 import fs from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
+import { spawnSync } from 'node:child_process'
+import { fileURLToPath } from 'node:url'
 
 import {
   resolveTarget,
@@ -17,6 +19,8 @@ import {
   checkDevResiduals,
   checkNoAbsolutePaths,
   checkProductionBinary,
+  checkVendoredPayloadPlatforms,
+  payloadPlatformMismatch,
   vendoredBinarySources,
   listFiles,
   crc32,
@@ -220,10 +224,101 @@ test('vendoredBinarySources: a checkout with nothing staged yields an empty set'
   assert.deepEqual(await vendoredBinarySources(root), [])
 })
 
+// ── V-108: the staged payload has to be the target's binary ────────────────
+//
+// The bug these cover: `binaries/rg` is one path for every platform, so a
+// checkout that had staged a macOS rg and then built for windows embedded the
+// macOS binary and reported success. Nothing downstream noticed — the bytes are
+// a valid file, just not one windows can exec.
+
+const MZ = Buffer.concat([Buffer.from('MZ'), Buffer.alloc(60)])
+const ELF = Buffer.concat([Buffer.from([0x7f, 0x45, 0x4c, 0x46]), Buffer.alloc(60)])
+const MACHO = Buffer.concat([Buffer.from([0xcf, 0xfa, 0xed, 0xfe]), Buffer.alloc(60)])
+
+test('payloadPlatformMismatch: accepts each platform its own header', () => {
+  assert.equal(payloadPlatformMismatch(MZ, 'windows'), null)
+  assert.equal(payloadPlatformMismatch(ELF, 'linux'), null)
+  assert.equal(payloadPlatformMismatch(MACHO, 'darwin'), null)
+})
+
+test('payloadPlatformMismatch: names the header when the platform is wrong', () => {
+  // The shape of the failure matters: it has to say what was found, because
+  // "wrong platform" alone does not tell you which build staged it.
+  assert.match(payloadPlatformMismatch(MACHO, 'windows'), /cffaedfe/)
+  assert.match(payloadPlatformMismatch(MZ, 'linux'), /4d5a/)
+  assert.match(payloadPlatformMismatch(ELF, 'darwin'), /7f454c46/)
+})
+
+test('payloadPlatformMismatch: a truncated file is a failure, not a pass', () => {
+  assert.match(payloadPlatformMismatch(Buffer.from('MZ'), 'windows'), /too short/)
+})
+
+test('payloadPlatformMismatch: an unknown platform asserts nothing', () => {
+  // Fail-open here is deliberate and bounded: this check exists to catch a
+  // payload staged for a platform we *do* know about. Guessing a rule for a
+  // platform whose headers we have not verified would produce false failures.
+  assert.equal(payloadPlatformMismatch(MZ, 'plan9'), null)
+})
+
+test('checkVendoredPayloadPlatforms: reports the mismatch against the repo root', async (t) => {
+  const root = await tmpdir(t)
+  const staged = path.join(root, 'internal', 'tools', 'rgembed', 'binaries', 'rg')
+  await fs.mkdir(path.dirname(staged), { recursive: true })
+  await fs.writeFile(staged, MACHO)
+
+  assert.deepEqual(await checkVendoredPayloadPlatforms([staged], 'windows', { root }), [
+    `vendored payload ${path.join('internal', 'tools', 'rgembed', 'binaries', 'rg')} cannot run on windows: its header is cffaedfe, which is not a windows binary`,
+  ])
+  assert.deepEqual(await checkVendoredPayloadPlatforms([staged], 'darwin', { root }), [])
+})
+
+test('checkVendoredPayloadPlatforms: wasm is platform-neutral', async (t) => {
+  const root = await tmpdir(t)
+  const wasm = path.join(root, 'internal', 'workflow', 'mruby.wasm')
+  await fs.mkdir(path.dirname(wasm), { recursive: true })
+  // The wasm magic is not any host's magic, and must not be read as one.
+  await fs.writeFile(wasm, Buffer.from('\0asm\x01\0\0\0'))
+
+  assert.deepEqual(await checkVendoredPayloadPlatforms([wasm], 'windows', { root }), [])
+})
+
+test('checkVendoredPayloadPlatforms: an absent payload is not this check\u2019s business', async (t) => {
+  const root = await tmpdir(t)
+  // `selfCheck` runs over the same discovered set that may legitimately be
+  // empty (a CLI-only checkout stages no uv.exe); missing must not fail here.
+  assert.deepEqual(
+    await checkVendoredPayloadPlatforms([path.join(root, 'dist', 'bundled-tools', 'windows-amd64', 'uv.exe')], 'windows', { root }),
+    [],
+  )
+})
+
+// The Makefile asks this file rather than restating the magic numbers, so the
+// CLI contract is load-bearing: `make rg-embed` fails the build on a non-zero
+// exit and writes no stamp.
+test('CLI --check-payload-platform: exit code is the contract the Makefile reads', async (t) => {
+  const dir = await tmpdir(t)
+  const ok = path.join(dir, 'rg.exe')
+  const bad = path.join(dir, 'rg')
+  await fs.writeFile(ok, MZ)
+  await fs.writeFile(bad, MACHO)
+
+  const run = (args) => spawnSync(process.execPath, [fileURLToPath(new URL('./package-portable.mjs', import.meta.url)), ...args], { encoding: 'utf8' })
+
+  const pass = run(['--check-payload-platform', ok, 'windows'])
+  assert.equal(pass.status, 0)
+  assert.match(pass.stdout, /是 windows 二进制/)
+
+  const fail = run(['--check-payload-platform', bad, 'windows'])
+  assert.equal(fail.status, 1)
+  assert.match(fail.stderr, /不能作为 windows 的随包原件/)
+
+  // A missing argument is a usage error (2), not a silent pass.
+  assert.equal(run(['--check-payload-platform', ok]).status, 2)
+})
+
 test('crc32: matches the standard check value', () => {
   assert.equal(crc32(Buffer.from('123456789')), 0xcbf43926)
 })
-
 // readZip is a minimal central-directory reader used only to round-trip what
 // buildZipBuffer writes, so the test asserts real structure, not just length.
 function readZip(buf) {

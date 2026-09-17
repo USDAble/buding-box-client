@@ -765,30 +765,36 @@ func TestChannelGoalCommand_SetsAndStartsTheGoal(t *testing.T) {
 	// handle: POSIX tolerates it, Windows fails the test with "directory is not
 	// empty" after every assertion above passed. CI proved that on v1's first
 	// windows-latest run (V-64), which is why the barrier is here.
-	waitTurnUnwound(t, srv, sess.Store.ID)
+	waitTurnsQuiesced(t, srv)
 }
 
-// OCTO-FORK: 上游文件补一个等待位 — 见 dev-docs-usdable/需求/20260911/需求基线.md `V-64`。
+// OCTO-FORK: 把这道屏障搭在真正被每条回合路径登记的那道门上 — 见 dev-docs-usdable/需求/20260911/需求基线.md `V-109`。
 //
-// waitTurnUnwound blocks until the session's background turn goroutine has
-// fully wound down. turnRunning flips back to false only after
-// runAgentTurnLoop — and every Save it makes — has returned, so this is the
-// point past which no goroutine still holds a session-file handle, which is
-// what t.TempDir()'s RemoveAll needs (see attachments_test.go, where the same
-// barrier is written inline; the two could be folded together).
-func waitTurnUnwound(t *testing.T, srv *Server, sid string) {
+// waitTurnsQuiesced blocks until no turn is in flight and no new one can start,
+// which is what t.TempDir()'s RemoveAll needs before it releases the data root.
+//
+// The barrier is drainGate.drain and not a turn-running flag: the gate is the
+// only bookkeeping *every* turn path enrolls in (runAgentTurnLoop, the
+// user-initiated channel turn, and runChannelIdleTurn all call begin/end),
+// while turnRunning is written by the WS, REST and kickIdleTurn paths only. This
+// test's turn comes from handleChannelGoal, whose `go s.runChannelIdleTurn(...)`
+// never sets it — so the V-64 barrier that read turnRunning returned in
+// microseconds while the turn was still writing, which is why the test stayed
+// flaky after it looked fixed (V-109). Measured with the turn parked inside the
+// provider call: turnRunning read false and the barrier returned in 65µs, while
+// the drain gate stayed blocked for as long as the turn did.
+//
+// drain also fences. It flips the gate to draining, so a follow-up turn the goal
+// chain would otherwise kick aborts in begin() instead of writing under the
+// cleanup — the half a plain "is anything running right now" poll cannot give.
+func waitTurnsQuiesced(t *testing.T, srv *Server) {
 	t.Helper()
-	mu := srv.sessionTurnLock(sid)
-	for deadline := time.Now().Add(5 * time.Second); time.Now().Before(deadline); {
-		mu.Lock()
-		running := srv.turnRunning[sid]
-		mu.Unlock()
-		if !running {
-			return
-		}
-		time.Sleep(20 * time.Millisecond)
+	// Generous on purpose: the stub sender finishes a turn in microseconds, so
+	// reaching this deadline means a turn is genuinely stuck rather than that
+	// the machine is slow, and the data root is not safe to release.
+	if !srv.drain.drain(10 * time.Second) {
+		t.Error("a turn was still in flight after 10s; the data root is not safe to release")
 	}
-	t.Error("background turn did not wind down within 5s")
 }
 
 // A command that only reports or parks the goal must not start a turn.

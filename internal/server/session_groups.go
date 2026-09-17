@@ -8,7 +8,6 @@ import (
 	"log/slog"
 	"net/http"
 	"os"
-	"path/filepath"
 	"strconv"
 	"strings"
 	"time"
@@ -132,15 +131,34 @@ var notifyGroupsChanged func()
 // a plain Unlock. See registryLock for why reads stay out of the file lock.
 var groupMu = &registryLock{}
 
-// sessionGroupsPath returns data/session-groups.json, creating the data root.
-// OCTO-FORK: the portable product keeps session groups next to the executable,
-// not in the host home — see dev-docs-usdable/需求/2260906/技术方案/P1-便携数据根.md.
+// sessionGroupsPath returns data/session-groups.json WITHOUT creating the data
+// root. Every read path uses it — the store watcher samples it every five
+// seconds, cachedRegistry stats it once per listing — and resolving through
+// datapath.Root made each of those a write: MkdirAll plus a temporary
+// writability probe in the root (V-105). Writers call ensureRegistryDir first.
+// OCTO-FORK: read-only resolver, split from the writers — see dev-docs-usdable/需求/20260911/需求基线.md §5.6.
 func sessionGroupsPath() (string, error) {
-	root, err := datapath.Root()
-	if err != nil {
-		return "", fmt.Errorf("session groups: %w", err)
+	return datapath.Join(sessionGroupsFile)
+}
+
+// sessionGroupsFile is the registry's name under the data root. One literal,
+// used by the read resolver above and by the writers that ensure the directory
+// the file lands in.
+const sessionGroupsFile = "session-groups.json"
+
+// ensureRegistryDir creates the data root for a writer. The registry lives
+// directly in it, and both saveRegistry's temporary file and the lock file
+// beside it need the directory to exist.
+//
+// Root, not Join: this is the write half of the split, and datapath.Join's own
+// doc names the hazard of resolving read-only and then writing anyway. It also
+// means a frozen data root refuses the write here rather than failing later,
+// mid-rename.
+func ensureRegistryDir() error {
+	if _, err := datapath.Root(); err != nil {
+		return fmt.Errorf("session groups: %w", err)
 	}
-	return filepath.Join(root, "session-groups.json"), nil
+	return nil
 }
 
 // loadRegistryFile reads and parses the whole registry file. A missing file is
@@ -181,6 +199,11 @@ func loadSessionGroups() ([]sessionGroup, error) {
 func saveRegistry(gf groupFile) error {
 	if gf.Groups == nil {
 		gf.Groups = []sessionGroup{}
+	}
+	// The write half of the split: the temp file below lands directly in the
+	// data root, so the writer is the one that makes sure it exists.
+	if err := ensureRegistryDir(); err != nil {
+		return err
 	}
 	path, err := sessionGroupsPath()
 	if err != nil {

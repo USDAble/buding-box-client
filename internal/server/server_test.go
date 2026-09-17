@@ -859,6 +859,11 @@ func mustServer(t *testing.T, cfg Config) *Server {
 		// on it, so it must exist before that goroutine can start. Assigning it
 		// afterwards would be a write racing that read.
 		watchStop: make(chan struct{}),
+		// Same reason, one step further: doShutdown waits on watchDone after
+		// closing watchStop (V-105), and the watch goroutine closes it from the
+		// other side. A nil channel would panic in one and block forever in the
+		// other.
+		watchDone: make(chan struct{}),
 	}
 	srv.registerRoutes()
 	// Same chain as New: host routing outside, CORS inside, so tests that

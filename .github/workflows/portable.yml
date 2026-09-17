@@ -25,6 +25,13 @@ on:
       - 'scripts/package-portable.test.mjs'
       - 'scripts/pe-info.mjs'
       - 'scripts/pe-info.test.mjs'
+      # The packaging preflight runs the fork guards (and `desktop-portable`
+      # depends on brand-check), so any change under scripts/ is a change to what
+      # this job exercises. Enumerating individual guard files is what let V-102
+      # stay red on Windows unnoticed: the guard changed and nothing that runs it
+      # did.
+      - 'scripts/*.mjs'
+      - 'scripts/*.txt'
       - 'cmd/generate-brand-assets/**'
       - 'scripts/package-desktop-macos.sh'
       - 'packaging/portable/**'
@@ -42,6 +49,13 @@ on:
       - 'scripts/package-portable.test.mjs'
       - 'scripts/pe-info.mjs'
       - 'scripts/pe-info.test.mjs'
+      # The packaging preflight runs the fork guards (and `desktop-portable`
+      # depends on brand-check), so any change under scripts/ is a change to what
+      # this job exercises. Enumerating individual guard files is what let V-102
+      # stay red on Windows unnoticed: the guard changed and nothing that runs it
+      # did.
+      - 'scripts/*.mjs'
+      - 'scripts/*.txt'
       - 'cmd/generate-brand-assets/**'
       - 'scripts/package-desktop-macos.sh'
       - 'packaging/portable/**'
@@ -133,8 +147,10 @@ jobs:
     steps:
       - uses: actions/checkout@v7
         with:
-          # package-desktop-macos.sh derives the version from `git describe`;
-          # fetch tags so it isn't just the short SHA.
+          # Full history: the packaging preflight's advisory guards diff against
+          # the pinned upstream commit, which a shallow checkout would not have.
+          # Not for the version — that comes from internal/version/version.go
+          # (V-103).
           fetch-depth: 0
 
       - uses: actions/setup-go@v7

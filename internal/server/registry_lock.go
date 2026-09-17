@@ -53,6 +53,16 @@ func (l *registryLock) Lock() {
 // deadlock against each other.
 func (l *registryLock) LockWrite() {
 	l.mu.Lock()
+	// The lock file is created beside the registry, so the data root has to
+	// exist before Acquire opens it — a write path, hence Root via
+	// ensureRegistryDir rather than the read-only resolver.
+	// OCTO-FORK: the writer materialises the data root, the resolver does not — see dev-docs-usdable/需求/20260911/需求基线.md §5.6.
+	if err := ensureRegistryDir(); err != nil {
+		// No usable data root means no registry to write either; the write
+		// itself will fail with the same error. Proceed with the in-process
+		// lock rather than blocking here.
+		return
+	}
 	path, err := sessionGroupsPath()
 	if err != nil {
 		// No resolvable path means no registry to write either; the write

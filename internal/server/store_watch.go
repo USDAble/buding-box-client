@@ -70,7 +70,12 @@ type storeFingerprint struct {
 // watcher should escalate.
 func sampleStore() storeFingerprint {
 	var fp storeFingerprint
-	if dir, err := agent.SessionsDir(); err == nil {
+	// SessionsDirPath, not SessionsDir: this is a read, and the creating form
+	// resolves through datapath.Root, which makes the directory and writes a
+	// probe file into it — five seconds apart, for as long as the server lives.
+	// The watcher must not be the thing that materialises the store it watches
+	// (V-105).
+	if dir, err := agent.SessionsDirPath(); err == nil {
 		if info, err := os.Stat(dir); err == nil {
 			fp.sessionsModTime = info.ModTime()
 		}

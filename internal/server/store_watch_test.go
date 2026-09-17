@@ -2,6 +2,8 @@ package server
 
 import (
 	"encoding/json"
+	"os"
+	"path/filepath"
 	"testing"
 	"time"
 )
@@ -162,4 +164,39 @@ func TestStoreWatch_StopsWhenTold(t *testing.T) {
 
 	close(stop)
 	time.Sleep(20 * time.Millisecond)
+}
+
+// TestStoreWatch_SampleCreatesNothing is V-105's first nail, and the flake that
+// took three CI rounds was its symptom rather than its subject.
+//
+// OCTO-FORK: added with the read-only sample fix — see dev-docs-usdable/需求/20260911/需求基线.md §5.6.
+//
+// The watch is a READER of the data root. Its sample used to resolve through the
+// creating accessors — agent.SessionsDir, and sessionGroupsPath via
+// datapath.Root — and datapath.Root does not merely join a path: it makes the
+// directory and then writes a temporary probe file into it to prove the volume
+// accepts writes. A sampler that aims that at an empty root therefore creates
+// data/sessions in it, every five seconds, for the life of the server.
+//
+// Two consequences, and the product one is the reason this is not just test
+// hygiene. In a test the write landed during a t.TempDir() removal, which fails
+// with "directory not empty" against whichever test happened to be running. In
+// the product it is worse in kind: a sampler can recreate a data root the user
+// has just deleted, which is the harm datapath.Freeze exists to prevent — an
+// empty data/ looks exactly like a clean install while the real one is on a
+// drive that is no longer mounted.
+func TestStoreWatch_SampleCreatesNothing(t *testing.T) {
+	root := filepath.Join(t.TempDir(), "data") // deliberately absent
+	t.Setenv("OCTO_DATA_ROOT", root)
+
+	_ = sampleStore()
+
+	if _, err := os.Stat(root); !os.IsNotExist(err) {
+		entries, _ := os.ReadDir(root)
+		names := make([]string, 0, len(entries))
+		for _, e := range entries {
+			names = append(names, e.Name())
+		}
+		t.Errorf("a sample materialised %s (entries: %v); the watch must read the root, not create it", root, names)
+	}
 }

@@ -1051,3 +1051,37 @@ func TestIsAutoNamePlaceholder(t *testing.T) {
 		}
 	}
 }
+
+// TestSessionsDirPathDoesNotCreate keeps the read-only half of the sessions
+// directory honest, and keeps the creating half working.
+//
+// The store watch asks for this path every five seconds (V-105). Resolving it
+// through the creating form ran datapath.Root underneath — which makes the
+// directory and writes a temporary probe file into it — so a reader materialised
+// data/sessions and touched the data root on every tick. The second half of the
+// test is not decoration: the fix must not have turned the WRITERS read-only, or
+// a session save would start failing with a missing directory.
+//
+// OCTO-FORK: read-only sessions path for the portable product's store watch — see dev-docs-usdable/需求/20260911/需求基线.md §5.6.
+func TestSessionsDirPathDoesNotCreate(t *testing.T) {
+	root := filepath.Join(t.TempDir(), "data") // deliberately absent
+	t.Setenv("OCTO_DATA_ROOT", root)
+
+	path, err := SessionsDirPath()
+	if err != nil {
+		t.Fatalf("SessionsDirPath: %v", err)
+	}
+	if want := filepath.Join(root, "sessions"); path != want {
+		t.Errorf("SessionsDirPath = %q, want %q", path, want)
+	}
+	if _, err := os.Stat(root); !os.IsNotExist(err) {
+		t.Errorf("SessionsDirPath created %s; a caller that only looks must not make the directory", root)
+	}
+
+	if _, err := SessionsDir(); err != nil {
+		t.Fatalf("SessionsDir: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(root, "sessions")); err != nil {
+		t.Errorf("SessionsDir did not create data/sessions: %v", err)
+	}
+}

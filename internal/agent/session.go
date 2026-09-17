@@ -555,6 +555,19 @@ func sessionsDir() (string, error) {
 	return datapath.Sub("sessions")
 }
 
+// SessionsDirPath returns data/sessions WITHOUT creating it, for a caller that
+// only wants to look inside. Write paths keep using SessionsDir.
+//
+// The split matters because the creating form is not free: datapath.Root (which
+// Sub calls) makes the directory and then writes a temporary probe file into it
+// to prove the volume is writable. A read path that resolved through it
+// therefore wrote into the data root every time it ran — and the store watcher
+// samples this directory every five seconds, for the life of the server
+// (V-105). datapath.Join is the read half of that split and creates nothing.
+//
+// OCTO-FORK: added for the portable product's store watcher — see dev-docs-usdable/需求/20260911/需求基线.md §5.6.
+func SessionsDirPath() (string, error) { return datapath.Join("sessions") }
+
 // SavePath returns the JSONL path where this session would be saved.
 func (s *Session) SavePath() (string, error) {
 	dir := s.Dir

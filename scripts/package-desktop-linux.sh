@@ -25,7 +25,18 @@ case "$(uname -m)" in
 	*) echo "unsupported host arch: $(uname -m) (expected x86_64 or aarch64)" >&2; exit 1 ;;
 esac
 OUT="$ROOT/Octo-$APPARCH.AppImage"
-VERSION="${1:-$(git -C "$ROOT" describe --tags --always 2>/dev/null || echo 0.1.0)}"
+# OCTO-FORK: 版本改走 internal/version（Makefile:34 明文禁止 `git describe`） — see dev-docs-usdable/需求/20260911/需求基线.md §5.6 V-103
+# Same source as the macOS packager and the Makefile: internal/version/version.go
+# (Makefile:34 explains why `git describe` is not used — this repo's tags are
+# archive snapshots, so it yields `archive/base-…`, which is not a version). The
+# Linux bundle has no plist, so the `-dev` suffix is fine here; what matters is
+# that the app's reported version agrees with the rest of the build.
+BASE_VERSION="$(sed -n 's/^var Version = "\(.*\)"/\1/p' "$ROOT/internal/version/version.go")"
+if [ -z "$BASE_VERSION" ]; then
+	echo "cannot read the version out of internal/version/version.go" >&2
+	exit 1
+fi
+VERSION="${1:-$BASE_VERSION-dev}"
 VERSION="${VERSION#v}"
 COMMIT="$(git -C "$ROOT" rev-parse --short HEAD 2>/dev/null || echo unknown)"
 

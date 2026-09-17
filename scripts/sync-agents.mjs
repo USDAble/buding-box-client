@@ -33,6 +33,7 @@ import fs from 'node:fs/promises'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 
+import { normalizeEol, sameGeneratedText } from './generated-text.mjs'
 import { NORMS_PATH, UPSTREAM_NORMS, repositoryRoot } from './norms-guard.mjs'
 
 export const OCTORULES_PATH = '.octorules'
@@ -100,6 +101,10 @@ The full \`${OCTORULES_PATH}\` text is **inlined below verbatim**, so a tool tha
 
 // renderAgents is the whole generated file. Exported so the tests can assert on
 // it without touching disk.
+//
+// The source's line endings are normalized to LF rather than passed through:
+// with CRLF inherited from the checkout this file would differ per platform for
+// the same commit (V-104). The *content* is still inlined verbatim.
 export function renderAgents(octorules) {
   return `${GENERATED_NOTICE}
 
@@ -108,7 +113,7 @@ ${renderPreamble()}
 
 ${BEGIN_MARKER}
 
-${octorules.trimEnd()}
+${normalizeEol(octorules.trimEnd())}
 
 ${END_MARKER}
 `
@@ -126,6 +131,9 @@ async function readIfPresent(absolutePath) {
 // check is the shape every other guard exposes, so preflight.mjs can call it
 // uniformly. It reports two distinct failures: the source lost its fork rules
 // (an upstream merge reverted them), or the generated file drifted.
+//
+// "Drifted" means the content differs. The line-ending form belongs to the
+// checkout, not to the file, so it is normalized away before comparing (V-104).
 export async function check(root) {
   const problems = []
   const notes = []
@@ -151,7 +159,7 @@ export async function check(root) {
   const actual = await readIfPresent(path.join(root, AGENTS_PATH))
   if (actual === null) {
     problems.push(`${AGENTS_PATH}: 缺失 —— Codex 这类只读该文件的工具会看不到上游规则。运行 \`make agents\`。`)
-  } else if (!actual.equals(expected)) {
+  } else if (!sameGeneratedText(actual.toString('utf8'), expected.toString('utf8'))) {
     problems.push(`${AGENTS_PATH}: 与 ${OCTORULES_PATH} 不一致（漂移）。运行 \`make agents\` 并提交。`)
   } else {
     notes.push(`${AGENTS_PATH}: 与 ${OCTORULES_PATH} 同步（${expected.length} 字节，已内联上游规则）。`)

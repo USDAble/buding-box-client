@@ -197,6 +197,53 @@ export function bundledUvPath(root, target) {
   return path.join(root, 'dist', 'bundled-tools', `windows-${target.goarch}`, 'uv.exe')
 }
 
+// A vendored payload is staged for one platform and then embedded verbatim, so
+// a payload for the wrong platform ships a binary the target cannot run — and
+// nothing else notices, because the bytes are a perfectly valid file (V-108).
+// Reproduced before this check existed: `make desktop-portable` on a host whose
+// `binaries/rg` happened to be a Mach-O arm64 build produced a windows/amd64 exe
+// with that macOS binary inside it, and the self-check passed.
+//
+// Checked by magic rather than by hash because the question is "can the target
+// run this", which the header answers for every platform and needs nothing
+// pinned. Provenance — "is it the release we pinned" — is a different question,
+// answered where the release is fetched.
+const PAYLOAD_MAGICS = {
+  windows: ['4d5a'], // MZ
+  linux: ['7f454c46'], // ELF
+  // Mach-O, either width or endianness, plus the fat/universal wrapper.
+  darwin: ['cffaedfe', 'cefaedfe', 'feedfacf', 'feedface', 'cafebabe', 'cafebabf'],
+}
+
+export function payloadPlatformMismatch(buf, goos) {
+  const wanted = PAYLOAD_MAGICS[goos]
+  if (!wanted) return null // nothing to assert for a platform we have no rule for
+  if (buf.length < 4) return `too short to be a ${goos} binary`
+  const head = buf.subarray(0, 4).toString('hex')
+  return wanted.some((m) => head.startsWith(m)) ? null : `its header is ${head}, which is not a ${goos} binary`
+}
+
+export async function checkVendoredPayloadPlatforms(paths, goos, { root = null } = {}) {
+  const failures = []
+  for (const p of paths) {
+    // WebAssembly is executed by a runtime we ship, not by the OS, so it is
+    // platform-neutral by construction and has no header to match.
+    if (p.endsWith('.wasm')) continue
+    let buf
+    try {
+      buf = await fs.readFile(p)
+    } catch {
+      continue // absence is not this check's business
+    }
+    const why = payloadPlatformMismatch(buf, goos)
+    if (why) {
+      const label = root ? path.relative(root, p) : p
+      failures.push(`vendored payload ${label} cannot run on ${goos}: ${why}`)
+    }
+  }
+  return failures
+}
+
 export async function vendoredBinarySources(root) {
   const out = []
   for (const [rel, keep] of VENDORED_ROOTS) {
@@ -285,7 +332,7 @@ export async function checkSize(baselinePath, files) {
 
 // selfCheck returns { failures, warnings, files }. A non-empty failures means
 // the package must not ship. warnings are advisory (e.g. the size budget).
-export async function selfCheck(dir, { brand, forbiddenPaths = [], vendoredPaths = [], baselinePath = null } = {}) {
+export async function selfCheck(dir, { brand, target = null, root = null, forbiddenPaths = [], vendoredPaths = [], baselinePath = null } = {}) {
   const files = await listFiles(dir)
   const failures = []
   const warnings = []
@@ -328,6 +375,12 @@ export async function selfCheck(dir, { brand, forbiddenPaths = [], vendoredPaths
     console.log(`  按字节归属 ${vendoredPaths.length} 个随包原件：${vendoredPaths.map((p) => path.basename(p)).join(", ")}`)
   }
   failures.push(...(await checkNoAbsolutePaths(files, forbiddenPaths, { vendoredPaths })))
+
+  // Every payload that goes into the artefact has to be a binary the target can
+  // actually run (V-108).
+  if (target) {
+    failures.push(...(await checkVendoredPayloadPlatforms(vendoredPaths, target.goos, { root })))
+  }
 
   if (baselinePath) {
     const { warning } = await checkSize(baselinePath, files)
@@ -530,6 +583,31 @@ async function assemble({ root, brand, target, dest }) {
 
 async function main() {
   const root = repositoryRoot(import.meta.url)
+
+  // `make rg-embed` needs the platform rule before the build rather than in the
+  // self-check, because the failure it prevents is a *stale* payload: the target
+  // is up to date by mtime while holding another platform's binary. It asks this
+  // file instead of repeating the magic numbers, so there is one definition of
+  // "this payload can run there" (V-108).
+  const probe = process.argv.indexOf('--check-payload-platform')
+  if (probe !== -1) {
+    const [payload, goos] = process.argv.slice(probe + 1)
+    if (!payload || !goos) {
+      console.error('用法: package-portable.mjs --check-payload-platform <文件> <goos>')
+      process.exitCode = 2
+      return
+    }
+    const buf = await fs.readFile(payload)
+    const why = payloadPlatformMismatch(buf, goos)
+    if (why) {
+      console.error(`${payload} 不能作为 ${goos} 的随包原件：${why}`)
+      process.exitCode = 1
+      return
+    }
+    console.log(`ok: ${payload} 是 ${goos} 二进制`)
+    return
+  }
+
   const brand = await loadBrand(root)
   const target = resolveTarget()
   if (target.goos !== 'windows') {
@@ -578,6 +656,8 @@ async function main() {
     // land outside the payloads and this check reports them.
     forbiddenPaths: [root, os.homedir()].filter(Boolean),
     vendoredPaths: await vendoredBinarySources(root),
+    target,
+    root,
     baselinePath: path.join(root, 'dist', '.portable-size-baseline'),
   })
   for (const w of warnings) console.warn(`  警告: ${w}`)

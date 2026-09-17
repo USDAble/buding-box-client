@@ -70,6 +70,22 @@ const hubPort = "8088"
 // hubAddr is the fixed loopback address the hub owns.
 const hubAddr = "127.0.0.1:" + hubPort
 
+// OCTO-FORK: desktopWebviewURL returns the URL the first window loads. It
+// defaults to the in-process hub (hubAddr), whose server serves the embedded
+// webdist. OCTO_DESKTOP_DEV_URL is honoured only under a developer Profile, for
+// the shell + Vite hot-reload loop (`make web-dev` + `make desktop-dev`); a
+// production build ignores it, which is exactly what AllowDevWebview asserts at
+// Validate() time. See dev-docs-usdable/运行时Profile配置.md and
+// dev-docs-usdable/本地开发与运行.md §3.4.
+func desktopWebviewURL() string {
+	if productprofile.Current().AllowDevWebview {
+		if dev := strings.TrimSpace(os.Getenv("OCTO_DESKTOP_DEV_URL")); dev != "" {
+			return dev
+		}
+	}
+	return "http://" + hubAddr
+}
+
 // minFreeBytes is the room the data root must have before this product is worth
 // starting (需求20260906 §5.1.2 第 4 条's 空间不足 arm).
 //
@@ -238,7 +254,7 @@ func main() {
 	// it runs before the bridge takes its copy of settings below.
 	ensureBundledOcto(&settings)
 
-	bridge := &nativeBridge{settings: settings, url: "http://" + hubAddr}
+	bridge := &nativeBridge{settings: settings, url: desktopWebviewURL()}
 	// On Windows/Linux a window close would otherwise quit the app; start with
 	// quit allowed only when the user opted out of keep-running-in-background.
 	bridge.allowQuit.Store(!settings.KeepRunningInBackground)

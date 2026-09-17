@@ -70,7 +70,7 @@ RG_EMBED_BIN := $(RG_EMBED_DIR)/rg
         eval-build eval-list eval \
         rg-embed rg-embed-clean \
         bundle-tools-windows bundle-tools-macos \
-        web-build web-dev dev build-full desktop desktop-app desktop-appimage \
+        web-build web-dev dev build-full desktop desktop-dev desktop-app desktop-appimage \
         desktop-portable desktop-portable-all portable-check
 
 all: test
@@ -134,6 +134,25 @@ desktop: web-build
 		CGO_CFLAGS="-mmacosx-version-min=$(DESKTOP_MACOS_VERSION)" \
 		CGO_LDFLAGS="-Wl,-macos_version_min,$(DESKTOP_MACOS_VERSION)" \
 		go build -ldflags='$(DESKTOP_LDFLAGS)' -o ../../octo-desktop .
+
+# OCTO-FORK: desktop-dev runs the desktop shell against the Vite dev server so
+# web/ edits hot-reload inside the real window instead of the embedded build.
+# Start `make web-dev` in a second terminal first (Vite on :5173), then this
+# target builds the shell and points the window at :5173 — it does NOT start
+# Vite itself, so skipping that terminal gives a blank window. Deliberately not
+# `make dev`: that one starts `go run ./cmd/octo serve`, which fights the
+# window's in-process hub for 8088. The window's hub still owns 8088 and Vite
+# proxies /api and /ws back to it (see desktopWebviewURL in
+# cmd/octo-desktop/main.go and web/vite.config.ts), so shell=octo-desktop and
+# the window token ride along unchanged. Only a developer Profile honours
+# OCTO_DESKTOP_DEV_URL, so a production build cannot be pointed at a dev
+# server. See dev-docs-usdable/本地开发与运行.md §3.4.
+desktop-dev:
+	cd cmd/octo-desktop && CGO_ENABLED=1 \
+		CGO_CFLAGS="-mmacosx-version-min=$(DESKTOP_MACOS_VERSION)" \
+		CGO_LDFLAGS="-Wl,-macos_version_min,$(DESKTOP_MACOS_VERSION)" \
+		go build -ldflags='$(DESKTOP_LDFLAGS)' -o ../../octo-desktop-dev .
+	OCTO_DESKTOP_DEV_URL="http://localhost:5173" ./octo-desktop-dev
 
 # Package the desktop shell into a double-clickable macOS Octo.app bundle
 # (embeds the web UI, ad-hoc signed for local use). Real Developer ID

@@ -13,7 +13,16 @@ name: Desktop
 # green independent of Wails.
 on:
   push:
-    branches: [main]
+    # OCTO-FORK: 把集成分支 v1 接进 CI — see dev-docs-usdable/需求/20260911/需求基线.md §5.6 `V-110`
+    #
+    # Same gap as portable.yml, same fix. v1 is the product integration branch and
+    # PRs land there as a squash, so the commit that lands is never the commit the
+    # PR leg built; this push trigger is the only thing that builds the merge
+    # result. `gh run list --workflow=desktop.yml --branch=v1` returned zero runs,
+    # so the five desktop jobs — including the two Windows ones that run
+    # scripts/embed-rg-windows.ps1, the only place the arm64 payload is staged —
+    # never ran on the branch everything ships from (V-110).
+    branches: [main, v1]
     paths:
       - 'cmd/octo-desktop/**'
       - 'internal/server/**'

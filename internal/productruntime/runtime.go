@@ -21,6 +21,7 @@ import (
 
 	"github.com/open-octo/octo-agent/internal/catalogstore"
 	"github.com/open-octo/octo-agent/internal/credentialstore"
+	"github.com/open-octo/octo-agent/internal/pii"
 	"github.com/open-octo/octo-agent/internal/productclient"
 	"github.com/open-octo/octo-agent/internal/productstate"
 	"github.com/open-octo/octo-agent/internal/sensitive"
@@ -74,6 +75,9 @@ type Deps struct {
 	// nil means the build did not wire it. The nickname route then refuses the
 	// edit instead of storing an unchecked name — see account.go.
 	Sensitive *sensitive.Engine
+	// PersonalInfo is the immutable built-in masking engine shared with the
+	// server-authoritative send path. nil makes the transform route fail closed.
+	PersonalInfo pii.Engine
 	// ServerDictionary owns the last verified server layer. A nil store removes
 	// only that layer; built-in and user words remain active.
 	ServerDictionary *sensitive.ServerStore
@@ -176,6 +180,7 @@ func (rt *Runtime) Mount(api func(pattern string, h http.HandlerFunc)) {
 	// (the turn-path gate) is NOT a route: it is handed to internal/server as
 	// SensitiveInputGate, so a frontend cannot skip it.
 	api("POST /api/product/sensitive/check", rt.handleSensitiveCheck)
+	api("POST /api/product/privacy/transform", rt.handlePrivacyTransform)
 }
 
 // chatModesDTO is the wire shape of 本地API契约 §2.8.

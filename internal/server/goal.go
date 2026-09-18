@@ -3,6 +3,7 @@ package server
 import (
 	"fmt"
 	"net/http"
+	"strings"
 
 	"github.com/open-octo/octo-agent/internal/agent"
 	"github.com/open-octo/octo-agent/internal/tools"
@@ -147,13 +148,41 @@ func (s *Server) wsGoalCommand(sessionID, args string) {
 		s.broadcastGoalNotice(sessionID, "command", "Goals are disabled (goal.enabled)", "error")
 		return
 	}
+	// OCTO-FORK: goal objectives are persisted user text, so Web commands share
+	// the same policy lock and preprocessing boundary as chat turns.
+	turnMu := s.sessionTurnLock(sessionID)
+	turnMu.Lock()
 	sess, err := s.goalSession(sessionID)
 	if err != nil {
+		turnMu.Unlock()
 		s.broadcastGoalNotice(sessionID, "command", fmt.Sprintf("/goal: %v", err), "error")
 		return
 	}
+	prepared := preparedUserText{text: args}
+	if prefix, objective, hasObjective := goalObjective(args); hasObjective {
+		if safetyErr := s.checkUserTextSafety(objective); safetyErr != nil {
+			turnMu.Unlock()
+			if safetyErr.code == codeInputSensitive {
+				safetyErr.replacement = "/goal " + rebuildGoalArgs(prefix, safetyErr.replacement)
+			}
+			s.refuseUserTextWS(sessionID, safetyErr)
+			return
+		}
+		protected, prepErr := s.protectUserText(sess, objective)
+		if prepErr != nil {
+			turnMu.Unlock()
+			s.refuseUserTextWS(sessionID, prepErr)
+			return
+		}
+		prepared = protected
+		args = rebuildGoalArgs(prefix, protected.text)
+	}
 	titleBefore := sess.Title
 	reply, start := agent.GoalCommand(sess, args)
+	titleChanged := sess.Title != titleBefore
+	title := sess.Title
+	goal, hasGoal := sess.GoalSnapshot()
+	turnMu.Unlock()
 	level := "info"
 	if len(reply) > 6 && (reply[:6] == "/goal:" || reply[:6] == "/goal ") {
 		level = "error"
@@ -164,13 +193,16 @@ func (s *Server) wsGoalCommand(sessionID, args string) {
 	// sidebar: without this the rename would only surface on the next refetch,
 	// so a session started by "/goal …" would look unnamed for as long as the
 	// tab stayed open.
-	if sess.Title != titleBefore {
-		s.broadcastSessionRenamed(sessionID, sess.Title)
+	if titleChanged {
+		s.broadcastSessionRenamed(sessionID, title)
 	}
-	if g, ok := sess.GoalSnapshot(); ok {
-		s.broadcastGoalUpdated(sessionID, g)
+	if hasGoal {
+		s.broadcastGoalUpdated(sessionID, goal)
 	} else {
 		s.broadcastGoalCleared(sessionID)
+	}
+	if goalCommandStoredText(reply) {
+		s.broadcastPrivacyApplied(sessionID, prepared)
 	}
 	if start != agent.GoalStartNone {
 		s.kickIdleGoalTurn(sessionID, start)
@@ -229,10 +261,6 @@ func (s *Server) handleUpdateSessionGoal(w http.ResponseWriter, r *http.Request)
 		writeError(w, http.StatusForbidden, "goals are disabled (goal.enabled)")
 		return
 	}
-	sess, ok := s.goalSessionForRequest(w, r)
-	if !ok {
-		return
-	}
 	var req struct {
 		Objective   string `json:"objective"`
 		Status      string `json:"status"`
@@ -242,6 +270,36 @@ func (s *Server) handleUpdateSessionGoal(w http.ResponseWriter, r *http.Request)
 	if err := readBodyJSON(r, &req); err != nil {
 		writeInvalidJSONBody(w, err)
 		return
+	}
+	// OCTO-FORK: the REST goal editor must not bypass the safety and personal-
+	// information checks applied to the Web command path.
+	if req.Objective != "" {
+		if safetyErr := s.checkUserTextSafety(req.Objective); safetyErr != nil {
+			refuseUserTextHTTP(w, safetyErr)
+			return
+		}
+	}
+	id := r.PathValue("id")
+	if id == "" {
+		writeError(w, http.StatusBadRequest, "missing session id")
+		return
+	}
+	turnMu := s.sessionTurnLock(id)
+	turnMu.Lock()
+	defer turnMu.Unlock()
+	sess, ok := s.goalSessionForRequest(w, r)
+	if !ok {
+		return
+	}
+	prepared := preparedUserText{text: req.Objective}
+	if req.Objective != "" {
+		var prepErr *userTextError
+		prepared, prepErr = s.protectUserText(sess, req.Objective)
+		if prepErr != nil {
+			refuseUserTextHTTP(w, prepErr)
+			return
+		}
+		req.Objective = prepared.text
 	}
 
 	titleBefore := sess.Title
@@ -274,12 +332,41 @@ func (s *Server) handleUpdateSessionGoal(w http.ResponseWriter, r *http.Request)
 		writeError(w, http.StatusBadRequest, err.Error())
 		return
 	}
+	s.broadcastPrivacyApplied(sess.ID, prepared)
 	s.broadcastGoalUpdated(sess.ID, g)
 	// Same objective-seeded rename as the composer's /goal (see wsGoalCommand).
 	if sess.Title != titleBefore {
 		s.broadcastSessionRenamed(sess.ID, sess.Title)
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"goal": g})
+}
+
+// goalObjective separates the user-authored objective from the command words.
+// Pure control commands carry no user text and therefore skip preprocessing.
+func goalObjective(args string) (prefix, objective string, ok bool) {
+	args = strings.TrimSpace(args)
+	lower := strings.ToLower(args)
+	switch {
+	case args == "", lower == "pause", lower == "resume", lower == "clear", lower == "edit", lower == "replace":
+		return "", "", false
+	case strings.HasPrefix(lower, "edit "):
+		return "edit", strings.TrimSpace(args[len("edit "):]), true
+	case strings.HasPrefix(lower, "replace "):
+		return "replace", strings.TrimSpace(args[len("replace "):]), true
+	default:
+		return "", args, true
+	}
+}
+
+func rebuildGoalArgs(prefix, objective string) string {
+	if prefix == "" {
+		return objective
+	}
+	return prefix + " " + objective
+}
+
+func goalCommandStoredText(reply string) bool {
+	return strings.HasPrefix(reply, "Goal set") || strings.HasPrefix(reply, "Goal replaced") || strings.HasPrefix(reply, "Goal updated")
 }
 
 // handleDeleteSessionGoal serves DELETE /api/sessions/{id}/goal.

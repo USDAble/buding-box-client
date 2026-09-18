@@ -345,10 +345,10 @@ func (s *Server) handleCreateChat(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// OCTO-FORK: PR-6b3 — the input gate, before the session is minted: a refused
-	// message must not leave a session file behind (需求 D1). See 开发计划 §PR-6b3.
-	if masked, refuse := s.sensInputVerdict(req.Message); refuse {
-		refuseSensitiveInput(w, masked)
+	// OCTO-FORK: reject blocked content before minting a session. Personal
+	// information protection follows once the new session owns its policy.
+	if err := s.checkUserTextSafety(req.Message); err != nil {
+		refuseUserTextHTTP(w, err)
 		return
 	}
 
@@ -357,6 +357,11 @@ func (s *Server) handleCreateChat(w http.ResponseWriter, r *http.Request) {
 		model = req.Model
 	}
 	sess := agent.NewSession(model, s.system)
+	prepared, prepErr := s.protectUserText(sess, req.Message)
+	if prepErr != nil {
+		refuseUserTextHTTP(w, prepErr)
+		return
+	}
 	s.applyDefaultWorkspaceDir(sess)
 	_ = sess.SetPermissionMode(string(resolvePermissionMode()))
 	sess.Bind(agent.EntryWeb, false)
@@ -378,7 +383,7 @@ func (s *Server) handleCreateChat(w http.ResponseWriter, r *http.Request) {
 	// OCTO-FORK: REST turns share the same monotonic first-turn lock as WebSocket
 	// turns. runTurn may persist an interrupted input, so lock before entering it.
 	sess.LockProtectionPolicy()
-	reply, err := s.runTurn(r.Context(), sess, req.Message)
+	reply, err := s.runTurn(r.Context(), sess, prepared.text)
 	if errors.Is(err, errDraining) {
 		writeError(w, http.StatusServiceUnavailable, err.Error())
 		return
@@ -392,6 +397,7 @@ func (s *Server) handleCreateChat(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusInternalServerError, fmt.Sprintf("save session: %v", err))
 		return
 	}
+	s.broadcastPrivacyApplied(sess.ID, prepared)
 
 	writeJSON(w, http.StatusOK, createChatResponse{
 		SessionID: sess.ID,
@@ -423,11 +429,9 @@ func (s *Server) handleTurn(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// OCTO-FORK: PR-6b3 — the input gate, before the session binding is taken:
-	// a refused message is not a turn, so it must not take the session over from
-	// the window holding it. See 开发计划 §PR-6b3.
-	if masked, refuse := s.sensInputVerdict(req.Message); refuse {
-		refuseSensitiveInput(w, masked)
+	// OCTO-FORK: blocked content is rejected before binding side effects.
+	if err := s.checkUserTextSafety(req.Message); err != nil {
+		refuseUserTextHTTP(w, err)
 		return
 	}
 
@@ -466,6 +470,11 @@ func (s *Server) handleTurn(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusNotFound, err.Error())
 		return
 	}
+	prepared, prepErr := s.protectUserText(sess, req.Message)
+	if prepErr != nil {
+		refuseUserTextHTTP(w, prepErr)
+		return
+	}
 
 	if err := s.validateConfidentialSession(sess); err != nil {
 		writeProtectionError(w, agent.ErrorCodeOf(err), agent.UserFacingError(err))
@@ -473,7 +482,7 @@ func (s *Server) handleTurn(w http.ResponseWriter, r *http.Request) {
 	}
 	// OCTO-FORK: lock before runTurn can append or persist the accepted input.
 	sess.LockProtectionPolicy()
-	reply, err := s.runTurn(r.Context(), sess, req.Message)
+	reply, err := s.runTurn(r.Context(), sess, prepared.text)
 	if errors.Is(err, errDraining) {
 		writeError(w, http.StatusServiceUnavailable, err.Error())
 		return
@@ -487,6 +496,7 @@ func (s *Server) handleTurn(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusInternalServerError, fmt.Sprintf("save session: %v", err))
 		return
 	}
+	s.broadcastPrivacyApplied(sess.ID, prepared)
 
 	writeJSON(w, http.StatusOK, map[string]string{"reply": reply})
 }
@@ -1068,6 +1078,23 @@ func (s *Server) handleEditMessage(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "new_content must be non-empty")
 		return
 	}
+	if safetyErr := s.checkUserTextSafety(req.NewContent); safetyErr != nil {
+		refuseUserTextHTTP(w, safetyErr)
+		return
+	}
+	// Existing editable messages belong to a locked policy. Preprocess before
+	// interrupting so an engine failure has no effect on the running turn; the
+	// authoritative reload below repeats the idempotent transform under lock.
+	initialSession, err := agent.LoadSession(id)
+	if err != nil {
+		writeError(w, http.StatusNotFound, err.Error())
+		return
+	}
+	prepared, prepErr := s.protectUserText(initialSession, req.NewContent)
+	if prepErr != nil {
+		refuseUserTextHTTP(w, prepErr)
+		return
+	}
 
 	// Interrupt any in-flight turn, then wait for it to fully wind down —
 	// turnRunning clears only after the turn's final save — so the truncate
@@ -1095,6 +1122,13 @@ func (s *Server) handleEditMessage(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusNotFound, err.Error())
 		return
 	}
+	authoritative, prepErr := s.protectUserText(sess, prepared.text)
+	if prepErr != nil {
+		mu.Unlock()
+		refuseUserTextHTTP(w, prepErr)
+		return
+	}
+	prepared = mergePreparedUserText(prepared, authoritative)
 	if req.MessageIndex < 0 || req.MessageIndex > len(sess.Messages) {
 		mu.Unlock()
 		writeError(w, http.StatusBadRequest, fmt.Sprintf("message_index out of range: %d (have %d messages)", req.MessageIndex, len(sess.Messages)))
@@ -1133,6 +1167,7 @@ func (s *Server) handleEditMessage(w http.ResponseWriter, r *http.Request) {
 
 	s.turnRunning[id] = true
 	mu.Unlock()
+	s.broadcastPrivacyApplied(id, prepared)
 
 	go func() {
 		defer func() {
@@ -1140,7 +1175,7 @@ func (s *Server) handleEditMessage(w http.ResponseWriter, r *http.Request) {
 			s.turnRunning[id] = false
 			mu.Unlock()
 		}()
-		s.runAgentTurnLoop(sess, req.NewContent, blocks, imageRefsFromBlocks(blocks))
+		s.runAgentTurnLoop(sess, prepared.text, blocks, imageRefsFromBlocks(blocks))
 	}()
 
 	writeJSON(w, http.StatusOK, map[string]any{"ok": true})

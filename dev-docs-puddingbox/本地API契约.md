@@ -84,7 +84,7 @@
 | GET / PUT | `/api/product/sensitive/dict` | 数据根与词库文件 | 读取或覆盖用户敏感词。 |
 | POST | `/api/product/sensitive/dict/import` | 数据根与词库文件 | 合并导入敏感词。 |
 | POST | `/api/product/sensitive/check` | 敏感词引擎可选 | 输入框即时检测。 |
-| POST | `/api/product/privacy/transform` | 目标接口，当前未实现 | 在本机生成自动脱敏文本和提示摘要；不是发送安全边界。 |
+| POST | `/api/product/privacy/transform` | 产品运行时已组装个人信息引擎 | 在本机生成自动脱敏文本和提示摘要；不是发送安全边界。 |
 | GET | `/api/product/control-plane` | 无平台请求 | 返回本构建的控制面可用性。 |
 | GET | `/api/product/catalog` | 目录缓存；需要刷新时还依赖平台会话 | 返回目录可用性。 |
 | GET | `/api/product/credits` | 平台客户端与可用平台会话 | 从账本刷新余额并返回 `{state}`。 |
@@ -172,7 +172,7 @@
 
 目标接口 `PATCH /api/sessions/{id}/protection` 接收 `personal_info_protection`、`confidential_session` 和可选 `model_id`，只允许在保护策略锁定前更新。当开启私密会话且当前模型不合格时，`model_id` 必须指定合格私密模型；服务端在同一会话锁中校验并原子保存模型绑定与版本化 `protection_policy`。成功返回完整策略和有效模型绑定；锁定后返回 `409 session_policy_locked`，模型不合格返回 `409 confidential_model_required`。创建会话接口必须能原子接收同样的用户可选字段和初始模型绑定；`version` 与 `locked` 只能由服务端写入。详细竞态和生命周期语义见 [模型选择与私密会话](模型选择与私密会话.md)。
 
-目标接口 `POST /api/product/privacy/transform` 接收 `{"text":"..."}`，返回 `{"hit":<bool>,"masked":"...","matches":[{"category":"...","count":1}],"ruleVersion":"..."}`。前端命中后不请求确认，直接以 `masked` 继续发送并展示“已自动脱敏”提示。它与服务端发送入口使用同一个 `internal/pii` 引擎，标准占位符在重复处理时保持不变；请求与响应不得写访问日志，且必须 `no-store`。发送入口仍对旧客户端或绕过 transform 的请求执行权威脱敏。
+`POST /api/product/privacy/transform` 接收 `{"text":"..."}`，返回 `{"hit":<bool>,"masked":"...","matches":[{"category":"...","count":1}],"ruleVersion":"..."}`。前端命中后不请求确认，直接以 `masked` 继续发送并展示“已自动脱敏”提示。它与服务端发送入口使用同一个 `internal/pii` 引擎，标准占位符在重复处理时保持不变；响应使用 `Cache-Control: no-store`，路由不得记录请求或响应 body。发送入口仍对旧客户端或绕过 transform 的请求执行权威脱敏；运行时未组装引擎或处理失败时返回 `500 privacy_transform_failed`，不返回原文。
 
 产品 WebSocket 事件如下：
 
@@ -202,7 +202,7 @@
 | `code_not_sent` / `activation_invalid` / `activation_code_used` | 登录或激活的业务结果。 |
 | `box_code_unknown` / `box_code_mismatch` / `activation_required` / `phone_mismatch` | 需要用户处理、重新激活或联系客服的业务结果。 |
 | `input_sensitive` | 本地敏感输入被拒；REST 返回打码文本，WebSocket 使用同名事件。 |
-| `privacy_transform_failed` | 个人信息保护开启但本地脱敏引擎不可用或处理失败；本次输入不得广播、落库或调用模型。 |
+| `privacy_transform_failed` | 产品 transform 路由未组装引擎，或受保护输入处理失败；本次输入不得广播、落库或调用模型。普通服务端发送路径默认使用内置规则，不把依赖缺失降级为明文发送。 |
 | `session_policy_locked` | 首个用户回合已经落库，保护策略不可再改变。 |
 | `confidential_model_required` | 请求开启私密会话或切换模型时，提交的模型不具备私密资格。 |
 | `confidential_model_unavailable` | 已锁定私密会话在回合开始前失去可用的合格模型；不得回退普通模型。 |

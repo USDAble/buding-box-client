@@ -13,6 +13,7 @@ import (
 
 	"github.com/open-octo/octo-agent/internal/catalogstore"
 	"github.com/open-octo/octo-agent/internal/credentialstore"
+	"github.com/open-octo/octo-agent/internal/pii"
 	"github.com/open-octo/octo-agent/internal/productclient"
 	"github.com/open-octo/octo-agent/internal/productclient/clienttest"
 	"github.com/open-octo/octo-agent/internal/productruntime"
@@ -32,8 +33,9 @@ type harness struct {
 	// engine is the one compliance-word engine this harness assembled, held so a
 	// test can assert that the mounted server received the SAME instance rather
 	// than building a second one (PR-6b1 判据 10).
-	engine     *sensitive.Engine
-	serverDict *sensitive.ServerStore
+	engine       *sensitive.Engine
+	personalInfo pii.Engine
+	serverDict   *sensitive.ServerStore
 }
 
 func newHarness(t *testing.T) *harness {
@@ -90,6 +92,7 @@ func newHarnessWithControlPlane(t *testing.T, status productruntime.ControlPlane
 	if err != nil {
 		t.Fatalf("sensitive.NewFromDataRoot: %v", err)
 	}
+	personalInfo := pii.New()
 
 	rt := productruntime.New(productruntime.Deps{
 		State:            state,
@@ -98,6 +101,7 @@ func newHarnessWithControlPlane(t *testing.T, status productruntime.ControlPlane
 		ControlPlane:     status,
 		Catalog:          catalog,
 		Sensitive:        engine,
+		PersonalInfo:     personalInfo,
 		ServerDictionary: serverDict,
 		// Explicit fixture facts rather than productprofile.Current(): the
 		// profile is chosen by a build tag, and a production-tagged run would
@@ -111,7 +115,7 @@ func newHarnessWithControlPlane(t *testing.T, status productruntime.ControlPlane
 	local := httptest.NewServer(rt.Handler())
 	t.Cleanup(local.Close)
 
-	return &harness{t: t, rt: rt, local: local, platform: platform, platformSrv: platformSrv, root: root, engine: engine, serverDict: serverDict}
+	return &harness{t: t, rt: rt, local: local, platform: platform, platformSrv: platformSrv, root: root, engine: engine, personalInfo: personalInfo, serverDict: serverDict}
 }
 
 // do issues a request against the local service and returns status plus the

@@ -63,7 +63,7 @@ export const GOVERNED_PREFIX = 'internal/server/'
 // WHAT IS AND IS NOT RATCHETED — the scope, stated here because the two are
 // easy to conflate and the conflation is silent (开发规范 §3.10).
 //
-//   R1 counts added `s.api(` lines in server.go: one number, ceiling 1.
+//   R1 counts added `s.api(` lines in server.go: one number, ceiling 2.
 //   R2's per-file ceilings cover a *named handful* of files — the ones carrying
 //     product debt that has a convergence plan. Everything else under
 //     GOVERNED_PREFIX is unratcheted *by design*: no drift ceiling, no
@@ -101,7 +101,7 @@ export const GOVERNED_PREFIX = 'internal/server/'
 // `upstreamCount` is asserted to be non-zero, so if `s.api(` ever stops being
 // upstream's own symbol the premise breaks loudly instead of silently passing.
 export const ROUTE_TABLE_FILE = 'internal/server/server.go'
-export const ROUTE_TABLE_CEILING = 1
+export const ROUTE_TABLE_CEILING = 2
 
 // R2 — per-file fork diff (added + removed lines vs upstream) ceilings for the
 // upstream files that carry real product debt. Merging upstream shrinks these
@@ -230,6 +230,17 @@ export const ROUTE_TABLE_CEILING = 1
 //       ratchets. What reaches this file is the wiring that has nowhere else to
 //       go.
 //
+//   The 2026-09-18 personal-information pipeline raises server.go 576 → 660,
+//   handlers.go 101 → 280, ws_handlers.go 26 → 105 and the route ceiling
+//   1 → 2. Measured values are 646/265/91 and 2; the explicitly approved
+//   14/15/14-line margin is small headroom, not a budget for unrelated work.
+//   Rule logic, error/event construction, the product transform endpoint and
+//   tests remain in fork-owned files. The upstream files only carry the
+//   Config/Server seam and calls at existing REST/WS entry points, where the
+//   transform must run before queue, broadcast, persistence or model work.
+//   A sender wrapper would run too late. The second route is the atomic session
+//   protection endpoint; product routes still use Config.MountAPI.
+//
 //   NOTE ON THE PR-5e PRECEDENT. That raise rejected a fork-side wrapper sender
 //   because forwarding the capability stack by hand can silently downgrade
 //   streaming. This wrapper is the same shape and is still the right answer,
@@ -242,7 +253,7 @@ export const ROUTE_TABLE_CEILING = 1
 export const DEBT_CEILINGS = [
   {
     file: 'internal/server/server.go',
-    ceiling: 576,
+    ceiling: 660,
     why:
       'the product seam and the data-root migration: Config.MountAPI/WindowToken/RequireGateway/ControlPlaneReady plumbing, the productAPI registrar (a method value, not a call site), V-36/PR-5c/PR-5b1 gates on the turn path, and Config.CatalogOffers + its guard (PR-5e, L-C7). ' +
       'Measured 2026-09-14 at 533 after excluding marker lines (see the marker note in forkDiffLines) and after trimming the PR-5e prose to pointers into 开发计划 §PR-5e; of the added lines the large majority are prose explaining those seams. ' +
@@ -257,18 +268,20 @@ export const DEBT_CEILINGS = [
       'WHY NO SMALLER FORM: the field is one line and the doc is where the next reader learns that a nil gate is the CLI shape and that the ORDER (refuse before broadcast/persist) is the requirement rather than an implementation detail — the PR-6b1 precedent for the same seam. ' +
       'V-105 added 11 (ninth raise), all of it the shutdown joins: the watchDone channel the store watch closes on its way out, the watchStarted flag that skips the join when the watch never ran, the test seam that makes the ordering observable, the make() for the channel, the two call lines in doShutdown, and five lines of prose — see the ninth raise note above. ' +
       'WHY NO SMALLER FORM: the fields are on Server because that is where the struct is declared and Config is the only construction channel; doShutdown is upstream\'s own method, so no fork-side wrapper reaches it; and watchStop is the ask, while a join needs the channel that answers. Stripping every comment still measures 571, over the previous 565 — so this raise could not have been avoided by trimming prose. ' +
-      'WHAT WAS MOVED OUT FIRST: both joins themselves live in internal/server/store_watch.go (+48) and internal/server/tasks_handlers.go (+34), neither of which this guard ratchets. Only the wiring lands here.',
+      'WHAT WAS MOVED OUT FIRST: both joins themselves live in internal/server/store_watch.go (+48) and internal/server/tasks_handlers.go (+34), neither of which this guard ratchets. Only the wiring lands here. ' +
+      'The 2026-09-18 raise adds the PersonalInfoTransform construction seam and includes earlier protection-policy wiring. Rules and preprocessing live in fork-owned files; Config and Server are the only injection boundary. The 660 ceiling is 14 lines above the measured 646 and is not permission for unrelated behavior.',
     convergence:
       'P0-01A C (the apiProduct fold is dead — see the R1 note; what remains is the registrar and the product-state move, P0-01A D). PR-5e adds nothing to fold: its 37 lines are the floor for a turn-path guard, and they shrink only if upstream grows a pre-send hook. The 11 V-105 lines shrink only if upstream joins its own background goroutines on Shutdown — the join belongs upstream, and this is the fork paying for it in the meantime',
   },
   {
     file: 'internal/server/handlers.go',
-    ceiling: 101,
+    ceiling: 280,
     why:
       'the data-root migration (a datapath import and the directory joins) plus sessionItem.ChatMode (PR-4d1, V-46 — see the raise notes above). ' +
       'PR-6b3 added 13: two input-gate call sites, one in handleCreateChat (before the session is minted, so a refused message leaves no session file) and one in handleTurn (before the session binding is taken, so a refused message does not take the session over). ' +
       'WHY NO SMALLER FORM: the two REST turn entry points are both in this file, so the gate has to be named twice; the alternative, one call inside runTurn, is the WRONG ORDER — that is after the session exists, and for handleCreateChat it would leave a session file behind for a question that was never asked (需求 D1, 开发计划 §PR-6b3). ' +
-      'WHAT WAS MOVED OUT FIRST: the verdict itself (the switch plus the engine) is not here at all — it arrives as Config.SensitiveInputGate from the fork-owned assembly, and the refusal writer lives in internal/server/sensitive.go. These 13 lines are the wiring and the three-to-four-line marker each, nothing more.',
+      'WHAT WAS MOVED OUT FIRST: the verdict itself (the switch plus the engine) is not here at all — it arrives as Config.SensitiveInputGate from the fork-owned assembly, and the refusal writer lives in internal/server/sensitive.go. These 13 lines are the wiring and the three-to-four-line marker each, nothing more. ' +
+      'The 2026-09-18 raise covers authoritative preprocessing at the existing create, turn and edit entry points plus the protection-policy response fields. The engine and error/event builders stay in fork-owned files. Moving these calls into runTurn would be unsafe because create and edit side effects can happen first. The 280 ceiling is 15 lines above the measured 265.',
     convergence: 'P0-01A D (+8 folds when the session descriptor moves); the datapath lines are the finished cost of hard rule 1',
   },
   {
@@ -277,7 +290,7 @@ export const DEBT_CEILINGS = [
     // below rather than letting a 36-line allowance hide them (V-49).
     // Raised 15 → 23 by PR-6b3 (2026-09-15), the second change.
     file: 'internal/server/ws_handlers.go',
-    ceiling: 26,
+    ceiling: 105,
     why:
       'G3 (需求基线 C8): the control plane\'s error code on the turn_error event. Composition at the measured 15 — 2 added + 3 removed are the `errorInput` signature and `error`\'s call line; 3 are the `if code != "" { ev["code"] = code }` that puts the field on the wire; 4 are the two `userError`/`userErrorInput` call lines (each forwards agent.ErrorCodeOf(err)); 3 are prose plus the marker. ' +
       'WHY NO SMALLER FORM: the field can only be added where the event is built, and once a fourth parameter exists the three call sites in this file must pass it — the alternative (a second emitter function) measured 22 lines, not fewer. The code has to be read from the error object, which exists only in the two userError* callers. ' +
@@ -286,7 +299,8 @@ export const DEBT_CEILINGS = [
       'WHY NO SMALLER FORM for that 8: this is the only WS entry point a typed message passes through, and the position is the requirement — the two lines below it in the same function broadcast `history_user_message` and append to the session, so a gate anywhere later is a refusal of something the transcript already shows (开发计划 §PR-6b3; this is also why the sender-wrapper alternative was measured and rejected). ' +
       'WHAT WAS MOVED OUT FIRST for it: the verdict and both response shapes (the WS broadcast and the REST refusal writer) are in the fork-owned internal/server/sensitive.go; what is here is the call and the marker. ' +
       'PR-8 added 3: the global credits nudge at the turn tail, next to the session_activity companion that already exists there for the same reason (completeEvent reaches only subscribers of this session, while the balance is shown in the sidebar corner and account panel, which live outside every session). ' +
-      'WHY NO SMALLER FORM: the nudge has to fire where a turn is known to be over, and every turn ends in this function; the emitter itself is one line in the fork-owned internal/server/product_events.go, so what is here is the call and its three-line marker.',
+      'WHY NO SMALLER FORM: the nudge has to fire where a turn is known to be over, and every turn ends in this function; the emitter itself is one line in the fork-owned internal/server/product_events.go, so what is here is the call and its three-line marker. ' +
+      'The 2026-09-18 raise covers preprocessing before the running Agent inbox, chained queue and idle turn. Shared logic stays in fork-owned user_text_preprocess.go; these calls must remain before enqueue or broadcast. The 105 ceiling is 14 lines above the measured 91.',
     convergence:
       'shrinks only if upstream grows a code channel on turn_error (or a pre-send hook that carries one) and a global companion hook on the turn tail; otherwise this is the permanent cost of the requirement that the client must not render `message` and that the balance refreshes in every window',
   },

@@ -647,8 +647,9 @@ func startHub(app *application.App, bridge *nativeBridge, settings desktopSettin
 	// reason the engine does: the two facts it needs — the user's switch and the
 	// engine — belong to internal/productstate and this assembly, and
 	// internal/server must not hold either (it would have to import a fork
-	// package, which the dependency direction forbids).
-	mountProduct, gatewaySender, catalogOffers, engine, sensitiveInputGate := mountProductAPI()
+	// package, which the dependency direction forbids). The sixth value is the
+	// immutable personal-information engine shared by preview and send paths.
+	mountProduct, gatewaySender, catalogOffers, engine, sensitiveInputGate, personalInfo := mountProductAPI()
 
 	// Immutable for the life of the process, and the owner of both facts the
 	// turn-path policy needs (see RequireGateway below), so it is read once.
@@ -722,6 +723,9 @@ func startHub(app *application.App, bridge *nativeBridge, settings desktopSettin
 		// internal/server must not hold either. nil (a build with no product, or
 		// a test) means "no gate" — nothing is refused.
 		SensitiveInputGate: sensitiveInputGate,
+		// OCTO-FORK: one immutable personal-information engine serves both the
+		// preview route and server-authoritative send path.
+		PersonalInfoTransform: personalInfo.Transform,
 	})
 	if err != nil {
 		bridge.showError(L().errTitle, fmt.Sprintf(L().errStartFmt, err))

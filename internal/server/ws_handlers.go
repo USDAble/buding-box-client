@@ -528,18 +528,11 @@ func (s *Server) handleWSUserMessage(conn *wsConn, msg *wsMsgUserMessage) {
 		}
 	}
 
-	// OCTO-FORK: PR-6b3 — the input gate, before any binding is taken and before
-	// the message is broadcast or persisted: a refused message leaves no mark on
-	// the session (需求 D1). Consults what the user typed; the local slash
-	// commands above never reach a model and are not input. See 开发计划 §PR-6b3.
-	if masked, refuse := s.sensInputVerdict(content); refuse {
-		s.broadcastInputSensitive(sid, masked)
+	// OCTO-FORK: blocked content is rejected before binding or queue side
+	// effects. Personal-information protection runs under the turn lock below.
+	if safetyErr := s.checkUserTextSafety(content); safetyErr != nil {
+		s.refuseUserTextWS(sid, safetyErr)
 		return
-	}
-	// Document attachments ride as path notes in the text so the model can
-	// read_file them and the transcript keeps a visible record.
-	if len(att.notes) > 0 {
-		content = strings.TrimSpace(content + "\n\n" + strings.Join(att.notes, "\n"))
 	}
 
 	if ok, prevEntry, berr := s.acquireSessionBinding(sid, agent.EntryWeb, msg.Force); !ok {
@@ -567,11 +560,24 @@ func (s *Server) handleWSUserMessage(conn *wsConn, msg *wsMsgUserMessage) {
 	mu.Lock()
 
 	if s.turnRunning[sid] {
+		prepared, prepErr := s.protectUserText(sess, content)
+		if prepErr != nil {
+			mu.Unlock()
+			s.refuseUserTextWS(sid, prepErr)
+			return
+		}
+		content = prepared.text
+		// Attachment path notes are outside the first-version scanning scope and
+		// are appended only after user-authored text has been protected.
+		if len(att.notes) > 0 {
+			content = strings.TrimSpace(content + "\n\n" + strings.Join(att.notes, "\n"))
+		}
 		mu.Unlock()
 		// An explicit queue request skips the running turn entirely: park it for
 		// runAgentTurnLoop to run as its own chained turn once this one is done.
 		if msg.Queue {
 			s.enqueueQueued(sid, agent.InboxItem{Text: content, Blocks: att.blocks})
+			s.broadcastPrivacyApplied(sid, prepared)
 			return
 		}
 		// The current Web entry already owns the binding; a mid-turn message
@@ -589,6 +595,7 @@ func (s *Server) handleWSUserMessage(conn *wsConn, msg *wsMsgUserMessage) {
 		if a == nil {
 			s.enqueueSteer(sid, agent.InboxItem{Text: content, Blocks: att.blocks})
 		}
+		s.broadcastPrivacyApplied(sid, prepared)
 		// The frontend already rendered a ghost bubble in _sendMessage;
 		// history_user_message (broadcast when the turn drains steer) will
 		// replace it.  No need for a separate pending_user_messages event.
@@ -607,10 +614,24 @@ func (s *Server) handleWSUserMessage(conn *wsConn, msg *wsMsgUserMessage) {
 		})
 		return
 	}
+	prepared, prepErr := s.protectUserText(sess, content)
+	if prepErr != nil {
+		mu.Unlock()
+		s.releaseSessionBinding(sid, agent.EntryWeb)
+		s.refuseUserTextWS(sid, prepErr)
+		return
+	}
+	content = prepared.text
+	// Keep attachment path notes out of personal-information scanning. The
+	// attachment capability boundary is surfaced separately by the UI.
+	if len(att.notes) > 0 {
+		content = strings.TrimSpace(content + "\n\n" + strings.Join(att.notes, "\n"))
+	}
 
 	sess.IncFlight()
 	s.turnRunning[sid] = true
 	mu.Unlock()
+	s.broadcastPrivacyApplied(sid, prepared)
 
 	go func() {
 		// Hold the drain gate across the deferred wind-down too, not just for

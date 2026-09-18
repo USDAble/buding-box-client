@@ -186,6 +186,10 @@ type Config struct {
 	// Nil means "no gate": the CLI path (`octo serve`, no product assembly) and
 	// any test that is not about the gate refuse nothing.
 	SensitiveInputGate func(text string) (masked string, refuse bool)
+	// OCTO-FORK: the versioned personal-information transform shared with the
+	// product preview route. Nil uses the built-in rules; injected failures are
+	// fail-closed when a session enables personal-information protection.
+	PersonalInfoTransform PersonalInfoTransform
 
 	// OCTO-FORK: gateway-bound model guard — see
 	// dev-docs-usdable/需求/20260911/开发计划.md §PR-4c0
@@ -319,6 +323,8 @@ type Server struct {
 	skillReg *skills.Registry
 	// OCTO-FORK: one compliance-word engine per server (PR-6a) — see sensitive.go.
 	sensitiveEngine *sensitive.Engine
+	// OCTO-FORK: personal-information preprocessing — see user_text_preprocess.go.
+	personalInfoTransform PersonalInfoTransform
 	// skillsManifest is recomposed when skills are toggled/imported (write) and
 	// read on every turn's prompt.Compose; skillsMu guards the two against a
 	// data race between the mutation handlers and concurrent turns.
@@ -708,38 +714,39 @@ func New(cfg Config) (*Server, error) {
 	}
 
 	s := &Server{
-		cfg:                 cfg,
-		mux:                 http.NewServeMux(),
-		sender:              sender,
-		model:               model,
-		provider:            provName,
-		system:              cfg.System,
-		skillReg:            skillReg,
-		sensitiveEngine:     sensitiveEngineOr(cfg.SensitiveEngine),
-		skillsManifest:      skillsManifest,
-		cwd:                 cwd,
-		envCtx:              envCtx,
-		homeMemDir:          homeMemDir,
-		workspaceDir:        workspaceDir,
-		turnLocks:           map[string]*sync.Mutex{},
-		turnRunning:         make(map[string]bool),
-		entryBindings:       make(map[string]*cachedEntryBinding),
-		sessionBindingLocks: map[string]*sync.Mutex{},
-		steerQueues:         make(map[string][]queuedTurn),
-		sessionAgents:       make(map[string]*agent.Agent),
-		liveSessions:        make(map[string]*agent.Session),
-		accessKey:           accessKey,
-		confirmations:       make(map[string]chan string),
-		questionChans:       make(map[string]chan tools.AskResponse),
-		watchStop:           make(chan struct{}),
-		watchDone:           make(chan struct{}),
-		pendingQuestions:    make(map[string]wsEventRequestUserQuestion),
-		pendingConfirms:     make(map[string]wsEventRequestConfirmation),
-		askSlots:            make(map[string]chan struct{}),
-		sessionInjectors:    make(map[string]*memory.Injector),
-		wakeupTimers:        make(map[string]*time.Timer),
-		wakeupStart:         make(map[string]time.Time),
-		goalLastStatus:      make(map[string]agent.GoalStatus),
+		cfg:                   cfg,
+		mux:                   http.NewServeMux(),
+		sender:                sender,
+		model:                 model,
+		provider:              provName,
+		system:                cfg.System,
+		skillReg:              skillReg,
+		sensitiveEngine:       sensitiveEngineOr(cfg.SensitiveEngine),
+		personalInfoTransform: personalInfoTransformOr(cfg.PersonalInfoTransform),
+		skillsManifest:        skillsManifest,
+		cwd:                   cwd,
+		envCtx:                envCtx,
+		homeMemDir:            homeMemDir,
+		workspaceDir:          workspaceDir,
+		turnLocks:             map[string]*sync.Mutex{},
+		turnRunning:           make(map[string]bool),
+		entryBindings:         make(map[string]*cachedEntryBinding),
+		sessionBindingLocks:   map[string]*sync.Mutex{},
+		steerQueues:           make(map[string][]queuedTurn),
+		sessionAgents:         make(map[string]*agent.Agent),
+		liveSessions:          make(map[string]*agent.Session),
+		accessKey:             accessKey,
+		confirmations:         make(map[string]chan string),
+		questionChans:         make(map[string]chan tools.AskResponse),
+		watchStop:             make(chan struct{}),
+		watchDone:             make(chan struct{}),
+		pendingQuestions:      make(map[string]wsEventRequestUserQuestion),
+		pendingConfirms:       make(map[string]wsEventRequestConfirmation),
+		askSlots:              make(map[string]chan struct{}),
+		sessionInjectors:      make(map[string]*memory.Injector),
+		wakeupTimers:          make(map[string]*time.Timer),
+		wakeupStart:           make(map[string]time.Time),
+		goalLastStatus:        make(map[string]agent.GoalStatus),
 	}
 
 	// Register the WebSocket-backed asker so ask_user_question appears in the

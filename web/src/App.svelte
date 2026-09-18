@@ -13,7 +13,6 @@
   import { installExternalLinkInterceptor } from './lib/externalLinks'
   import { startNativeHeartbeat } from './lib/nativeHeartbeat'
   import { normalizeHash, hashPicksChatTarget } from './lib/hashRouting'
-  import { viewHidden } from './lib/features'
   import { pruneSessions } from './lib/genui/panel-state'
   import { onTurnEnded as onDiffTurnEnded, resetDiff } from './lib/diff'
   import { globalKeyIntent } from './lib/globalKeys'
@@ -246,18 +245,6 @@
     const hash = normalizeHash(v, sid)
     if (location.hash !== hash) location.hash = hash
     writeLastRoute(v, sid)
-  })
-
-  // P6: a hidden view can still be reached via a hand-typed #/mcp or a stale
-  // last-route entry (Sidebar already filters it out of navigation). Bounce it
-  // back to chat and tell the user why, rather than silently resetting them.
-  // OCTO-FORK: P6 入口隐藏 — see
-  // dev-docs-usdable/需求/2260906/技术方案/P6-入口隐藏与积分.md.
-  $effect(() => {
-    if (viewHidden($view)) {
-      view.set('chat')
-      showToast($t('feature.not_available'))
-    }
   })
 
   function bootMain() {

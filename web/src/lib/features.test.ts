@@ -1,22 +1,22 @@
 import { describe, it, expect } from 'vitest'
-import { HIDDEN_VIEWS, viewHidden, visibleNav } from './features'
+import { NAVIGATION_VIEWS, navigationVisible, visibleNav } from './features'
 
-describe('viewHidden', () => {
-  it('hides the three upstream capability views', () => {
-    expect(viewHidden('channels')).toBe(true)
-    expect(viewHidden('mcp')).toBe(true)
-    expect(viewHidden('lightapps')).toBe(true)
+describe('navigationVisible', () => {
+  it('shows the approved product entries', () => {
+    for (const v of ['chat', 'tasks', 'agents', 'skills', 'workflows', 'browser']) {
+      expect(navigationVisible(v)).toBe(true)
+    }
   })
 
-  it('leaves the product views visible', () => {
-    for (const v of ['chat', 'agents', 'skills', 'workflows', 'browser', 'tasks']) {
-      expect(viewHidden(v)).toBe(false)
+  it('keeps unsupported and future views out of navigation', () => {
+    for (const v of ['channels', 'mcp', 'lightapps', 'future_view']) {
+      expect(navigationVisible(v)).toBe(false)
     }
   })
 })
 
 describe('visibleNav', () => {
-  it('filters hidden views and preserves order', () => {
+  it('filters unapproved views and preserves order', () => {
     const items = [
       { v: 'tasks', label: 'Tasks' },
       { v: 'lightapps', label: 'Light Apps' },
@@ -28,16 +28,15 @@ describe('visibleNav', () => {
     expect(out.map((i) => i.v)).toEqual(['tasks', 'chat', 'agents'])
   })
 
-  it('defaults unknown views to visible (blacklist semantics)', () => {
+  it('defaults unknown views to hidden from navigation', () => {
     const items = [
       { v: 'future_view', label: 'Future' },
       { v: 'mcp', label: 'MCP' },
     ]
-    expect(visibleNav(items).map((i) => i.v)).toEqual(['future_view'])
+    expect(visibleNav(items)).toEqual([])
   })
 
-  it('mirrors the HIDDEN_VIEWS contract', () => {
-    // Every hidden view must be exactly the upstream capability trio.
-    expect([...HIDDEN_VIEWS].sort()).toEqual(['channels', 'lightapps', 'mcp'])
+  it('mirrors the NAVIGATION_VIEWS contract', () => {
+    expect([...NAVIGATION_VIEWS]).toEqual(['chat', 'tasks', 'agents', 'skills', 'workflows', 'browser'])
   })
 })

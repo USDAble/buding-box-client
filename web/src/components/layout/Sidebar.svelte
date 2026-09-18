@@ -16,7 +16,7 @@
   // dictionary, not .svelte literals. See 品牌升级方案.md §2.5.
   import { brandShortName } from '../../lib/brand'
   import { confirmDialog } from '../../lib/confirm'
-  import { viewHidden, visibleNav } from '../../lib/features'
+  import { visibleNav } from '../../lib/features'
   import { splitSections, swapWithinSection, parseSectionFold, type SectionFold } from '../../lib/sidebarSections'
   import { SIDEBAR_MIN, SIDEBAR_MAX, CENTER_MIN, readSidebarWidth, saveSidebarWidth } from '../../lib/sidebarWidth'
   import { ago, clockTick } from '../../lib/relTime'
@@ -399,9 +399,10 @@
     ...topNav.map(item => ({ icon: item.icon, title: item.label, v: item.v })),
   ]
 
-  // P6: filter the hidden upstream capability views (mcp/channels/lightapps)
-  // out of navigation WITHOUT touching the arrays themselves, so upstream
-  // additions to these arrays merge cleanly (需求 §5.4.3: 隐藏不删代码).
+  // P6: filter navigation through the product's explicit visible set without
+  // touching the upstream arrays. Hidden entries and future upstream additions
+  // remain implemented and directly routable; they simply receive no sidebar
+  // entry until the product approves one.
   // OCTO-FORK: P6 入口隐藏 — see
   // dev-docs-usdable/需求/2260906/技术方案/P6-入口隐藏与积分.md.
   const visibleTopNav = $derived(visibleNav(topNav))
@@ -409,7 +410,7 @@
   const visibleRailNav = $derived(visibleNav(railNav))
 
   function navActive(v: string) { return $view === v }
-  function moreActive() { return moreCategories.some(c => c.v === $view) }
+  function moreActive() { return $visibleMoreCategories.some(c => c.v === $view) }
 
   function toggleSel(id: string) {
     sel.update(s => { const n = { ...s }; n[id] ? delete n[id] : (n[id] = true); return n })

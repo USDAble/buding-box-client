@@ -248,19 +248,29 @@ export async function vendoredBinarySources(root) {
   const out = []
   for (const [rel, keep] of VENDORED_ROOTS) {
     const dir = path.join(root, ...rel.split('/'))
-    let entries
-    try {
-      entries = await fs.readdir(dir, { recursive: true, withFileTypes: true })
-    } catch {
-      continue // not staged in this checkout — nothing to attribute
-    }
-    for (const e of entries) {
-      if (!e.isFile()) continue
-      // Repo metadata that lives beside a payload but is never embedded: keep
-      // the logged set honest so a human can see what was attributed.
-      if (e.name.startsWith('.') || e.name.endsWith('.md')) continue
-      const abs = path.join(e.parentPath ?? e.path, e.name)
-      if (keep(abs)) out.push(abs)
+    // OCTO-FORK: Node 20.0 accepts recursive readdir but neither recurses nor
+    // exposes Dirent.path; walk explicitly so the release guard is portable.
+    const pending = [dir]
+    while (pending.length > 0) {
+      const current = pending.pop()
+      let entries
+      try {
+        entries = await fs.readdir(current, { withFileTypes: true })
+      } catch {
+        continue // not staged in this checkout — nothing to attribute
+      }
+      for (const e of entries) {
+        const abs = path.join(current, e.name)
+        if (e.isDirectory()) {
+          pending.push(abs)
+          continue
+        }
+        if (!e.isFile()) continue
+        // Repo metadata that lives beside a payload but is never embedded: keep
+        // the logged set honest so a human can see what was attributed.
+        if (e.name.startsWith('.') || e.name.endsWith('.md')) continue
+        if (keep(abs)) out.push(abs)
+      }
     }
   }
   return out.sort()

@@ -1,6 +1,8 @@
 import { describe, it, expect } from 'vitest'
 import { en, zh } from './i18n'
 
+// OCTO-FORK: the developer-profile endpoint editor includes local confidential
+// model eligibility, so both locales must carry its product-specific label.
 // Settings → Endpoints is a direct-edit UI (EndpointsSection.svelte): card
 // list, inline create/edit form, per-model chip actions, plus a secondary
 // "edit with agent" conversational entry. Every key it renders must exist in
@@ -16,6 +18,7 @@ const ENDPOINT_KEYS = [
   'settings.endpoints.api_key.missing',
   'settings.endpoints.models',
   'settings.endpoints.models.vision',
+  'settings.endpoints.models.confidential',
   'settings.endpoints.badge.default',
   'settings.endpoints.badge.lite',
   'settings.endpoints.add_model',

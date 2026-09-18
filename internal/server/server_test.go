@@ -161,6 +161,7 @@ func TestHandleBranchSession(t *testing.T) {
 	t.Setenv("USERPROFILE", tmp)
 
 	sess := agent.NewSession("stub-model", "sys")
+	sess.LockProtectionPolicy()
 	sess.Messages = []agent.Message{
 		{Role: agent.RoleUser, Content: "hello"},
 		{Role: agent.RoleAssistant, Content: "hi"},
@@ -285,6 +286,9 @@ func TestHandleBranchSession(t *testing.T) {
 	}
 	if branch.System != "sys" {
 		t.Fatalf("System = %q, want sys", branch.System)
+	}
+	if branch.ProtectionPolicy != sess.ProtectionPolicy {
+		t.Fatalf("branch policy = %+v, want %+v", branch.ProtectionPolicy, sess.ProtectionPolicy)
 	}
 
 	// Source session was untouched.

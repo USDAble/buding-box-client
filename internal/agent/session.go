@@ -107,6 +107,11 @@ type Session struct {
 	// package must not learn about product state. See
 	// dev-docs-usdable/需求/20260911/本地API契约.md §1.5.
 	ChatMode string `json:"chat_mode,omitempty"`
+	// OCTO-FORK: ProtectionPolicy is the session-owned privacy contract. It is
+	// versioned and persisted as one complete value so readers never combine
+	// booleans from interleaved writes. ChatMode remains only until the staged
+	// removal of the legacy three-mode feature.
+	ProtectionPolicy ProtectionPolicy `json:"protection_policy"`
 	// LastContextTokens is the real input-token count of the most recent model
 	// request in this session — how full the context window was as of the last
 	// turn. Persisted so an idle or resumed session (no live Agent in memory)
@@ -153,6 +158,12 @@ type Session struct {
 	// the signal Save otherwise uses to detect new content. Cleared with
 	// forceRewrite by a successful rewriteAll. Not serialized.
 	rewriteIsContent bool
+
+	// protectionPolicyDirty is set when the first accepted user turn locks the
+	// policy. appendDelta writes that record before the user message, so a crash
+	// can conservatively leave an empty locked session but never persisted user
+	// text under an unlocked policy.
+	protectionPolicyDirty bool
 
 	// mu guards runtime binding state (BoundEntry, InFlight) and is not
 	// serialized. Session methods that mutate bound state are goroutine-safe;
@@ -237,6 +248,28 @@ type Session struct {
 	// budgets. Cleared unconsumed at the next turn start.
 	goalSkipNextTokenDelta bool
 }
+
+const ProtectionPolicyVersion = 1
+
+// ProtectionPolicy records the two independent session protections. Locked is
+// monotonic: once the first user turn is accepted, neither protection may be
+// changed for the lifetime of the session.
+type ProtectionPolicy struct {
+	Version                int  `json:"version"`
+	PersonalInfoProtection bool `json:"personal_info_protection"`
+	ConfidentialSession    bool `json:"confidential_session"`
+	Locked                 bool `json:"locked"`
+}
+
+// DefaultProtectionPolicy is used by genuinely new and pristine sessions.
+func DefaultProtectionPolicy() ProtectionPolicy {
+	return ProtectionPolicy{
+		Version:                ProtectionPolicyVersion,
+		PersonalInfoProtection: true,
+	}
+}
+
+var ErrProtectionPolicyLocked = fmt.Errorf("session protection policy is locked")
 
 // Common entry names. Use these constants at call sites so typos are caught.
 const (
@@ -434,11 +467,12 @@ func (s *Session) appendLeaseRecordLocked(entry string, expires time.Time) error
 func NewSession(model, system string) *Session {
 	now := time.Now()
 	return &Session{
-		ID:        now.Format("20060102-150405") + "-" + randomSuffix(now),
-		CreatedAt: now,
-		Model:     model,
-		System:    system,
-		Title:     "*Octo Agent",
+		ID:               now.Format("20060102-150405") + "-" + randomSuffix(now),
+		CreatedAt:        now,
+		Model:            model,
+		System:           system,
+		Title:            "*Octo Agent",
+		ProtectionPolicy: DefaultProtectionPolicy(),
 	}
 }
 
@@ -472,6 +506,9 @@ func BranchFrom(s *Session, count int) *Session {
 	// silently start sending through the non-privacy model. See session.go's
 	// ChatMode field.
 	branch.ChatMode = s.ChatMode
+	// OCTO-FORK: a branch continues the same disclosure boundary, so it inherits
+	// the complete policy (including the monotonic lock) and model binding.
+	branch.ProtectionPolicy = s.ProtectionPolicy
 	branch.ModelConfig = s.ModelConfig
 	branch.AgentID = s.AgentID
 	branch.BranchedFrom = s.ID
@@ -603,7 +640,7 @@ func (s *Session) ChunkDir() (string, error) {
 // type as authoritative; rewriteAll folds them back into the meta header when
 // compacting.
 type sessionRecord struct {
-	Type                  string    `json:"type"` // "meta" | "message" | "title" | "model_config" | "agent_id" | "working_dir" | "permission_mode" | "chat_mode" | "context_tokens" | "content_updated_at" | "composed_system" | "lease" | "goal"
+	Type                  string    `json:"type"` // "meta" | "message" | "title" | "model_config" | "protection_policy" | "agent_id" | "working_dir" | "permission_mode" | "chat_mode" | "context_tokens" | "content_updated_at" | "composed_system" | "lease" | "goal"
 	ID                    string    `json:"id,omitempty"`
 	CreatedAt             time.Time `json:"created_at,omitempty"`
 	Model                 string    `json:"model,omitempty"`
@@ -622,17 +659,22 @@ type sessionRecord struct {
 	// OCTO-FORK: the session's chat mode (see Session.ChatMode). Carried in the
 	// meta header on rewrite and appended as its own record otherwise, exactly
 	// like permission_mode above.
-	ChatMode          string    `json:"chat_mode,omitempty"`
-	BoundEntry        string    `json:"bound_entry,omitempty"`
-	BoundAt           time.Time `json:"bound_at,omitempty"`
-	LeaseEntry        string    `json:"lease_entry,omitempty"`
-	LeaseExpires      time.Time `json:"lease_expires,omitempty"`
-	HookStarted       bool      `json:"hook_started,omitempty"`
-	BranchedFrom      string    `json:"branched_from,omitempty"`
-	LastContextTokens int       `json:"last_context_tokens,omitempty"`
-	ContentUpdatedAt  time.Time `json:"content_updated_at,omitempty"`
-	Message           *Message  `json:"message,omitempty"`
-	Goal              *Goal     `json:"goal,omitempty"`
+	ChatMode string `json:"chat_mode,omitempty"`
+	// OCTO-FORK: protection_policy records are complete snapshots. A model
+	// switch may ride the same line; ModelConfigSet distinguishes an intentional
+	// unbind (empty string) from a policy-only update.
+	ProtectionPolicy  *ProtectionPolicy `json:"protection_policy,omitempty"`
+	ModelConfigSet    bool              `json:"model_config_set,omitempty"`
+	BoundEntry        string            `json:"bound_entry,omitempty"`
+	BoundAt           time.Time         `json:"bound_at,omitempty"`
+	LeaseEntry        string            `json:"lease_entry,omitempty"`
+	LeaseExpires      time.Time         `json:"lease_expires,omitempty"`
+	HookStarted       bool              `json:"hook_started,omitempty"`
+	BranchedFrom      string            `json:"branched_from,omitempty"`
+	LastContextTokens int               `json:"last_context_tokens,omitempty"`
+	ContentUpdatedAt  time.Time         `json:"content_updated_at,omitempty"`
+	Message           *Message          `json:"message,omitempty"`
+	Goal              *Goal             `json:"goal,omitempty"`
 }
 
 func (s *Session) metaRecord() sessionRecord {
@@ -647,7 +689,8 @@ func (s *Session) metaRecord() sessionRecord {
 		goal = &g
 	}
 	s.mu.Unlock()
-	return sessionRecord{Type: "meta", ID: s.ID, CreatedAt: s.CreatedAt, Model: s.Model, System: s.System, ComposedSystem: s.ComposedSystem, ComposedLeanSystem: s.ComposedLeanSystem, ComposedForModel: s.ComposedForModel, ComposedForCWD: s.ComposedForCWD, ComposedForSourceDirs: s.ComposedForSourceDirs, Title: s.Title, Source: s.Source, ModelConfig: s.ModelConfig, AgentID: s.AgentID, WorkingDir: s.WorkingDir, PermissionMode: s.PermissionMode, ChatMode: s.ChatMode, LastContextTokens: s.LastContextTokens, ContentUpdatedAt: s.ContentUpdatedAt, BoundEntry: s.BoundEntry, BoundAt: s.BoundAt, HookStarted: s.HookStarted, BranchedFrom: s.BranchedFrom, Goal: goal}
+	policy := s.ProtectionPolicy
+	return sessionRecord{Type: "meta", ID: s.ID, CreatedAt: s.CreatedAt, Model: s.Model, System: s.System, ComposedSystem: s.ComposedSystem, ComposedLeanSystem: s.ComposedLeanSystem, ComposedForModel: s.ComposedForModel, ComposedForCWD: s.ComposedForCWD, ComposedForSourceDirs: s.ComposedForSourceDirs, Title: s.Title, Source: s.Source, ModelConfig: s.ModelConfig, AgentID: s.AgentID, WorkingDir: s.WorkingDir, PermissionMode: s.PermissionMode, ChatMode: s.ChatMode, ProtectionPolicy: &policy, LastContextTokens: s.LastContextTokens, ContentUpdatedAt: s.ContentUpdatedAt, BoundEntry: s.BoundEntry, BoundAt: s.BoundAt, HookStarted: s.HookStarted, BranchedFrom: s.BranchedFrom, Goal: goal}
 }
 
 // MarkHookStarted records that SessionStart has fired for this session, so a
@@ -693,10 +736,12 @@ func (s *Session) Save() error {
 		}
 		return s.rewriteAll()
 	}
-	if len(s.Messages) == s.persisted {
+	if len(s.Messages) == s.persisted && !s.protectionPolicyDirty {
 		return nil
 	}
-	s.stampContentUpdated()
+	if len(s.Messages) != s.persisted {
+		s.stampContentUpdated()
+	}
 	return s.appendDelta()
 }
 
@@ -768,6 +813,7 @@ func (s *Session) rewriteAll() error {
 	s.persisted = len(s.Messages)
 	s.forceRewrite = false
 	s.rewriteIsContent = false
+	s.protectionPolicyDirty = false
 	return nil
 }
 
@@ -785,6 +831,14 @@ func (s *Session) appendDelta() error {
 
 	w := bufio.NewWriter(f)
 	enc := json.NewEncoder(w)
+	// OCTO-FORK: persist the monotonic lock before any newly accepted user
+	// message. A partial append therefore fails closed after a crash.
+	if s.protectionPolicyDirty {
+		policy := s.ProtectionPolicy
+		if err := enc.Encode(sessionRecord{Type: "protection_policy", ProtectionPolicy: &policy}); err != nil {
+			return fmt.Errorf("session: append protection_policy: %w", err)
+		}
+	}
 	for _, m := range s.Messages[s.persisted:] {
 		if err := enc.Encode(messageRecord(m)); err != nil {
 			return fmt.Errorf("session: append message: %w", err)
@@ -797,13 +851,16 @@ func (s *Session) appendDelta() error {
 	// binding acquire/release around every turn does exactly that) would see
 	// a stale or zero value and reintroduce the phantom-unread-dot bug this
 	// field exists to fix.
-	if err := enc.Encode(sessionRecord{Type: "content_updated_at", ContentUpdatedAt: s.ContentUpdatedAt}); err != nil {
-		return fmt.Errorf("session: append content_updated_at: %w", err)
+	if len(s.Messages) != s.persisted {
+		if err := enc.Encode(sessionRecord{Type: "content_updated_at", ContentUpdatedAt: s.ContentUpdatedAt}); err != nil {
+			return fmt.Errorf("session: append content_updated_at: %w", err)
+		}
 	}
 	if err := w.Flush(); err != nil {
 		return fmt.Errorf("session: flush %s: %w", path, err)
 	}
 	s.persisted = len(s.Messages)
+	s.protectionPolicyDirty = false
 	return nil
 }
 
@@ -895,6 +952,103 @@ func (s *Session) SetModelConfig(name, model string) error {
 	if err := json.NewEncoder(f).Encode(sessionRecord{Type: "model_config", ModelConfig: name, Model: s.Model}); err != nil {
 		return fmt.Errorf("session: append model_config: %w", err)
 	}
+	return nil
+}
+
+// LockProtectionPolicy marks the first accepted user turn. Persistence is
+// intentionally deferred to Save so the lock record and the user message share
+// one buffered append, with the lock encoded first.
+//
+// OCTO-FORK: the policy lock is monotonic and belongs to the session JSONL
+// owner, not to any individual transport.
+func (s *Session) LockProtectionPolicy() bool {
+	if s.ProtectionPolicy.Locked {
+		return false
+	}
+	if s.ProtectionPolicy.Version == 0 {
+		s.ProtectionPolicy.Version = ProtectionPolicyVersion
+	}
+	s.ProtectionPolicy.Locked = true
+	s.protectionPolicyDirty = true
+	return true
+}
+
+// SetProtectionPolicyAndModel persists a complete policy and, optionally, a
+// model binding in one JSONL record. The optional model fields make a private
+// session's automatic model switch externally atomic with enabling the policy.
+func (s *Session) SetProtectionPolicyAndModel(policy ProtectionPolicy, modelConfig, model string, updateModel bool) error {
+	if policy.Version != ProtectionPolicyVersion {
+		return fmt.Errorf("unsupported protection policy version %d", policy.Version)
+	}
+	current := s.ProtectionPolicy
+	if current.Version == 0 {
+		current.Version = ProtectionPolicyVersion
+	}
+	if current.Locked && policy != current {
+		return ErrProtectionPolicyLocked
+	}
+	if current.Locked && !policy.Locked {
+		return ErrProtectionPolicyLocked
+	}
+
+	modelChanged := updateModel && (s.ModelConfig != modelConfig || (model != "" && s.Model != model))
+	if policy == current && !modelChanged {
+		return nil
+	}
+
+	oldPolicy, oldModelConfig, oldModel := s.ProtectionPolicy, s.ModelConfig, s.Model
+	s.ProtectionPolicy = policy
+	if updateModel {
+		s.ModelConfig = modelConfig
+		if model != "" {
+			s.Model = model
+		}
+	}
+
+	rollback := func() {
+		s.ProtectionPolicy, s.ModelConfig, s.Model = oldPolicy, oldModelConfig, oldModel
+	}
+	path, err := s.SavePath()
+	if err != nil {
+		rollback()
+		return err
+	}
+	if _, statErr := os.Stat(path); os.IsNotExist(statErr) {
+		return nil
+	} else if statErr != nil {
+		rollback()
+		return statErr
+	}
+	if s.forceRewrite {
+		if err := s.rewriteAll(); err != nil {
+			rollback()
+			return err
+		}
+		return nil
+	}
+
+	policyCopy := policy
+	rec := sessionRecord{
+		Type:             "protection_policy",
+		ProtectionPolicy: &policyCopy,
+		ModelConfigSet:   updateModel,
+		ModelConfig:      modelConfig,
+		Model:            s.Model,
+	}
+	f, err := os.OpenFile(path, os.O_WRONLY|os.O_APPEND, 0o600)
+	if err != nil {
+		rollback()
+		return fmt.Errorf("session: open %s: %w", path, err)
+	}
+	if err := json.NewEncoder(f).Encode(rec); err != nil {
+		_ = f.Close()
+		rollback()
+		return fmt.Errorf("session: append protection_policy: %w", err)
+	}
+	if err := f.Close(); err != nil {
+		return fmt.Errorf("session: close %s: %w", path, err)
+	}
+	s.protectionPolicyDirty = false
 	return nil
 }
 
@@ -1494,6 +1648,7 @@ func LoadSession(id string) (*Session, error) {
 	}
 
 	s := &Session{}
+	protectionPolicyPresent := false
 	sc := bufio.NewScanner(bytes.NewReader(data))
 	// A single message (e.g. a large tool_result) can exceed the default 64 KB
 	// line cap; allow up to 16 MB per line.
@@ -1521,6 +1676,10 @@ func LoadSession(id string) (*Session, error) {
 			// OCTO-FORK: a rewritten/compacted file carries the chat mode in its
 			// meta header too. See Session.ChatMode.
 			s.ChatMode = rec.ChatMode
+			if rec.ProtectionPolicy != nil {
+				s.ProtectionPolicy = *rec.ProtectionPolicy
+				protectionPolicyPresent = true
+			}
 			s.LastContextTokens = rec.LastContextTokens // a rewritten file carries it in its meta header
 			s.ContentUpdatedAt = rec.ContentUpdatedAt   // a rewritten file carries it in its meta header
 			s.BoundEntry = rec.BoundEntry
@@ -1546,6 +1705,19 @@ func LoadSession(id string) (*Session, error) {
 			// OCTO-FORK: see Session.ChatMode. A record of its own, so setting
 			// the mode never rewrites (or races) the permission mode.
 			s.ChatMode = rec.ChatMode // last one wins, like title
+		case "protection_policy":
+			// OCTO-FORK: last complete policy wins. A model switch on this same
+			// record is applied with it, so readers never observe half a change.
+			if rec.ProtectionPolicy != nil {
+				s.ProtectionPolicy = *rec.ProtectionPolicy
+				protectionPolicyPresent = true
+			}
+			if rec.ModelConfigSet {
+				s.ModelConfig = rec.ModelConfig
+				if rec.Model != "" {
+					s.Model = rec.Model
+				}
+			}
 		case "context_tokens":
 			s.LastContextTokens = rec.LastContextTokens // last one wins, like title
 		case "content_updated_at":
@@ -1577,6 +1749,16 @@ func LoadSession(id string) (*Session, error) {
 		// Meta line was missing/corrupt — fall back to the filename stem.
 		s.ID = strings.TrimSuffix(filepath.Base(path), ".jsonl")
 	}
+	// OCTO-FORK: legacy chat_mode is not evidence of either new guarantee. A
+	// session with any execution trace is conservatively locked off; only a
+	// truly pristine empty transcript receives the new-session defaults.
+	if !protectionPolicyPresent {
+		if s.hasExecutionTrace() {
+			s.ProtectionPolicy = ProtectionPolicy{Version: ProtectionPolicyVersion, Locked: true}
+		} else {
+			s.ProtectionPolicy = DefaultProtectionPolicy()
+		}
+	}
 	rehydrateImageBlocks(s.Messages)
 	// An accruing goal restarts its wall-clock baseline at load: the time the
 	// session spent on disk is downtime, not goal work.
@@ -1586,6 +1768,13 @@ func LoadSession(id string) (*Session, error) {
 	s.persisted = len(s.Messages) // a resumed session continues appending
 	s.forceRewrite = droppedTail
 	return s, nil
+}
+
+func (s *Session) hasExecutionTrace() bool {
+	return len(s.Messages) > 0 ||
+		s.ComposedSystem != "" || s.ComposedLeanSystem != "" ||
+		s.ComposedForModel != "" || s.ComposedForCWD != "" || s.ComposedForSourceDirs != "" ||
+		s.LastContextTokens != 0 || !s.ContentUpdatedAt.IsZero() || s.HookStarted || s.Goal != nil
 }
 
 // rehydrateImageBlocks reloads persisted image attachments (ImagePath) into

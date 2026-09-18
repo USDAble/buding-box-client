@@ -1,4 +1,4 @@
-import type { Session, SessionGroup, Skill, Workflow, ScheduledTask, McpServer, McpServerDetail, Channel, Memory, RecallFile, TagStatus, GitDiffResponse, GitDiffSummaryResponse, GitDiffFile } from './types'
+import type { Session, SessionGroup, Skill, Workflow, ScheduledTask, McpServer, McpServerDetail, Channel, Memory, RecallFile, TagStatus, GitDiffResponse, GitDiffSummaryResponse, GitDiffFile, ProtectionPolicy } from './types'
 import { windowToken, WINDOW_TOKEN_HEADER, productPhase, noteSessionLost } from './product'
 
 // TaskResponse matches the Go server task struct.
@@ -160,6 +160,10 @@ export interface CreateSessionOpts {
   // P9: the mode group this one session belongs to (the selector's
   // landing-page pick). Omitted → the server applies the account default.
   chat_mode?: string
+  // OCTO-FORK: submitted with model on session creation so no default-policy
+  // window exists before the first user turn.
+  personal_info_protection?: boolean
+  confidential_session?: boolean
 }
 
 export async function createSession(opts: CreateSessionOpts): Promise<Session> {
@@ -179,6 +183,17 @@ export async function deleteSessions(ids: string[]): Promise<void> {
 
 export async function updateSession(id: string, patch: { name?: string }): Promise<Session> {
   return request<Session>(`/api/sessions/${id}`, { method: 'PATCH', ...json(patch) })
+}
+
+export async function setSessionProtection(
+  id: string,
+  policy: Pick<ProtectionPolicy, 'personal_info_protection' | 'confidential_session'>,
+  modelId?: string,
+): Promise<{ ok: boolean; protection_policy: ProtectionPolicy; model: string; model_id?: string; session: Session }> {
+  return request(`/api/sessions/${encodeURIComponent(id)}/protection`, {
+    method: 'PATCH',
+    ...json({ ...policy, ...(modelId !== undefined ? { model_id: modelId } : {}) }),
+  })
 }
 
 // ─── Session groups (Web-UI sidebar organisation) ───────────────────────────
@@ -1115,6 +1130,7 @@ export async function getConfig(): Promise<ConfigResponse> {
 export interface EndpointModel {
   model: string
   vision: boolean
+  confidential: boolean
 }
 export interface EndpointConfig {
   id: string
@@ -1149,6 +1165,7 @@ export async function getEndpoints(): Promise<EndpointsResponse> {
 export interface EndpointModelInput {
   model: string
   vision: boolean
+  confidential?: boolean
 }
 
 export interface EndpointConfigInput {
@@ -1203,8 +1220,8 @@ export async function deleteEndpoint(id: string): Promise<void> {
   await request<unknown>(`/api/config/endpoints/${encodeURIComponent(id)}`, { method: 'DELETE' })
 }
 
-export async function addEndpointModel(id: string, model: string, vision: boolean): Promise<EndpointMutationResult> {
-  return request<EndpointMutationResult>(`/api/config/endpoints/${encodeURIComponent(id)}/models`, { method: 'POST', ...json({ model, vision }) })
+export async function addEndpointModel(id: string, model: string, vision: boolean, confidential = false): Promise<EndpointMutationResult> {
+  return request<EndpointMutationResult>(`/api/config/endpoints/${encodeURIComponent(id)}/models`, { method: 'POST', ...json({ model, vision, confidential }) })
 }
 
 export async function deleteEndpointModel(id: string, model: string): Promise<void> {

@@ -167,6 +167,9 @@ func mountProductAPI() (mount func(api func(pattern string, h http.HandlerFunc))
 		ControlPlane: productruntime.ControlPlaneStatus{
 			Configured:     profile.ControlPlaneConfigured(),
 			HasTrustedKeys: profile.HasTrustedKeys(),
+			// OCTO-FORK: the frontend must consume the build-profile capability
+			// instead of guessing from the presence of local config.yml entries.
+			AllowEnvironmentModelSource: profile.AllowEnvironmentModelSource,
 		},
 		Catalog: catalog,
 		// The trust anchor and the audience come from their own owners

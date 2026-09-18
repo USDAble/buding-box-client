@@ -22,7 +22,7 @@
   import SensitiveToggle from './SensitiveToggle.svelte'
   import PrivacyBar from './PrivacyBar.svelte'
   import PrivacyMark from '../ui/PrivacyMark.svelte'
-  import { productState } from '../../lib/product'
+  import { allowEnvironmentModelSource, productState } from '../../lib/product'
   import { checkSensitive } from '../../lib/sensitive'
 
   let { onSend }: { onSend?: (text: string, files?: any[], queued?: boolean) => void } = $props()
@@ -860,6 +860,14 @@
   let modelsFetchSeq = 0
   async function refreshModels() {
     const seq = ++modelsFetchSeq
+    // OCTO-FORK: a product profile must not even load local endpoint models;
+    // the signed gateway catalog becomes its sole model source in phase three.
+    if (get(allowEnvironmentModelSource) === false) {
+      models = []
+      defaultModelId = ''
+      defaultModelName = ''
+      return
+    }
     try {
       const ep = await api.getEndpoints()
       if (seq !== modelsFetchSeq) return

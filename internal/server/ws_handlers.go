@@ -1372,6 +1372,18 @@ func (s *Server) handleWSRetractSteer(sessionID, pendingID, text string) {
 const crashRecoveryReminder = `<system-reminder>The previous turn in this session ended abnormally (the server stopped mid-turn). Tool calls from that turn may have executed and changed state even if their results are missing from this conversation. Verify the current state before repeating or continuing potentially destructive actions.</system-reminder>`
 
 func (s *Server) doAgentTurn(sess *agent.Session, content string, blocks []agent.ContentBlock, images []string) {
+	// OCTO-FORK: confidential qualification is re-read before every chained or
+	// ordinary Web turn. Losing eligibility stops before broadcast, persistence,
+	// or provider selection; it never falls back to a public model.
+	if err := s.validateConfidentialSession(sess); err != nil {
+		s.wsHub.broadcast(sess.ID, map[string]any{
+			"type":       "send_rejected",
+			"session_id": sess.ID,
+			"message":    err.Error(),
+			"code":       agent.ErrorCodeOf(err),
+		})
+		return
+	}
 	// A transcript that still ends mid-turn here means the previous turn died
 	// with the server — a finished or user-interrupted turn always ends on a
 	// plain assistant message. Warn the model once: the reminder rides this
@@ -1395,6 +1407,10 @@ func (s *Server) doAgentTurn(sess *agent.Session, content string, blocks []agent
 		userMsg.Content = ""
 		userMsg.Blocks = append(multi, blocks...)
 	}
+	// OCTO-FORK: the first accepted user turn locks the complete protection
+	// policy before any user text is broadcast or persisted. Session.Save writes
+	// the lock record before this message, making crash recovery fail closed.
+	policyLockedNow := sess.LockProtectionPolicy()
 
 	// Confirm the user message immediately so the frontend can swap the
 	// ghost (.msg-pending) bubble for the real one before streaming starts.
@@ -1426,7 +1442,6 @@ func (s *Server) doAgentTurn(sess *agent.Session, content string, blocks []agent
 		if len(images) > 0 {
 			userEvent["images"] = images
 		}
-		s.wsHub.broadcast(sess.ID, userEvent)
 	}
 
 	// Persist the user message right away so a page refresh mid-turn doesn't
@@ -1436,7 +1451,25 @@ func (s *Server) doAgentTurn(sess *agent.Session, content string, blocks []agent
 	// the turn's history watermark: while the turn runs, the history endpoint
 	// serves only messages below it and the WS replay buffer owns the rest.
 	sess.Messages = append(sess.Messages, userMsg)
-	_ = sess.Save()
+	if err := sess.Save(); err != nil {
+		sess.Messages = sess.Messages[:len(sess.Messages)-1]
+		s.wsHub.broadcast(sess.ID, map[string]any{
+			"type":       "send_rejected",
+			"session_id": sess.ID,
+			"message":    fmt.Sprintf("save user message: %v", err),
+		})
+		return
+	}
+	if userEvent != nil {
+		s.wsHub.broadcast(sess.ID, userEvent)
+	}
+	if policyLockedNow {
+		s.wsHub.broadcast(sess.ID, map[string]any{
+			"type":              "session_update",
+			"session_id":        sess.ID,
+			"protection_policy": sess.ProtectionPolicy,
+		})
+	}
 	historyWatermark := len(sess.Messages)
 	sess.Messages = sess.Messages[:len(sess.Messages)-1]
 

@@ -6,6 +6,13 @@ export type MemTab = 'soul' | 'user' | 'memories'
 export type ArtifactView = 'preview' | 'code'
 export type TagStatus = 'success' | 'info' | 'warning' | 'error' | 'default'
 
+export interface ProtectionPolicy {
+  version: number
+  personal_info_protection: boolean
+  confidential_session: boolean
+  locked: boolean
+}
+
 // Session matches the server-side session item returned by the REST API and
 // broadcast over the WebSocket. The UI stores it as-is; title/name may differ
 // depending on which endpoint produced the record.
@@ -30,6 +37,8 @@ export interface Session {
   permission_mode: 'interactive' | 'auto' | 'strict' | string
   // OCTO-FORK: 前端适配（webview 路由/构建/入口隐藏） — see dev-docs-usdable/需求/2260906/技术方案/P6-入口隐藏与积分.md
   chat_mode: 'privacy' | 'smart' | 'default' | string
+  // OCTO-FORK: server-authoritative privacy state; never infer locked from UI history.
+  protection_policy: ProtectionPolicy
   reasoning_effort: 'low' | 'medium' | 'high' | string
   show_reasoning?: boolean
   context_usage: number

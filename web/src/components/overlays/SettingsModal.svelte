@@ -16,6 +16,7 @@
   import { confirmDialog } from '../../lib/confirm'
   import { ago, clockTick } from '../../lib/relTime'
   import * as api from '../../lib/api'
+  import { allowEnvironmentModelSource } from '../../lib/product'
 
   const LICENSE_URL = 'https://github.com/open-octo/octo-agent/blob/main/LICENSE.txt'
 
@@ -243,7 +244,9 @@
 
   const categories: { key: typeof cat, icon: string, label: string }[] = $derived([
     { key: 'general',   icon: 'ant-design:sliders-outlined',       label: 'settings.general' },
-    { key: 'endpoints', icon: 'ant-design:api-outlined',           label: 'settings.endpoints.title' },
+    // OCTO-FORK: product profiles hide local model management from the
+    // server-projected capability; null keeps plain octo serve behavior.
+    ...($allowEnvironmentModelSource === false ? [] : [{ key: 'endpoints' as const, icon: 'ant-design:api-outlined', label: 'settings.endpoints.title' }]),
     { key: 'agent',     icon: 'ant-design:robot-outlined',         label: 'settings.agent' },
     { key: 'mobile',    icon: 'ant-design:mobile-outlined',        label: 'settings.mobile' },
     // Experimental features (computer-use) need the desktop shell AND a
@@ -256,6 +259,10 @@
     { key: 'data',      icon: 'ant-design:database-outlined',       label: 'settings.data' },
     { key: 'about',     icon: 'ant-design:info-circle-outlined',   label: 'settings.about' },
   ])
+
+  $effect(() => {
+    if ($allowEnvironmentModelSource === false && cat === 'endpoints') cat = 'general'
+  })
 
   // Re-seed on every open, same as the other global modals — reflects
   // whatever config was saved elsewhere (agent chat, another window) since

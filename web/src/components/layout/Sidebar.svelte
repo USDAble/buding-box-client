@@ -410,7 +410,7 @@
   const visibleRailNav = $derived(visibleNav(railNav))
 
   function navActive(v: string) { return $view === v }
-  function moreActive() { return $visibleMoreCategories.some(c => c.v === $view) }
+  function moreActive() { return visibleMoreCategories.some(c => c.v === $view) }
 
   function toggleSel(id: string) {
     sel.update(s => { const n = { ...s }; n[id] ? delete n[id] : (n[id] = true); return n })

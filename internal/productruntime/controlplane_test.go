@@ -22,8 +22,9 @@ import (
 // every case: the frontend tells the four blocked-page outcomes apart by their
 // values, so a `false` that went missing would silently merge two pages.
 type controlPlaneDTO struct {
-	Configured     *bool `json:"configured"`
-	HasTrustedKeys *bool `json:"hasTrustedKeys"`
+	Configured                  *bool `json:"configured"`
+	HasTrustedKeys              *bool `json:"hasTrustedKeys"`
+	AllowEnvironmentModelSource *bool `json:"allowEnvironmentModelSource"`
 }
 
 func readControlPlane(t *testing.T, h *mountedHarness) (int, controlPlaneDTO) {
@@ -71,12 +72,28 @@ func TestControlPlaneReportsAnUnconfiguredBuild(t *testing.T) {
 	if status != http.StatusOK {
 		t.Fatalf("status = %d, want 200", status)
 	}
-	if dto.Configured == nil || dto.HasTrustedKeys == nil {
-		t.Fatalf("both fields must be present, got %+v", dto)
+	if dto.Configured == nil || dto.HasTrustedKeys == nil || dto.AllowEnvironmentModelSource == nil {
+		t.Fatalf("all fields must be present, got %+v", dto)
 	}
 	if *dto.Configured || *dto.HasTrustedKeys {
 		t.Errorf("got configured=%v hasTrustedKeys=%v, want false/false for a build with no control plane",
 			*dto.Configured, *dto.HasTrustedKeys)
+	}
+}
+
+func TestControlPlaneProjectsEnvironmentModelCapability(t *testing.T) {
+	h := newMountedHarnessWithControlPlane(t, productruntime.ControlPlaneStatus{
+		Configured:                  true,
+		HasTrustedKeys:              true,
+		AllowEnvironmentModelSource: true,
+	})
+
+	status, dto := readControlPlane(t, h)
+	if status != http.StatusOK {
+		t.Fatalf("status = %d, want 200", status)
+	}
+	if dto.AllowEnvironmentModelSource == nil || !*dto.AllowEnvironmentModelSource {
+		t.Fatalf("allowEnvironmentModelSource = %v, want true", dto.AllowEnvironmentModelSource)
 	}
 }
 

@@ -287,6 +287,10 @@ type Config struct {
 	// nil means unchanged upstream behavior: the CLI, `octo serve` and every test
 	// that predates this field.
 	CatalogOffers func(id string) (offers, known bool)
+	// OCTO-FORK: product builds take confidential-model eligibility from the
+	// current signed catalog through this seam. Developer builds may instead
+	// use EndpointModel.Confidential; product builds never do.
+	ConfidentialModel func(id string) (eligible, known bool)
 }
 
 // Server is the HTTP server skeleton. It owns the mux, the agent factory,
@@ -1127,6 +1131,9 @@ func (s *Server) registerRoutes() {
 	s.api("DELETE /api/sessions/{id}", s.handleDeleteSession)
 	s.api("PATCH /api/sessions/{id}", s.handleUpdateSession)
 	s.api("PATCH /api/sessions/{id}/model", s.handleUpdateSessionModel)
+	// OCTO-FORK: policy and optional model selection are one pre-turn atomic
+	// mutation; the handler shares the session turn lock with message execution.
+	s.api("PATCH /api/sessions/{id}/protection", s.handleUpdateSessionProtection)
 	s.api("PATCH /api/sessions/{id}/reasoning_effort", s.handleUpdateSessionReasoningEffort)
 	s.api("PATCH /api/sessions/{id}/show_reasoning", s.handleUpdateSessionShowReasoning)
 	s.api("PATCH /api/sessions/{id}/permission_mode", s.handleUpdateSessionPermissionMode)

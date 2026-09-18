@@ -5,6 +5,7 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 )
@@ -34,6 +35,121 @@ func TestNewSession(t *testing.T) {
 	}
 	if s.CreatedAt.IsZero() {
 		t.Error("CreatedAt must be set")
+	}
+	if got, want := s.ProtectionPolicy, DefaultProtectionPolicy(); got != want {
+		t.Fatalf("ProtectionPolicy = %+v, want %+v", got, want)
+	}
+}
+
+func TestProtectionPolicyLocksBeforeFirstMessage(t *testing.T) {
+	setTempHome(t)
+	s := NewSession("m", "")
+	if err := s.Save(); err != nil {
+		t.Fatalf("initial Save: %v", err)
+	}
+	s.LockProtectionPolicy()
+	s.Messages = append(s.Messages, NewUserMessage("hello"))
+	if err := s.Save(); err != nil {
+		t.Fatalf("Save: %v", err)
+	}
+	path, _ := s.SavePath()
+	raw, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	policyAt := strings.Index(string(raw), `"protection_policy"`)
+	messageAt := strings.Index(string(raw), `"type":"message"`)
+	if policyAt < 0 || messageAt < 0 || policyAt > messageAt {
+		t.Fatalf("policy record must precede first message:\n%s", raw)
+	}
+	got, err := LoadSession(s.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !got.ProtectionPolicy.Locked || !got.ProtectionPolicy.PersonalInfoProtection {
+		t.Fatalf("loaded policy = %+v", got.ProtectionPolicy)
+	}
+}
+
+func TestLegacyProtectionPolicyInference(t *testing.T) {
+	root := setTempHome(t)
+	dir := filepath.Join(root, "sessions")
+	if err := os.MkdirAll(dir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	cases := []struct {
+		name string
+		body string
+		want ProtectionPolicy
+	}{
+		{name: "pristine", body: `{"type":"meta","id":"pristine","model":"m","chat_mode":"privacy"}` + "\n", want: DefaultProtectionPolicy()},
+		{name: "history", body: `{"type":"meta","id":"history","model":"m"}` + "\n" + `{"type":"message","message":{"role":"user","content":"hi"}}` + "\n", want: ProtectionPolicy{Version: ProtectionPolicyVersion, Locked: true}},
+		{name: "execution trace", body: `{"type":"meta","id":"trace","model":"m","last_context_tokens":1}` + "\n", want: ProtectionPolicy{Version: ProtectionPolicyVersion, Locked: true}},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			path := filepath.Join(dir, strings.ReplaceAll(tc.name, " ", "-")+".jsonl")
+			if err := os.WriteFile(path, []byte(tc.body), 0o600); err != nil {
+				t.Fatal(err)
+			}
+			got, err := LoadSession(strings.TrimSuffix(filepath.Base(path), ".jsonl"))
+			if err != nil {
+				t.Fatal(err)
+			}
+			if got.ProtectionPolicy != tc.want {
+				t.Fatalf("policy = %+v, want %+v", got.ProtectionPolicy, tc.want)
+			}
+		})
+	}
+}
+
+func TestProtectionPolicyAndModelAreOneRecord(t *testing.T) {
+	setTempHome(t)
+	s := NewSession("public", "")
+	if err := s.Save(); err != nil {
+		t.Fatal(err)
+	}
+	policy := DefaultProtectionPolicy()
+	policy.ConfidentialSession = true
+	if err := s.SetProtectionPolicyAndModel(policy, "local::private", "private", true); err != nil {
+		t.Fatal(err)
+	}
+	got, err := LoadSession(s.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.ProtectionPolicy != policy || got.ModelConfig != "local::private" || got.Model != "private" {
+		t.Fatalf("loaded session = policy %+v model_config %q model %q", got.ProtectionPolicy, got.ModelConfig, got.Model)
+	}
+	got.LockProtectionPolicy()
+	if err := got.Save(); err != nil {
+		t.Fatal(err)
+	}
+	changed := got.ProtectionPolicy
+	changed.PersonalInfoProtection = false
+	if err := got.SetProtectionPolicyAndModel(changed, "", "public", true); !errors.Is(err, ErrProtectionPolicyLocked) {
+		t.Fatalf("locked update error = %v, want ErrProtectionPolicyLocked", err)
+	}
+}
+
+func TestHistoryRewriteDoesNotUnlockProtectionPolicy(t *testing.T) {
+	setTempHome(t)
+	s := NewSession("m", "")
+	s.LockProtectionPolicy()
+	s.Messages = []Message{NewUserMessage("hello"), NewAssistantMessage("hi")}
+	if err := s.Save(); err != nil {
+		t.Fatal(err)
+	}
+	s.Messages = nil
+	if err := s.Save(); err != nil {
+		t.Fatal(err)
+	}
+	got, err := LoadSession(s.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !got.ProtectionPolicy.Locked || !got.ProtectionPolicy.PersonalInfoProtection {
+		t.Fatalf("history rewrite changed policy: %+v", got.ProtectionPolicy)
 	}
 }
 

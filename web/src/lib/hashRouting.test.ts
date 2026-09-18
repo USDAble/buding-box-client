@@ -1,6 +1,9 @@
 import { describe, it, expect } from 'vitest'
 import { normalizeHash, hashPicksChatTarget } from './hashRouting'
 
+// OCTO-FORK: hidden product navigation entries remain directly addressable so
+// removing a sidebar link does not destroy upstream routes or deep links.
+
 describe('normalizeHash', () => {
   it('keeps the active session id on the chat view', () => {
     expect(normalizeHash('chat', 'sess-42')).toBe('#/chat/sess-42')

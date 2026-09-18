@@ -62,20 +62,27 @@ type sessionItem struct {
 	// 本地API契约 §1.5). Sent verbatim; when empty the client falls back to the
 	// account default (prefs.defaultChatMode) on its own, because that value
 	// lives in the fork's product state and internal/server must not read it.
-	ChatMode            string `json:"chat_mode,omitempty"`
-	ReasoningEffort     string `json:"reasoning_effort,omitempty"`
-	ShowReasoning       *bool  `json:"show_reasoning,omitempty"`
-	ContextUsage        int    `json:"context_usage,omitempty"`
-	PendingQuestion     bool   `json:"pending_question,omitempty"`
-	PendingConfirmation bool   `json:"pending_confirmation,omitempty"`
-	BranchedFrom        string `json:"branched_from,omitempty"`
+	ChatMode string `json:"chat_mode,omitempty"`
+	// OCTO-FORK: the server is authoritative for protection state and lock;
+	// clients must not infer either from local message history.
+	ProtectionPolicy    agent.ProtectionPolicy `json:"protection_policy"`
+	ReasoningEffort     string                 `json:"reasoning_effort,omitempty"`
+	ShowReasoning       *bool                  `json:"show_reasoning,omitempty"`
+	ContextUsage        int                    `json:"context_usage,omitempty"`
+	PendingQuestion     bool                   `json:"pending_question,omitempty"`
+	PendingConfirmation bool                   `json:"pending_confirmation,omitempty"`
+	BranchedFrom        string                 `json:"branched_from,omitempty"`
 }
 
 type sessionDetail struct {
-	ID        string          `json:"id"`
-	CreatedAt time.Time       `json:"created_at"`
-	Model     string          `json:"model"`
-	Messages  []agent.Message `json:"messages"`
+	ID        string    `json:"id"`
+	CreatedAt time.Time `json:"created_at"`
+	Model     string    `json:"model"`
+	ModelID   string    `json:"model_id,omitempty"`
+	// OCTO-FORK: direct session reads expose the same authoritative protection
+	// state as list/create responses.
+	ProtectionPolicy agent.ProtectionPolicy `json:"protection_policy"`
+	Messages         []agent.Message        `json:"messages"`
 }
 
 // sessionListResponse matches the Ruby frontend's expected list envelope.
@@ -91,6 +98,10 @@ type sessionCreateRequest struct {
 	AgentProfile string `json:"agent_profile"`
 	Source       string `json:"source"`
 	Model        string `json:"model,omitempty"`
+	// OCTO-FORK: new-session policy and model arrive in the same create request,
+	// avoiding a default-session-then-PATCH race before the first message.
+	PersonalInfoProtection *bool `json:"personal_info_protection,omitempty"`
+	ConfidentialSession    *bool `json:"confidential_session,omitempty"`
 	// GroupID files the session under an existing group at creation time —
 	// the sidebar's per-group "+" button. For a project this is the ordered
 	// path that lets applyDefaultWorkspaceDir see the membership and skip
@@ -151,6 +162,7 @@ func (srv *Server) toSessionItem(s *agent.Session, source, agentProfile string) 
 		// OCTO-FORK: verbatim — no "effective value" resolution here. See
 		// sessionItem.ChatMode.
 		ChatMode:            s.ChatMode,
+		ProtectionPolicy:    s.ProtectionPolicy,
 		ReasoningEffort:     re,
 		ShowReasoning:       sr,
 		ContextUsage:        ctxUsage,
@@ -359,6 +371,13 @@ func (s *Server) handleCreateChat(w http.ResponseWriter, r *http.Request) {
 		s.releaseSessionBinding(sess.ID, agent.EntryWeb)
 	}()
 
+	if err := s.validateConfidentialSession(sess); err != nil {
+		writeProtectionError(w, agent.ErrorCodeOf(err), agent.UserFacingError(err))
+		return
+	}
+	// OCTO-FORK: REST turns share the same monotonic first-turn lock as WebSocket
+	// turns. runTurn may persist an interrupted input, so lock before entering it.
+	sess.LockProtectionPolicy()
 	reply, err := s.runTurn(r.Context(), sess, req.Message)
 	if errors.Is(err, errDraining) {
 		writeError(w, http.StatusServiceUnavailable, err.Error())
@@ -448,6 +467,12 @@ func (s *Server) handleTurn(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if err := s.validateConfidentialSession(sess); err != nil {
+		writeProtectionError(w, agent.ErrorCodeOf(err), agent.UserFacingError(err))
+		return
+	}
+	// OCTO-FORK: lock before runTurn can append or persist the accepted input.
+	sess.LockProtectionPolicy()
 	reply, err := s.runTurn(r.Context(), sess, req.Message)
 	if errors.Is(err, errDraining) {
 		writeError(w, http.StatusServiceUnavailable, err.Error())
@@ -515,23 +540,45 @@ func (s *Server) handleCreateSession(w http.ResponseWriter, r *http.Request) {
 		// to the bare model name (as this once did) loses the endpoint half,
 		// so a later EntryByModel re-resolution could land on a DIFFERENT
 		// endpoint exposing the same model name.
-		if cfg, err := config.Load(); err == nil {
-			if e, ok := cfg.EntryByModel(req.Model); ok {
-				modelConfig = req.Model
-				if e.Model != "" {
-					model = e.Model
+		// OCTO-FORK: product profiles never bind sessions to local endpoints;
+		// only developer profiles may resolve the environment-backed config.
+		if !s.cfg.RequireGateway {
+			cfg, err := config.Load()
+			if err == nil {
+				if e, ok := cfg.EntryByModel(req.Model); ok {
+					modelConfig = req.Model
+					if e.Model != "" {
+						model = e.Model
+					}
 				}
 			}
 		}
 	}
 	if model == "" {
 		// Fall back to the user's configured default model.
-		if cfg, err := config.Load(); err == nil && cfg.DefaultEntry().Model != "" {
-			model = cfg.DefaultEntry().Model
+		if !s.cfg.RequireGateway {
+			if cfg, err := config.Load(); err == nil && cfg.DefaultEntry().Model != "" {
+				model = cfg.DefaultEntry().Model
+			}
 		}
 	}
 	if model == "" {
 		writeError(w, http.StatusBadRequest, "no default model configured")
+		return
+	}
+	policy := agent.DefaultProtectionPolicy()
+	if req.PersonalInfoProtection != nil {
+		policy.PersonalInfoProtection = *req.PersonalInfoProtection
+	}
+	if req.ConfidentialSession != nil {
+		policy.ConfidentialSession = *req.ConfidentialSession
+	}
+	eligibilityID := modelConfig
+	if eligibilityID == "" {
+		eligibilityID = model
+	}
+	if policy.ConfidentialSession && !s.confidentialModelEligible(eligibilityID) {
+		writeProtectionError(w, codeConfidentialModelRequired, "confidential session requires an eligible confidential model")
 		return
 	}
 
@@ -560,6 +607,10 @@ func (s *Server) handleCreateSession(w http.ResponseWriter, r *http.Request) {
 	s.applyDefaultWorkspaceDir(sess)
 	sess.Source = source
 	sess.ModelConfig = modelConfig
+	if err := sess.SetProtectionPolicyAndModel(policy, modelConfig, model, false); err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
 	sess.AgentID = agentProfile
 	_ = sess.SetPermissionMode(string(resolvePermissionMode()))
 	sess.Bind(agent.EntryWeb, false)
@@ -808,10 +859,12 @@ func (s *Server) handleGetSession(w http.ResponseWriter, r *http.Request) {
 	}
 
 	writeJSON(w, http.StatusOK, sessionDetail{
-		ID:        sess.ID,
-		CreatedAt: sess.CreatedAt,
-		Model:     sess.Model,
-		Messages:  sess.Messages,
+		ID:               sess.ID,
+		CreatedAt:        sess.CreatedAt,
+		Model:            sess.Model,
+		ModelID:          sess.ModelConfig,
+		ProtectionPolicy: sess.ProtectionPolicy,
+		Messages:         sess.Messages,
 	})
 }
 
@@ -1155,6 +1208,11 @@ func (s *Server) handleHealth(w http.ResponseWriter, r *http.Request) {
 // runTurn executes one user message against a session. It builds the agent,
 // runs the tool loop if enabled, and returns the assistant's text reply.
 func (s *Server) runTurn(ctx context.Context, sess *agent.Session, userInput string) (string, error) {
+	// OCTO-FORK: REST turns enforce the same per-turn confidential qualification
+	// as the WebSocket path before the agent can append or send user input.
+	if err := s.validateConfidentialSession(sess); err != nil {
+		return "", err
+	}
 	if err := s.drain.begin(); err != nil {
 		return "", err
 	}
@@ -1385,6 +1443,15 @@ func (s *Server) handleUpdateSessionModel(w http.ResponseWriter, r *http.Request
 		return
 	}
 	defer s.releaseSessionBinding(id, agent.EntryWeb)
+	// OCTO-FORK: model changes share the turn lock with policy changes and
+	// message execution, so a confidential turn cannot race onto a public model.
+	turnMu := s.sessionTurnLock(id)
+	turnMu.Lock()
+	defer turnMu.Unlock()
+	if s.turnRunning[id] {
+		writeError(w, http.StatusConflict, "cannot change model while a turn is running")
+		return
+	}
 
 	// Reload after acquiring the binding in case another process saved.
 	sess, err = agent.LoadSession(id)
@@ -1393,28 +1460,20 @@ func (s *Server) handleUpdateSessionModel(w http.ResponseWriter, r *http.Request
 		return
 	}
 
-	cfg, _ := config.Load()
-	var model string
-	if entry, ok := cfg.EntryByModel(req.ModelID); ok {
-		model = entry.Model
-		// Bind with the id AS RECEIVED — a composite "<endpoint>::<model>"
-		// id must survive verbatim, or re-resolving the bare model name
-		// later could land on a different endpoint exposing the same model.
-		err = sess.SetModelConfig(req.ModelID, entry.Model)
-	} else if req.ModelID == "default" {
-		// Legacy id for "the default entry". Unbind so the session follows
-		// whatever the default is at turn time.
-		model = cfg.DefaultEntry().Model
-		if model == "" {
-			writeError(w, http.StatusBadRequest, "no default model configured")
-			return
-		}
-		err = sess.SetModelConfig("", model)
-	} else {
-		// Raw model string: keep the default sender, change only the model.
-		model = req.ModelID
-		err = sess.SetModelConfig("", model)
+	modelConfig, model, err := s.resolveSessionModel(req.ModelID)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
 	}
+	eligibilityID := modelConfig
+	if eligibilityID == "" {
+		eligibilityID = model
+	}
+	if sess.ProtectionPolicy.ConfidentialSession && !s.confidentialModelEligible(eligibilityID) {
+		writeProtectionError(w, codeConfidentialModelRequired, "confidential session requires an eligible confidential model")
+		return
+	}
+	err = sess.SetProtectionPolicyAndModel(sess.ProtectionPolicy, modelConfig, model, true)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, fmt.Sprintf("save session: %v", err))
 		return

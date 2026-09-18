@@ -1835,3 +1835,40 @@ func TestUpdateCheckEnabled_RoundTrip(t *testing.T) {
 		})
 	}
 }
+
+func TestEndpointModelConfidentialMissingFalseTrue(t *testing.T) {
+	cases := []struct {
+		name string
+		line string
+		want bool
+	}{
+		{name: "missing", line: "", want: false},
+		{name: "false", line: "        confidential: false\n", want: false},
+		{name: "true", line: "        confidential: true\n", want: true},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			home := setHome(t)
+			writeOcto(t, home, "config.yml", "endpoints:\n  - id: local\n    provider: openai\n    models:\n      - model: m\n"+tc.line)
+			cfg, err := Load()
+			if err != nil {
+				t.Fatal(err)
+			}
+			entry, ok := cfg.EntryByModel("local::m")
+			if !ok || entry.Confidential != tc.want {
+				t.Fatalf("entry = (%+v, %v), want confidential=%v", entry, ok, tc.want)
+			}
+			if err := cfg.Save(); err != nil {
+				t.Fatal(err)
+			}
+			reloaded, err := Load()
+			if err != nil {
+				t.Fatal(err)
+			}
+			entry, ok = reloaded.EntryByModel("local::m")
+			if !ok || entry.Confidential != tc.want {
+				t.Fatalf("round-trip entry = (%+v, %v), want confidential=%v", entry, ok, tc.want)
+			}
+		})
+	}
+}

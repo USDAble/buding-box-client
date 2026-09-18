@@ -132,6 +132,10 @@ async function productFetch(path: string, init?: RequestInit): Promise<Response>
 export type BlockedPage = "login" | "unconfigured" | "no_keys";
 
 export const blockedPage = writable<BlockedPage>("login");
+// OCTO-FORK: the settings/model UI consumes the build-profile capability from
+// the server. null means the non-product/upstream endpoint is unavailable and
+// preserves ordinary octo serve behavior.
+export const allowEnvironmentModelSource = writable<boolean | null>(null);
 
 /**
  * refreshControlPlane decides which blocked page the window shows, from the two
@@ -156,6 +160,7 @@ export async function refreshControlPlane(): Promise<void> {
   // this read fails - a stale "no keys" page is a lie about the build in front
   // of the user, and it would outlive the refresh that produced it.
   let page: BlockedPage = "login";
+  let environmentModelSource: boolean | null = null;
   try {
     const res = await productFetch("/api/product/control-plane", {
       cache: "no-store",
@@ -164,7 +169,8 @@ export async function refreshControlPlane(): Promise<void> {
     // A non-200 (including 404 from a build without this endpoint) keeps the
     // login form, for the same reason as the catch below.
     if (res.ok) {
-      const d = (await res.json()) as { configured?: boolean; hasTrustedKeys?: boolean };
+      const d = (await res.json()) as { configured?: boolean; hasTrustedKeys?: boolean; allowEnvironmentModelSource?: boolean };
+      if (typeof d.allowEnvironmentModelSource === "boolean") environmentModelSource = d.allowEnvironmentModelSource;
       if (d.configured === false) page = "unconfigured";
       else if (d.hasTrustedKeys === false) page = "no_keys";
     }
@@ -172,6 +178,7 @@ export async function refreshControlPlane(): Promise<void> {
     // Unreadable is the same case as unreachable: keep the login form.
   }
   blockedPage.set(page);
+  allowEnvironmentModelSource.set(environmentModelSource);
 }
 
 // ─── control-plane failure tiers (L-B3) ─────────────────────────────────────/** The four control-plane failure tiers. See 本地API契约 §3 and P4-拦截页 §3. */

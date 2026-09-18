@@ -17,6 +17,7 @@ import {
   failureTier,
   tierRetryable,
   WINDOW_TOKEN_HEADER,
+  allowEnvironmentModelSource,
 } from "./product";
 import type { ProductStateDTO } from "./product";
 
@@ -403,6 +404,18 @@ describe("blocked-page selection (L-B2)", () => {
     await refreshProductState();
 
     expect(get(blockedPage)).toBe("unconfigured");
+  });
+
+  it("projects the build's environment-model capability", async () => {
+    sessionStorage.setItem("octo_window_token", "tok");
+    stubSequence([
+      { status: 200, body: { configured: true, hasTrustedKeys: true, allowEnvironmentModelSource: false } },
+      { status: 200, body: stateBody },
+    ]);
+
+    await refreshProductState();
+
+    expect(get(allowEnvironmentModelSource)).toBe(false);
   });
 
   it("selects the no-keys page when a host exists but no key is trusted", async () => {

@@ -22,6 +22,41 @@ func setTestHome(t *testing.T) string {
 	return tmp
 }
 
+func TestEndpointModelConfidentialCRUDRoundTrip(t *testing.T) {
+	setTestHome(t)
+	srv := mustServer(t, Config{Addr: "127.0.0.1:0"})
+
+	created := doJSON(t, srv, http.MethodPost, "/api/config/endpoints", `{
+		"id":"local","provider":"custom","base_url":"http://127.0.0.1:9000","protocol":"openai",
+		"models":[{"model":"private-model","vision":false,"confidential":true}]
+	}`)
+	if created.Code != http.StatusCreated {
+		t.Fatalf("create = %d: %s", created.Code, created.Body.String())
+	}
+	if !strings.Contains(created.Body.String(), `"confidential":true`) {
+		t.Fatalf("create response omitted confidential flag: %s", created.Body.String())
+	}
+
+	read := doJSON(t, srv, http.MethodGet, "/api/config/endpoints", "")
+	if read.Code != http.StatusOK || !strings.Contains(read.Body.String(), `"confidential":true`) {
+		t.Fatalf("GET did not read flag immediately: %d %s", read.Code, read.Body.String())
+	}
+
+	updated := doJSON(t, srv, http.MethodPost, "/api/config/endpoints/local/models",
+		`{"model":"private-model","vision":false,"confidential":false}`)
+	if updated.Code != http.StatusOK {
+		t.Fatalf("update model = %d: %s", updated.Code, updated.Body.String())
+	}
+	cfg, err := config.Load()
+	if err != nil {
+		t.Fatal(err)
+	}
+	entry, ok := cfg.EntryByModel("local::private-model")
+	if !ok || entry.Confidential {
+		t.Fatalf("reloaded model = (%+v, %v), want confidential=false", entry, ok)
+	}
+}
+
 func seedModels(t *testing.T, cfg config.Config) {
 	t.Helper()
 	if err := cfg.Save(); err != nil {

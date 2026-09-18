@@ -40,9 +40,9 @@ type Deps struct {
 	State    *productstate.Store
 	Creds    *credentialstore.Store
 	Platform *productclient.Client
-	// ControlPlane carries the two compile-time profile facts the blocked page
-	// needs before the user types anything: whether this build names a real
-	// control plane, and whether it trusts any signing key.
+	// ControlPlane carries compile-time profile facts needed before the user
+	// types: whether this build names a real control plane, whether it trusts a
+	// signing key, and whether local environment models are an allowed source.
 	//
 	// They are facts about the BUILD, not about the user's data, which is why
 	// they arrive here instead of being read out of product-state.json (E6.1) -
@@ -95,11 +95,12 @@ type CatalogTrust struct {
 	Skew time.Duration
 }
 
-// ControlPlaneStatus is the answer to "can this build reach a control plane at
-// all", as computed by internal/productprofile. See 本地API契约 §2.13.
+// ControlPlaneStatus projects the build capabilities computed by
+// internal/productprofile. See 本地API契约 §2.13.
 type ControlPlaneStatus struct {
-	Configured     bool
-	HasTrustedKeys bool
+	Configured                  bool
+	HasTrustedKeys              bool
+	AllowEnvironmentModelSource bool
 }
 
 // Runtime serves the local product endpoints.
@@ -285,8 +286,8 @@ func (rt *Runtime) handleChatModes(w http.ResponseWriter, r *http.Request) {
 }
 
 // handleControlPlane reports whether this build can reach a control plane at
-// all, so the blocked page can say "this package is misconfigured" before the
-// user spends a round-trip finding out (本地API契约 §2.13, L-B2).
+// all, and whether local models are permitted, so the UI can apply the profile
+// before the user spends a round-trip finding out (本地API契约 §2.13, L-B2).
 //
 // It reads Deps rather than internal/productprofile because it must work in the
 // one case the profile cannot describe: a build whose config is fine on disk
@@ -295,17 +296,18 @@ func (rt *Runtime) handleChatModes(w http.ResponseWriter, r *http.Request) {
 // what "configured" means - that judgement has one owner.
 func (rt *Runtime) handleControlPlane(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, controlPlaneDTO{
-		Configured:     rt.deps.ControlPlane.Configured,
-		HasTrustedKeys: rt.deps.ControlPlane.HasTrustedKeys,
+		Configured:                  rt.deps.ControlPlane.Configured,
+		HasTrustedKeys:              rt.deps.ControlPlane.HasTrustedKeys,
+		AllowEnvironmentModelSource: rt.deps.ControlPlane.AllowEnvironmentModelSource,
 	})
 }
 
-// controlPlaneDTO is the wire shape of 本地API契约 §2.13. Both fields are always
-// present: the frontend distinguishes the four blocked-page outcomes by their
-// values, not by their absence, so omitting a false would collapse two of them.
+// controlPlaneDTO is the wire shape of 本地API契约 §2.13. Every field is always
+// present: false is a build capability decision, not a missing value.
 type controlPlaneDTO struct {
-	Configured     bool `json:"configured"`
-	HasTrustedKeys bool `json:"hasTrustedKeys"`
+	Configured                  bool `json:"configured"`
+	HasTrustedKeys              bool `json:"hasTrustedKeys"`
+	AllowEnvironmentModelSource bool `json:"allowEnvironmentModelSource"`
 }
 
 // handleCatalog reports whether the catalog is usable, and if not why

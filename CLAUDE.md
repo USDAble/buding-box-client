@@ -1,6 +1,16 @@
 # CLAUDE.md
 
+<!-- OCTO-FORK: binds the portable-product safety rules to the Claude Code entry point. -->
+
 Guidance for Claude Code working in this repository. The octo-agent equivalent is `.octorules`.
+
+## Fork rules
+
+Read and obey `dev-docs-puddingbox/规范/开发规范.md` together with this file and
+`.octorules`. The fork adds three hard rules: resolve product data paths through
+`internal/datapath`; derive product copy from `branding/brand.json`; and mark
+every change to an upstream file with `OCTO-FORK: <reason>`. Upstream changes are
+merged, never rebased; see `dev-docs-puddingbox/规范/上游合并策略.md`.
 
 ## Project
 

@@ -93,8 +93,8 @@ The full \`${OCTORULES_PATH}\` text is **inlined below verbatim**, so a tool tha
 
 | Content | Location |
 |---|---|
-| This fork's norms and upstream-merge policy | \`${NORMS_PATH}\`, \`dev-docs-usdable/上游合并策略.md\` |
-| This fork's requirements, plans, per-PR design docs | \`dev-docs-usdable/需求/<批次>/\` |
+| This fork's norms and upstream-merge policy | \`${NORMS_PATH}\`, \`dev-docs-puddingbox/规范/上游合并策略.md\` |
+| This fork's design and product documents | \`dev-docs-puddingbox/\` |
 | Upstream architecture decisions | \`dev-docs/\` — **upstream directory, do not add downstream docs here** |
 `
 }

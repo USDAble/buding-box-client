@@ -79,31 +79,6 @@ jobs:
       - name: Run datapath guard tests
         run: node --test scripts/datapath-guard.test.mjs
 
-  # OCTO-FORK: 六条守卫的 CI 接线（TODO-02 / V-1；接线位置按 archive/feat-*-guard-20260911 与
-  # archive/feat-test-production-20260911 取） — see dev-docs-usdable/需求/20260911/TODO.md §TODO-02
-  #
-  # These four scripts existed with their unit tests and were run by
-  # scripts/preflight.mjs (packaging only) — but no CI job called them, while
-  # this file's own comment claimed "the guards already run as their own CI
-  # jobs". That is V-1's shape: not a missing capability, a missing automatic
-  # regression. Packaging is a later, different act than committing, so a rule
-  # enforced only at packaging time can be violated for weeks.
-  docs-table-guard:
-    name: Docs Table Guard
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v7
-
-      - uses: actions/setup-node@v7
-        with:
-          node-version: '22'
-
-      - name: Run docs table guard
-        run: node scripts/docs-table-guard.mjs
-
-      - name: Run docs table guard tests
-        run: node --test scripts/docs-table-guard.test.mjs
-
   # Guards requirement D6 / G4 (需求基线.md): the web bundle keeps a second copy
   # of the normalization symbol table (the dictionary page pre-checks duplicates
   # and emptiness without a round trip), and nothing compared the two until

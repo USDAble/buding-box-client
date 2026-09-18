@@ -1,0 +1,6 @@
+---
+description: Binding project rules for this fork
+alwaysApply: true
+---
+
+Read and obey `dev-docs-puddingbox/规范/开发规范.md` together with `.octorules` and `CLAUDE.md` before changing this repository. The fork's hard rules cover data paths, product branding, and marking changes to upstream files.

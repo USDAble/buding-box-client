@@ -1,3 +1,28 @@
+Generated from .octorules by scripts/sync-agents.mjs. Do not edit directly.
+
+# AGENTS.md
+
+**This file is an entry point, not the spec.** Every AI coding tool that reads or edits this repository MUST read and obey, in this order:
+
+1. **`dev-docs-puddingbox/规范/开发规范.md`** — this fork's binding engineering norms (branching, the three hard rules, review, testing, DoD).
+2. **`.octorules`** and **`CLAUDE.md`** — the upstream normative rules, of **equal standing** with the fork spec (开发规范 §3.6). `CLAUDE.md` is the fuller write-up, `.octorules` the short index.
+
+The full `.octorules` text is **inlined below verbatim**, so a tool that reads only this file still receives the upstream rules — including the three hard rules under "Fork rules". `dev-docs-puddingbox/规范/开发规范.md` and `CLAUDE.md` stay pointers: both exceed the per-file instruction budget Codex imposes (`project_doc_max_bytes`, 32 KiB by default), so they cannot be inlined. Nothing here replaces them.
+
+`scripts/norms-guard.mjs` and `scripts/sync-agents.mjs --check` (CI `norms-guard` / `agents-guard` jobs, `make norms-check` / `make agents-check`, and the packaging preflight) fail the build if this file is missing, stops pointing at the fork spec, or drifts from `.octorules`.
+
+## Where things live
+
+| Content | Location |
+|---|---|
+| This fork's norms and upstream-merge policy | `dev-docs-puddingbox/规范/开发规范.md`, `dev-docs-puddingbox/规范/上游合并策略.md` |
+| This fork's design and product documents | `dev-docs-puddingbox/` |
+| Upstream architecture decisions | `dev-docs/` — **upstream directory, do not add downstream docs here** |
+
+---
+
+<!-- BEGIN inlined .octorules — edit .octorules and run `make agents` -->
+
 # octo-agent Project Rules
 
 # OCTO-FORK: binds the portable-product safety rules to every upstream-agent entry point.
@@ -89,3 +114,5 @@ Read them together with this file and `CLAUDE.md`; all three are binding.
 - Never hardcode a brand string. Product copy comes from `branding/brand.json` through the generated accessors and localization tables.
 - Mark every change to an upstream file with an `OCTO-FORK: <reason>` comment in the file's native comment syntax.
 - Merge upstream changes; never `rebase` fork history onto upstream. Follow `dev-docs-puddingbox/规范/上游合并策略.md`.
+
+<!-- END inlined .octorules -->

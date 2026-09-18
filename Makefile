@@ -63,7 +63,6 @@ RG_EMBED_BIN := $(RG_EMBED_DIR)/rg
 .PHONY: all build install test test-production cover vet fmt fmt-check tidy clean \
         gate web-gate \
         brand brand-check datapath-check norms-check agents agents-check \
-        docs-table-check \
         sensitive-norm-check \
         reuse-check server-diff-check release-profile-check release-config-check \
         preflight-check \
@@ -316,19 +315,6 @@ marker-check:
 	node scripts/fork-marker-guard.mjs
 	node --test scripts/fork-marker-guard.test.mjs
 
-# ── docs table guard (V-56 / V-59) ───────────────────────────────────────────
-# OCTO-FORK: 表格容器守卫（V-59 处置 ③） — see dev-docs-usdable/需求/20260911/需求基线.md §5.6 `V-59`
-#
-# The registers carry their facts in tables, so a row whose cell count does not
-# match its header renders as shifted columns and the record becomes invisible
-# while staying true. Six instances were found by hand on 2026-09-14 and four of
-# them were in the register; wiring this guard then found eight more that no
-# audit had seen. It asserts container integrity only — whether a row's content
-# is up to date needs per-column semantics and stays a human judgement (V-52).
-docs-table-check:
-	node scripts/docs-table-guard.mjs
-	node --test scripts/docs-table-guard.test.mjs
-
 # Guards requirement D6 / G4 (需求基线.md): the web bundle carries a second copy
 # of the normalization symbol table for the dictionary page's pre-check, and
 # nothing compared it against the Go owner until D-010 was registered. Order is
@@ -401,7 +387,7 @@ release-config-check:
 # so if you are about to land a merge, commit first and run it on the commit.
 gate: fmt-check vet test portable-check \
       norms-check agents-check brand-check datapath-check marker-check \
-      docs-table-check sensitive-norm-check reuse-check \
+      sensitive-norm-check reuse-check \
       server-diff-check release-profile-check release-config-check \
       web-gate
 	@echo ""

@@ -38,7 +38,7 @@ Profile JSON 解析或校验失败会在首次读取时 panic，构建不能靠�
 | `gatewayHost` | OpenAI 兼容模型网关基址。 | `GatewayEndpoint`；模型回合使用。 |
 | `trustedKeyIDs` | `keyId → base64 Ed25519 公钥` 信任表。 | 目录/策略签名验证。 |
 | `allowDevWebview` | 是否允许 `OCTO_DESKTOP_DEV_URL` 改变桌面 webview 地址。 | 仅桌面开发 Profile 使用。 |
-| `allowEnvironmentModelSource` | 是否允许不经产品控制面的模型来源。 | 反向导出为 `RequireGateway`。 |
+| `allowEnvironmentModelSource` | 是否允许不经产品控制面的模型来源。 | 反向导出为 `RequireGateway`；目标设计还用同一事实控制本地模型列表与管理入口。 |
 | `allowDataRootOverride` | 声明开发 Profile 允许数据根覆盖。 | **当前没有运行时代码读取此字段**；不能把它当作对 `OCTO_DATA_ROOT` 的实际生产限制。 |
 | `startup` | channels、tools、MCP、backgroundTasks 的既有能力声明。 | **当前仅被 Profile 测试断言为全部保留**，尚非启动或可见性开关。 |
 
@@ -68,6 +68,8 @@ Profile
 生产 Profile 禁止 `allowDevWebview`、`allowEnvironmentModelSource` 与 `allowDataRootOverride` 三个开发能力；校验层面只要任一为 true 就拒绝启动。桌面壳据 `allowDevWebview` 决定是否读取 `OCTO_DESKTOP_DEV_URL`，生产构建忽略该变量并始终加载进程内服务的嵌入 Web UI。
 
 模型路径的判断不靠调用方比较 `name`：`RequiresControlPlane()` 由 `allowEnvironmentModelSource` 反向得出。桌面把它传给服务端的 `RequireGateway`，使生产构建不能在控制面/网关不可用时悄悄改走环境或用户配置的模型来源。
+
+同一个事实还应投影到 Web UI：开发 Profile 显示本地 endpoint 管理、本地模型和本地私密测试标记；产品 Profile 隐藏管理入口并从可选列表排除本地模型。前端不能自行比较 Profile 名称或 host，避免 UI 与服务端 `RequireGateway` 形成两套环境判断。
 
 ## 用户可见的失败结果
 

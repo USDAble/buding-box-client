@@ -63,7 +63,7 @@
 | `account` | object \| null | `{phoneMasked, nickname, lastLoginAt}`；不返回明文手机号。 |
 | `credits` | object | 只含 `{balance}`；余额只从账本刷新。 |
 | `plan` | object | `{name}`。 |
-| `prefs` | object | `{locale, inputSensitiveCheck, defaultChatMode}`。 |
+| `prefs` | object | 当前为 `{locale, inputSensitiveCheck, defaultChatMode}`；`defaultChatMode` 属于待删除三组模式。 |
 | `suppressOnboarding` | boolean | 控制桌面首启向导。 |
 
 状态中永不返回 token、明文手机号或一次性激活码。`ProductStateDTO` 不承载编译期控制面配置、目录可用性等运行时事实；这些由专用端点给出。
@@ -79,10 +79,12 @@
 | PUT | `/api/product/locale` | 状态存储 | 保存界面语言。 |
 | PUT | `/api/product/nickname` | 状态存储与敏感词引擎 | 保存昵称并返回 `{state}`。 |
 | PUT | `/api/product/prefs` | 状态存储 | 更新偏好并返回 `{state}`。 |
-| GET | `/api/product/chat-modes` | 目录缓存可读时有模型投影 | 返回可用模式和模型投影。 |
+| GET | `/api/product/chat-modes` | 目录缓存可读时有模型投影 | 当前返回旧三组模式投影；目标设计删除。 |
+| GET | `/api/product/models` | 目标接口，当前未实现 | 返回已验签目录的厂商/模型只读投影，替代 `chat-modes`。 |
 | GET / PUT | `/api/product/sensitive/dict` | 数据根与词库文件 | 读取或覆盖用户敏感词。 |
 | POST | `/api/product/sensitive/dict/import` | 数据根与词库文件 | 合并导入敏感词。 |
 | POST | `/api/product/sensitive/check` | 敏感词引擎可选 | 输入框即时检测。 |
+| POST | `/api/product/privacy/transform` | 目标接口，当前未实现 | 在本机生成自动脱敏文本和提示摘要；不是发送安全边界。 |
 | GET | `/api/product/control-plane` | 无平台请求 | 返回本构建的控制面可用性。 |
 | GET | `/api/product/catalog` | 目录缓存；需要刷新时还依赖平台会话 | 返回目录可用性。 |
 | GET | `/api/product/credits` | 平台客户端与可用平台会话 | 从账本刷新余额并返回 `{state}`。 |
@@ -115,9 +117,9 @@
 
 `PUT /api/product/nickname` 接收昵称并返回 `{"state": ProductStateDTO}`。`nickname_format` 与 `nickname_sensitive` 是业务级码，不能错误地包装为 `fieldErrors`。
 
-`PUT /api/product/prefs` 接收任意子集：`locale`、`defaultChatMode`、`inputSensitiveCheck`，未给出的字段保持不变。成功返回持久化后的 `{state}`；非法值使用 `{"field":"<field>","code":"invalid_value"}`。模式 ID 必须来自模式目录。
+`PUT /api/product/prefs` 当前接收任意子集：`locale`、`defaultChatMode`、`inputSensitiveCheck`，未给出的字段保持不变。成功返回持久化后的 `{state}`；非法值使用 `{"field":"<field>","code":"invalid_value"}`。`defaultChatMode` 及其三组校验是待删除当前实现，不能继续扩展为新的私密会话契约；目标见 [模型选择与私密会话](模型选择与私密会话.md)。
 
-## 模式、词库与输入检测
+## 当前模式接口、词库与输入检测
 
 `GET /api/product/chat-modes` 返回：
 
@@ -129,7 +131,7 @@
 }
 ```
 
-模式 ID 是稳定数据键，模式展示名由前端 i18n 的 `mode.<id>` 生成。接口不提供本地 fallback 名单：目录不可用时返回空模式，前端依据目录状态解释原因，而不是猜测或启用本地 provider。
+以上是代码仍在提供的旧契约，不是目标产品结构。三组模式、`mode.<id>` 文案和该端点将在统一模型列表接入后删除；中台模型与开发 Profile 的本地模型改为同一个“厂商 → 模型 ID”选择器。迁移完成前，现有端点仍应保持当前 wire 形状，不能只删一侧。
 
 敏感词接口由词库所有者统一归一化：
 
@@ -141,6 +143,18 @@
 ## 运行时可用性与余额
 
 `GET /api/product/control-plane` 返回 `{"configured":<bool>,"hasTrustedKeys":<bool>}`。这两个值是构建 profile 的事实，不属于 `ProductStateDTO`。前端按顺序处理：未配置、无可信密钥、正常登录；请求本身失败时不要假称配置错误。页面不向用户展示 URL 或配置文件名。
+
+目标设计在同一响应增加 `allowEnvironmentModelSource`，直接投影编译期 Profile 的同名事实。前端据此同时决定是否合并本地模型、显示本地模型管理入口和允许本地私密测试标记；不得再从 profile 名称、host 或本地列表是否为空推断。该字段落地前，产品 Profile 隐藏行为仍属于待实现目标。
+
+目标 `GET /api/product/models` 返回 `state`、`catalogVersion` 和 `vendors`；每个 vendor 有稳定 `id`、本地化 `displayName` 和 models，每个 model 至少有 `id`、`displayName`、`compositeId`、`confidential`、`confidentialPriority`。它只投影最后一次验签通过的目录缓存，不触发网络、不混入 `/api/config/endpoints` 的本地模型。完整形状和前端合并边界见 [模型选择与私密会话](模型选择与私密会话.md)。
+
+现有本地 endpoint 接口继续负责可真实调用的本地模型，不被 `/api/product/models` 取代。目标 model 对象在原有 `model`、`vision` 之外增加 `confidential`：
+
+```json
+{"model":"local-model-id","vision":true,"confidential":true}
+```
+
+`POST /api/config/endpoints` 的嵌套 `models`、`POST /api/config/endpoints/{id}/models` 和 `GET /api/config/endpoints`/CRUD 响应使用同一形状。对同一 endpoint 和 model ID 再次 POST 仍沿用现有 upsert 语义，用于修改 `vision` 或 `confidential`，不新增一条平行的“私密模型”接口。字段缺失按 `false` 读取。开发 Profile 保存成功后失效对应 sender 缓存并刷新统一模型投影；下一回合使用新配置，不要求重启。正式产品模式虽然不为隐藏入口删除这些上游路由实现，但前端不读取或调用它们，本地 endpoint 不进入模型投影或回合路由，只允许中台 gateway。
 
 `GET /api/product/catalog` 返回：
 
@@ -154,7 +168,11 @@
 
 ## 会话路由与 WebSocket
 
-`PATCH /api/sessions/{id}/chat_mode` 不属于产品端点，但属于同一用户体验契约。它接收 `{"chat_mode":"<mode id>"}`，成功返回 `{"ok":true,"chat_mode":"<mode id>"}`；未知模式返回 `400`，缺失会话返回 `404`，冲突返回 `409`。值写入会话并通过既有 `session_update` 广播。模式 ID 的唯一所有者是模式目录。
+`PATCH /api/sessions/{id}/chat_mode` 是当前三组模式遗留接口。它接收 `{"chat_mode":"<mode id>"}`，成功返回 `{"ok":true,"chat_mode":"<mode id>"}`；未知模式返回 `400`，缺失会话返回 `404`，冲突返回 `409`。目标设计以明确的个人信息保护和私密会话状态替代它，并在首条消息后锁定；旧 `privacy` 值不得自动迁移成新的安全保证。
+
+目标接口 `PATCH /api/sessions/{id}/protection` 接收 `personal_info_protection`、`confidential_session` 和可选 `model_id`，只允许在保护策略锁定前更新。当开启私密会话且当前模型不合格时，`model_id` 必须指定合格私密模型；服务端在同一会话锁中校验并原子保存模型绑定与版本化 `protection_policy`。成功返回完整策略和有效模型绑定；锁定后返回 `409 session_policy_locked`，模型不合格返回 `409 confidential_model_required`。创建会话接口必须能原子接收同样的用户可选字段和初始模型绑定；`version` 与 `locked` 只能由服务端写入。详细竞态和生命周期语义见 [模型选择与私密会话](模型选择与私密会话.md)。
+
+目标接口 `POST /api/product/privacy/transform` 接收 `{"text":"..."}`，返回 `{"hit":<bool>,"masked":"...","matches":[{"category":"...","count":1}],"ruleVersion":"..."}`。前端命中后不请求确认，直接以 `masked` 继续发送并展示“已自动脱敏”提示。它与服务端发送入口使用同一个 `internal/pii` 引擎，标准占位符在重复处理时保持不变；请求与响应不得写访问日志，且必须 `no-store`。发送入口仍对旧客户端或绕过 transform 的请求执行权威脱敏。
 
 产品 WebSocket 事件如下：
 
@@ -162,11 +180,12 @@
 | --- | --- | --- |
 | `credits_update` | 无 | 提醒所有窗口调用余额刷新；不携带余额，也不重放。 |
 | `input_sensitive` | `{session_id, text}` | 拒绝敏感输入前返回已打码文本；被拒内容不入库、不广播、不发模型请求。 |
+| `privacy_applied` | `{session_id,categories,count,rule_version}` | 服务端发送入口对旧客户端原文或遗漏命中执行了权威脱敏；不携带原值，也不作为历史事件重放。 |
 | `datastore:lost` | 无 | 数据目录失联时冻结输入；新连接必须重放冻结状态。 |
 | `datastore:restored` | 无 | 同一路径恢复时解除冻结；不重放。 |
 | `turn_error` | `{session_id, error, code?, input_rolled_back?}` | 有码时由前端按码取文案；原始 `error` 只作未知错误兜底。 |
 
-每个事件只有一个发射方和一个重放策略。事件消费方不能从缺失的 `session_id` 猜测会话范围：缺失表示全局事件，`input_sensitive` 是唯一会话级事件。
+每个事件只有一个发射方和一个重放策略。事件消费方不能从缺失的 `session_id` 猜测会话范围：缺失表示全局事件；`input_sensitive` 与 `privacy_applied` 是会话级事件。`privacy_applied` 是瞬时提示，不进入历史重放；重新打开会话只展示已经持久化的脱敏文本。
 
 ## 错误码
 
@@ -183,6 +202,10 @@
 | `code_not_sent` / `activation_invalid` / `activation_code_used` | 登录或激活的业务结果。 |
 | `box_code_unknown` / `box_code_mismatch` / `activation_required` / `phone_mismatch` | 需要用户处理、重新激活或联系客服的业务结果。 |
 | `input_sensitive` | 本地敏感输入被拒；REST 返回打码文本，WebSocket 使用同名事件。 |
+| `privacy_transform_failed` | 个人信息保护开启但本地脱敏引擎不可用或处理失败；本次输入不得广播、落库或调用模型。 |
+| `session_policy_locked` | 首个用户回合已经落库，保护策略不可再改变。 |
+| `confidential_model_required` | 请求开启私密会话或切换模型时，提交的模型不具备私密资格。 |
+| `confidential_model_unavailable` | 已锁定私密会话在回合开始前失去可用的合格模型；不得回退普通模型。 |
 | `unauthorized` | 会话刷新被明确拒绝；本地以 401 回产品门。 |
 
 ## 验证与变更

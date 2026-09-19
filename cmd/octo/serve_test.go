@@ -84,7 +84,7 @@ func TestServeRejectsPositionalArgsAlone(t *testing.T) {
 }
 
 // isolatePidFile points the daemon pid-file lookup at a temp dir so the
-// OCTO-FORK: 数据根：`~/.octo` → `<exe dir>/data`（硬规则 1） — see dev-docs-usdable/需求/2260906/技术方案/P1-便携数据根.md
+// OCTO-FORK: 数据根：`~/.octo` → `<exe dir>/data`（硬规则 1） — see the portable data-root boundary
 // subcommand tests below never see (or touch) a real data/serve.pid.
 func isolatePidFile(t *testing.T) {
 	t.Helper()

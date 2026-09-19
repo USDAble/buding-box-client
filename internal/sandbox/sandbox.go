@@ -64,7 +64,7 @@ func DefaultPolicy(cwd string) Policy {
 	// scripts invoke via PATH — see internal/tools/sandbox.go's PATH
 	// injection. Read+execute only, not a write root.
 	// OCTO-FORK: the portable product keeps bin next to the executable, not in
-	// the host home — see dev-docs-usdable/需求/2260906/技术方案/P1-便携数据根.md.
+	// the host home — see the portable data-root boundary.
 	if bin, err := datapath.Join("bin"); err == nil && bin != "" {
 		add(bin)
 	}

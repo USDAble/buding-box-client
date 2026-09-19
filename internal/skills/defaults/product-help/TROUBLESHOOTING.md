@@ -24,7 +24,7 @@ Common issues and their fixes.
 ### `octo` says "no API key"
 
 - Check that the env var is set: `echo $ANTHROPIC_API_KEY` (or `OPENAI_API_KEY`)
-<!-- OCTO-FORK: 技能文档改为数据根语义：用户级数据根改用 <data root>  — see dev-docs-usdable/需求/2260906/技术方案/P1-便携数据根.md -->
+<!-- OCTO-FORK: 技能文档改为数据根语义：用户级数据根改用 <data root>  — see the portable data-root boundary -->
 - Or run `octo config` to store the key in `<data root>/config.yml` (mode 0600)
 - Check `octo config show` to see where the provider/model resolve from
 

@@ -370,7 +370,7 @@ func printMCP(w io.Writer) {
 	reg := tools.ActiveMCPRegistry()
 	if reg == nil || reg.Len() == 0 {
 		fmt.Fprintln(w, "No MCP servers connected.")
-		// OCTO-FORK: 数据根：`~/.octo` → `<exe dir>/data`（硬规则 1） — see dev-docs-usdable/需求/2260906/技术方案/P1-便携数据根.md
+		// OCTO-FORK: 数据根：`~/.octo` → `<exe dir>/data`（硬规则 1） — see the portable data-root boundary
 		fmt.Fprintln(w, "Configure one at data/mcp.json (run `octo help mcp` for the format).")
 		return
 	}

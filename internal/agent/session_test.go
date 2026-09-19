@@ -16,7 +16,7 @@ func setTempHome(t *testing.T) string {
 	t.Helper()
 	tmp := t.TempDir()
 	t.Setenv("HOME", tmp)
-	// OCTO-FORK: 数据根：`~/.octo` → `<exe dir>/data`（硬规则 1） — see dev-docs-usdable/需求/2260906/技术方案/P1-便携数据根.md
+	// OCTO-FORK: 数据根：`~/.octo` → `<exe dir>/data`（硬规则 1） — see the portable data-root boundary
 	t.Setenv("OCTO_DATA_ROOT", tmp)
 	t.Setenv("USERPROFILE", tmp) // Windows: os.UserHomeDir() reads USERPROFILE
 	return tmp
@@ -1178,7 +1178,7 @@ func TestIsAutoNamePlaceholder(t *testing.T) {
 // test is not decoration: the fix must not have turned the WRITERS read-only, or
 // a session save would start failing with a missing directory.
 //
-// OCTO-FORK: read-only sessions path for the portable product's store watch — see dev-docs-usdable/需求/20260911/需求基线.md §5.6.
+// OCTO-FORK: read-only sessions path for the portable product's store watch — see the product baseline §5.6.
 func TestSessionsDirPathDoesNotCreate(t *testing.T) {
 	root := filepath.Join(t.TempDir(), "data") // deliberately absent
 	t.Setenv("OCTO_DATA_ROOT", root)

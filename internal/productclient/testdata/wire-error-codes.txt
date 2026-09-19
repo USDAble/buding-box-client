@@ -3,7 +3,7 @@
 # this package appears below.
 #
 # WHY THIS FILE EXISTS (2026-09-15, 人工拍板). Until today the registry was
-# `dev-docs-usdable/需求/20260911/中台交付包.md` §3.2, and code_test.go read that
+# `the control-plane contract` §3.2, and code_test.go read that
 # document at test time. The document was deleted because a design-first contract
 # kept generating requirements the code had already outgrown; the interface
 # contract is now regenerated FROM the code instead of ahead of it. The registry

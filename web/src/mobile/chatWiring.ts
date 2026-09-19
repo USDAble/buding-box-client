@@ -18,7 +18,7 @@ import { ws } from '../lib/ws'
 import { tr } from '../lib/i18n'
 import * as api from '../lib/api'
 import { inlineSlashCommand } from '../lib/inlineSlash'
-// OCTO-FORK: turn failures are read by CODE, not by the server's sentence (G3 / C8) — see dev-docs-usdable/需求/20260911/开发计划.md §PR-5d3.
+// OCTO-FORK: turn failures are read by CODE, not by the server's sentence (G3 / C8) — see the current implementation plan §PR-5d3.
 import { turnErrorView } from '../lib/turnError'
 import {
   chatMessages,

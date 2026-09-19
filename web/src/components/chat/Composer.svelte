@@ -1137,7 +1137,7 @@
   // entries under it. P8 (sensitive-word hit) and P10 (privacy notice) append
   // their own entries here later — the ordering rule stays in this one array.
   // OCTO-FORK: P6 入口隐藏与积分 — see
-  // dev-docs-usdable/需求/2260906/技术方案/P6-入口隐藏与积分.md §3.6.
+  // the approved navigation and credits boundary §3.6.
   // P8: 敏感词命中提示的开关。命中时置 true 让通知条显示；用户修改文本或
   // 下次发送重新检测时按结果更新。用 $state 而非 derived 内部局部变量，
   // 因为 send() 需要读写它（命中置位 / 未命中清除）。
@@ -1203,7 +1203,7 @@
     // 下方提示 + 不发送；未命中清除提示继续。这是即时回填的体验层——服务端
     // 在扣分前还会再查一次（checkInputSensitive），所以这里失败不阻塞。
     // OCTO-FORK: P8 敏感词接入 — see
-    // dev-docs-usdable/需求/2260906/技术方案/P8-敏感词接入.md §3.5.
+    // the content-safety boundary §3.5.
     if ($productState?.prefs.inputSensitiveCheck !== false) {
       try {
         const res = await checkSensitive(v)

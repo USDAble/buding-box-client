@@ -2,8 +2,8 @@
 //
 // OCTO-FORK: P7 敏感词引擎 — 纯新增包，上游无同名路径（零合并冲突）。
 // 唯一的敏感词实现（输入检测 / 输出过滤 / 昵称校验三处共用），Web 侧不
-// 做第二套匹配。本轮落地与判据见 dev-docs-usdable/需求/20260911/开发计划.md §PR-6a；
-// 引擎自身的设计来自 dev-docs-usdable/需求/2260906/技术方案/P8-敏感词接入.md。
+// 做第二套匹配。本轮落地与判据见 the current implementation plan §PR-6a；
+// 引擎自身的设计来自 the content-safety boundary。
 package sensitive
 
 import (

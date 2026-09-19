@@ -1,6 +1,6 @@
 # octo CLI Reference
 
-<!-- OCTO-FORK: 技能文档改为数据根语义：用户级数据根改用 <data root>  — see dev-docs-usdable/需求/2260906/技术方案/P1-便携数据根.md -->
+<!-- OCTO-FORK: 技能文档改为数据根语义：用户级数据根改用 <data root>  — see the portable data-root boundary -->
 Precedence is **CLI flag > env var > `<data root>/config.yml` > built-in default**. Run `octo <command> --help` for any subcommand's full flag list.
 
 ## `octo [message]`

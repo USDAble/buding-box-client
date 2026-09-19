@@ -1913,7 +1913,7 @@ func (s *Server) doAgentTurn(sess *agent.Session, content string, blocks []agent
 		Kind:      "turn_complete",
 	})
 	// OCTO-FORK: the turn that just ended may have moved the balance, and every
-	// window shows that number — see dev-docs-usdable/需求/20260911/开发计划.md
+	// window shows that number — see the current implementation plan
 	// §2 PR-8.
 	s.broadcastCreditsMayHaveMoved()
 
@@ -2094,7 +2094,7 @@ func (w *wsStreamWriter) error(msg string) {
 // OCTO-FORK: `code` is the control plane's code (G3 / 需求基线 C8) — the only field the
 // browser may key its copy on; `error` stays the fallback sentence. An empty code is
 // omitted, so "no code" and "a code with no copy" stay distinguishable. See
-// dev-docs-usdable/需求/20260911/开发计划.md §PR-5d3.
+// the current implementation plan §PR-5d3.
 func (w *wsStreamWriter) errorInput(msg string, inputRolledBack bool, code string) {
 	ev := map[string]any{
 		"type":       "turn_error",

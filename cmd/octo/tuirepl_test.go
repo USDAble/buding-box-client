@@ -39,7 +39,7 @@ var (
 
 // isolateTestInputHistory points OCTO_INPUT_HISTORY_FILE at a fresh,
 // nonexistent path per call, so newTestModel never reads or writes the
-// OCTO-FORK: 数据根：`~/.octo` → `<exe dir>/data`（硬规则 1） — see dev-docs-usdable/需求/2260906/技术方案/P1-便携数据根.md
+// OCTO-FORK: 数据根：`~/.octo` → `<exe dir>/data`（硬规则 1） — see the portable data-root boundary
 // developer's real data/input_history, and successive tests in this
 // package don't leak history entries into each other.
 func isolateTestInputHistory() {

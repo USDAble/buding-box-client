@@ -11,7 +11,7 @@ import { applyTitlebarLift } from './lib/nativeWindow'
 
 // OCTO-FORK: a comment-only deviation recording where the development stand-in
 // used to be installed, and the two rules learned from it — see
-// dev-docs-usdable/需求/20260911/开发计划.md PR-3 and 需求基线 §5.6 G5/V-47.
+// the current implementation plan PR-3 and 需求基线 §5.6 G5/V-47.
 //
 // The stand-in that used to be installed here is gone (PR-3, 2026-09-13):
 // /api/* now always reaches the local Go service, in dev builds too (vite

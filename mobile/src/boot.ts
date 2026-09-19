@@ -4,7 +4,7 @@ import { ManagedRelayTransport } from './transport'
 import { OctoTunnel, registerPlugin } from './plugin'
 import { parsePairingURL, type PairingInfo } from './pairing'
 import { scanPairingURL } from './qr'
-// OCTO-FORK: 移动端壳的品牌插值 — see dev-docs-usdable/开发规范.md §3.2
+// OCTO-FORK: 移动端壳的品牌插值 — see the fork engineering norms §3.2
 import { brandName } from './brand'
 
 // The first-party App plugin, resolved through the same native bridge as

@@ -1255,7 +1255,7 @@ func (m *tuiModel) modelPickerView() string {
 //
 // Flags:
 //
-// OCTO-FORK: 数据根：`~/.octo` → `<exe dir>/data`（硬规则 1） — see dev-docs-usdable/需求/2260906/技术方案/P1-便携数据根.md
+// OCTO-FORK: 数据根：`~/.octo` → `<exe dir>/data`（硬规则 1） — see the portable data-root boundary
 //
 //	--default  also persist the model as default_model in data/config.yml.
 func (m *tuiModel) dispatchModel(name string) (tea.Model, tea.Cmd) {

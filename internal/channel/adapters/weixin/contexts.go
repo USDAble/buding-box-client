@@ -19,7 +19,7 @@ import (
 )
 
 // contextStorePath derives the token-store path from the credentials path so
-// OCTO-FORK: 数据根：`~/.octo` → `<exe dir>/data`（硬规则 1） — see dev-docs-usdable/需求/2260906/技术方案/P1-便携数据根.md
+// OCTO-FORK: 数据根：`~/.octo` → `<exe dir>/data`（硬规则 1） — see the portable data-root boundary
 // both live in the same directory (default data/).
 func contextStorePath(credPath string) string {
 	return filepath.Join(filepath.Dir(credPath), "weixin-contexts.json")

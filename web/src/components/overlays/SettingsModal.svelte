@@ -241,7 +241,7 @@
   let coauthorVal      = $state(true)
   let updateCheckVal   = $state(true)
   let workspaceDir        = $state('')
-  // OCTO-FORK: 前端适配（webview 路由/构建/入口隐藏） — see dev-docs-usdable/需求/2260906/技术方案/P6-入口隐藏与积分.md
+  // OCTO-FORK: 前端适配（webview 路由/构建/入口隐藏） — see the approved navigation and credits boundary
   // Resolved default new sessions get when workspaceDir is empty (data/workspace/,
   // expanded server-side) — shown as the input's placeholder instead of a
   // bare "auto" that's easy to mistake for an actually-saved value.
@@ -722,7 +722,7 @@
                上游 updateCheckVal / saveUpdateCheck 的脚本半边留在原地不动（硬规则 3：
                宁可到不了，也不删）；钉子见 web/src/lib/updateEntry.test.ts 的
                LIVE_UPDATE_MARKERS。
-               — see dev-docs-usdable/需求/2260906/技术方案/P2-启动与生命周期.md §5（V-86） -->
+               — see the desktop startup and lifecycle boundary §5（V-86） -->
           <div class="setrow">
             <div class="seti">
               <span class="setl">{$t('settings.update')}</span>
@@ -893,7 +893,7 @@
                  换成占位，文案与个人中心那一处共用同一个键。
                  设置的关于分类已承载同一意图，此处是那笔账的收尾。
                  上游的 checkUpdate/loadVersion 脚本留在原地不动（硬规则 3：宁可到不了，也不删）。
-                 — see dev-docs-usdable/需求/2260906/技术方案/P2-启动与生命周期.md §5（V-86） -->
+                 — see the desktop startup and lifecycle boundary §5（V-86） -->
             <div class="setrow">
               <div class="seti">
                 <span class="setl">{$t('settings.update')}</span>

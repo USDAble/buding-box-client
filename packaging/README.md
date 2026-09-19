@@ -6,7 +6,7 @@ long-lived daemon.
 ## Portable package (primary deliverable)
 
 <!-- OCTO-FORK: portable directory is the product's main deliverable, not the
-installer — see dev-docs-usdable/需求/2260906/技术方案/P12-便携打包.md. -->
+installer — see the portable packaging design. -->
 
 `make desktop-portable` produces the copy-to-USB deliverable — a self-contained
 `dist/PuddingBox/` directory (GUI exe + bundled `bin/uv.exe` + pre-filled
@@ -20,7 +20,7 @@ host (`make desktop-portable`); the macOS `.app` is native-only (`make
 desktop-app`, needs macOS + Xcode). On a Mac, `make desktop-portable-all`
 produces both in one command. CI splits them across the windows-latest /
 macos-latest jobs of `.github/workflows/portable.yml` — see
-`dev-docs-usdable/需求/2260906/技术方案/P12-便携打包.md` §3.5a.
+`the portable packaging design` §3.5a.
 
 The template lives in [`portable/`](portable/) — `data/` is copied verbatim and
 `使用说明.txt` is rendered with `{nameZh}` / `{nameEn}` / `{exeName}` placeholders

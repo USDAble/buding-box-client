@@ -5,7 +5,7 @@ import (
 	"strings"
 	"sync/atomic"
 
-	// OCTO-FORK: 内置默认工作区从 `~/Octo` 改为数据根下的 `data/workspace/`（便携化） — see dev-docs-usdable/需求/2260906/技术方案/P12-便携打包.md
+	// OCTO-FORK: 内置默认工作区从 `~/Octo` 改为数据根下的 `data/workspace/`（便携化） — see the portable packaging design
 	"github.com/open-octo/octo-agent/internal/brand"
 	"github.com/open-octo/octo-agent/internal/config"
 )
@@ -85,7 +85,7 @@ func enStringsFor(name, short string) uiStrings {
 		trayChannelsFmt:    "Configured channels: %d",
 		// OCTO-FORK: upstream #2421 added the desktop pet; its two tray labels are
 		// brand-free, so they land here verbatim from upstream's table — see
-		// dev-docs-usdable/需求/20260911/开发计划.md §PR-3
+		// the current implementation plan §PR-3
 		trayPet:     "Show Pet",
 		trayPetHide: "Hide Pet",
 

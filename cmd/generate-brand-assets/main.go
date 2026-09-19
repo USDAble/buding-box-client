@@ -1,7 +1,7 @@
 // Command generate-brand-assets turns the brand master under branding/source/
 // into every bitmap the product ships: the Windows icon.ico, the macOS
 // icon.icns + tray-icon.png, the Linux icon.png, and the landing og-image.png.
-// This is the "PR2" tool from dev-docs-usdable/需求/2260906/品牌升级方案.md
+// This is the "PR2" tool from the brand-configuration boundary
 // §5.2; it needs no npm because rendering is pure Go (oksvg + rasterx for
 // vector, image/png for raster).
 //

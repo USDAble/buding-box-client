@@ -35,7 +35,7 @@ export function globalKeyIntent(e: GlobalKeyEvent, opts: GlobalKeyOpts): 'palett
 // must not steal their key. Callers decide when an 'overlay' answer applies.
 //
 // OCTO-FORK: P5 account panel — see
-// dev-docs-usdable/需求/2260906/技术方案/P5-个人中心.md §4.2.
+// the account-center boundary §4.2.
 export function dismissIntent(e: GlobalKeyEvent): 'overlay' | null {
   const mod = e.metaKey || e.ctrlKey || e.altKey || e.shiftKey
   if (mod) return null

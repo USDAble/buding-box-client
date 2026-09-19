@@ -6,7 +6,7 @@
   // two entry points in this file, so upstream's import of it would be an unused symbol.
   // isDesktopShell, by contrast, IS upstream's (the URL marker is known at first paint, while
   // nativeShell waits on /api/version) and both of its uses auto-merged in. — see
-  // dev-docs-usdable/需求/20260911/开发计划.md §PR-5b2b
+  // the current implementation plan §PR-5b2b
   import { view, sidebar, sessions, sessionGroups, pinnedSessions, collapsedSessions, editGroupId, editGroupDraft, activeSessionId, selMode, sel, menuFor, editId, editDraft, showToast, mcpServers, createNewSession, createSessionInGroup, clearPendingSessionOpts, accountPanelOpen, cmdkOpen, nativeShell, isDesktopShell, dirLeaf } from '../../lib/stores'
   import * as api from '../../lib/api'
   import { titlebarDblClick } from '../../lib/nativeWindow'
@@ -402,7 +402,7 @@
   // remain implemented and directly routable; they simply receive no sidebar
   // entry until the product approves one.
   // OCTO-FORK: P6 入口隐藏 — see
-  // dev-docs-usdable/需求/2260906/技术方案/P6-入口隐藏与积分.md.
+  // the approved navigation and credits boundary.
   const visibleTopNav = $derived(visibleNav(topNav))
   const visibleMoreCategories = $derived(visibleNav(moreCategories))
   const visibleRailNav = $derived(visibleNav(railNav))

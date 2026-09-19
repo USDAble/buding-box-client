@@ -3,7 +3,7 @@
 //
 // It is the single place where central-facing field names live (fork spec
 // §3.8). The contract is a proposal until the platform confirms it - see
-// dev-docs-usdable/需求/20260911/中台交付包.md - so keeping every name here means a
+// the control-plane contract - so keeping every name here means a
 // contract change is a single-point edit.
 //
 // This package does not talk to model providers. The gateway is reached through

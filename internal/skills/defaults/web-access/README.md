@@ -12,7 +12,7 @@
 
 ## 站点经验
 
-<!-- OCTO-FORK: 技能文档改为数据根语义：用户级数据根改用 <data root>  — see dev-docs-usdable/需求/2260906/技术方案/P1-便携数据根.md -->
+<!-- OCTO-FORK: 技能文档改为数据根语义：用户级数据根改用 <data root>  — see the portable data-root boundary -->
 `<data root>/site-patterns/<domain>.md` 按域名存放操作经验（本地、跨 session 持久）。放在 octo 管理的 `<data root>/skills-default/` 之外，版本升级的 wipe-and-rewrite 不会清掉它。
 
 ## 已移除

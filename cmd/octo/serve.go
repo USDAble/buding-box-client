@@ -50,7 +50,7 @@ func runServe(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 	noChannel := fs.Bool("no-channel", false, "Disable IM channel (DingTalk, Feishu)")
 	noMemory := fs.Bool("no-memory", false, "Disable cross-session memory injection")
 	noSupervisor := fs.Bool("no-supervisor", false, "Run the server directly, without the self-restart supervisor (exit code 42 still signals a restart request to an external supervisor)")
-	// OCTO-FORK: 数据根：`~/.octo` → `<exe dir>/data`（硬规则 1） — see dev-docs-usdable/需求/2260906/技术方案/P1-便携数据根.md
+	// OCTO-FORK: 数据根：`~/.octo` → `<exe dir>/data`（硬规则 1） — see the portable data-root boundary
 	daemon := fs.Bool("d", false, "Run as a background daemon (writes pid to data/serve.pid, logs to data/serve.log)")
 	fs.BoolVar(daemon, "daemon", false, "Run as a background daemon")
 	stop := fs.Bool("stop", false, "Stop the background daemon")

@@ -36,7 +36,7 @@ import (
 // be adopted into a project. Left as-is rather than hardcoding the legacy path:
 // the datapath rules forbid naming that root, and a portable install never sees
 // those sessions in the first place, because they live under the old data root.
-// See dev-docs-usdable/需求/2260906/技术方案/P1-便携数据根.md.
+// See the portable data-root boundary.
 //
 // Idempotent, so it can run on every start: a session already in a project is
 // skipped, and a second run over the same directory finds the project the first

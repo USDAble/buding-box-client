@@ -26,7 +26,7 @@ func writeSkillDir(t *testing.T, root, name, desc string) {
 // An expert skill is discovered with its own source, stays out of the global
 // manifest, and appears in an expert's manifest only when tool_skills names it.
 func TestExpertSkills_ScopedToNamingProfiles(t *testing.T) {
-	// OCTO-FORK: 技能文档改为数据根语义（`~/.octo/…` → `<data root>/…`） — see dev-docs-usdable/需求/2260906/技术方案/P1-便携数据根.md
+	// OCTO-FORK: 技能文档改为数据根语义（`~/.octo/…` → `<data root>/…`） — see the portable data-root boundary
 	// Isolate the user root too — Discover reads data/skills via HOME.
 	tmp := t.TempDir()
 	t.Setenv("HOME", tmp)

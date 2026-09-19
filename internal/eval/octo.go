@@ -63,7 +63,7 @@ func driveOcto(ctx context.Context, opt octoOptions, workDir, prompt string) (st
 	cmd := exec.CommandContext(ctx, opt.Bin, args...)
 	cmd.Dir = workDir
 	// OCTO-FORK: isolate octo via OCTO_DATA_ROOT, not a throwaway HOME — see
-	// dev-docs-usdable/需求/2260906/技术方案/P1-便携数据根.md.
+	// the portable data-root boundary.
 	cmd.Env = append(os.Environ(), "OCTO_DATA_ROOT="+opt.EvalHome)
 	var buf bytes.Buffer
 	cmd.Stdout = &buf

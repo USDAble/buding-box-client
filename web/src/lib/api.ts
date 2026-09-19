@@ -62,7 +62,7 @@ export async function request<T>(path: string, init?: RequestInit): Promise<T> {
   // OCTO-FORK: stamp every call with the adopted window token so the server's
   // product gate can tell this window from other loopback peers. A plain
   // browser has no token, so this is a no-op under `octo serve` — see
-  // dev-docs-usdable/需求/2260906/技术方案/P3-登录态与产品门.md.
+  // the product access-control boundary.
   const res = await fetch(path, { ...init, headers: withWindowToken(init?.headers) })
   if (!res.ok) {
     // Read the error body once. A 403 with error "product_gate" means the
@@ -104,7 +104,7 @@ export async function request<T>(path: string, init?: RequestInit): Promise<T> {
 // product gate only blocks requests that PRESENT a token; an in-window call
 // missing it would be mistaken for a CLI peer and let through, so every
 // window-initiated fetch must be stamped — see
-// dev-docs-usdable/需求/2260906/技术方案/P3-登录态与产品门.md.
+// the product access-control boundary.
 function withWindowToken(initHeaders?: HeadersInit): Headers {
   const headers = new Headers(initHeaders)
   const token = windowToken()

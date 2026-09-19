@@ -42,7 +42,7 @@ const defaultStampFile = ".octo-version"
 // directory kept separate from data/skills so refreshing the defaults never
 // touches a user's own skills. A var so tests can redirect it.
 // OCTO-FORK: the portable product keeps skills next to the executable, not in
-// the host home — see dev-docs-usdable/需求/2260906/技术方案/P1-便携数据根.md.
+// the host home — see the portable data-root boundary.
 var defaultSkillsRoot = func() string {
 	p, err := datapath.Join("skills-default")
 	if err != nil {

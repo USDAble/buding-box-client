@@ -9,7 +9,9 @@
 #   make vet        go vet ./...
 #   make fmt        gofmt -w on all .go files
 #   make fmt-check  fail if anything would be reformatted
+#   make quick-check fast local checks run by the commit hook
 #   make gate       everything a change must pass before landing on v1 (see below)
+#   make hooks-install enable the repository's commit and push hooks
 #   make tidy       go mod tidy
 #   make clean      remove build artefacts
 #   make brand      regenerate the branding files from branding/brand.json
@@ -61,7 +63,7 @@ RG_EMBED_DIR := internal/tools/rgembed/binaries
 RG_EMBED_BIN := $(RG_EMBED_DIR)/rg
 
 .PHONY: all build install test test-production cover vet fmt fmt-check tidy clean \
-        gate web-gate \
+        node-check docs-ref-check quick-check hooks-install gate web-gate \
         brand brand-check datapath-check norms-check agents agents-check \
         sensitive-norm-check \
         reuse-check server-diff-check release-profile-check release-config-check \
@@ -81,7 +83,7 @@ all: test
 # scripts/webdist-clean.mjs and V-34. Upstream only ever runs vite here, and
 # vite is configured not to empty the directory (that config protects the
 # .gitkeep), so a deleted asset used to stay on disk and get embedded.
-web-build: web-dist-clean
+web-build: node-check web-dist-clean
 	cd web && npm install && npm run build
 
 # Empty webdist of everything the build does not just produce. Named as its own
@@ -145,7 +147,7 @@ build-full: build
 # records 13.0, because cgo's floor comes from clang, which defaults to the build
 # host's macOS. The pair below is what makes the shipped floor 12.0 rather than
 # whatever the builder happens to run, which is the whole point of pinning it.
-# See dev-docs-usdable/需求/2260906/需求20260906.md §8.
+# See the desktop compatibility decision
 DESKTOP_MACOS_VERSION ?= 12.0
 desktop: web-build
 	cd cmd/octo-desktop && CGO_ENABLED=1 \
@@ -164,7 +166,7 @@ desktop: web-build
 # cmd/octo-desktop/main.go and web/vite.config.ts), so shell=octo-desktop and
 # the window token ride along unchanged. Only a developer Profile honours
 # OCTO_DESKTOP_DEV_URL, so a production build cannot be pointed at a dev
-# server. See dev-docs-usdable/本地开发与运行.md §3.4.
+# server. See the local development boundary
 desktop-dev:
 	cd cmd/octo-desktop && CGO_ENABLED=1 \
 		CGO_CFLAGS="-mmacosx-version-min=$(DESKTOP_MACOS_VERSION)" \
@@ -201,7 +203,7 @@ desktop-portable-all: web-build brand-check desktop-app desktop-portable
 
 # Node unit tests for the packaging pipeline (self-check predicates, the
 # zero-dependency ZIP writer, the PE reader) — same pattern as brand-check.
-portable-check:
+portable-check: node-check
 	node --test scripts/package-portable.test.mjs scripts/pe-info.test.mjs scripts/webdist-clean.test.mjs scripts/preflight.test.mjs
 
 install: web-build rg-embed
@@ -211,7 +213,7 @@ test:
 	go test -race $(GOFLAGS) -tags='$(GOTAGS)' ./...
 
 # OCTO-FORK: 六条守卫的 Makefile 接线（TODO-02 / V-1） — see
-# dev-docs-usdable/需求/20260911/TODO.md §TODO-02
+# the guard rollout
 #
 # Test the build that is actually shipped: everything compiled with the
 # product_production tag, which selects the production runtime profile and
@@ -270,7 +272,7 @@ clean:
 brand:
 	node scripts/sync-branding.mjs
 
-brand-check:
+brand-check: node-check
 	node scripts/brand-schema.mjs
 	node scripts/sync-branding.mjs --check
 	node scripts/brand-guard.mjs
@@ -287,7 +289,7 @@ datapath-check:
 # ── AI-tool entry-point guards ────────────────────────────────────────────────
 # Every AI coding tool reads a different file (.cursor/rules, CLAUDE.md,
 # .github/copilot-instructions.md, AGENTS.md, .octorules). norms-check asserts
-# each one still points at dev-docs-usdable/开发规范.md; agents-check asserts the
+# each one still points at the fork engineering norms; agents-check asserts the
 # generated AGENTS.md matches the inlined .octorules. CI runs both (norms-guard /
 # agents-guard jobs).
 norms-check:
@@ -302,7 +304,7 @@ agents-check:
 	node --test scripts/sync-agents.test.mjs
 
 # ── fork-marker guard ────────────────────────────────────────────────────────
-# Hard rule 3 (开发规范 §3.3) requires `OCTO-FORK:` on every change to an
+# Hard rule 3 (开发规范) requires `OCTO-FORK:` on every change to an
 # upstream file, and that marker list is the inventory an upstream merge is done
 # from. The guard anchors on a marker LINE rather than the bare token (prose
 # *about* the rule lives in .octorules and CLAUDE.md, which is how a 79%-missing
@@ -326,7 +328,7 @@ sensitive-norm-check:
 
 # ── remaining fork guards (TODO-02 / V-1) ────────────────────────────────────
 # OCTO-FORK: 四条守卫的 Makefile 接线（此前只有 CI 与本文件的注释声称它们在跑） — see
-# dev-docs-usdable/需求/20260911/TODO.md §TODO-02
+# the guard rollout
 #
 # These four scripts already existed on v1 with their unit tests, and
 # scripts/preflight.mjs already ran them at packaging time — so packaging was
@@ -367,8 +369,33 @@ release-config-check:
 	node scripts/release-config-guard.mjs
 	node --test scripts/release-config-guard.test.mjs
 
+# ── local developer entry points ─────────────────────────────────────────────
+# Node is checked before npm/Vite so an old system Node produces one actionable
+# diagnostic instead of a package-specific syntax error.
+node-check:
+	node scripts/node-version-guard.mjs
+	node --test scripts/node-version-guard.test.mjs
+
+# Keeps design references navigable without scanning vendored/upstream dev-docs.
+docs-ref-check: node-check
+	node scripts/docs-ref-guard.mjs
+	node --test scripts/docs-ref-guard.test.mjs
+
+# Commit-time checks are intentionally quick and deterministic. Full Go race,
+# package and web checks run in gate, which the push hook invokes.
+quick-check: node-check fmt-check docs-ref-check norms-check agents-check \
+	brand-check datapath-check marker-check sensitive-norm-check reuse-check \
+	server-diff-check release-profile-check
+	@echo "quick-check passed: format + documentation + fork guards."
+
+# Hooks live in the repository so their policy is reviewable. Git does not
+# activate a versioned hooks directory automatically; each clone opts in once.
+hooks-install:
+	git config core.hooksPath .githooks
+	@echo "Git hooks installed from .githooks (commit: quick-check; push: gate)."
+
 # gate is the single command a change must pass before it lands on v1. It is
-# dev-docs-usdable/需求/20260911/开发计划.md §1.2.2's local gate, which until now
+# the current implementation plan's local gate, which until now
 # was a list a human had to remember and re-issue by hand:
 #
 #   make test + make fmt-check + make vet + every *-check
@@ -385,7 +412,7 @@ release-config-check:
 # Scope note (§3.10): this gates the tree you are standing on, including
 # uncommitted edits. `V-61` was exactly a worktree-vs-committed-tree divergence,
 # so if you are about to land a merge, commit first and run it on the commit.
-gate: fmt-check vet test portable-check \
+gate: node-check fmt-check vet test portable-check \
       norms-check agents-check brand-check datapath-check marker-check \
       sensitive-norm-check reuse-check \
       server-diff-check release-profile-check release-config-check \
@@ -419,7 +446,7 @@ preflight-check:
 #
 # OCTO-FORK: the target platform joins the up-to-date judgement, and a staged
 # payload is verified before it is trusted — see V-108 in
-# dev-docs-usdable/需求/20260911/需求基线.md. Upstream's `rg-embed: $(RG_EMBED_BIN)`
+# the product baseline. Upstream's `rg-embed: $(RG_EMBED_BIN)`
 # was a pure file target: the payload path is the same for every platform, so
 # the *second* build for a different platform found the file present, skipped
 # the download, and embedded the first platform's binary. `make build` on a mac

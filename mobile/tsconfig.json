@@ -6,7 +6,7 @@
     "lib": ["ESNext", "DOM"],
     "strict": true,
     "skipLibCheck": true,
-    // OCTO-FORK: 移动端壳的品牌插值 — see dev-docs-usdable/开发规范.md §3.2
+    // OCTO-FORK: 移动端壳的品牌插值 — see the fork engineering norms §3.2
     "resolveJsonModule": true,
     "noEmit": true
   },

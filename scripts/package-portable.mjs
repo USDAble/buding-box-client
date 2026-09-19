@@ -2,7 +2,7 @@
 // directory (product exe + bundled tools + pre-filled data/ + bilingual usage
 // note) and zips it for the CI artifact. This is the product's primary
 // deliverable (需求 §5.1.1): the installer still builds but is no longer the
-// main output (see dev-docs-usdable/需求/2260906/技术方案/P12-便携打包.md).
+// main output (see the portable packaging design).
 //
 // Usage:
 //   node scripts/package-portable.mjs
@@ -36,7 +36,7 @@ const VERSION_PKG = 'github.com/open-octo/octo-agent/internal/version'
 const DEFAULT_VERSION = '0.0.0-dev'
 // Build tags for the packaged desktop binary. product_production selects the
 // immutable production profile; see the buildExe comment and
-// dev-docs-usdable/运行时Profile配置.md.
+// the runtime Profile boundary.
 export const BUILD_TAGS = 'embedrg product_production'
 // The pre-filled data/ files. The portable package ships an empty template so
 // the user can see and edit it (P12 §3.1).
@@ -546,7 +546,7 @@ async function buildExe({ root, brand, target, dest }) {
   const commit = process.env.COMMIT || gitShortHead(root)
   const ldflags = `-H windowsgui -X ${VERSION_PKG}.Version=${target.version} -X ${VERSION_PKG}.Commit=${commit}`
   // product_production selects the immutable production profile (see
-  // dev-docs-usdable/运行时Profile配置.md). Packaged artifacts are standard
+  // the runtime Profile boundary). Packaged artifacts are standard
   // production binaries; a distributor that omitted the tag would ship a
   // developer package with every production rejection disabled. Keep in sync
   // with release.yml / package-desktop-macos.sh / package-desktop-linux.sh;

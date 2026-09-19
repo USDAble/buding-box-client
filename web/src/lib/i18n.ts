@@ -747,7 +747,7 @@ export const en: Record<string, string> = {
   "settings.experimental.computer_use_desc": "Let the agent see and operate desktop apps directly — click, type, scroll, and read app interfaces — for software with no CLI or API",
   "settings.experimental.computer_use_hint": "macOS will ask for Screen Recording and Accessibility permissions on first use. Experimental feature — keep an eye on its actions while it works.",
   // OCTO-FORK: upstream's sentence names "Octo" twice; the product name is interpolated
-  // instead (硬规则 2, guarded by scripts/brand-guard.mjs) — see dev-docs-usdable/需求/2260906/品牌升级方案.md
+  // instead (硬规则 2, guarded by scripts/brand-guard.mjs) — see the brand-configuration boundary
   "settings.experimental.computer_use_hint_windows": "No system permission is needed, but apps running as administrator ignore input unless {brand} also runs as administrator. Experimental feature — keep an eye on its actions while it works.",
   "settings.update": "Updates",
   "settings.update_desc": "Check whether a newer version of {brand} is available.",
@@ -1023,7 +1023,7 @@ export const en: Record<string, string> = {
 
   // ── product gate / login form (P4) ─────────────────────────────────────────
   // OCTO-FORK: product-gate keys, absent upstream (P4-拦截页.md §7) — see
-  // dev-docs-usdable/需求/20260911/需求基线.md. Kept in one block at the tail of
+  // the product baseline. Kept in one block at the tail of
   // each dictionary so upstream merges collide at the tail rather than mid-file.
   "product.phone_label": "Phone number",
   "product.phone_placeholder": "Enter phone number",
@@ -1064,7 +1064,7 @@ export const en: Record<string, string> = {
   "product.legal_close": "Close",
   "product.plan_trial": "Trial",
   // OCTO-FORK: L-B2 / L-B3 blocked pages — see
-  // dev-docs-usdable/需求/2260906/技术方案/P4-拦截页.md §2/§3.
+  // the product access-control boundary §2/§3.
   //
   // Neither misconfiguration page names a host, a config file or a key format:
   // the user cannot change any of them, and naming one suggests a setting that
@@ -1087,7 +1087,7 @@ export const en: Record<string, string> = {
   // it without a way to reach it is the dead end this page exists to avoid.
   "product.tier.dismiss": "Got it",
   // OCTO-FORK: P5 account panel — see
-  // dev-docs-usdable/需求/2260906/技术方案/P5-个人中心.md.
+  // the account-center boundary.
   "product.panel.back": "Back",
   "product.panel.points_value": "{n} points",
   "product.panel.plan": "Plan",
@@ -1134,7 +1134,7 @@ export const en: Record<string, string> = {
   "product.panel.help.smartscreen": "If SmartScreen warns, choose “Run anyway”",
   "product.panel.help.docs_note": "More product help lives in the docs bundled with the program directory",
   // OCTO-FORK: P13 sensitive-word dictionary management — see
-  // dev-docs-usdable/需求/2260906/技术方案/P13-词库管理界面.md.
+  // the dictionary-management boundary.
   "product.dict.builtin": "Built-in words",
   "product.dict.user": "My words",
   "product.dict.count": "{n} items",
@@ -1153,18 +1153,18 @@ export const en: Record<string, string> = {
   "product.dict.sync_degraded_builtin": "Server dictionary update failed. Built-in and personal words remain active; retrying at the next login.",
   "product.dict.sync_recovered": "Server dictionary recovered to version {version}.",
   // OCTO-FORK: P6 hidden entries + credits — see
-  // dev-docs-usdable/需求/2260906/技术方案/P6-入口隐藏与积分.md.
+  // the approved navigation and credits boundary.
   "feature.not_available": "This entry isn't available in this version",
   // V-58 (PR-5d3) deleted `credits.insufficient`: the Composer no longer decides
   // "not enough points" locally (PQ8 — the platform's 402 decides), so
   // `turn_error.insufficient_credits` is the sentence that replaced it.
   // OCTO-FORK: P8 敏感词接入 — see
-  // dev-docs-usdable/需求/2260906/技术方案/P8-敏感词接入.md.
+  // the content-safety boundary.
   "sensitive.toggle": "Sensitive-word check",
   "sensitive.toggle_off_confirm": "Once off, your input is sent as-is. Model replies will still be filtered.",
   "sensitive.hit_notice": "Contains sensitive content. Sensitive words have been replaced — review and send again.",
   // OCTO-FORK: P9 模式与模型选择器 — see
-  // dev-docs-usdable/需求/2260906/技术方案/P9-模式与模型.md §5.
+  // the model-selection and confidential-session boundary §5.
   "catalog.no_models": "No models are currently available",
   "catalog.absent": "The model list has not been downloaded yet. Check your connection and try again.",
   "catalog.stale": "The model list needs an online update before you can send a message.",
@@ -2214,7 +2214,7 @@ export const zh: Record<string, string> = {
 
   // ── 产品门 / 登录表单（P4）────────────────────────────────────────────────
   // OCTO-FORK: 产品门新增键，上游没有（P4-拦截页.md §7）—— 见
-  // dev-docs-usdable/需求/20260911/需求基线.md。集中在每份字典末尾，让上游合并
+  // the product baseline。集中在每份字典末尾，让上游合并
   // 冲突只发生在尾部。
   "product.phone_label": "手机号",
   "product.phone_placeholder": "请输入手机号",
@@ -2255,7 +2255,7 @@ export const zh: Record<string, string> = {
   "product.legal_close": "关闭",
   "product.plan_trial": "体验版",
   // OCTO-FORK: L-B2 / L-B3 拦截页 —— 见
-  // dev-docs-usdable/需求/2260906/技术方案/P4-拦截页.md §2/§3
+  // the product access-control boundary §2/§3
   "product.blocked.unconfigured_title": "这个版本还没有配置服务地址",
   "product.blocked.unconfigured_body": "程序没有可连接的服务地址，登录无法完成。请向提供此程序目录的人索取已配置好的版本。",
   "product.blocked.no_keys_title": "当前版本无法验证服务下发的数据",
@@ -2266,7 +2266,7 @@ export const zh: Record<string, string> = {
   "product.tier.retry": "重试",
   "product.tier.dismiss": "知道了",
   // OCTO-FORK: P5 account panel — see
-  // dev-docs-usdable/需求/2260906/技术方案/P5-个人中心.md.
+  // the account-center boundary.
   "product.panel.back": "返回",
   "product.panel.points_value": "积分 {n}",
   "product.panel.plan": "套餐版本",
@@ -2313,7 +2313,7 @@ export const zh: Record<string, string> = {
   "product.panel.help.smartscreen": "若出现 SmartScreen 提示，请选择「仍要运行」",
   "product.panel.help.docs_note": "更多产品帮助见随程序目录提供的说明文档",
   // OCTO-FORK: P13 敏感词库管理 — see
-  // dev-docs-usdable/需求/2260906/技术方案/P13-词库管理界面.md.
+  // the dictionary-management boundary.
   "product.dict.builtin": "内置词",
   "product.dict.user": "我的词库",
   "product.dict.count": "{n} 条",
@@ -2332,17 +2332,17 @@ export const zh: Record<string, string> = {
   "product.dict.sync_degraded_builtin": "服务器词库更新失败，当前仅使用内置词和用户词；下次登录时重试。",
   "product.dict.sync_recovered": "服务器词库已恢复至版本 {version}。",
   // OCTO-FORK: P6 入口隐藏与积分 — see
-  // dev-docs-usdable/需求/2260906/技术方案/P6-入口隐藏与积分.md.
+  // the approved navigation and credits boundary.
   "feature.not_available": "本期不提供此入口",
   // V-58（PR-5d3）删掉了 `credits.insufficient`：输入框不再自己下「积分不足」的
   // 结论（PQ8 —— 由中台 402 决定），替代它的是上面的 `turn_error.insufficient_credits`。
   // OCTO-FORK: P8 敏感词接入 — see
-  // dev-docs-usdable/需求/2260906/技术方案/P8-敏感词接入.md.
+  // the content-safety boundary.
   "sensitive.toggle": "敏感词检测",
   "sensitive.toggle_off_confirm": "关闭后，输入将按原文发送。模型回复仍会过滤。",
   "sensitive.hit_notice": "包含敏感内容，已替换敏感词，确认后可再次发送。",
   // OCTO-FORK: P9 模式与模型选择器 — see
-  // dev-docs-usdable/需求/2260906/技术方案/P9-模式与模型.md §5.
+  // the model-selection and confidential-session boundary §5.
   "catalog.no_models": "当前暂无可用模型",
   "catalog.absent": "模型列表尚未下载，请检查网络后重试。",
   "catalog.stale": "模型列表需要联网更新后才能发送消息。",

@@ -143,7 +143,7 @@ test('a growing allowlist fails even when every marker is present', () => {
   }))
   const { problems } = analyzeMarkers({ examined: 10, missing: [], ceiling: 0, allowlisted })
   assert.equal(problems.length, 1)
-  assert.match(problems[0], /entries \(ceiling 6\)/)
+  assert.match(problems[0], /entries \(ceiling 7\)/)
   assert.match(problems[0], /§3\.7 stop-and-ask/)
 })
 

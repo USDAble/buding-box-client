@@ -1,4 +1,4 @@
-// OCTO-FORK: PR-4c 三条降级语义与条件刷新 — see dev-docs-usdable/需求/20260911/开发计划.md (§2 PR-4c).
+// OCTO-FORK: PR-4c 三条降级语义与条件刷新 — see the current implementation plan (§2 PR-4c).
 package productruntime
 
 import (

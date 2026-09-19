@@ -8,7 +8,7 @@
 // grow a second one, or the product could be showing a frozen screen while its
 // writers keep running.
 //
-// See dev-docs-usdable/需求/20260911/开发计划0911/ 的 L-E3（PR-7）与
+// See the desktop lifecycle design 的 L-E3（PR-7）与
 // P2-启动与生命周期.md §3.4.
 package main
 

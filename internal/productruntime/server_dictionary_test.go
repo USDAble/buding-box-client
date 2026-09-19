@@ -1,4 +1,4 @@
-// OCTO-FORK: L-D5 delta application nails — see dev-docs-usdable/需求/20260911/需求基线.md D5.
+// OCTO-FORK: L-D5 delta application nails — see the product baseline D5.
 package productruntime
 
 import (

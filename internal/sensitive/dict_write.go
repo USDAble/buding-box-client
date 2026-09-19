@@ -1,5 +1,5 @@
-// OCTO-FORK: P13 词库管理（原设计：dev-docs-usdable/需求/2260906/技术方案/P13-词库管理界面.md）
-// — 落地与复用判断见 dev-docs-usdable/需求/20260911/开发计划.md §2 `PR-6b2`。
+// OCTO-FORK: P13 词库管理（原设计：the dictionary-management boundary）
+// — 落地与复用判断见 the current implementation plan §2 `PR-6b2`。
 package sensitive
 
 import (

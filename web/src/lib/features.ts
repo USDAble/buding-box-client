@@ -8,7 +8,7 @@
 // adding an approved entry here leaves the implementation and direct routes
 // untouched.
 //
-// See dev-docs-usdable/需求/2260906/技术方案/P6-入口隐藏与积分.md §3.1-3.2.
+// See the approved navigation and credits boundary §3.1-3.2.
 
 /** Views with an approved navigation entry, in their callers' existing order. */
 export const NAVIGATION_VIEWS = ['chat', 'tasks', 'agents', 'skills', 'workflows', 'browser'] as const

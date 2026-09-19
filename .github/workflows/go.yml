@@ -2,7 +2,7 @@ name: Go
 
 on:
   push:
-    # OCTO-FORK: 把集成分支 v1 接进 CI — see dev-docs-usdable/需求/20260911/需求基线.md §5.6 `V-62`
+    # OCTO-FORK: 把集成分支 v1 接进 CI — see the product baseline §5.6 `V-62`
     #
     # v1 is the product integration branch and PRs land there by local merge
     # followed by a direct push — so without it here, no guard, no Go test and
@@ -23,7 +23,7 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  # OCTO-FORK: CI 守卫接线：新增 norms/brand/datapath/agents/server-diff 等 job — see dev-docs-usdable/开发规范.md §3.4
+  # OCTO-FORK: CI 守卫接线：新增 norms/brand/datapath/agents/server-diff 等 job — see the fork engineering norms §3.4
   # Guards branding/brand.json — the single source of truth for product identity
   # — and the generated copies that go:embed, Vite and Inno Setup read.
   #

@@ -1,5 +1,5 @@
 // OCTO-FORK: nails for the three product events that are not session-scoped —
-// see dev-docs-usdable/需求/20260911/开发计划.md §2 PR-8.
+// see the current implementation plan §2 PR-8.
 package server
 
 import (

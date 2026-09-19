@@ -1,4 +1,4 @@
-// OCTO-FORK: the client's catalog fetch and cache — see dev-docs-usdable/需求/20260911/开发计划.md (PR-4b).
+// OCTO-FORK: the client's catalog fetch and cache — see the current implementation plan (PR-4b).
 package productruntime
 
 import (

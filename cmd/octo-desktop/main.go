@@ -76,8 +76,8 @@ const hubAddr = "127.0.0.1:" + hubPort
 // webdist. OCTO_DESKTOP_DEV_URL is honoured only under a developer Profile, for
 // the shell + Vite hot-reload loop (`make web-dev` + `make desktop-dev`); a
 // production build ignores it, which is exactly what AllowDevWebview asserts at
-// Validate() time. See dev-docs-usdable/运行时Profile配置.md and
-// dev-docs-usdable/本地开发与运行.md §3.4.
+// Validate() time. See the runtime Profile boundary and
+// the local development boundary §3.4.
 func desktopWebviewURL() string {
 	if productprofile.Current().AllowDevWebview {
 		if dev := strings.TrimSpace(os.Getenv("OCTO_DESKTOP_DEV_URL")); dev != "" {
@@ -171,7 +171,7 @@ func homeIfRootLaunch(wd, home string) string {
 // which chdir'd into the user's home — the portable product pins to the
 // program directory (data root parent), matching the CLI.
 // OCTO-FORK: cwd is pinned to the program dir, not the host home — see
-// dev-docs-usdable/需求/2260906/技术方案/P1-便携数据根.md §3.3.
+// the portable data-root boundary §3.3.
 func ensureWorkingDir() {
 	dir, err := datapath.ProgramDir()
 	if err != nil {
@@ -359,7 +359,7 @@ func main() {
 	// OCTO-FORK: 便携交付物不做更新：原地写回整块不装配，于是 inplaceUpdate 恒为 false，
 	// 即便有路径调到 startUpdateFlow 也只会打开下载页、不会自我替换（需求 §5.1.2 第 13 条；
 	// 理由见 update.go 的 productUpdatesEnabled）。上游这段代码留在原地，只是到不了。
-	// — see dev-docs-usdable/需求/2260906/技术方案/P2-启动与生命周期.md §5（V-86）
+	// — see the desktop startup and lifecycle boundary §5（V-86）
 	if productUpdatesEnabled {
 		// Configure the in-place updater when this build can swap itself (bundled
 		// release build — see canInplaceUpdate). The flag routes the tray item and
@@ -436,7 +436,7 @@ func main() {
 		// OCTO-FORK: 便携交付物不做更新：定时自动检查整块不启动（需求 §5.1.2 第 13 条；
 		// 理由见 update.go 的 productUpdatesEnabled）。上游这个 goroutine 留在原地，只是
 		// 永远不被启动 —— 没有它就没有"新版本"通知，托盘的更新项也随之没有来源。
-		// — see dev-docs-usdable/需求/2260906/技术方案/P2-启动与生命周期.md §5（V-86）
+		// — see the desktop startup and lifecycle boundary §5（V-86）
 		if productUpdatesEnabled {
 			// Surface a newer release in the tray without the user asking: a delayed
 			// first check, then daily. Foreground-suppressed toasts don't matter here
@@ -454,7 +454,7 @@ func main() {
 	err := app.Run()
 
 	// OCTO-FORK: stop the data-root watchdog before the process tears down — see
-	// watchdog.go and dev-docs-usdable/需求/20260911/开发计划0911/ 的 L-E3.
+	// watchdog.go and the desktop lifecycle design 的 L-E3.
 	if wd := bridge.watchdog.Load(); wd != nil {
 		wd.Stop()
 	}
@@ -547,7 +547,7 @@ func startHub(app *application.App, bridge *nativeBridge, settings desktopSettin
 	// probe distinguishes "the path is not there" from "it is there but not
 	// writable" (需求20260906 §5.1.2 第 4 条).
 	// OCTO-FORK: portable-delivery boot gate — see
-	// dev-docs-usdable/需求/20260911/开发计划0911/ 的 L-E3. The free-space half
+	// the desktop lifecycle design 的 L-E3. The free-space half
 	// below is V-82.
 	root, err := datapath.Root()
 	if err != nil {
@@ -681,15 +681,15 @@ func startHub(app *application.App, bridge *nativeBridge, settings desktopSettin
 		DisableRestart: true,
 		// OCTO-FORK: our product routes and the built-in gateway's sender, both
 		// from one assembly so they share one credential holder — see
-		// mountProductAPI and dev-docs-usdable/需求/20260911/开发计划.md §PR-5a.
+		// mountProductAPI and the current implementation plan §PR-5a.
 		MountAPI: mountProduct,
 		// OCTO-FORK: the product gate's window identity — see
-		// dev-docs-usdable/需求/20260911/开发计划.md §PR-2b2b. Generated here
+		// the current implementation plan §PR-2b2b. Generated here
 		// because this runs before the first window is shown, which is what lets
 		// shellURL carry the token into that window's very first URL.
 		WindowToken: windowToken(),
 		// OCTO-FORK: gateway-bound models are served by the built-in gateway —
-		// see dev-docs-usdable/需求/20260911/开发计划.md §PR-5a. The prefix is
+		// see the current implementation plan §PR-5a. The prefix is
 		// what marks a model as the gateway's (PR-4c0); the factory is how a
 		// gateway-bound turn is actually served (PR-5a). With both injected,
 		// internal/server stops requiring a third-party endpoint at startup
@@ -697,7 +697,7 @@ func startHub(app *application.App, bridge *nativeBridge, settings desktopSettin
 		GatewayModelPrefix: productprofile.GatewayModelPrefix(),
 		GatewaySender:      gatewaySender,
 		// OCTO-FORK: the model source this build permits — see
-		// dev-docs-usdable/需求/20260911/开发计划.md §PR-5c. Both values are read
+		// the current implementation plan §PR-5c. Both values are read
 		// from the profile (their owner) rather than decided here, and they are
 		// what stops a production build from falling back to config.yml or the
 		// environment when the gateway cannot serve a turn (C9 规则 2, L-C5).
@@ -706,7 +706,7 @@ func startHub(app *application.App, bridge *nativeBridge, settings desktopSettin
 		RequireGateway:    profile.RequiresControlPlane(),
 		ControlPlaneReady: profile.ControlPlaneConfigured() && profile.HasTrustedKeys(),
 		// OCTO-FORK: a session whose catalog model was withdrawn — see
-		// dev-docs-usdable/需求/20260911/开发计划.md §PR-5e. The predicate is the
+		// the current implementation plan §PR-5e. The predicate is the
 		// runtime's own, so "which models exist" keeps one owner; the shell only
 		// forwards it.
 		CatalogOffers: catalogOffers,
@@ -715,13 +715,13 @@ func startHub(app *application.App, bridge *nativeBridge, settings desktopSettin
 		CatalogModel:               catalogModel,
 		PreferredConfidentialModel: preferredConfidentialModel,
 		// OCTO-FORK: the process's one compliance-word engine — see
-		// dev-docs-usdable/需求/20260911/开发计划.md §PR-6b1. Forwarded, not
+		// the current implementation plan §PR-6b1. Forwarded, not
 		// built here: the assembly above owns it, so the turn path and the
 		// product routes cannot end up on two dictionaries. nil (a build with no
 		// product) leaves internal/server to build its own.
 		SensitiveEngine: engine,
 		// OCTO-FORK: the server-side input gate (需求 D1, L-D1) — see
-		// dev-docs-usdable/需求/20260911/开发计划.md §PR-6b3. Forwarded for the
+		// the current implementation plan §PR-6b3. Forwarded for the
 		// same reason as the engine above: the verdict needs the user's switch
 		// (productstate) and the engine, both owned by the assembly, and
 		// internal/server must not hold either. nil (a build with no product, or
@@ -771,7 +771,7 @@ func startHub(app *application.App, bridge *nativeBridge, settings desktopSettin
 	// root that is already unusable never reaches here (see the startup check
 	// above, which fails closed instead).
 	// OCTO-FORK: arm the portable data-root watchdog — see
-	// dev-docs-usdable/需求/20260911/开发计划0911/ 的 L-E3.
+	// the desktop lifecycle design 的 L-E3.
 	if root, err := datapath.Root(); err == nil {
 		bridge.watchdog.Store(StartWatchdog(root, func() {
 			slog.Error("the data root is gone; writes are frozen", "root", root)
@@ -1006,7 +1006,7 @@ func buildTrayMenu(app *application.App, bridge *nativeBridge) *application.Menu
 	// update.go 的 productUpdatesEnabled）。上游这两个分支留在原地，只是永远走不到 ——
 	// 于是托盘上既没有"更新到 vX"也没有"检查更新…"，用户能看到的更新入口只剩个人中心里
 	// 那个「即将支持」占位（AccountPanel，PQ12 规定的形态）。
-	// — see dev-docs-usdable/需求/2260906/技术方案/P2-启动与生命周期.md §5（V-86）
+	// — see the desktop startup and lifecycle boundary §5（V-86）
 	if productUpdatesEnabled {
 		// A known-newer release replaces the "check" item with a one-click update
 		// (in-place when this build supports it, else the download page) — the

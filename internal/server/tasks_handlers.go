@@ -14,7 +14,7 @@ import (
 
 	"github.com/open-octo/octo-agent/internal/agent"
 	"github.com/open-octo/octo-agent/internal/channel"
-	// OCTO-FORK: 数据根：`~/.octo` → `<exe dir>/data`（硬规则 1） — see dev-docs-usdable/需求/2260906/技术方案/P1-便携数据根.md
+	// OCTO-FORK: 数据根：`~/.octo` → `<exe dir>/data`（硬规则 1） — see the portable data-root boundary
 	"github.com/open-octo/octo-agent/internal/datapath"
 	"github.com/open-octo/octo-agent/internal/permission"
 	"github.com/open-octo/octo-agent/internal/scheduler"
@@ -89,7 +89,7 @@ func (s *Server) initScheduler() {
 // task's run is a whole agent turn. What must not be negotiated is the part
 // that has already happened by then — Stop's first act ends scheduling, so no
 // new run starts either way.
-// OCTO-FORK: the join Scheduler.Stop never had — see dev-docs-usdable/需求/20260911/需求基线.md §5.6.
+// OCTO-FORK: the join Scheduler.Stop never had — see the product baseline §5.6.
 func (s *Server) stopScheduler(ctx context.Context) {
 	s.schedulerMu.Lock()
 	sch := s.scheduler

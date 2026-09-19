@@ -6,7 +6,7 @@
 //   - M3: interactive REPL + session persistence (this milestone)
 //
 // Tool use, skills, the web server, and IM bridges land in M4+.
-// See dev-docs/CATCHUP_PLAN.md for the wider plan.
+// See the current roadmap for the wider plan.
 package main
 
 import (
@@ -39,7 +39,7 @@ func run(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 	// (the common terminal launch).
 	shellpath.SyncToLoginShell()
 
-	// OCTO-FORK: 数据根：`~/.octo` → `<exe dir>/data`（硬规则 1） — see dev-docs-usdable/需求/2260906/技术方案/P1-便携数据根.md
+	// OCTO-FORK: 数据根：`~/.octo` → `<exe dir>/data`（硬规则 1） — see the portable data-root boundary
 	// Load data/serve.env for variables the launcher can't inherit (GUI /
 	// launchd / .desktop start with a minimal environment, missing the user's
 	// shell profile). Best-effort — a missing file is a no-op, and explicit

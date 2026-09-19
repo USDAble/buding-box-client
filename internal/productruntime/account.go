@@ -21,7 +21,7 @@
 // reported as a formatting mistake. No error is raised and the sentence is
 // wrong. 本地API契约 §2.2 records the identical trap for invalid_phone.
 //
-// OCTO-FORK: 本地新增路由（`PR-6b1`）— see dev-docs-usdable/需求/20260911/开发计划.md §PR-6b1.
+// OCTO-FORK: 本地新增路由（`PR-6b1`）— see the current implementation plan §PR-6b1.
 package productruntime
 
 import (

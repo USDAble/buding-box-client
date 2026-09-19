@@ -25,7 +25,7 @@ case "$(uname -m)" in
 	*) echo "unsupported host arch: $(uname -m) (expected x86_64 or aarch64)" >&2; exit 1 ;;
 esac
 OUT="$ROOT/Octo-$APPARCH.AppImage"
-# OCTO-FORK: 版本改走 internal/version（Makefile:34 明文禁止 `git describe`） — see dev-docs-usdable/需求/20260911/需求基线.md §5.6 V-103
+# OCTO-FORK: 版本改走 internal/version（Makefile:34 明文禁止 `git describe`） — see the product baseline §5.6 V-103
 # Same source as the macOS packager and the Makefile: internal/version/version.go
 # (Makefile:34 explains why `git describe` is not used — this repo's tags are
 # archive snapshots, so it yields `archive/base-…`, which is not a version). The
@@ -40,7 +40,7 @@ VERSION="${1:-$BASE_VERSION-dev}"
 VERSION="${VERSION#v}"
 COMMIT="$(git -C "$ROOT" rev-parse --short HEAD 2>/dev/null || echo unknown)"
 
-# OCTO-FORK: 便携交付物：打包脚本适配 — see dev-docs-usdable/需求/2260906/技术方案/P12-便携打包.md
+# OCTO-FORK: 便携交付物：打包脚本适配 — see the portable packaging design
 # Refuse to build a shipped artifact the fork guards reject (same preflight as
 # the macOS and portable packagers — see scripts/preflight.mjs).
 node "$ROOT/scripts/preflight.mjs"

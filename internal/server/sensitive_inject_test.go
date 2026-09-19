@@ -1,4 +1,4 @@
-// OCTO-FORK: 新增测试：引擎的注入缝（`PR-6b1`）— see dev-docs-usdable/需求/20260911/开发计划.md §PR-6b1
+// OCTO-FORK: 新增测试：引擎的注入缝（`PR-6b1`）— see the current implementation plan §PR-6b1
 package server
 
 import (

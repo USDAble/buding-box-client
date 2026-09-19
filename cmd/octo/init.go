@@ -56,7 +56,7 @@ func runInit(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 	cfg, err := config.Load()
 	if err != nil {
 		fmt.Fprintf(stderr, "octo init: %v\n", err)
-		// OCTO-FORK: 数据根：`~/.octo` → `<exe dir>/data`（硬规则 1） — see dev-docs-usdable/需求/2260906/技术方案/P1-便携数据根.md
+		// OCTO-FORK: 数据根：`~/.octo` → `<exe dir>/data`（硬规则 1） — see the portable data-root boundary
 		fmt.Fprintln(stderr, "Run `octo config` to rewrite data/config.yml.")
 		return 1
 	}

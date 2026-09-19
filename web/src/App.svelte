@@ -47,7 +47,7 @@
   // injects it into the webview URL, and every API/WS call from inside the
   // window must carry it back (P3 product gate). Runs at module init (before
   // onMount), so even the earliest gated call is already stamped. No-op outside
-  // the desktop shell. See dev-docs-usdable/需求/2260906/技术方案/P3-登录态与产品门.md.
+  // the desktop shell. See the product access-control boundary.
   adoptWindowToken()
 
   // The session on screen is read by definition — this is the only place the
@@ -90,7 +90,7 @@
   // dead end. The server sets productState.suppressOnboarding from config;
   // when it's true, treat key_setup as already-done and boot the main UI
   // directly. OCTO-FORK: P9 模式与模型选择器 — see
-  // dev-docs-usdable/需求/2260906/技术方案/P9-模式与模型.md §3.1.
+  // the model-selection and confidential-session boundary §3.1.
   let effectiveOnboardPhase = $derived(
     ($productState?.suppressOnboarding === true && $onboardPhase === 'key_setup')
       ? ''
@@ -188,7 +188,7 @@
     // in parallel with the auth probe below — the splash clears only when both
     // answers are in (P3 product gate). A plain browser short-circuits to
     // "ready" without a call. See
-    // dev-docs-usdable/需求/2260906/技术方案/P3-登录态与产品门.md.
+    // the product access-control boundary.
     refreshProductState()
     // The onboard-status read is issued alongside the auth probe rather than
     // after it, taking one serial round trip out of every cold start. checkAuth

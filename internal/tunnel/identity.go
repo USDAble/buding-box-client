@@ -33,7 +33,7 @@ func (i *Identity) PublicKeyBase64() string {
 	return base64.StdEncoding.EncodeToString(i.static.Public)
 }
 
-// OCTO-FORK: 数据根：`~/.octo` → `<exe dir>/data`（硬规则 1） — see dev-docs-usdable/需求/2260906/技术方案/P1-便携数据根.md
+// OCTO-FORK: 数据根：`~/.octo` → `<exe dir>/data`（硬规则 1） — see the portable data-root boundary
 // identityFile is the on-disk form of an Identity (data/tunnel.json).
 type identityFile struct {
 	TunnelID   string `json:"tunnel_id"`

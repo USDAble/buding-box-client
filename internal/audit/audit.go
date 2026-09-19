@@ -62,7 +62,7 @@ func NewAt(path string) *Logger {
 // defaultPath returns data/audit.log, or the empty string if the data root
 // cannot be resolved.
 // OCTO-FORK: the portable product keeps the audit log next to the executable,
-// not in the host home — see dev-docs-usdable/需求/2260906/技术方案/P1-便携数据根.md.
+// not in the host home — see the portable data-root boundary.
 func defaultPath() string {
 	p, err := datapath.Join("audit.log")
 	if err != nil {

@@ -386,7 +386,7 @@ func TestNewSender_UnknownProvider(t *testing.T) {
 }
 
 // OCTO-FORK: 未知流字段的报告必须有人装（`待解决问题.md` D-002 第 3 条 / `需求基线` V-90）
-// — see dev-docs-usdable/需求/20260911/中台接口清单.md §6.2
+// — see the control-plane contract §6.2
 //
 // The gateway installs this callback, so a stream chunk carrying a field this
 // build does not model (the 中台 gateway's `retract`, whose semantics are still

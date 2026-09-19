@@ -3,7 +3,7 @@ package main
 // OCTO-FORK: assembles this fork's product service into the desktop hub. The
 // whole product vocabulary for cmd/octo-desktop lives in this file so the diff
 // to upstream main.go stays at one line — see
-// dev-docs-usdable/需求/20260911/开发计划.md §PR-2b2a
+// the current implementation plan §PR-2b2a
 
 import (
 	"crypto/rand"

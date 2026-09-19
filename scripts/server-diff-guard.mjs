@@ -172,7 +172,7 @@ export const ROUTE_TABLE_CEILING = 2
 //       silently downgrades streaming, which is a worse defect than the one the
 //       wrapper would prevent.
 //   (c) the bulk was moved out first: the reasoning lives in
-//       dev-docs-usdable/需求/20260911/开发计划.md §PR-5e, and trimming the three
+//       the current implementation plan §PR-5e, and trimming the three
 //       comment blocks to pointers took the measured diff from 550 to 533 before
 //       the ceiling was touched (−17). The remaining 37 are not slack: they are
 //       the feature's floor for this file.

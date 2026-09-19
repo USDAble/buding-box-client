@@ -1,5 +1,5 @@
 // OCTO-FORK: the control plane's error envelope alongside OpenAI's — see
-// dev-docs-usdable/需求/20260911/开发计划.md §PR-5d3.
+// the current implementation plan §PR-5d3.
 package openai
 
 import (

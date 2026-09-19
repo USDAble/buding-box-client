@@ -22,7 +22,7 @@ func ResolveWorkspaceDir(raw string) (string, error) {
 		return expandHome(v), nil
 	}
 	// OCTO-FORK: the default workspace is data/workspace, not ~/Octo — see
-	// dev-docs-usdable/需求/2260906/技术方案/P1-便携数据根.md.
+	// the portable data-root boundary.
 	return datapath.Sub("workspace")
 }
 

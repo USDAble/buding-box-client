@@ -18,7 +18,7 @@ func groupTestServer(t *testing.T) *Server {
 	t.Helper()
 	tmp := t.TempDir()
 	t.Setenv("HOME", tmp)
-	// OCTO-FORK: 数据根：`~/.octo` → `<exe dir>/data`（硬规则 1） — see dev-docs-usdable/需求/2260906/技术方案/P1-便携数据根.md
+	// OCTO-FORK: 数据根：`~/.octo` → `<exe dir>/data`（硬规则 1） — see the portable data-root boundary
 	t.Setenv("OCTO_DATA_ROOT", tmp)
 	t.Setenv("USERPROFILE", tmp)
 	return mustServer(t, Config{Addr: "127.0.0.1:0", Tools: false})
@@ -625,7 +625,7 @@ func TestSessionCollapse_CoexistsWithGroupsAndPins(t *testing.T) {
 // a probe file into the root each time, so a reader resolving through it is a
 // writer in disguise.
 //
-// OCTO-FORK: read/write split of the registry path — see dev-docs-usdable/需求/20260911/需求基线.md §5.6.
+// OCTO-FORK: read/write split of the registry path — see the product baseline §5.6.
 func TestReadingTheRegistryCreatesNothing(t *testing.T) {
 	root := filepath.Join(t.TempDir(), "data") // deliberately absent
 	t.Setenv("OCTO_DATA_ROOT", root)

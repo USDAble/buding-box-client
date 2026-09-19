@@ -91,7 +91,7 @@ func (h *wsHub) run() {
 			h.mu.Unlock()
 			// OCTO-FORK: hand a window that connects *while* the data root is
 			// gone the freeze it cannot infer from past events — see
-			// dev-docs-usdable/需求/20260911/开发计划.md §2 PR-8.
+			// the current implementation plan §2 PR-8.
 			h.replayProductState(conn)
 
 		case conn := <-h.unregister:

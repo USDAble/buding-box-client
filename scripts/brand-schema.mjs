@@ -1,5 +1,5 @@
 // Validates branding/brand.json against the three structural rules that keep
-// brand values in the right bucket (see dev-docs-usdable/需求/2260906/品牌升级方案.md §2.5):
+// brand values in the right bucket (see the brand-configuration boundary §2.5):
 //
 //   A 本地化文案   product / about / copy   → locale map, zh-CN + en-US both present
 //   B 固定显示值   display                  → single string, never a locale map

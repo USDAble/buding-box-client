@@ -104,7 +104,7 @@ func renderToolCard(toolName string, input map[string]any, output string, isErr 
 		// link — same threshold the generic card path uses to decide whether
 		// to fold at all. Spilling every read unconditionally, even a 1-line
 		// read, would widen every file the agent touches into a plaintext
-		// OCTO-FORK: 数据根：`~/.octo` → `<exe dir>/data`（硬规则 1） — see dev-docs-usdable/需求/2260906/技术方案/P1-便携数据根.md
+		// OCTO-FORK: 数据根：`~/.octo` → `<exe dir>/data`（硬规则 1） — see the portable data-root boundary
 		// copy under data/tmp for no reason: nothing is hidden when the
 		// whole thing already fits in the one-liner.
 		if n > outputCardMaxLines {

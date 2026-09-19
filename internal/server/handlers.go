@@ -1277,7 +1277,7 @@ func (s *Server) runTurn(ctx context.Context, sess *agent.Session, userInput str
 // permissionConfigPath returns data/permissions.yml, or "" when the data root
 // can't be resolved.
 // OCTO-FORK: the portable product keeps permissions next to the executable,
-// not in the host home — see dev-docs-usdable/需求/2260906/技术方案/P1-便携数据根.md.
+// not in the host home — see the portable data-root boundary.
 func permissionConfigPath() string {
 	p, err := datapath.Join("permissions.yml")
 	if err != nil {

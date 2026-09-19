@@ -105,7 +105,7 @@ func TestRenderToolCard_ReadFileIsOneLiner(t *testing.T) {
 	}
 	// A read this small has nothing folded/hidden behind a link — spilling it
 	// to disk anyway would needlessly widen every file read into a plaintext
-	// OCTO-FORK: 数据根：`~/.octo` → `<exe dir>/data`（硬规则 1） — see dev-docs-usdable/需求/2260906/技术方案/P1-便携数据根.md
+	// OCTO-FORK: 数据根：`~/.octo` → `<exe dir>/data`（硬规则 1） — see the portable data-root boundary
 	// copy under data/tmp for no reason (#1097 review feedback).
 	if strings.Contains(got, "\x1b]8;;") {
 		t.Errorf("a short read should not spill to disk or link; got:\n%s", got)

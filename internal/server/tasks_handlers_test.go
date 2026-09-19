@@ -317,7 +317,7 @@ func TestCreateSession_EmptyAgentID_DefaultsToDefault(t *testing.T) {
 // does before waiting: it is the state a second shutdown would see, and the one
 // nothing can recover from.
 //
-// OCTO-FORK: fork-side fix, upstream left the scheduler running — see dev-docs-usdable/需求/20260911/需求基线.md §5.6.
+// OCTO-FORK: fork-side fix, upstream left the scheduler running — see the product baseline §5.6.
 func TestShutdownStopsTheScheduler(t *testing.T) {
 	srv := groupTestServer(t)
 	srv.initScheduler()

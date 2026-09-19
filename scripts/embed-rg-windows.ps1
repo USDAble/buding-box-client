@@ -30,7 +30,7 @@ $rg = Get-ChildItem -Path dl\rg -Recurse -Filter rg.exe | Select-Object -First 1
 Copy-Item $rg.FullName "$embedDir/rg" -Force
 # OCTO-FORK: drop the Makefile's rg-embed cache stamp, because this script just
 # replaced the payload without going through that target — see V-108 in
-# dev-docs-usdable/需求/20260911/需求基线.md. `make rg-embed` decides whether to
+# the product baseline. `make rg-embed` decides whether to
 # re-download from `<RG_VERSION> <GOOS>/<GOARCH>`; a stamp left over from a
 # different windows arch (this script can stage arm64 where make staged amd64)
 # would otherwise be read as "cache is current" over bytes that no longer match

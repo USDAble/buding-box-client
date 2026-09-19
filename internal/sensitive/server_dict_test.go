@@ -1,4 +1,4 @@
-// OCTO-FORK: L-D5 server dictionary acceptance nails — see dev-docs-usdable/需求/20260911/需求基线.md D4/D5.
+// OCTO-FORK: L-D5 server dictionary acceptance nails — see the product baseline D4/D5.
 package sensitive_test
 
 import (

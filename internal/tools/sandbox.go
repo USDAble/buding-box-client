@@ -179,7 +179,7 @@ func shellCommand(ctx context.Context, command string) (*exec.Cmd, error) {
 // for them — not an error.
 // bundledBinDir returns data/bin if it exists on disk, or "" otherwise.
 // OCTO-FORK: the portable product keeps helper binaries next to the executable,
-// not in the host home — see dev-docs-usdable/需求/2260906/技术方案/P1-便携数据根.md.
+// not in the host home — see the portable data-root boundary.
 func bundledBinDir() string {
 	dir, err := datapath.Join("bin")
 	if err != nil {

@@ -1,5 +1,5 @@
 // Package productruntime serves the local product API the web UI calls
-// (/api/product/*), defined by dev-docs-usdable/需求/20260911/本地API契约.md.
+// (/api/product/*), defined by the local product API contract.
 //
 // It sits between two contracts: browser-facing on this side, platform-facing on
 // the other (中台交付包.md). It holds no platform field names of its own - the

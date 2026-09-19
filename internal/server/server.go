@@ -118,7 +118,7 @@ type Config struct {
 	DisableRestart bool
 
 	// OCTO-FORK: mount point for this fork's product routes — see
-	// dev-docs-usdable/需求/20260911/开发计划.md §PR-2b2a
+	// the current implementation plan §PR-2b2a
 	//
 	// MountAPI, when non-nil, lets a build register extra routes without this
 	// package learning their names. It receives this server's authenticated
@@ -133,7 +133,7 @@ type Config struct {
 	MountAPI func(api func(pattern string, h http.HandlerFunc))
 
 	// OCTO-FORK: window token for this fork's product gate — see
-	// dev-docs-usdable/需求/20260911/开发计划.md §PR-2b2b
+	// the current implementation plan §PR-2b2b
 	//
 	// When non-empty, every route registered through Config.MountAPI additionally
 	// requires the caller to present this value in windowTokenHeader. It is the
@@ -152,7 +152,7 @@ type Config struct {
 	WindowToken string
 
 	// OCTO-FORK: the process's one compliance-word engine — see
-	// dev-docs-usdable/需求/20260911/开发计划.md §PR-6b1
+	// the current implementation plan §PR-6b1
 	//
 	// The engine is needed on both sides of a package boundary that must not be
 	// crossed: this package masks model output on the turn path, and
@@ -168,7 +168,7 @@ type Config struct {
 	SensitiveEngine *sensitive.Engine
 
 	// OCTO-FORK: the server-side input gate — see
-	// dev-docs-usdable/需求/20260911/开发计划.md §PR-6b3
+	// the current implementation plan §PR-6b3
 	//
 	// A browser check is skippable, so 需求 D1's substance — the check also runs
 	// where the frontend cannot bypass it — lands in this package, the only
@@ -192,7 +192,7 @@ type Config struct {
 	PersonalInfoTransform PersonalInfoTransform
 
 	// OCTO-FORK: gateway-bound model guard — see
-	// dev-docs-usdable/需求/20260911/开发计划.md §PR-4c0
+	// the current implementation plan §PR-4c0
 	//
 	// GatewayModelPrefix, when non-empty, is the composite-id prefix
 	// (productprofile.GatewayModelPrefix()) of the models this build serves from
@@ -279,7 +279,7 @@ type Config struct {
 	// the answer rather than re-deciding what "configured" means.
 	ControlPlaneReady bool
 	// OCTO-FORK: a session whose catalog model was withdrawn — see
-	// dev-docs-usdable/需求/20260911/开发计划.md §PR-5e
+	// the current implementation plan §PR-5e
 	//
 	// CatalogOffers answers, for a bare catalog id, whether the signed catalog this
 	// build holds still offers it — and whether that can be answered at all. The
@@ -1182,7 +1182,7 @@ func (s *Server) registerRoutes() {
 		// the same auth and cache policy as everything above, plus this fork's
 		// window gate (Config.WindowToken) and nothing else. The fork supplies the
 		// route table; this package never learns a product name — see
-		// dev-docs-usdable/需求/20260911/开发计划.md §PR-2b2a
+		// the current implementation plan §PR-2b2a
 		s.cfg.MountAPI(s.productAPI)
 	}
 	if s.cfg.Native != nil {
@@ -1961,7 +1961,7 @@ func (s *Server) effectiveCoauthor(cfg config.Config) bool {
 // breaking the turn.
 //
 // OCTO-FORK: 网关绑定模型的前置拦截 — see
-// dev-docs-usdable/需求/20260911/开发计划.md §PR-4c0
+// the current implementation plan §PR-4c0
 //
 // One case must NOT degrade, and it is not a refinement of the rule above but
 // the one exception to it: a model the catalog serves from the built-in gateway
@@ -1978,7 +1978,7 @@ func (s *Server) effectiveCoauthor(cfg config.Config) bool {
 // explicit check at each caller would state the rule four times and miss the
 // fifth path someone adds later (§3.8).
 // OCTO-FORK: 网关绑定的回合交给内置网关 — see
-// dev-docs-usdable/需求/20260911/开发计划.md §PR-5a
+// the current implementation plan §PR-5a
 //
 // PR-4c0 left the decision here and nothing else, so this is where PR-5a plugs
 // the gateway in: the same gatewayBound test that used to refuse now asks the
@@ -3193,7 +3193,7 @@ func (s *Server) validateAgentID(agentID string) error {
 
 // agentUserDir is the user-level profile directory (data/agents).
 // OCTO-FORK: the portable product keeps agents next to the executable, not in
-// the host home — see dev-docs-usdable/需求/2260906/技术方案/P1-便携数据根.md.
+// the host home — see the portable data-root boundary.
 func agentUserDir() string {
 	p, err := datapath.Join("agents")
 	if err != nil {

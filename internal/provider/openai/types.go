@@ -289,7 +289,7 @@ type streamChunk struct {
 }
 
 // OCTO-FORK: report chunk-level fields this client does not model instead of
-// dropping them in silence — see dev-docs-usdable/需求/20260911/待解决问题.md
+// dropping them in silence — see the recorded compatibility constraint
 // D-002.
 //
 // WHY THIS EXISTS. The control plane's gateway speaks OpenAI-compatible

@@ -5,7 +5,7 @@ name: Portable
 # note) and zips it for manual download. This is the product's primary
 # deliverable (需求 §5.1.1): the installer (windows-installer-check.yml /
 # release.yml) still builds but is no longer the main output. See
-# dev-docs-usdable/需求/2260906/技术方案/P12-便携打包.md.
+# the portable packaging design.
 #
 # The package-portable.mjs self-check asserts the exe name / VERSIONINFO /
 # GUI subsystem, the pre-filled data/, no dev residuals, no build-machine
@@ -14,7 +14,7 @@ name: Portable
 # leaves no new .octo data in the host home" acceptance item (§3.4).
 on:
   push:
-    # OCTO-FORK: 把集成分支 v1 接进 CI — see dev-docs-usdable/需求/20260911/需求基线.md §5.6 `V-110`
+    # OCTO-FORK: 把集成分支 v1 接进 CI — see the product baseline §5.6 `V-110`
     #
     # v1 is the product integration branch and PRs land there as a squash, so the
     # commit that lands is never the commit the PR leg built. This push trigger

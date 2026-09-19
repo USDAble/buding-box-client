@@ -9,7 +9,7 @@
 # A trailing "/" means the directory matches recursively. Blank lines and
 # lines starting with "#" are ignored. scripts/brand-guard.mjs reads this file
 # through scripts/datapath-guard.mjs's parser; keep the two in step. Each entry
-# must carry a written reason (see dev-docs-usdable/开发规范.md §3.2).
+# must carry a written reason (see the fork engineering norms §3.2).
 #
 # Not needed here: *.md (documents may name the product), _test.go and
 # *.test.* (a test pins the value it asserts), branding/ (the origin), and the
@@ -23,7 +23,7 @@
 # The two macOS package scripts already substitute a version token with `sed`
 # (packaging/macos/build.sh, scripts/package-desktop-macos.sh), so the fix is
 # to extend that token set and re-verify a real package build — tracked as V-81
-# in dev-docs-usdable/需求/20260911/需求基线.md §5.6. Removing an entry here is
+# in the product baseline §5.6. Removing an entry here is
 # what closing V-81 means.
 
 cmd/octo-desktop/build/darwin/Info.plist  V-81: CFBundleName/CFBundleDisplayName; plist has no build-time interpolation yet.

@@ -70,7 +70,7 @@ func runUpgrade(args []string, stdout, stderr io.Writer) int {
 }
 
 // runningServeDaemon reports the pid of a live backend registered in the
-// OCTO-FORK: 数据根：`~/.octo` → `<exe dir>/data`（硬规则 1） — see dev-docs-usdable/需求/2260906/技术方案/P1-便携数据根.md
+// OCTO-FORK: 数据根：`~/.octo` → `<exe dir>/data`（硬规则 1） — see the portable data-root boundary
 // shared data/serve.pid. The owner may be an `octo serve -d` daemon or the
 // desktop hub (which serves in-process from a different executable), and the
 // file can't tell them apart — messages built on this must hedge accordingly.

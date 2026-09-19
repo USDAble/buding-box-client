@@ -42,7 +42,7 @@ describe('globalKeyIntent', () => {
 })
 
 // OCTO-FORK: P5 account panel — see
-// dev-docs-usdable/需求/2260906/技术方案/P5-个人中心.md.
+// the account-center boundary.
 describe('dismissIntent', () => {
   it('bare Escape means overlay dismissal', () => {
     expect(dismissIntent({ key: 'Escape' })).toBe('overlay')

@@ -120,7 +120,7 @@ function main() {
 // from the generator's header rather than written into the output so that
 // \`npm run gen:icons\` cannot erase it; that is also why this file is not on
 // scripts/fork-marker-allowlist.txt.
-// — see dev-docs-usdable/上游合并策略.md
+// — see the upstream-merge policy
 import type { IconifyJSON } from 'iconify-icon'
 
 export const iconCollections: IconifyJSON[] = ${JSON.stringify(resolved)}

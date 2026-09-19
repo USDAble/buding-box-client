@@ -13,9 +13,9 @@ import (
 // on every upstream merge. internal/app is the fork's single Sender-assembly
 // layer, so the wrap belongs here.
 //
-// OCTO-FORK: P8 敏感词接入（原设计：dev-docs-usdable/需求/2260906/技术方案/
+// OCTO-FORK: P8 敏感词接入（原设计：the product design技术方案/
 // P8-敏感词接入.md §3.3）— 本轮装配与判据见
-// dev-docs-usdable/需求/20260911/开发计划.md §PR-6a。
+// the current implementation plan §PR-6a。
 
 // WrapSensitive wraps s so every visible text it returns is filtered through
 // e: buffered assistant text, streamed text deltas, tool-result text, and the

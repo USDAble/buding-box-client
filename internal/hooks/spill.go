@@ -188,7 +188,7 @@ func DrainSpill(deadline time.Duration) { sharedSpill.Drain(deadline) }
 
 // pendingDir returns data/hooks-pending, creating it if needed.
 // OCTO-FORK: the portable product keeps pending hooks next to the executable,
-// not in the host home — see dev-docs-usdable/需求/2260906/技术方案/P1-便携数据根.md.
+// not in the host home — see the portable data-root boundary.
 func pendingDir() string {
 	p, err := datapath.Sub("hooks-pending")
 	if err != nil {

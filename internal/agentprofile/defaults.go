@@ -28,7 +28,7 @@ const defaultStampFile = ".octo-version"
 // experts never touches a user's own saved agents. A var so tests can
 // redirect it.
 // OCTO-FORK: the portable product keeps agents next to the executable, not in
-// the host home — see dev-docs-usdable/需求/2260906/技术方案/P1-便携数据根.md.
+// the host home — see the portable data-root boundary.
 var defaultAgentsRoot = func() string {
 	p, err := datapath.Join("agents-default")
 	if err != nil {

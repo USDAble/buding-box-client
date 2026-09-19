@@ -80,7 +80,7 @@ func TestRunDoctor_MissingKeyIsProblem(t *testing.T) {
 
 func TestRunDoctor_UnparseableConfig(t *testing.T) {
 	home := doctorHome(t)
-	// OCTO-FORK: 数据根：`~/.octo` → `<exe dir>/data`（硬规则 1） — see dev-docs-usdable/需求/2260906/技术方案/P1-便携数据根.md
+	// OCTO-FORK: 数据根：`~/.octo` → `<exe dir>/data`（硬规则 1） — see the portable data-root boundary
 	dir := home
 	if err := os.MkdirAll(dir, 0o700); err != nil {
 		t.Fatal(err)

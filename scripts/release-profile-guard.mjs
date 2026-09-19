@@ -3,7 +3,7 @@
 // Guards the one rule that decides whether a packaged artifact is a real
 // product or an accidental developer build: every build of cmd/octo-desktop
 // that produces a **shipped** artifact must carry the `product_production`
-// build tag (dev-docs-usdable/运行时Profile配置.md §2).
+// build tag (the runtime Profile boundary §2).
 //
 // Why this needs a guard rather than review: the default branch of
 // internal/productprofile/profile_developer.go is `!product_production`, so a

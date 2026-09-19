@@ -125,7 +125,7 @@ func TestLatestVersion_DevBuildNeverNags(t *testing.T) {
 func TestVersionUpgradeMode(t *testing.T) {
 	tmp := t.TempDir()
 	t.Setenv("HOME", tmp)
-	// OCTO-FORK: 数据根：`~/.octo` → `<exe dir>/data`（硬规则 1） — see dev-docs-usdable/需求/2260906/技术方案/P1-便携数据根.md
+	// OCTO-FORK: 数据根：`~/.octo` → `<exe dir>/data`（硬规则 1） — see the portable data-root boundary
 	t.Setenv("OCTO_DATA_ROOT", tmp)
 	t.Setenv("USERPROFILE", tmp)
 
@@ -422,7 +422,7 @@ func TestLatestVersion_ConfigOptOut(t *testing.T) {
 	// tests, which share the one TestMain pins.
 	home := t.TempDir()
 	t.Setenv("HOME", home)
-	// OCTO-FORK: 数据根：`~/.octo` → `<exe dir>/data`（硬规则 1） — see dev-docs-usdable/需求/2260906/技术方案/P1-便携数据根.md
+	// OCTO-FORK: 数据根：`~/.octo` → `<exe dir>/data`（硬规则 1） — see the portable data-root boundary
 	// 上游那句 "Own HOME so the saved preference can't leak into the package's other tests,
 	// which share the one TestMain pins" 在本 fork 要靠 OCTO_DATA_ROOT 才成立：TestMain 钉住的
 	// 是它，只设 HOME 会让这份 preference 落进包级共享数据根。实测后果就在本文件里 —— 把
@@ -471,7 +471,7 @@ func TestLatestVersion_BrokenConfigKeepsOptOut(t *testing.T) {
 
 	home := t.TempDir()
 	t.Setenv("HOME", home)
-	// OCTO-FORK: 数据根：`~/.octo` → `<exe dir>/data`（硬规则 1） — see dev-docs-usdable/需求/2260906/技术方案/P1-便携数据根.md
+	// OCTO-FORK: 数据根：`~/.octo` → `<exe dir>/data`（硬规则 1） — see the portable data-root boundary
 	t.Setenv("OCTO_DATA_ROOT", home)
 	t.Setenv("USERPROFILE", home)
 	off := false
@@ -527,7 +527,7 @@ func TestRefreshLatestVersion_IgnoresConfigOptOut(t *testing.T) {
 
 	home := t.TempDir()
 	t.Setenv("HOME", home)
-	// OCTO-FORK: 数据根：`~/.octo` → `<exe dir>/data`（硬规则 1） — see dev-docs-usdable/需求/2260906/技术方案/P1-便携数据根.md
+	// OCTO-FORK: 数据根：`~/.octo` → `<exe dir>/data`（硬规则 1） — see the portable data-root boundary
 	t.Setenv("OCTO_DATA_ROOT", home)
 	t.Setenv("USERPROFILE", home)
 	off := false
@@ -568,7 +568,7 @@ func TestPutUpdateCheck_PersistsAndSilences(t *testing.T) {
 
 	home := t.TempDir()
 	t.Setenv("HOME", home)
-	// OCTO-FORK: 数据根：`~/.octo` → `<exe dir>/data`（硬规则 1） — see dev-docs-usdable/需求/2260906/技术方案/P1-便携数据根.md
+	// OCTO-FORK: 数据根：`~/.octo` → `<exe dir>/data`（硬规则 1） — see the portable data-root boundary
 	t.Setenv("OCTO_DATA_ROOT", home)
 	t.Setenv("USERPROFILE", home)
 

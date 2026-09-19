@@ -14,7 +14,7 @@
   // by character count — CJK/Latin mixes cut badly by count (P5 §4.1).
   //
   // OCTO-FORK: P5 account corner — see
-  // dev-docs-usdable/需求/2260906/技术方案/P5-个人中心.md.
+  // the account-center boundary.
 
   let { rail = false }: { rail?: boolean } = $props()
 

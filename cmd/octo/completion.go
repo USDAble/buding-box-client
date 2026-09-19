@@ -196,7 +196,7 @@ func sessionIDCandidates() []string {
 // completionHelp prints the user-facing instructions for `octo help
 // completion`. Kept here rather than in help.go so the strings sit next to
 // the scripts they reference.
-// OCTO-FORK: 数据根：`~/.octo` → `<exe dir>/data`（硬规则 1） — see dev-docs-usdable/需求/2260906/技术方案/P1-便携数据根.md
+// OCTO-FORK: 数据根：`~/.octo` → `<exe dir>/data`（硬规则 1） — see the portable data-root boundary
 func completionHelp(w io.Writer) {
 	fmt.Fprintln(w, strings.TrimSpace(`
 octo completion — print the shell-completion snippet for bash, zsh, fish, or powershell.

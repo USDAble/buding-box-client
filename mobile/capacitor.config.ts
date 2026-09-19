@@ -8,7 +8,7 @@ import { brandName } from './src/brand'
 // /api + /ws out to the remote octo serve.
 const config: CapacitorConfig = {
   appId: 'dev.octo.mobile',
-  // OCTO-FORK: 移动端壳的品牌插值 — see dev-docs-usdable/开发规范.md §3.2
+  // OCTO-FORK: 移动端壳的品牌插值 — see the fork engineering norms §3.2
   // appName lands in the generated native projects' Info.plist / strings.xml:
   // OS metadata that is never re-rendered when the UI language changes, so it
   // takes the fixed English name — the same choice brand.json's

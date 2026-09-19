@@ -7,7 +7,7 @@ import (
 )
 
 // TestMain neutralizes the default-skills root for the whole package so tests
-// OCTO-FORK: 技能文档改为数据根语义（`~/.octo/…` → `<data root>/…`） — see dev-docs-usdable/需求/2260906/技术方案/P1-便携数据根.md
+// OCTO-FORK: 技能文档改为数据根语义（`~/.octo/…` → `<data root>/…`） — see the portable data-root boundary
 // never read the real data/skills-default (which an installed binary
 // populates). Tests that exercise defaults opt in via useDefaultRoot.
 func TestMain(m *testing.M) {

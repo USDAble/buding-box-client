@@ -162,7 +162,7 @@ func detectOnboardPhase(flagProvider string) string {
 	// some identity set up, so don't nudge. (IdentityPath also finds the legacy
 	// uppercase SOUL.md/USER.md spellings.)
 	// OCTO-FORK: identity files live in the data root, not the host home — see
-	// dev-docs-usdable/需求/2260906/技术方案/P1-便携数据根.md.
+	// the portable data-root boundary.
 	root, err := datapath.Root()
 	if err == nil && identityMissing(root) {
 		return "soul_setup"

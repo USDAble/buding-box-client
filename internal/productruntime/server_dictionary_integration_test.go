@@ -1,4 +1,4 @@
-// OCTO-FORK: L-D5 signed server dictionary integration nails — see dev-docs-usdable/需求/20260911/需求基线.md D5.
+// OCTO-FORK: L-D5 signed server dictionary integration nails — see the product baseline D5.
 package productruntime_test
 
 import (

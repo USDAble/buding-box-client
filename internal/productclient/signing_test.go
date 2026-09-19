@@ -42,11 +42,12 @@ func policyBytes(t *testing.T, mutate func(*productclient.Policy)) []byte {
 		Catalog: productclient.Catalog{
 			Version: "2026-09-11.1",
 			TTLSec:  3600,
+			Vendors: []productclient.CatalogVendor{{ID: "buding"}},
 			Models: []productclient.CatalogModel{{
 				ID:          "buding-cloud-pro",
+				VendorID:    "buding",
 				DisplayName: productclient.DisplayName{Zh: "布丁专业版", En: "Pudding Pro"},
-				ModeIDs:     []string{"smart", "default"},
-				Transport:   "gateway",
+				Transport:   productclient.CatalogTransportGateway,
 				Eligible:    true,
 			}},
 		},
@@ -77,6 +78,43 @@ func verifyOpts(t *testing.T) productclient.VerifyOptions {
 		Audience:    testAudience,
 		Now:         testNow(),
 		Skew:        time.Minute,
+	}
+}
+
+func TestVerifyRejectsSemanticallyInvalidCatalogs(t *testing.T) {
+	priority := func(value int) *int { return &value }
+	tests := map[string]func(*productclient.Policy){
+		"unknown vendor": func(policy *productclient.Policy) {
+			policy.Catalog.Models[0].VendorID = "missing"
+		},
+		"duplicate vendor": func(policy *productclient.Policy) {
+			policy.Catalog.Vendors = append(policy.Catalog.Vendors, policy.Catalog.Vendors[0])
+		},
+		"duplicate model": func(policy *productclient.Policy) {
+			policy.Catalog.Models = append(policy.Catalog.Models, policy.Catalog.Models[0])
+		},
+		"unsupported transport": func(policy *productclient.Policy) {
+			policy.Catalog.Models[0].Transport = "provider-direct"
+		},
+		"ineligible confidential model": func(policy *productclient.Policy) {
+			policy.Catalog.Models[0].Eligible = false
+			policy.Catalog.Models[0].Confidential = true
+		},
+		"priority on ordinary model": func(policy *productclient.Policy) {
+			policy.Catalog.Models[0].ConfidentialPriority = priority(10)
+		},
+		"priority out of range": func(policy *productclient.Policy) {
+			policy.Catalog.Models[0].Confidential = true
+			policy.Catalog.Models[0].ConfidentialPriority = priority(productclient.MaxConfidentialPriority + 1)
+		},
+	}
+	for name, mutate := range tests {
+		t.Run(name, func(t *testing.T) {
+			envelope := signedEnvelope(t, policyBytes(t, mutate))
+			if _, err := envelope.Verify(verifyOpts(t)); !errors.Is(err, productclient.ErrPolicyMalformed) {
+				t.Fatalf("Verify error = %v, want ErrPolicyMalformed", err)
+			}
+		})
 	}
 }
 

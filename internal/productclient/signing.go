@@ -97,6 +97,9 @@ func (e PolicyEnvelope) Verify(opts VerifyOptions) (Policy, error) {
 	if err := verifyClaims(policy.KeyID, policy.Audience, policy.IssuedAt, policy.ExpiresAt, e.Signature, opts); err != nil {
 		return zero, err
 	}
+	if err := ValidateCatalog(policy.Catalog); err != nil {
+		return zero, err
+	}
 
 	return policy, nil
 }

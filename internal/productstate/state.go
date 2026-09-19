@@ -89,7 +89,6 @@ type Plan struct {
 type Prefs struct {
 	Locale              string `json:"locale"`
 	InputSensitiveCheck bool   `json:"inputSensitiveCheck"`
-	DefaultChatMode     string `json:"defaultChatMode"`
 }
 
 // State is the on-disk shape, one field per row of the E6.1 table.
@@ -269,16 +268,13 @@ func (s *Store) SetLocale(locale string) error {
 
 // SetPrefs stores the caller's preference changes. A nil pointer leaves that
 // preference alone.
-func (s *Store) SetPrefs(locale *string, inputSensitiveCheck *bool, defaultChatMode *string) error {
+func (s *Store) SetPrefs(locale *string, inputSensitiveCheck *bool) error {
 	return s.mutate(func(st *State) {
 		if locale != nil {
 			st.Prefs.Locale = *locale
 		}
 		if inputSensitiveCheck != nil {
 			st.Prefs.InputSensitiveCheck = *inputSensitiveCheck
-		}
-		if defaultChatMode != nil {
-			st.Prefs.DefaultChatMode = *defaultChatMode
 		}
 	})
 }

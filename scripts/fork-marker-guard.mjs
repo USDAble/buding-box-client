@@ -35,9 +35,10 @@
 //   - It does not judge whether a reason is *good* — only that a marker exists.
 //     A wrong-but-present reason is a review matter; the guard cannot read.
 //   - It does not decide the comment syntax. It accepts the introducers in
-//     MARKER_PATTERN, one of which works in every text format the fork
-//     touches. Formats that cannot hold a comment at all (binaries, generated
-//     lockfiles) are named in scripts/fork-marker-allowlist.txt with a reason.
+//     MARKER_PATTERN, one of which works in every comment-capable text format
+//     the fork touches. Formats that cannot hold a comment at all (binaries,
+//     generated lockfiles, JSON manifests) are named in the allowlist with a
+//     format-specific reason.
 //
 // Usage:
 //   node scripts/fork-marker-guard.mjs
@@ -64,11 +65,13 @@ import { MARKER_PATTERN } from './fork-marker.mjs'
 // marked, and a new one that is not fails immediately.
 export const MARKER_DEBT_CEILING = 0
 
+// OCTO-FORK: package manifests can carry a guarded runtime constraint but JSON
+// has no native comment syntax, so the exception remains explicit and capped.
 // The allowlist covers formats and generators that cannot carry a marker.
 // ALLOWLIST_CEILING is a second ratchet: adding an entry is a deliberate act,
 // and a file that could have carried a marker must not sneak in to dodge one.
 export const ALLOWLIST_PATH = 'scripts/fork-marker-allowlist.txt'
-export const ALLOWLIST_CEILING = 6
+export const ALLOWLIST_CEILING = 7
 
 // ─── pure analyzers (unit-tested) ───────────────────────────────────────────
 

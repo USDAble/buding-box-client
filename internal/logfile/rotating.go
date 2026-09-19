@@ -1,5 +1,5 @@
 // Package logfile provides a size-bounded, self-rotating log file for the
-// OCTO-FORK: 数据根：`~/.octo` → `<exe dir>/data`（硬规则 1） — see dev-docs-usdable/需求/2260906/技术方案/P1-便携数据根.md
+// OCTO-FORK: 数据根：`~/.octo` → `<exe dir>/data`（硬规则 1） — see the portable data-root boundary
 // backends that write data/serve.log directly with no service manager in
 // front of them: the desktop hub (in-process) and `octo serve -d`. systemd
 // users are unaffected — they capture stderr into the journal, which rotates

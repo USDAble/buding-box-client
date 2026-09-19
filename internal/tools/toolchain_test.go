@@ -33,7 +33,7 @@ func withIsolatedPath(t *testing.T) string {
 
 func TestDetectToolchain_PresentAndMissing(t *testing.T) {
 	dir := withIsolatedPath(t)
-	// OCTO-FORK: 数据根：`~/.octo` → `<exe dir>/data`（硬规则 1） — see dev-docs-usdable/需求/2260906/技术方案/P1-便携数据根.md
+	// OCTO-FORK: 数据根：`~/.octo` → `<exe dir>/data`（硬规则 1） — see the portable data-root boundary
 	withFakeHome(t) // isolate data/bin bundled fallback from the host
 	fakeExe(t, dir, "git")
 	fakeExe(t, dir, "node")

@@ -26,6 +26,7 @@ import (
 	"time"
 
 	"github.com/open-octo/octo-agent/internal/productclient"
+	"github.com/open-octo/octo-agent/internal/productphone"
 )
 
 // Fixture values. The BUDING-DEMO-* and BOX-DEMO-* strings are fixed ASCII data
@@ -94,9 +95,10 @@ type Server struct {
 	codes    map[string]codeFixture // activation code -> what it was issued with
 	used     map[string]string      // activation code -> account that consumed it
 	accounts map[string]*accountState
-	smsSent  map[string]string // phone -> login code
-	access   map[string]string // access token -> phone
-	refresh  map[string]string // refresh token -> phone
+	smsSent  map[string]string         // phone -> login code
+	access   map[string]string         // access token -> phone
+	refresh  map[string]string         // refresh token -> phone
+	feedback map[string]feedbackRecord // account + idempotency key -> accepted receipt
 
 	seq          int
 	refreshCount int
@@ -166,6 +168,11 @@ type Server struct {
 	// arrived rather than on what it hoped was sent.
 	lastToolNames []string
 	lastToolCalls []toolResultSeen
+}
+
+type feedbackRecord struct {
+	req     productclient.FeedbackRequest
+	receipt productclient.FeedbackData
 }
 
 // toolResultSeen is one role:"tool" message as the client sent it back: the
@@ -581,6 +588,7 @@ func New(opts ...Option) *Server {
 		smsSent:  map[string]string{},
 		access:   map[string]string{},
 		refresh:  map[string]string{},
+		feedback: map[string]feedbackRecord{},
 		now:      time.Now,
 	}
 	for _, opt := range opts {
@@ -618,6 +626,8 @@ func (s *Server) Handler() http.Handler {
 	// and the projection it feeds was written only by the login handler handing
 	// back the value it had just read off disk (V-28).
 	mux.HandleFunc("GET "+"/v1/credits/ledger", s.handleCreditsLedger)
+	mux.HandleFunc("POST "+"/v1/feedback", s.handleFeedback)
+	mux.HandleFunc("GET "+"/v1/box", s.handleBox)
 	// The built-in gateway half (需求基线 C1). It lives on the same stand-in as
 	// the control plane because the developer profile points both hosts at this
 	// one process (internal/productprofile/profiles/developer.json), and a
@@ -662,6 +672,9 @@ func (s *Server) ExpireAccessTokens() {
 func (s *Server) ClearBoxCode(phone string) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	if canonical, ok := productphone.Normalize(phone); ok {
+		phone = canonical
+	}
 	if acct := s.accounts[phone]; acct != nil {
 		acct.activation.BoxCode = ""
 	}
@@ -672,12 +685,13 @@ func (s *Server) handleSendSMS(w http.ResponseWriter, r *http.Request) {
 	if !decode(w, r, &req) {
 		return
 	}
-	if !validPhone(req.Phone) {
+	phone, ok := productphone.Normalize(req.Phone)
+	if !ok {
 		writeError(w, http.StatusBadRequest, productclient.CodeInvalidPhone, "phone")
 		return
 	}
 	s.mu.Lock()
-	s.smsSent[req.Phone] = FixtureSMSCode
+	s.smsSent[phone] = FixtureSMSCode
 	s.mu.Unlock()
 	writeData(w, http.StatusOK, productclient.SendSMSData{CooldownSec: 60, ExpiresInSec: 600})
 }
@@ -687,7 +701,8 @@ func (s *Server) handleLogin(w http.ResponseWriter, r *http.Request) {
 	if !decode(w, r, &req) {
 		return
 	}
-	if !validPhone(req.Phone) {
+	phone, ok := productphone.Normalize(req.Phone)
+	if !ok {
 		writeError(w, http.StatusBadRequest, productclient.CodeInvalidPhone, "phone")
 		return
 	}
@@ -695,6 +710,7 @@ func (s *Server) handleLogin(w http.ResponseWriter, r *http.Request) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
+	req.Phone = phone
 	sent, asked := s.smsSent[req.Phone]
 	if !asked {
 		writeError(w, http.StatusBadRequest, productclient.CodeCodeNotSent, "code")
@@ -936,6 +952,93 @@ func (s *Server) handleLogout(w http.ResponseWriter, r *http.Request) {
 	// (开发规范 §6.4.6 discipline 4: the stand-in only does what the contract can
 	// state, and an invention drifts the two apart silently).
 	writeData(w, http.StatusOK, nil)
+}
+
+// handleFeedback mirrors the small protected contract used by the desktop
+// feedback form. It holds only enough in-memory data to prove idempotency.
+func (s *Server) handleFeedback(w http.ResponseWriter, r *http.Request) {
+	var req productclient.FeedbackRequest
+	if !decode(w, r, &req) {
+		return
+	}
+	if !validFeedback(req) {
+		writeError(w, http.StatusBadRequest, productclient.CodeInvalidRequest, "")
+		return
+	}
+	key := r.Header.Get(productclient.HeaderIdempotencyKey)
+	if key == "" {
+		writeError(w, http.StatusBadRequest, productclient.CodeInvalidRequest, "")
+		return
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	phone, ok := s.access[bearer(r)]
+	if !ok {
+		writeError(w, http.StatusUnauthorized, productclient.CodeUnauthorized, "")
+		return
+	}
+	compoundKey := phone + "\x00" + key
+	normalizeFeedback(&req)
+	if existing, ok := s.feedback[compoundKey]; ok {
+		if existing.req != req {
+			writeError(w, http.StatusConflict, productclient.CodeIdempotencyConflict, "")
+			return
+		}
+		writeData(w, http.StatusOK, existing.receipt)
+		return
+	}
+	s.seq++
+	receipt := productclient.FeedbackData{
+		FeedbackID: fmt.Sprintf("fb_%03d", s.seq),
+		AcceptedAt: s.now().UTC().Format(time.RFC3339),
+	}
+	s.feedback[compoundKey] = feedbackRecord{req: req, receipt: receipt}
+	writeData(w, http.StatusOK, receipt)
+}
+
+func validFeedback(req productclient.FeedbackRequest) bool {
+	if req.Category != "bug" && req.Category != "suggestion" && req.Category != "other" {
+		return false
+	}
+	if req.Impact != "low" && req.Impact != "normal" && req.Impact != "high" {
+		return false
+	}
+	return strings.TrimSpace(req.Title) != "" && strings.TrimSpace(req.Content) != ""
+}
+
+func normalizeFeedback(req *productclient.FeedbackRequest) {
+	req.Title = strings.TrimSpace(req.Title)
+	req.Content = strings.TrimSpace(req.Content)
+	req.Reproduction = strings.TrimSpace(req.Reproduction)
+	req.Expected = strings.TrimSpace(req.Expected)
+	req.Contact = strings.TrimSpace(req.Contact)
+}
+
+// handleBox is a deterministic development fixture for the single-box contract.
+// It is served only by productstub/clienttest; production data always comes from
+// the central platform.
+func (s *Server) handleBox(w http.ResponseWriter, r *http.Request) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if _, ok := s.access[bearer(r)]; !ok {
+		writeError(w, http.StatusUnauthorized, productclient.CodeUnauthorized, "")
+		return
+	}
+	writeData(w, http.StatusOK, productclient.BoxData{
+		ID:              "box_demo_0001",
+		DisplayName:     "Development fixture box",
+		State:           "online",
+		BoundAt:         "2026-09-01T00:00:00Z",
+		LastSeenAt:      s.now().UTC().Format(time.RFC3339),
+		SoftwareVersion: "0.1.0-dev",
+		Management:      productclient.BoxManagement{CanView: true},
+		Capabilities: productclient.BoxCapabilities{
+			PrivateModels: productclient.BoxCapability{State: "available", Count: 1},
+			Tools:         productclient.BoxCapability{State: "coming_soon"},
+			Knowledge:     productclient.BoxCapability{State: "coming_soon"},
+			Automation:    productclient.BoxCapability{State: "coming_soon"},
+		},
+	})
 }
 
 func (s *Server) handleBootstrap(w http.ResponseWriter, r *http.Request) {
@@ -1440,20 +1543,6 @@ func bearer(r *http.Request) string {
 		return ""
 	}
 	return strings.TrimPrefix(value, prefix)
-}
-
-// validPhone accepts the mainland mobile shape the registry's invalid_phone
-// covers. It is deliberately shallow: the platform owns real validation.
-func validPhone(phone string) bool {
-	if len(phone) != 11 || phone[0] != '1' {
-		return false
-	}
-	for _, r := range phone {
-		if r < '0' || r > '9' {
-			return false
-		}
-	}
-	return true
 }
 
 func maskPhone(phone string) string {

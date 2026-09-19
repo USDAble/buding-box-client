@@ -17,7 +17,7 @@ MOD_DIR="$ROOT/cmd/octo-desktop"
 # keeps every packaging path (make target, CI job, direct invocation) aligned.
 node "$ROOT/scripts/preflight.mjs"
 
-# OCTO-FORK: 版本改走 internal/version（Makefile:34 明文禁止 `git describe`） — see dev-docs-usdable/需求/20260911/需求基线.md §5.6 V-103
+# OCTO-FORK: 版本改走 internal/version（Makefile:34 明文禁止 `git describe`） — see the product baseline §5.6 V-103
 # The version comes from internal/version/version.go, the single source the
 # Makefile names (see its comment at line 34). `git describe` was used here and
 # is deliberately avoided one directory up for a reason that applies doubly:

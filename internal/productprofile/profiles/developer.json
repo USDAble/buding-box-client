@@ -8,11 +8,5 @@
   "gatewayHost": "http://127.0.0.1:8788",
   "trustedKeyIDs": {
     "dev-policy-2026-a": "KP/trCGfSmkwfEv39GqO5WqqUDMMQELhl6YakhdE/90="
-  },
-  "startup": {
-    "channels": true,
-    "tools": true,
-    "mcp": true,
-    "backgroundTasks": true
   }
 }

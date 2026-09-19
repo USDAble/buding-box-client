@@ -92,17 +92,6 @@ func GatewayModelPrefix() string {
 	return GatewayEndpointID + "::"
 }
 
-// Startup records whether an existing runtime capability is available to the
-// desktop build. It is not a visibility or authorization policy: P0 keeps the
-// existing channel, tool, MCP, and background implementations intact, while
-// productpolicy later governs UI visibility and PEP decisions.
-type Startup struct {
-	Channels        bool `json:"channels"`
-	Tools           bool `json:"tools"`
-	MCP             bool `json:"mcp"`
-	BackgroundTasks bool `json:"backgroundTasks"`
-}
-
 // Profile is the immutable, build-selected product runtime configuration.
 // Dynamic control-plane data intentionally does not belong here.
 //
@@ -121,7 +110,6 @@ type Profile struct {
 	APIHost                     string            `json:"apiHost"`
 	GatewayHost                 string            `json:"gatewayHost"`
 	TrustedKeyIDs               map[string]string `json:"trustedKeyIDs"`
-	Startup                     Startup           `json:"startup"`
 }
 
 var (

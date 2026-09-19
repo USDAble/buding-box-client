@@ -13,7 +13,6 @@
   import { installExternalLinkInterceptor } from './lib/externalLinks'
   import { startNativeHeartbeat } from './lib/nativeHeartbeat'
   import { normalizeHash, hashPicksChatTarget } from './lib/hashRouting'
-  import { viewHidden } from './lib/features'
   import { pruneSessions } from './lib/genui/panel-state'
   import { onTurnEnded as onDiffTurnEnded, resetDiff } from './lib/diff'
   import { globalKeyIntent } from './lib/globalKeys'
@@ -48,7 +47,7 @@
   // injects it into the webview URL, and every API/WS call from inside the
   // window must carry it back (P3 product gate). Runs at module init (before
   // onMount), so even the earliest gated call is already stamped. No-op outside
-  // the desktop shell. See dev-docs-usdable/需求/2260906/技术方案/P3-登录态与产品门.md.
+  // the desktop shell. See the product access-control boundary.
   adoptWindowToken()
 
   // The session on screen is read by definition — this is the only place the
@@ -91,7 +90,7 @@
   // dead end. The server sets productState.suppressOnboarding from config;
   // when it's true, treat key_setup as already-done and boot the main UI
   // directly. OCTO-FORK: P9 模式与模型选择器 — see
-  // dev-docs-usdable/需求/2260906/技术方案/P9-模式与模型.md §3.1.
+  // the model-selection and confidential-session boundary §3.1.
   let effectiveOnboardPhase = $derived(
     ($productState?.suppressOnboarding === true && $onboardPhase === 'key_setup')
       ? ''
@@ -189,7 +188,7 @@
     // in parallel with the auth probe below — the splash clears only when both
     // answers are in (P3 product gate). A plain browser short-circuits to
     // "ready" without a call. See
-    // dev-docs-usdable/需求/2260906/技术方案/P3-登录态与产品门.md.
+    // the product access-control boundary.
     refreshProductState()
     // The onboard-status read is issued alongside the auth probe rather than
     // after it, taking one serial round trip out of every cold start. checkAuth
@@ -248,18 +247,6 @@
     writeLastRoute(v, sid)
   })
 
-  // P6: a hidden view can still be reached via a hand-typed #/mcp or a stale
-  // last-route entry (Sidebar already filters it out of navigation). Bounce it
-  // back to chat and tell the user why, rather than silently resetting them.
-  // OCTO-FORK: P6 入口隐藏 — see
-  // dev-docs-usdable/需求/2260906/技术方案/P6-入口隐藏与积分.md.
-  $effect(() => {
-    if (viewHidden($view)) {
-      view.set('chat')
-      showToast($t('feature.not_available'))
-    }
-  })
-
   function bootMain() {
     ws.connect()
 
@@ -298,7 +285,6 @@
               show_reasoning: typeof ev.show_reasoning === 'boolean' ? ev.show_reasoning : s.show_reasoning,
               permission_mode: typeof ev.permission_mode === 'string' ? ev.permission_mode : s.permission_mode,
               reasoning_effort: typeof ev.reasoning_effort === 'string' ? ev.reasoning_effort : s.reasoning_effort,
-              chat_mode: typeof ev.chat_mode === 'string' ? ev.chat_mode : s.chat_mode,
             }
           : s
         )

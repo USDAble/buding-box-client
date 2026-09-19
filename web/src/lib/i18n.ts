@@ -490,6 +490,67 @@ export const en: Record<string, string> = {
   "settings.data.delete_selected_partial": "{n} could not be deleted",
   "settings.data.archived_no_match": "No archived tasks match this search or filter.",
   "settings.about": "About",
+  "settings.help": "Help & feedback",
+  "settings.box": "My box",
+  "settings.box.title": "My box",
+  "settings.box.desc": "View the private capabilities authorised for the box bound to this account.",
+  "settings.box.loading": "Loading box information…",
+  "settings.box.refresh": "Refresh",
+  "settings.box.refreshing": "Refreshing…",
+  "settings.box.unavailable_title": "Box information is unavailable",
+  "settings.box.unavailable_desc": "Check your connection and try again. This does not mean that your box is offline.",
+  "settings.box.bound_at": "Bound on",
+  "settings.box.last_seen": "Last seen",
+  "settings.box.version": "Box software",
+  "settings.box.capabilities": "Private capabilities",
+  "settings.box.notice": "For your security, this page never shows activation codes, local addresses, device serials, logs, or credentials.",
+  "settings.box.state.online": "Online",
+  "settings.box.state.offline": "Offline",
+  "settings.box.state.degraded": "Needs attention",
+  "settings.box.state.attention": "Needs attention",
+  "settings.box.state.unknown": "Status unknown",
+  "settings.box.capability.privateModels": "Private models",
+  "settings.box.capability.tools": "Tools",
+  "settings.box.capability.knowledge": "Knowledge",
+  "settings.box.capability.automation": "Automation",
+  "settings.box.capability_state.available": "Available · {n}",
+  "settings.box.capability_state.unavailable": "Not available",
+  "settings.box.capability_state.coming_soon": "Coming soon",
+  "settings.help.title": "Help & support",
+  "settings.help.subtitle": "Quick answers and a direct way to share product feedback.",
+  "settings.help.guides": "Help center",
+  "settings.help.full": "Full help",
+  "settings.help.faq_title": "Frequently asked questions",
+  "settings.help.models_q": "How do I choose or change a model?",
+  "settings.help.models_a": "Use the model picker in the chat composer before sending a message. A private session can only use a model marked private.",
+  "settings.help.personal_q": "What does personal-information protection do?",
+  "settings.help.personal_a": "When enabled for a new chat, supported personal information is replaced before the message is sent and the chat shows that it was protected.",
+  "settings.help.private_q": "What is a private session?",
+  "settings.help.private_a": "A private session requires a private model. If no eligible model is available, the chat cannot be sent until you select one.",
+  "settings.help.unavailable_q": "What should I do when a model or the network is unavailable?",
+  "settings.help.unavailable_a": "Check your connection, then retry or choose another available model. Your unsent message remains in the composer.",
+  "settings.help.box_q": "What can my box do?",
+  "settings.help.box_a": "A bound box can make private models available. More private capabilities will appear here only after the service authorises them.",
+  "settings.help.feedback_title": "Send feedback",
+  "settings.help.feedback_notice": "Only the category and text you enter here are sent. Chat content and diagnostics are not attached.",
+  "settings.help.feedback_category": "Category",
+  "settings.help.feedback_title_label": "Title",
+  "settings.help.feedback_impact": "Impact",
+  "settings.help.feedback_impact_low": "Low",
+  "settings.help.feedback_impact_normal": "Normal",
+  "settings.help.feedback_impact_high": "High",
+  "settings.help.feedback_reproduction": "How can we reproduce it? (optional)",
+  "settings.help.feedback_expected": "What did you expect? (optional)",
+  "settings.help.feedback_contact": "Contact details for follow-up (optional)",
+  "settings.help.feedback_bug": "Problem",
+  "settings.help.feedback_suggestion": "Suggestion",
+  "settings.help.feedback_other": "Other",
+  "settings.help.feedback_content": "Feedback",
+  "settings.help.feedback_submit": "Send feedback",
+  "settings.help.feedback_length": "Enter a 1–120 character title and 1–4,000 character description; optional fields have their stated limits.",
+  "settings.help.feedback_failed": "Feedback could not be sent. Your text is still here; please try again.",
+  "settings.help.feedback_sent": "Sent. Receipt: {id}",
+  "settings.help.website_soon": "The official website is coming soon.",
   "settings.about.version_desc": "Currently installed {brand} version",
   "settings.about.firstrun": "First-run Setup",
   "settings.about.firstrun_desc": "Re-run the welcome and configuration wizard",
@@ -597,6 +658,49 @@ export const en: Record<string, string> = {
   "composer.session_agent": "Expert bound to this session (locked after the first turn)",
   "composer.assign_agent": "Assign agent — changeable until this session's first turn",
   "composer.manage_models": "Manage models in Settings…",
+  "model.confidential": "Private",
+  "privacy.security_title": "Safety & privacy",
+  "privacy.content_safety_desc": "Checks message text; output protection stays on.",
+  "privacy.personal_info": "Personal information protection",
+  "privacy.personal_info_desc": "Mask supported personal data before sending.",
+  "privacy.private_session": "Private session",
+  "privacy.private_session_desc": "Use private models only for this session.",
+  "privacy.private_session_banner": "Private session · Private models only",
+  "privacy.output_protection": "Output and nickname protection",
+  "privacy.always_on": "Always on",
+  "privacy.locked_after_start": "Locked after the first accepted message",
+  "privacy.private_model_required": "A private session can only use a private model.",
+  "privacy.private_model_ordinary": "A private model is selected; this is still a regular session.",
+  "privacy.no_private_model": "No private model is currently available.",
+  "privacy.auto_switched": "Switched to private model: {model}",
+  "privacy.applied": "Masked {count} personal-data item(s): {categories}",
+  "privacy.attachments_not_scanned": "Attachment contents are not automatically masked in this release.",
+  "privacy.transform_failed": "Personal information protection failed. Please retry.",
+  "settings.safety": "Safety & privacy",
+  "settings.safety.personal_rules": "Personal-information rules",
+  "settings.safety.dictionary": "Sensitive-word library",
+  "settings.safety.personal_rules_desc": "Built-in rules mask supported personal data before it is stored or sent to a model.",
+  "settings.safety.rules_scope": "New conversations enable this protection by default. Change it for a conversation in the composer before its first accepted message.",
+  "settings.safety.rules_version": "Rule set {version}",
+  "settings.safety.rules_readonly": "Built-in rules are read-only and cannot be switched individually.",
+  "settings.safety.rules_loading": "Loading built-in rules…",
+  "settings.safety.rules_unavailable": "Built-in rules could not be loaded. Protection still remains enforced on the sending path.",
+  "settings.safety.dictionary_desc": "Manage your custom sensitive words. Built-in words remain read-only.",
+  "settings.account": "Account",
+  "settings.account.nickname_desc": "The name shown in the account corner.",
+  "settings.account.phone_desc": "Your phone number is always shown in masked form.",
+  "settings.account.license_desc": "Authorization information for this device.",
+  "settings.account.security": "Account security",
+  "settings.account.signout_desc": "Signing out is kept here to avoid accidental account changes from the quick panel.",
+  "privacy.category.cn_resident_id": "resident ID",
+  "privacy.category.cn_mobile": "mobile number",
+  "privacy.category.email": "email",
+  "privacy.category.bank_card": "bank card",
+  "privacy.category.vin": "VIN",
+  "privacy.category.ip_address": "IP address",
+  "privacy.category.pem_private_key": "private key",
+  "privacy.category.secret_token": "access credential",
+  "privacy.category.sms_otp": "verification code",
   "tools.title.read_file": "Read file",
   "tools.title.write_file": "Write file",
   "tools.title.edit_file": "Edit file",
@@ -704,7 +808,7 @@ export const en: Record<string, string> = {
   "settings.experimental.computer_use_desc": "Let the agent see and operate desktop apps directly — click, type, scroll, and read app interfaces — for software with no CLI or API",
   "settings.experimental.computer_use_hint": "macOS will ask for Screen Recording and Accessibility permissions on first use. Experimental feature — keep an eye on its actions while it works.",
   // OCTO-FORK: upstream's sentence names "Octo" twice; the product name is interpolated
-  // instead (硬规则 2, guarded by scripts/brand-guard.mjs) — see dev-docs-usdable/需求/2260906/品牌升级方案.md
+  // instead (硬规则 2, guarded by scripts/brand-guard.mjs) — see the brand-configuration boundary
   "settings.experimental.computer_use_hint_windows": "No system permission is needed, but apps running as administrator ignore input unless {brand} also runs as administrator. Experimental feature — keep an eye on its actions while it works.",
   "settings.update": "Updates",
   "settings.update_desc": "Check whether a newer version of {brand} is available.",
@@ -838,6 +942,7 @@ export const en: Record<string, string> = {
   "settings.endpoints.api_key.optional": "None (optional)",
   "settings.endpoints.models": "Models",
   "settings.endpoints.models.vision": "Vision",
+  "settings.endpoints.models.confidential": "Confidential model",
   "settings.endpoints.badge.default": "Default",
   "settings.endpoints.badge.lite": "Lite",
   "chat.describing_image": "Describing {name} with the vision helper…",
@@ -979,10 +1084,10 @@ export const en: Record<string, string> = {
 
   // ── product gate / login form (P4) ─────────────────────────────────────────
   // OCTO-FORK: product-gate keys, absent upstream (P4-拦截页.md §7) — see
-  // dev-docs-usdable/需求/20260911/需求基线.md. Kept in one block at the tail of
+  // the product baseline. Kept in one block at the tail of
   // each dictionary so upstream merges collide at the tail rather than mid-file.
   "product.phone_label": "Phone number",
-  "product.phone_placeholder": "Enter phone number",
+  "product.phone_placeholder": "Enter phone number with country code",
   "product.code_label": "Verification code",
   "product.code_placeholder": "6-digit code",
   "product.send_code": "Send code",
@@ -1000,7 +1105,7 @@ export const en: Record<string, string> = {
   "product.submit_login": "Log in",
   "product.switch_to_activate": "Have an activation code? Activate",
   "product.submitting": "Logging in…",
-  "product.err_phone": "Enter a valid phone number",
+  "product.err_phone": "Enter a valid international phone number",
   "product.err_code": "Enter the 6-digit code",
   "product.err_nickname": "Nickname format is invalid",
   "product.err_nickname_sensitive": "Nickname contains sensitive content",
@@ -1020,7 +1125,7 @@ export const en: Record<string, string> = {
   "product.legal_close": "Close",
   "product.plan_trial": "Trial",
   // OCTO-FORK: L-B2 / L-B3 blocked pages — see
-  // dev-docs-usdable/需求/2260906/技术方案/P4-拦截页.md §2/§3.
+  // the product access-control boundary §2/§3.
   //
   // Neither misconfiguration page names a host, a config file or a key format:
   // the user cannot change any of them, and naming one suggests a setting that
@@ -1043,10 +1148,7 @@ export const en: Record<string, string> = {
   // it without a way to reach it is the dead end this page exists to avoid.
   "product.tier.dismiss": "Got it",
   // OCTO-FORK: P5 account panel — see
-  // dev-docs-usdable/需求/2260906/技术方案/P5-个人中心.md.
-  "product.mode.privacy": "Privacy",
-  "product.mode.smart": "Smart",
-  "product.mode.default": "Default",
+  // the account-center boundary.
   "product.panel.back": "Back",
   "product.panel.points_value": "{n} points",
   "product.panel.plan": "Plan",
@@ -1054,6 +1156,7 @@ export const en: Record<string, string> = {
   "product.panel.license": "License",
   "product.panel.sensitive_library": "Sensitive-word library",
   "product.panel.help": "Help & feedback",
+  "product.panel.box": "My box",
   "product.panel.check_updates": "Check for updates",
   "product.panel.about": "About",
   "product.panel.soon": "Coming soon",
@@ -1078,10 +1181,11 @@ export const en: Record<string, string> = {
   "product.panel.nickname": "Nickname",
   "product.panel.phone": "Phone",
   "product.panel.language": "Language",
-  "product.panel.default_mode": "Default mode for new sessions",
-  "product.panel.default_mode_note": "Used when you start a new session; you can still switch within a conversation",
   "product.panel.full_settings": "Open full settings",
   "product.panel.nickname_saved": "Nickname updated",
+  "product.panel.manage_account": "Manage account",
+  "product.panel.safety_privacy": "Safety & privacy",
+  "product.panel.feedback_unavailable": "Help and feedback channel is not configured yet.",
   "product.panel.help.test_code": "Test verification code: 123456",
   "product.panel.help.test_activation": "Test activation code (USB drive): BUDING-DEMO-0001",
   "product.panel.help.test_box_code": "Test box code: BOX-DEMO-0001",
@@ -1092,7 +1196,7 @@ export const en: Record<string, string> = {
   "product.panel.help.smartscreen": "If SmartScreen warns, choose “Run anyway”",
   "product.panel.help.docs_note": "More product help lives in the docs bundled with the program directory",
   // OCTO-FORK: P13 sensitive-word dictionary management — see
-  // dev-docs-usdable/需求/2260906/技术方案/P13-词库管理界面.md.
+  // the dictionary-management boundary.
   "product.dict.builtin": "Built-in words",
   "product.dict.user": "My words",
   "product.dict.count": "{n} items",
@@ -1111,27 +1215,24 @@ export const en: Record<string, string> = {
   "product.dict.sync_degraded_builtin": "Server dictionary update failed. Built-in and personal words remain active; retrying at the next login.",
   "product.dict.sync_recovered": "Server dictionary recovered to version {version}.",
   // OCTO-FORK: P6 hidden entries + credits — see
-  // dev-docs-usdable/需求/2260906/技术方案/P6-入口隐藏与积分.md.
+  // the approved navigation and credits boundary.
   "feature.not_available": "This entry isn't available in this version",
   // V-58 (PR-5d3) deleted `credits.insufficient`: the Composer no longer decides
   // "not enough points" locally (PQ8 — the platform's 402 decides), so
   // `turn_error.insufficient_credits` is the sentence that replaced it.
   // OCTO-FORK: P8 敏感词接入 — see
-  // dev-docs-usdable/需求/2260906/技术方案/P8-敏感词接入.md.
+  // the content-safety boundary.
   "sensitive.toggle": "Sensitive-word check",
   "sensitive.toggle_off_confirm": "Once off, your input is sent as-is. Model replies will still be filtered.",
   "sensitive.hit_notice": "Contains sensitive content. Sensitive words have been replaced — review and send again.",
   // OCTO-FORK: P9 模式与模型选择器 — see
-  // dev-docs-usdable/需求/2260906/技术方案/P9-模式与模型.md §5.
-  "mode.privacy": "Privacy",
-  "mode.smart": "Smart",
-  "mode.default": "Default",
-  "mode.no_models": "No models available in this mode",
+  // the model-selection and confidential-session boundary §5.
+  "catalog.no_models": "No models are currently available",
   "catalog.absent": "The model list has not been downloaded yet. Check your connection and try again.",
   "catalog.stale": "The model list needs an online update before you can send a message.",
   "catalog.unverifiable": "The model list could not be verified, so it is not being used. It will recover after the platform is updated.",
   // PR-5e / L-C7: the catalogue is fine, but this conversation is bound to a model
-  // it no longer offers. Distinct from mode.no_models (nothing to pick at all) and
+  // it no longer offers. Distinct from catalog.no_models (nothing to pick at all) and
   // from catalog.stale (the list itself needs a refresh) — all three end in "you
   // cannot send", and only this one is about the model THIS session chose.
   "session.model_withdrawn": "The model this conversation uses is no longer available. Pick another one to continue.",
@@ -1158,13 +1259,6 @@ export const en: Record<string, string> = {
   "turn_error.invalid_request": "The request was malformed. Please try once more.",
   "turn_error.internal_error": "Something went wrong on the service side. Please try again later.",
   "turn_error.unknown": "request failed",
-  // OCTO-FORK: P10 隐私模式与 PII 处理 — see
-  // dev-docs-usdable/需求/2260906/技术方案/P10-隐私模式与PII.md.
-  "privacy.mode_label": "Privacy mode",
-  "privacy.notice": "Privacy mode: personal information such as phone numbers is processed before sending.",
-  "privacy.notice_detail": "Only content subsequently sent to the model is processed; the chat still shows your original text. This release demonstrates 11-digit phone numbers.",
-  "privacy.expand": "Show privacy details",
-  "privacy.collapse": "Hide privacy details",
 };
 
 export const zh: Record<string, string> = {
@@ -1652,6 +1746,67 @@ export const zh: Record<string, string> = {
   "settings.data.delete_selected_partial": "{n} 个删除失败",
   "settings.data.archived_no_match": "没有匹配搜索或筛选条件的已归档任务。",
   "settings.about": "关于",
+  "settings.help": "帮助与反馈",
+  "settings.box": "我的盒子",
+  "settings.box.title": "我的盒子",
+  "settings.box.desc": "查看当前帐号已绑定盒子的私有能力与运行状态。",
+  "settings.box.loading": "正在加载盒子信息…",
+  "settings.box.refresh": "刷新",
+  "settings.box.refreshing": "刷新中…",
+  "settings.box.unavailable_title": "暂时无法获取盒子信息",
+  "settings.box.unavailable_desc": "请检查网络后重试。这不表示盒子一定已离线。",
+  "settings.box.bound_at": "绑定时间",
+  "settings.box.last_seen": "最近在线",
+  "settings.box.version": "盒子软件",
+  "settings.box.capabilities": "私有能力",
+  "settings.box.notice": "为保护安全，本页不会展示激活码、局域网地址、设备序列号、日志或凭证。",
+  "settings.box.state.online": "在线",
+  "settings.box.state.offline": "离线",
+  "settings.box.state.degraded": "需要关注",
+  "settings.box.state.attention": "需要关注",
+  "settings.box.state.unknown": "状态未知",
+  "settings.box.capability.privateModels": "私有模型",
+  "settings.box.capability.tools": "工具",
+  "settings.box.capability.knowledge": "知识库",
+  "settings.box.capability.automation": "自动化",
+  "settings.box.capability_state.available": "可用 · {n}",
+  "settings.box.capability_state.unavailable": "暂不可用",
+  "settings.box.capability_state.coming_soon": "即将支持",
+  "settings.help.title": "帮助与支持",
+  "settings.help.subtitle": "快速查看常见问题，并直接提交产品反馈。",
+  "settings.help.guides": "帮助中心",
+  "settings.help.full": "完整帮助",
+  "settings.help.faq_title": "常见问题",
+  "settings.help.models_q": "如何选择或切换模型？",
+  "settings.help.models_a": "在发送消息前，使用聊天输入区的模型选择器。私密会话只能使用已标记为私密的模型。",
+  "settings.help.personal_q": "个人信息保护会做什么？",
+  "settings.help.personal_a": "在新会话中开启后，支持识别的个人信息会在消息发送前被替换，聊天界面会提示已受到保护。",
+  "settings.help.private_q": "什么是私密会话？",
+  "settings.help.private_a": "私密会话必须使用私密模型。没有可用的合格模型时，需要先选择一个才能发送消息。",
+  "settings.help.unavailable_q": "模型或网络不可用时怎么办？",
+  "settings.help.unavailable_a": "请检查网络后重试，或选择另一个可用模型。未发送的消息会保留在输入区。",
+  "settings.help.box_q": "我的盒子可以做什么？",
+  "settings.help.box_a": "已绑定的盒子可以提供私有模型。其他私有能力只有在服务端授权后才会显示在这里。",
+  "settings.help.feedback_title": "提交反馈",
+  "settings.help.feedback_notice": "只会发送你在此填写的类别和正文，不会附带聊天内容或诊断信息。",
+  "settings.help.feedback_category": "类别",
+  "settings.help.feedback_title_label": "标题",
+  "settings.help.feedback_impact": "影响程度",
+  "settings.help.feedback_impact_low": "轻微",
+  "settings.help.feedback_impact_normal": "一般",
+  "settings.help.feedback_impact_high": "严重",
+  "settings.help.feedback_reproduction": "如何复现？（可选）",
+  "settings.help.feedback_expected": "期望结果（可选）",
+  "settings.help.feedback_contact": "便于跟进的联系方式（可选）",
+  "settings.help.feedback_bug": "问题",
+  "settings.help.feedback_suggestion": "建议",
+  "settings.help.feedback_other": "其他",
+  "settings.help.feedback_content": "反馈内容",
+  "settings.help.feedback_submit": "提交反馈",
+  "settings.help.feedback_length": "请输入 1–120 个字符的标题和 1–4000 个字符的详细描述；可选字段须符合标注的长度限制。",
+  "settings.help.feedback_failed": "反馈发送失败。内容已保留，请重试。",
+  "settings.help.feedback_sent": "已提交，回执：{id}",
+  "settings.help.website_soon": "官网即将上线。",
   "settings.about.version_desc": "当前安装的{brand}版本",
   "settings.about.firstrun": "首次引导",
   "settings.about.firstrun_desc": "重新运行欢迎与配置向导",
@@ -1759,6 +1914,49 @@ export const zh: Record<string, string> = {
   "composer.session_agent": "本会话绑定的专家（第一轮对话后不可更改）",
   "composer.assign_agent": "指派专家 · 本会话开始对话前均可修改",
   "composer.manage_models": "在设置中管理模型…",
+  "model.confidential": "私密",
+  "privacy.security_title": "安全与隐私",
+  "privacy.content_safety_desc": "检查消息文本；输出保护始终开启。",
+  "privacy.personal_info": "个人信息保护",
+  "privacy.personal_info_desc": "发送前自动脱敏已支持的个人信息。",
+  "privacy.private_session": "私密会话",
+  "privacy.private_session_desc": "本会话仅使用私密模型。",
+  "privacy.private_session_banner": "私密会话 · 仅使用私密模型",
+  "privacy.output_protection": "输出与昵称保护",
+  "privacy.always_on": "始终开启",
+  "privacy.locked_after_start": "首条消息被接受后已锁定",
+  "privacy.private_model_required": "私密会话只能使用私密模型。",
+  "privacy.private_model_ordinary": "已选择私密模型；当前仍是普通会话。",
+  "privacy.no_private_model": "当前没有可用的私密模型。",
+  "privacy.auto_switched": "已切换到私密模型：{model}",
+  "privacy.applied": "已自动脱敏 {count} 处个人信息：{categories}",
+  "privacy.attachments_not_scanned": "本期暂不自动脱敏附件内容。",
+  "privacy.transform_failed": "个人信息保护处理失败，请重试。",
+  "settings.safety": "安全与隐私",
+  "settings.safety.personal_rules": "个人信息规则",
+  "settings.safety.dictionary": "敏感词库",
+  "settings.safety.personal_rules_desc": "内置规则会在内容写入本地或发送给模型前，自动脱敏已支持的个人信息。",
+  "settings.safety.rules_scope": "新会话默认开启此保护；在首条消息被接受前，可在输入框的安全与隐私面板中按会话调整。",
+  "settings.safety.rules_version": "规则集 {version}",
+  "settings.safety.rules_readonly": "内置规则只读，不能逐条编辑或开关。",
+  "settings.safety.rules_loading": "正在读取内置规则…",
+  "settings.safety.rules_unavailable": "无法读取规则列表；发送链路仍会强制执行个人信息保护。",
+  "settings.safety.dictionary_desc": "管理自定义敏感词；内置词保持只读。",
+  "settings.account": "账号",
+  "settings.account.nickname_desc": "显示在左下角账号入口的名称。",
+  "settings.account.phone_desc": "手机号始终以脱敏形式显示。",
+  "settings.account.license_desc": "本设备的授权信息。",
+  "settings.account.security": "账号安全",
+  "settings.account.signout_desc": "退出登录放在这里，避免在快捷面板中误操作。",
+  "privacy.category.cn_resident_id": "身份证号",
+  "privacy.category.cn_mobile": "手机号",
+  "privacy.category.email": "邮箱",
+  "privacy.category.bank_card": "银行卡号",
+  "privacy.category.vin": "车辆识别码",
+  "privacy.category.ip_address": "IP 地址",
+  "privacy.category.pem_private_key": "私钥",
+  "privacy.category.secret_token": "访问凭据",
+  "privacy.category.sms_otp": "验证码",
   "tools.title.read_file": "读取文件",
   "tools.title.write_file": "写入文件",
   "tools.title.edit_file": "编辑文件",
@@ -1998,6 +2196,7 @@ export const zh: Record<string, string> = {
   "settings.endpoints.api_key.optional": "未设置（可选）",
   "settings.endpoints.models": "模型",
   "settings.endpoints.models.vision": "视觉",
+  "settings.endpoints.models.confidential": "私密模型",
   "settings.endpoints.badge.default": "默认",
   "settings.endpoints.badge.lite": "Lite",
   "chat.describing_image": "正在用看图助手描述 {name}…",
@@ -2138,10 +2337,10 @@ export const zh: Record<string, string> = {
 
   // ── 产品门 / 登录表单（P4）────────────────────────────────────────────────
   // OCTO-FORK: 产品门新增键，上游没有（P4-拦截页.md §7）—— 见
-  // dev-docs-usdable/需求/20260911/需求基线.md。集中在每份字典末尾，让上游合并
+  // the product baseline。集中在每份字典末尾，让上游合并
   // 冲突只发生在尾部。
   "product.phone_label": "手机号",
-  "product.phone_placeholder": "请输入手机号",
+  "product.phone_placeholder": "请输入手机号（支持国际区号，如 +86）",
   "product.code_label": "验证码",
   "product.code_placeholder": "6 位验证码",
   "product.send_code": "发送验证码",
@@ -2159,7 +2358,7 @@ export const zh: Record<string, string> = {
   "product.submit_login": "登录",
   "product.switch_to_activate": "有激活码？去激活",
   "product.submitting": "登录中…",
-  "product.err_phone": "请输入正确的手机号",
+  "product.err_phone": "请输入正确的国际手机号",
   "product.err_code": "请输入 6 位验证码",
   "product.err_nickname": "昵称格式不正确",
   "product.err_nickname_sensitive": "昵称包含敏感内容",
@@ -2179,7 +2378,7 @@ export const zh: Record<string, string> = {
   "product.legal_close": "关闭",
   "product.plan_trial": "体验版",
   // OCTO-FORK: L-B2 / L-B3 拦截页 —— 见
-  // dev-docs-usdable/需求/2260906/技术方案/P4-拦截页.md §2/§3
+  // the product access-control boundary §2/§3
   "product.blocked.unconfigured_title": "这个版本还没有配置服务地址",
   "product.blocked.unconfigured_body": "程序没有可连接的服务地址，登录无法完成。请向提供此程序目录的人索取已配置好的版本。",
   "product.blocked.no_keys_title": "当前版本无法验证服务下发的数据",
@@ -2190,10 +2389,7 @@ export const zh: Record<string, string> = {
   "product.tier.retry": "重试",
   "product.tier.dismiss": "知道了",
   // OCTO-FORK: P5 account panel — see
-  // dev-docs-usdable/需求/2260906/技术方案/P5-个人中心.md.
-  "product.mode.privacy": "隐私",
-  "product.mode.smart": "智能",
-  "product.mode.default": "默认",
+  // the account-center boundary.
   "product.panel.back": "返回",
   "product.panel.points_value": "积分 {n}",
   "product.panel.plan": "套餐版本",
@@ -2201,6 +2397,7 @@ export const zh: Record<string, string> = {
   "product.panel.license": "授权",
   "product.panel.sensitive_library": "敏感词库",
   "product.panel.help": "帮助与反馈",
+  "product.panel.box": "我的盒子",
   "product.panel.check_updates": "检查更新",
   "product.panel.about": "关于",
   "product.panel.soon": "即将支持",
@@ -2225,10 +2422,11 @@ export const zh: Record<string, string> = {
   "product.panel.nickname": "昵称",
   "product.panel.phone": "手机号",
   "product.panel.language": "语言",
-  "product.panel.default_mode": "新会话默认模式",
-  "product.panel.default_mode_note": "新建会话时默认使用的模式，单个对话内仍可切换",
   "product.panel.full_settings": "打开完整设置",
   "product.panel.nickname_saved": "昵称已更新",
+  "product.panel.manage_account": "管理账号",
+  "product.panel.safety_privacy": "安全与隐私",
+  "product.panel.feedback_unavailable": "帮助与反馈通道暂未配置。",
   "product.panel.help.test_code": "测试验证码：123456",
   "product.panel.help.test_activation": "测试激活码（U 盘）：BUDING-DEMO-0001",
   "product.panel.help.test_box_code": "测试盒子编号：BOX-DEMO-0001",
@@ -2239,7 +2437,7 @@ export const zh: Record<string, string> = {
   "product.panel.help.smartscreen": "若出现 SmartScreen 提示，请选择「仍要运行」",
   "product.panel.help.docs_note": "更多产品帮助见随程序目录提供的说明文档",
   // OCTO-FORK: P13 敏感词库管理 — see
-  // dev-docs-usdable/需求/2260906/技术方案/P13-词库管理界面.md.
+  // the dictionary-management boundary.
   "product.dict.builtin": "内置词",
   "product.dict.user": "我的词库",
   "product.dict.count": "{n} 条",
@@ -2258,21 +2456,18 @@ export const zh: Record<string, string> = {
   "product.dict.sync_degraded_builtin": "服务器词库更新失败，当前仅使用内置词和用户词；下次登录时重试。",
   "product.dict.sync_recovered": "服务器词库已恢复至版本 {version}。",
   // OCTO-FORK: P6 入口隐藏与积分 — see
-  // dev-docs-usdable/需求/2260906/技术方案/P6-入口隐藏与积分.md.
+  // the approved navigation and credits boundary.
   "feature.not_available": "本期不提供此入口",
   // V-58（PR-5d3）删掉了 `credits.insufficient`：输入框不再自己下「积分不足」的
   // 结论（PQ8 —— 由中台 402 决定），替代它的是上面的 `turn_error.insufficient_credits`。
   // OCTO-FORK: P8 敏感词接入 — see
-  // dev-docs-usdable/需求/2260906/技术方案/P8-敏感词接入.md.
+  // the content-safety boundary.
   "sensitive.toggle": "敏感词检测",
   "sensitive.toggle_off_confirm": "关闭后，输入将按原文发送。模型回复仍会过滤。",
   "sensitive.hit_notice": "包含敏感内容，已替换敏感词，确认后可再次发送。",
   // OCTO-FORK: P9 模式与模型选择器 — see
-  // dev-docs-usdable/需求/2260906/技术方案/P9-模式与模型.md §5.
-  "mode.privacy": "隐私",
-  "mode.smart": "智能",
-  "mode.default": "默认",
-  "mode.no_models": "该模式下暂无可用模型",
+  // the model-selection and confidential-session boundary §5.
+  "catalog.no_models": "当前暂无可用模型",
   "catalog.absent": "模型列表尚未下载，请检查网络后重试。",
   "catalog.stale": "模型列表需要联网更新后才能发送消息。",
   "catalog.unverifiable": "模型列表未通过校验，已停止使用；平台更新后会自动恢复。",
@@ -2292,13 +2487,6 @@ export const zh: Record<string, string> = {
   "turn_error.invalid_request": "请求格式有误，请重试一次。",
   "turn_error.internal_error": "服务出错了，请稍后重试。",
   "turn_error.unknown": "请求失败",
-  // OCTO-FORK: P10 隐私模式与 PII 处理 — see
-  // dev-docs-usdable/需求/2260906/技术方案/P10-隐私模式与PII.md.
-  "privacy.mode_label": "隐私模式",
-  "privacy.notice": "隐私模式：发送前会处理手机号等个人信息。",
-  "privacy.notice_detail": "只处理随后发给模型的内容；你在对话框里看到的仍是原文。本期演示 11 位手机号。",
-  "privacy.expand": "展开隐私说明",
-  "privacy.collapse": "收起隐私说明",
 };
 
 const dictionaries: Record<string, Record<string, string>> = { en, zh };

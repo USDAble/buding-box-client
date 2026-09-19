@@ -3,7 +3,7 @@
 # this package appears below.
 #
 # WHY THIS FILE EXISTS (2026-09-15, 人工拍板). Until today the registry was
-# `dev-docs-usdable/需求/20260911/中台交付包.md` §3.2, and code_test.go read that
+# `the control-plane contract` §3.2, and code_test.go read that
 # document at test time. The document was deleted because a design-first contract
 # kept generating requirements the code had already outgrown; the interface
 # contract is now regenerated FROM the code instead of ahead of it. The registry
@@ -49,20 +49,24 @@
 403 safety_blocked
 403 content_restricted
 403 account_restricted
+403 box_access_denied
 
 # 404
 404 model_not_found
+404 box_not_found
 
 # 409 — a request with this id is already in flight; do not start a second model
 # call, query its status instead.
 409 request_in_progress
 409 duplicate_request
+409 idempotency_conflict
 
 # 429 — cool down for retryAfterSec; never retry concurrently.
 429 rate_limited
 
 # 503
 503 maintenance
+503 box_unavailable
 
 # 5xx — retry with bounded backoff, and for a repeated clientRequestId query the
 # request status before deciding whether to resend.

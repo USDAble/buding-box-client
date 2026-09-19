@@ -167,7 +167,7 @@ func writeSpillFile(id, body string) (string, error) {
 
 // spillDir returns (creating if needed) data/tmp.
 // OCTO-FORK: the portable product keeps spills next to the executable, not in
-// the host home — see dev-docs-usdable/需求/2260906/技术方案/P1-便携数据根.md.
+// the host home — see the portable data-root boundary.
 func spillDir() (string, error) {
 	return datapath.Sub("tmp")
 }

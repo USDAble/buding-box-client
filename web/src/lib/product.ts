@@ -52,7 +52,6 @@ export interface ProductStateDTO {
   prefs: {
     locale: string;
     inputSensitiveCheck: boolean;
-    defaultChatMode: string;
   };
   /** P9: desktop builds suppress the first-run "set up an API key" wizard (the
    *  window token is already wired to the product backend, so onboarding is a
@@ -132,6 +131,10 @@ async function productFetch(path: string, init?: RequestInit): Promise<Response>
 export type BlockedPage = "login" | "unconfigured" | "no_keys";
 
 export const blockedPage = writable<BlockedPage>("login");
+// OCTO-FORK: the settings/model UI consumes the build-profile capability from
+// the server. null means the non-product/upstream endpoint is unavailable and
+// preserves ordinary octo serve behavior.
+export const allowEnvironmentModelSource = writable<boolean | null>(null);
 
 /**
  * refreshControlPlane decides which blocked page the window shows, from the two
@@ -156,6 +159,7 @@ export async function refreshControlPlane(): Promise<void> {
   // this read fails - a stale "no keys" page is a lie about the build in front
   // of the user, and it would outlive the refresh that produced it.
   let page: BlockedPage = "login";
+  let environmentModelSource: boolean | null = null;
   try {
     const res = await productFetch("/api/product/control-plane", {
       cache: "no-store",
@@ -164,7 +168,8 @@ export async function refreshControlPlane(): Promise<void> {
     // A non-200 (including 404 from a build without this endpoint) keeps the
     // login form, for the same reason as the catch below.
     if (res.ok) {
-      const d = (await res.json()) as { configured?: boolean; hasTrustedKeys?: boolean };
+      const d = (await res.json()) as { configured?: boolean; hasTrustedKeys?: boolean; allowEnvironmentModelSource?: boolean };
+      if (typeof d.allowEnvironmentModelSource === "boolean") environmentModelSource = d.allowEnvironmentModelSource;
       if (d.configured === false) page = "unconfigured";
       else if (d.hasTrustedKeys === false) page = "no_keys";
     }
@@ -172,6 +177,7 @@ export async function refreshControlPlane(): Promise<void> {
     // Unreadable is the same case as unreachable: keep the login form.
   }
   blockedPage.set(page);
+  allowEnvironmentModelSource.set(environmentModelSource);
 }
 
 // ─── control-plane failure tiers (L-B3) ─────────────────────────────────────/** The four control-plane failure tiers. See 本地API契约 §3 and P4-拦截页 §3. */
@@ -276,12 +282,8 @@ export function isCatalogState(value?: string | null): value is CatalogState {
   return value === "ready" || value === "absent" || value === "stale" || value === "unverifiable";
 }
 
-// canStartTurn and catalogNoticeKey — "may a new turn start?" and "if not, why?" —
-// live together in chatMode.ts as of PR-5e. They were split across two modules
-// (the first here, the second there) while the question had one half; L-C7 gave it
-// a second, and a two-module answer would have had this module importing the
-// projection both ways round. What stays here is the FACT (catalogState) and its
-// owner; what moved is the question asked of it.
+// The pre-turn decision lives in modelAvailability.ts. This module owns only
+// the control-plane facts it consumes.
 
 // refreshProductState loads the (de-identified) state and derives the phase.
 // Outside the desktop shell there is no gate, so the phase is ready outright.
@@ -379,6 +381,67 @@ export async function refreshCredits(): Promise<number> {
   const body = (await res.json()) as { state: ProductStateDTO };
   productState.set(body.state);
   return body.state.credits.balance;
+}
+
+export interface FeedbackReceipt {
+  feedbackId: string;
+  acceptedAt: string;
+}
+
+export interface FeedbackForm {
+  category: "bug" | "suggestion" | "other";
+  title: string;
+  content: string;
+  reproduction?: string;
+  expected?: string;
+  impact: "low" | "normal" | "high";
+  contact?: string;
+}
+
+// submitFeedback sends only the fields visible in the help form. The form owns
+// its draft and retry key in memory; neither is persisted or supplemented with
+// chat and diagnostic data here.
+export async function submitFeedback(form: FeedbackForm, idempotencyKey: string): Promise<FeedbackReceipt> {
+  const res = await productFetch("/api/product/feedback", {
+    method: "POST",
+    headers: jsonHeaders(),
+    body: JSON.stringify({ ...form, idempotencyKey }),
+  });
+  const body = (await res.json().catch(() => ({}))) as Record<string, unknown>;
+  if (!res.ok) {
+    throw new ProductError(res.status, (body.fieldErrors as Record<string, string>) ?? {}, (body.code as string) ?? null,
+      (body.retryAfterSec as number) ?? null);
+  }
+  return body as unknown as FeedbackReceipt;
+}
+
+export interface BoxCapability {
+  state: "available" | "unavailable" | "coming_soon";
+  count?: number;
+}
+
+export interface BoxDTO {
+  id: string;
+  displayName: string;
+  state: "online" | "offline" | "degraded" | "attention" | "unknown";
+  boundAt: string;
+  lastSeenAt?: string;
+  softwareVersion?: string;
+  management: { canView: boolean };
+  capabilities: {
+    privateModels: BoxCapability;
+    tools: BoxCapability;
+    knowledge: BoxCapability;
+    automation: BoxCapability;
+  };
+}
+
+// getBox reads the account's one server-authorised box. A failure is surfaced
+// to the view; it is never converted into a made-up offline box.
+export async function getBox(): Promise<BoxDTO> {
+  const res = await productFetch("/api/product/box", { headers: windowTokenHeaders() });
+  if (!res.ok) throw new ProductError(res.status);
+  return await res.json() as BoxDTO;
 }
 
 // ─── P4 login form ──────────────────────────────────────────────────────────
@@ -544,7 +607,6 @@ export async function setProductLocale(locale: "zh" | "en"): Promise<void> {
 
 export interface AccountPrefs {
   locale?: "zh" | "en";
-  defaultChatMode?: string;
   /** Input sensitive-word check toggle (P8); omitted means "leave unchanged". */
   inputSensitiveCheck?: boolean;
 }
@@ -570,9 +632,8 @@ export async function updateNickname(nickname: string): Promise<ProductStateDTO>
 }
 
 /**
- * Saves preference edits (PUT /api/product/prefs): locale and/or the default
- * chat mode for new sessions (P9 reads defaultChatMode when creating a
- * session). Unchanged fields may be omitted. Throws ProductError with
+ * Saves preference edits (PUT /api/product/prefs). Unchanged fields may be
+ * omitted. Throws ProductError with
  * `code` = "invalid_value" on an unknown value, with the offending field name
  * travelling inside the ProductError's fieldErrors map (product.ts builds it from
  * body.field) — the same refusal shape PUT /api/product/locale answers with.

@@ -118,7 +118,7 @@ type Config struct {
 	DisableRestart bool
 
 	// OCTO-FORK: mount point for this fork's product routes — see
-	// dev-docs-usdable/需求/20260911/开发计划.md §PR-2b2a
+	// the current implementation plan §PR-2b2a
 	//
 	// MountAPI, when non-nil, lets a build register extra routes without this
 	// package learning their names. It receives this server's authenticated
@@ -133,7 +133,7 @@ type Config struct {
 	MountAPI func(api func(pattern string, h http.HandlerFunc))
 
 	// OCTO-FORK: window token for this fork's product gate — see
-	// dev-docs-usdable/需求/20260911/开发计划.md §PR-2b2b
+	// the current implementation plan §PR-2b2b
 	//
 	// When non-empty, every route registered through Config.MountAPI additionally
 	// requires the caller to present this value in windowTokenHeader. It is the
@@ -152,7 +152,7 @@ type Config struct {
 	WindowToken string
 
 	// OCTO-FORK: the process's one compliance-word engine — see
-	// dev-docs-usdable/需求/20260911/开发计划.md §PR-6b1
+	// the current implementation plan §PR-6b1
 	//
 	// The engine is needed on both sides of a package boundary that must not be
 	// crossed: this package masks model output on the turn path, and
@@ -168,7 +168,7 @@ type Config struct {
 	SensitiveEngine *sensitive.Engine
 
 	// OCTO-FORK: the server-side input gate — see
-	// dev-docs-usdable/需求/20260911/开发计划.md §PR-6b3
+	// the current implementation plan §PR-6b3
 	//
 	// A browser check is skippable, so 需求 D1's substance — the check also runs
 	// where the frontend cannot bypass it — lands in this package, the only
@@ -186,9 +186,13 @@ type Config struct {
 	// Nil means "no gate": the CLI path (`octo serve`, no product assembly) and
 	// any test that is not about the gate refuse nothing.
 	SensitiveInputGate func(text string) (masked string, refuse bool)
+	// OCTO-FORK: the versioned personal-information transform shared with the
+	// product preview route. Nil uses the built-in rules; injected failures are
+	// fail-closed when a session enables personal-information protection.
+	PersonalInfoTransform PersonalInfoTransform
 
 	// OCTO-FORK: gateway-bound model guard — see
-	// dev-docs-usdable/需求/20260911/开发计划.md §PR-4c0
+	// the current implementation plan §PR-4c0
 	//
 	// GatewayModelPrefix, when non-empty, is the composite-id prefix
 	// (productprofile.GatewayModelPrefix()) of the models this build serves from
@@ -275,7 +279,7 @@ type Config struct {
 	// the answer rather than re-deciding what "configured" means.
 	ControlPlaneReady bool
 	// OCTO-FORK: a session whose catalog model was withdrawn — see
-	// dev-docs-usdable/需求/20260911/开发计划.md §PR-5e
+	// the current implementation plan §PR-5e
 	//
 	// CatalogOffers answers, for a bare catalog id, whether the signed catalog this
 	// build holds still offers it — and whether that can be answered at all. The
@@ -287,6 +291,23 @@ type Config struct {
 	// nil means unchanged upstream behavior: the CLI, `octo serve` and every test
 	// that predates this field.
 	CatalogOffers func(id string) (offers, known bool)
+	// OCTO-FORK: the signed catalog's full model qualification. Unlike the old
+	// membership-only guard, this carries freshness and confidential eligibility
+	// from one authoritative row. nil keeps non-product entry points unchanged.
+	CatalogModel func(id string) (CatalogModelStatus, bool)
+	// OCTO-FORK: the signed catalog's highest-priority current confidential
+	// model, already rendered as the composite session binding. Developer builds
+	// may fall back to their local confidential markers when this has no answer.
+	PreferredConfidentialModel func() (modelID string, ok bool)
+}
+
+// CatalogModelStatus is the package-neutral qualification internal/server
+// needs at routing boundaries. The product runtime owns how these fields are
+// derived from the signed catalog; the server only enforces the result.
+type CatalogModelStatus struct {
+	Selectable   bool
+	Confidential bool
+	Current      bool
 }
 
 // Server is the HTTP server skeleton. It owns the mux, the agent factory,
@@ -315,6 +336,8 @@ type Server struct {
 	skillReg *skills.Registry
 	// OCTO-FORK: one compliance-word engine per server (PR-6a) — see sensitive.go.
 	sensitiveEngine *sensitive.Engine
+	// OCTO-FORK: personal-information preprocessing — see user_text_preprocess.go.
+	personalInfoTransform PersonalInfoTransform
 	// skillsManifest is recomposed when skills are toggled/imported (write) and
 	// read on every turn's prompt.Compose; skillsMu guards the two against a
 	// data race between the mutation handlers and concurrent turns.
@@ -704,38 +727,39 @@ func New(cfg Config) (*Server, error) {
 	}
 
 	s := &Server{
-		cfg:                 cfg,
-		mux:                 http.NewServeMux(),
-		sender:              sender,
-		model:               model,
-		provider:            provName,
-		system:              cfg.System,
-		skillReg:            skillReg,
-		sensitiveEngine:     sensitiveEngineOr(cfg.SensitiveEngine),
-		skillsManifest:      skillsManifest,
-		cwd:                 cwd,
-		envCtx:              envCtx,
-		homeMemDir:          homeMemDir,
-		workspaceDir:        workspaceDir,
-		turnLocks:           map[string]*sync.Mutex{},
-		turnRunning:         make(map[string]bool),
-		entryBindings:       make(map[string]*cachedEntryBinding),
-		sessionBindingLocks: map[string]*sync.Mutex{},
-		steerQueues:         make(map[string][]queuedTurn),
-		sessionAgents:       make(map[string]*agent.Agent),
-		liveSessions:        make(map[string]*agent.Session),
-		accessKey:           accessKey,
-		confirmations:       make(map[string]chan string),
-		questionChans:       make(map[string]chan tools.AskResponse),
-		watchStop:           make(chan struct{}),
-		watchDone:           make(chan struct{}),
-		pendingQuestions:    make(map[string]wsEventRequestUserQuestion),
-		pendingConfirms:     make(map[string]wsEventRequestConfirmation),
-		askSlots:            make(map[string]chan struct{}),
-		sessionInjectors:    make(map[string]*memory.Injector),
-		wakeupTimers:        make(map[string]*time.Timer),
-		wakeupStart:         make(map[string]time.Time),
-		goalLastStatus:      make(map[string]agent.GoalStatus),
+		cfg:                   cfg,
+		mux:                   http.NewServeMux(),
+		sender:                sender,
+		model:                 model,
+		provider:              provName,
+		system:                cfg.System,
+		skillReg:              skillReg,
+		sensitiveEngine:       sensitiveEngineOr(cfg.SensitiveEngine),
+		personalInfoTransform: personalInfoTransformOr(cfg.PersonalInfoTransform),
+		skillsManifest:        skillsManifest,
+		cwd:                   cwd,
+		envCtx:                envCtx,
+		homeMemDir:            homeMemDir,
+		workspaceDir:          workspaceDir,
+		turnLocks:             map[string]*sync.Mutex{},
+		turnRunning:           make(map[string]bool),
+		entryBindings:         make(map[string]*cachedEntryBinding),
+		sessionBindingLocks:   map[string]*sync.Mutex{},
+		steerQueues:           make(map[string][]queuedTurn),
+		sessionAgents:         make(map[string]*agent.Agent),
+		liveSessions:          make(map[string]*agent.Session),
+		accessKey:             accessKey,
+		confirmations:         make(map[string]chan string),
+		questionChans:         make(map[string]chan tools.AskResponse),
+		watchStop:             make(chan struct{}),
+		watchDone:             make(chan struct{}),
+		pendingQuestions:      make(map[string]wsEventRequestUserQuestion),
+		pendingConfirms:       make(map[string]wsEventRequestConfirmation),
+		askSlots:              make(map[string]chan struct{}),
+		sessionInjectors:      make(map[string]*memory.Injector),
+		wakeupTimers:          make(map[string]*time.Timer),
+		wakeupStart:           make(map[string]time.Time),
+		goalLastStatus:        make(map[string]agent.GoalStatus),
 	}
 
 	// Register the WebSocket-backed asker so ask_user_question appears in the
@@ -1127,16 +1151,12 @@ func (s *Server) registerRoutes() {
 	s.api("DELETE /api/sessions/{id}", s.handleDeleteSession)
 	s.api("PATCH /api/sessions/{id}", s.handleUpdateSession)
 	s.api("PATCH /api/sessions/{id}/model", s.handleUpdateSessionModel)
+	// OCTO-FORK: policy and optional model selection are one pre-turn atomic
+	// mutation; the handler shares the session turn lock with message execution.
+	s.api("PATCH /api/sessions/{id}/protection", s.handleUpdateSessionProtection)
 	s.api("PATCH /api/sessions/{id}/reasoning_effort", s.handleUpdateSessionReasoningEffort)
 	s.api("PATCH /api/sessions/{id}/show_reasoning", s.handleUpdateSessionShowReasoning)
 	s.api("PATCH /api/sessions/{id}/permission_mode", s.handleUpdateSessionPermissionMode)
-	// OCTO-FORK: PATCH /api/sessions/{id}/chat_mode — the session-level chat mode
-	// (需求基线 B5 规则 6). Path spelled with an underscore like its five
-	// siblings above; the picker used to PUT a `chat-mode` (hyphen) path that no
-	// server ever registered, which is why a real build answered 404 to the
-	// first of a model switch's two requests (V-46). See
-	// dev-docs-usdable/需求/20260911/本地API契约.md §1.5.
-	s.api("PATCH /api/sessions/{id}/chat_mode", s.handleUpdateSessionChatMode)
 	s.api("PATCH /api/sessions/{id}/working_dir", s.handleUpdateSessionWorkingDir)
 	s.api("PATCH /api/sessions/{id}/agent_profile", s.handleUpdateSessionAgentProfile)
 	s.api("GET /api/sessions/{id}/goal", s.handleGetSessionGoal)
@@ -1162,7 +1182,7 @@ func (s *Server) registerRoutes() {
 		// the same auth and cache policy as everything above, plus this fork's
 		// window gate (Config.WindowToken) and nothing else. The fork supplies the
 		// route table; this package never learns a product name — see
-		// dev-docs-usdable/需求/20260911/开发计划.md §PR-2b2a
+		// the current implementation plan §PR-2b2a
 		s.cfg.MountAPI(s.productAPI)
 	}
 	if s.cfg.Native != nil {
@@ -1941,7 +1961,7 @@ func (s *Server) effectiveCoauthor(cfg config.Config) bool {
 // breaking the turn.
 //
 // OCTO-FORK: 网关绑定模型的前置拦截 — see
-// dev-docs-usdable/需求/20260911/开发计划.md §PR-4c0
+// the current implementation plan §PR-4c0
 //
 // One case must NOT degrade, and it is not a refinement of the rule above but
 // the one exception to it: a model the catalog serves from the built-in gateway
@@ -1958,7 +1978,7 @@ func (s *Server) effectiveCoauthor(cfg config.Config) bool {
 // explicit check at each caller would state the rule four times and miss the
 // fifth path someone adds later (§3.8).
 // OCTO-FORK: 网关绑定的回合交给内置网关 — see
-// dev-docs-usdable/需求/20260911/开发计划.md §PR-5a
+// the current implementation plan §PR-5a
 //
 // PR-4c0 left the decision here and nothing else, so this is where PR-5a plugs
 // the gateway in: the same gatewayBound test that used to refuse now asks the
@@ -2001,7 +2021,11 @@ func (s *Server) senderForSession(sess *agent.Session) (agent.Sender, string) {
 		// order is the requirement, not a detail. After the nil check, because a
 		// build with no gateway is a fault the catalog cannot explain. known=false
 		// falls through — see the field. Nothing is sent on this path (L-C7).
-		if s.cfg.CatalogOffers != nil {
+		if s.cfg.CatalogModel != nil {
+			if status, known := s.cfg.CatalogModel(bare); known && (!status.Current || !status.Selectable) {
+				return failingSender{err: errModelNotListed(bare)}, bare
+			}
+		} else if s.cfg.CatalogOffers != nil {
 			if offers, known := s.cfg.CatalogOffers(bare); known && !offers {
 				return failingSender{err: errModelNotListed(bare)}, bare
 			}
@@ -3169,7 +3193,7 @@ func (s *Server) validateAgentID(agentID string) error {
 
 // agentUserDir is the user-level profile directory (data/agents).
 // OCTO-FORK: the portable product keeps agents next to the executable, not in
-// the host home — see dev-docs-usdable/需求/2260906/技术方案/P1-便携数据根.md.
+// the host home — see the portable data-root boundary.
 func agentUserDir() string {
 	p, err := datapath.Join("agents")
 	if err != nil {

@@ -1,6 +1,6 @@
 # Cross-session memory
 
-<!-- OCTO-FORK: 技能文档改为数据根语义：用户级数据根改用 <data root>  — see dev-docs-usdable/需求/2260906/技术方案/P1-便携数据根.md -->
+<!-- OCTO-FORK: 技能文档改为数据根语义：用户级数据根改用 <data root>  — see the portable data-root boundary -->
 octo remembers preferences, project conventions, and past corrections across sessions — stored locally as plain markdown in `<data root>/memories/<repo-slug>/`, never in the cloud. There's no dedicated remember/forget tool and no background consolidation: the agent manages memory with its own file tools (`read_file`/`write_file`/`edit_file`), keeping to one convention:
 
 - `MEMORY.md` — the index, loaded into the system prompt every session (capped at 200 lines / 25KB).

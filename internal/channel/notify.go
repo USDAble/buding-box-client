@@ -3,7 +3,7 @@ package channel
 import "fmt"
 
 // SendOnce delivers a single outbound message to an IM chat by constructing
-// OCTO-FORK: 数据根：`~/.octo` → `<exe dir>/data`（硬规则 1） — see dev-docs-usdable/需求/2260906/技术方案/P1-便携数据根.md
+// OCTO-FORK: 数据根：`~/.octo` → `<exe dir>/data`（硬规则 1） — see the portable data-root boundary
 // the platform adapter from data/channels.yml on the fly. It exists for
 // proactive pushes (e.g. scheduled-task results) from processes that don't run
 // inbound adapters, such as octo serve. Every registered platform can be

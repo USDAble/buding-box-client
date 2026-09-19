@@ -22,7 +22,7 @@ func setHome(t *testing.T) string {
 	t.Helper()
 	home := t.TempDir()
 	t.Setenv("HOME", home)
-	// OCTO-FORK: 数据根：`~/.octo` → `<exe dir>/data`（硬规则 1） — see dev-docs-usdable/需求/2260906/技术方案/P1-便携数据根.md
+	// OCTO-FORK: 数据根：`~/.octo` → `<exe dir>/data`（硬规则 1） — see the portable data-root boundary
 	t.Setenv("USERPROFILE", home)    // Windows
 	t.Setenv("OCTO_DATA_ROOT", home) // portable data root
 	return home
@@ -1831,6 +1831,43 @@ func TestUpdateCheckEnabled_RoundTrip(t *testing.T) {
 			}
 			if got.UpdateCheckEnabled() != want {
 				t.Errorf("UpdateCheckEnabled = %v, want %v", got.UpdateCheckEnabled(), want)
+			}
+		})
+	}
+}
+
+func TestEndpointModelConfidentialMissingFalseTrue(t *testing.T) {
+	cases := []struct {
+		name string
+		line string
+		want bool
+	}{
+		{name: "missing", line: "", want: false},
+		{name: "false", line: "        confidential: false\n", want: false},
+		{name: "true", line: "        confidential: true\n", want: true},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			home := setHome(t)
+			writeOcto(t, home, "config.yml", "endpoints:\n  - id: local\n    provider: openai\n    models:\n      - model: m\n"+tc.line)
+			cfg, err := Load()
+			if err != nil {
+				t.Fatal(err)
+			}
+			entry, ok := cfg.EntryByModel("local::m")
+			if !ok || entry.Confidential != tc.want {
+				t.Fatalf("entry = (%+v, %v), want confidential=%v", entry, ok, tc.want)
+			}
+			if err := cfg.Save(); err != nil {
+				t.Fatal(err)
+			}
+			reloaded, err := Load()
+			if err != nil {
+				t.Fatal(err)
+			}
+			entry, ok = reloaded.EntryByModel("local::m")
+			if !ok || entry.Confidential != tc.want {
+				t.Fatalf("round-trip entry = (%+v, %v), want confidential=%v", entry, ok, tc.want)
 			}
 		})
 	}

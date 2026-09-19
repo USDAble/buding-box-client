@@ -528,18 +528,11 @@ func (s *Server) handleWSUserMessage(conn *wsConn, msg *wsMsgUserMessage) {
 		}
 	}
 
-	// OCTO-FORK: PR-6b3 — the input gate, before any binding is taken and before
-	// the message is broadcast or persisted: a refused message leaves no mark on
-	// the session (需求 D1). Consults what the user typed; the local slash
-	// commands above never reach a model and are not input. See 开发计划 §PR-6b3.
-	if masked, refuse := s.sensInputVerdict(content); refuse {
-		s.broadcastInputSensitive(sid, masked)
+	// OCTO-FORK: blocked content is rejected before binding or queue side
+	// effects. Personal-information protection runs under the turn lock below.
+	if safetyErr := s.checkUserTextSafety(content); safetyErr != nil {
+		s.refuseUserTextWS(sid, safetyErr)
 		return
-	}
-	// Document attachments ride as path notes in the text so the model can
-	// read_file them and the transcript keeps a visible record.
-	if len(att.notes) > 0 {
-		content = strings.TrimSpace(content + "\n\n" + strings.Join(att.notes, "\n"))
 	}
 
 	if ok, prevEntry, berr := s.acquireSessionBinding(sid, agent.EntryWeb, msg.Force); !ok {
@@ -567,11 +560,24 @@ func (s *Server) handleWSUserMessage(conn *wsConn, msg *wsMsgUserMessage) {
 	mu.Lock()
 
 	if s.turnRunning[sid] {
+		prepared, prepErr := s.protectUserText(sess, content)
+		if prepErr != nil {
+			mu.Unlock()
+			s.refuseUserTextWS(sid, prepErr)
+			return
+		}
+		content = prepared.text
+		// Attachment path notes are outside the first-version scanning scope and
+		// are appended only after user-authored text has been protected.
+		if len(att.notes) > 0 {
+			content = strings.TrimSpace(content + "\n\n" + strings.Join(att.notes, "\n"))
+		}
 		mu.Unlock()
 		// An explicit queue request skips the running turn entirely: park it for
 		// runAgentTurnLoop to run as its own chained turn once this one is done.
 		if msg.Queue {
 			s.enqueueQueued(sid, agent.InboxItem{Text: content, Blocks: att.blocks})
+			s.broadcastPrivacyApplied(sid, prepared)
 			return
 		}
 		// The current Web entry already owns the binding; a mid-turn message
@@ -589,6 +595,7 @@ func (s *Server) handleWSUserMessage(conn *wsConn, msg *wsMsgUserMessage) {
 		if a == nil {
 			s.enqueueSteer(sid, agent.InboxItem{Text: content, Blocks: att.blocks})
 		}
+		s.broadcastPrivacyApplied(sid, prepared)
 		// The frontend already rendered a ghost bubble in _sendMessage;
 		// history_user_message (broadcast when the turn drains steer) will
 		// replace it.  No need for a separate pending_user_messages event.
@@ -607,10 +614,24 @@ func (s *Server) handleWSUserMessage(conn *wsConn, msg *wsMsgUserMessage) {
 		})
 		return
 	}
+	prepared, prepErr := s.protectUserText(sess, content)
+	if prepErr != nil {
+		mu.Unlock()
+		s.releaseSessionBinding(sid, agent.EntryWeb)
+		s.refuseUserTextWS(sid, prepErr)
+		return
+	}
+	content = prepared.text
+	// Keep attachment path notes out of personal-information scanning. The
+	// attachment capability boundary is surfaced separately by the UI.
+	if len(att.notes) > 0 {
+		content = strings.TrimSpace(content + "\n\n" + strings.Join(att.notes, "\n"))
+	}
 
 	sess.IncFlight()
 	s.turnRunning[sid] = true
 	mu.Unlock()
+	s.broadcastPrivacyApplied(sid, prepared)
 
 	go func() {
 		// Hold the drain gate across the deferred wind-down too, not just for
@@ -1372,6 +1393,18 @@ func (s *Server) handleWSRetractSteer(sessionID, pendingID, text string) {
 const crashRecoveryReminder = `<system-reminder>The previous turn in this session ended abnormally (the server stopped mid-turn). Tool calls from that turn may have executed and changed state even if their results are missing from this conversation. Verify the current state before repeating or continuing potentially destructive actions.</system-reminder>`
 
 func (s *Server) doAgentTurn(sess *agent.Session, content string, blocks []agent.ContentBlock, images []string) {
+	// OCTO-FORK: confidential qualification is re-read before every chained or
+	// ordinary Web turn. Losing eligibility stops before broadcast, persistence,
+	// or provider selection; it never falls back to a public model.
+	if err := s.validateConfidentialSession(sess); err != nil {
+		s.wsHub.broadcast(sess.ID, map[string]any{
+			"type":       "send_rejected",
+			"session_id": sess.ID,
+			"message":    err.Error(),
+			"code":       agent.ErrorCodeOf(err),
+		})
+		return
+	}
 	// A transcript that still ends mid-turn here means the previous turn died
 	// with the server — a finished or user-interrupted turn always ends on a
 	// plain assistant message. Warn the model once: the reminder rides this
@@ -1395,6 +1428,10 @@ func (s *Server) doAgentTurn(sess *agent.Session, content string, blocks []agent
 		userMsg.Content = ""
 		userMsg.Blocks = append(multi, blocks...)
 	}
+	// OCTO-FORK: the first accepted user turn locks the complete protection
+	// policy before any user text is broadcast or persisted. Session.Save writes
+	// the lock record before this message, making crash recovery fail closed.
+	policyLockedNow := sess.LockProtectionPolicy()
 
 	// Confirm the user message immediately so the frontend can swap the
 	// ghost (.msg-pending) bubble for the real one before streaming starts.
@@ -1426,7 +1463,6 @@ func (s *Server) doAgentTurn(sess *agent.Session, content string, blocks []agent
 		if len(images) > 0 {
 			userEvent["images"] = images
 		}
-		s.wsHub.broadcast(sess.ID, userEvent)
 	}
 
 	// Persist the user message right away so a page refresh mid-turn doesn't
@@ -1436,7 +1472,25 @@ func (s *Server) doAgentTurn(sess *agent.Session, content string, blocks []agent
 	// the turn's history watermark: while the turn runs, the history endpoint
 	// serves only messages below it and the WS replay buffer owns the rest.
 	sess.Messages = append(sess.Messages, userMsg)
-	_ = sess.Save()
+	if err := sess.Save(); err != nil {
+		sess.Messages = sess.Messages[:len(sess.Messages)-1]
+		s.wsHub.broadcast(sess.ID, map[string]any{
+			"type":       "send_rejected",
+			"session_id": sess.ID,
+			"message":    fmt.Sprintf("save user message: %v", err),
+		})
+		return
+	}
+	if userEvent != nil {
+		s.wsHub.broadcast(sess.ID, userEvent)
+	}
+	if policyLockedNow {
+		s.wsHub.broadcast(sess.ID, map[string]any{
+			"type":              "session_update",
+			"session_id":        sess.ID,
+			"protection_policy": sess.ProtectionPolicy,
+		})
+	}
 	historyWatermark := len(sess.Messages)
 	sess.Messages = sess.Messages[:len(sess.Messages)-1]
 
@@ -1859,7 +1913,7 @@ func (s *Server) doAgentTurn(sess *agent.Session, content string, blocks []agent
 		Kind:      "turn_complete",
 	})
 	// OCTO-FORK: the turn that just ended may have moved the balance, and every
-	// window shows that number — see dev-docs-usdable/需求/20260911/开发计划.md
+	// window shows that number — see the current implementation plan
 	// §2 PR-8.
 	s.broadcastCreditsMayHaveMoved()
 
@@ -2040,7 +2094,7 @@ func (w *wsStreamWriter) error(msg string) {
 // OCTO-FORK: `code` is the control plane's code (G3 / 需求基线 C8) — the only field the
 // browser may key its copy on; `error` stays the fallback sentence. An empty code is
 // omitted, so "no code" and "a code with no copy" stay distinguishable. See
-// dev-docs-usdable/需求/20260911/开发计划.md §PR-5d3.
+// the current implementation plan §PR-5d3.
 func (w *wsStreamWriter) errorInput(msg string, inputRolledBack bool, code string) {
 	ev := map[string]any{
 		"type":       "turn_error",

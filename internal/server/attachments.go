@@ -66,7 +66,7 @@ func docChipRefs(text string) (cleaned string, refs []string) {
 // isImageUpload reports whether path is an image file persisted in the uploads
 // directory, i.e. one that can be served back under /api/uploads/.
 // OCTO-FORK: uploads live under data/uploads, not in the host home — see
-// dev-docs-usdable/需求/2260906/技术方案/P1-便携数据根.md.
+// the portable data-root boundary.
 func isImageUpload(path string) bool {
 	ext := strings.ToLower(filepath.Ext(path))
 	switch ext {
@@ -102,7 +102,7 @@ type userAttachments struct {
 
 // ensureUploadsDir returns data/uploads, creating it if needed.
 // OCTO-FORK: the portable product keeps uploads next to the executable, not in
-// the host home — see dev-docs-usdable/需求/2260906/技术方案/P1-便携数据根.md.
+// the host home — see the portable data-root boundary.
 func ensureUploadsDir() (string, error) {
 	return datapath.Sub(uploadsDirName)
 }

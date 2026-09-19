@@ -1,4 +1,4 @@
-import type { Session, SessionGroup, Skill, Workflow, ScheduledTask, McpServer, McpServerDetail, Channel, Memory, RecallFile, TagStatus, GitDiffResponse, GitDiffSummaryResponse, GitDiffFile } from './types'
+import type { Session, SessionGroup, Skill, Workflow, ScheduledTask, McpServer, McpServerDetail, Channel, Memory, RecallFile, TagStatus, GitDiffResponse, GitDiffSummaryResponse, GitDiffFile, ProtectionPolicy } from './types'
 import { windowToken, WINDOW_TOKEN_HEADER, productPhase, noteSessionLost } from './product'
 
 // TaskResponse matches the Go server task struct.
@@ -62,7 +62,7 @@ export async function request<T>(path: string, init?: RequestInit): Promise<T> {
   // OCTO-FORK: stamp every call with the adopted window token so the server's
   // product gate can tell this window from other loopback peers. A plain
   // browser has no token, so this is a no-op under `octo serve` — see
-  // dev-docs-usdable/需求/2260906/技术方案/P3-登录态与产品门.md.
+  // the product access-control boundary.
   const res = await fetch(path, { ...init, headers: withWindowToken(init?.headers) })
   if (!res.ok) {
     // Read the error body once. A 403 with error "product_gate" means the
@@ -104,7 +104,7 @@ export async function request<T>(path: string, init?: RequestInit): Promise<T> {
 // product gate only blocks requests that PRESENT a token; an in-window call
 // missing it would be mistaken for a CLI peer and let through, so every
 // window-initiated fetch must be stamped — see
-// dev-docs-usdable/需求/2260906/技术方案/P3-登录态与产品门.md.
+// the product access-control boundary.
 function withWindowToken(initHeaders?: HeadersInit): Headers {
   const headers = new Headers(initHeaders)
   const token = windowToken()
@@ -157,9 +157,10 @@ export interface CreateSessionOpts {
   // For a project, the server skips seeding a default working dir so the
   // session runs purely in the project's directory.
   group_id?: string
-  // P9: the mode group this one session belongs to (the selector's
-  // landing-page pick). Omitted → the server applies the account default.
-  chat_mode?: string
+  // OCTO-FORK: submitted with model on session creation so no default-policy
+  // window exists before the first user turn.
+  personal_info_protection?: boolean
+  confidential_session?: boolean
 }
 
 export async function createSession(opts: CreateSessionOpts): Promise<Session> {
@@ -179,6 +180,17 @@ export async function deleteSessions(ids: string[]): Promise<void> {
 
 export async function updateSession(id: string, patch: { name?: string }): Promise<Session> {
   return request<Session>(`/api/sessions/${id}`, { method: 'PATCH', ...json(patch) })
+}
+
+export async function setSessionProtection(
+  id: string,
+  policy: Pick<ProtectionPolicy, 'personal_info_protection' | 'confidential_session'>,
+  modelId?: string,
+): Promise<{ ok: boolean; protection_policy: ProtectionPolicy; model: string; model_id?: string; session: Session }> {
+  return request(`/api/sessions/${encodeURIComponent(id)}/protection`, {
+    method: 'PATCH',
+    ...json({ ...policy, ...(modelId !== undefined ? { model_id: modelId } : {}) }),
+  })
 }
 
 // ─── Session groups (Web-UI sidebar organisation) ───────────────────────────
@@ -345,59 +357,54 @@ export async function updateSessionPermissionMode(id: string, mode: string): Pro
   })
 }
 
-// ── P9 chat modes (mode→model selector) ────────────────────────────────────
-// OCTO-FORK: P9 模式与模型选择器 — see
-// dev-docs-usdable/需求/2260906/技术方案/P9-模式与模型.md §4.
-// PR-4d 起，本类型的数据源是**中台签名目录**（`GET /api/product/chat-modes`），
-// 不再是 data/chat-modes.json —— see dev-docs-usdable/需求/20260911/开发计划.md.
-
-/** The catalog's name for a model, in every language it ships. */
-export interface ModelDisplayName {
-  zh: string
-  en: string
-}
-
-export interface ChatModeModel {
+// OCTO-FORK: the unified vendor/model projection replaces the old three-mode
+// catalog. It is read-only and never contains developer-local endpoints.
+export type ProductModelsState = 'ready' | 'absent' | 'stale' | 'unverifiable'
+export interface ProductModelDTO {
   id: string
-  /** The catalog's own name for this model (需求基线 B6). Render it through
-   *  modelDisplayName(); never keep an id→name table — a local table shadows the
-   *  server's copy and keeps showing the old name after a platform rename. */
-  displayName: ModelDisplayName
-  /** Composite "<endpoint>::<model>" id, the form a session stores (需求基线 B8
-   *  规则 1). Built by the projection, so it is always present: the endpoint half
-   *  is a product constant and the catalog supplies the other half. */
+  displayName: string
   compositeId: string
+  confidential: boolean
+  confidentialPriority?: number
 }
-export interface ChatModeDTO {
-  id: 'privacy' | 'smart' | 'default' | string
-  models: ChatModeModel[]
-  defaultModel: string
+export interface ProductModelVendorDTO {
+  id: string
+  displayName: string
+  models: ProductModelDTO[]
 }
-export interface ChatModesResponse {
-  modes: ChatModeDTO[]
-  /** Versions of the signed policy this projection came from. Emitted because
-   *  本地API契约 §2.8 requires them, and consumed by PR-4c's refresh decision
-   *  ("has the catalog changed?") — nothing in the picker reads them today, so
-   *  they must not be treated as a signal that already works. */
+export interface ProductModelsResponse {
+  state: ProductModelsState
   catalogVersion: string
-  policyVersion: string
+  vendors: ProductModelVendorDTO[]
 }
-export async function getChatModes(): Promise<ChatModesResponse> {
-  return request<ChatModesResponse>('/api/product/chat-modes')
+export async function getProductModels(): Promise<ProductModelsResponse> {
+  return request<ProductModelsResponse>('/api/product/models')
 }
-// The session's chat mode is persisted through its own route, and the path is
-// PATCH /chat_mode — an underscore, like permission_mode / reasoning_effort /
-// show_reasoning / working_dir / agent_profile. It is NOT `/chat-mode`, which
-// no server has ever registered: only the DEV fake backend answered it, so on a
-// real build the first of a switch's two requests answered a plain-text 404
-// that the caller rendered as "404 Not Found" (V-46).
-export async function setSessionChatMode(id: string, mode: string): Promise<{ ok: boolean; chat_mode: string }> {
-  return request<{ ok: boolean; chat_mode: string }>(`/api/sessions/${id}/chat_mode`, {
-    method: 'PATCH',
-    ...json({ mode }),
+
+export interface PersonalInfoRulesResponse {
+  ruleVersion: string
+  rules: string[]
+}
+export async function getPersonalInfoRules(): Promise<PersonalInfoRulesResponse> {
+  return request<PersonalInfoRulesResponse>('/api/product/privacy/rules')
+}
+
+export interface PersonalInfoMatchSummary {
+  category: string
+  count: number
+}
+export interface PersonalInfoTransformResponse {
+  hit: boolean
+  masked: string
+  matches: PersonalInfoMatchSummary[]
+  ruleVersion: string
+}
+export async function transformPersonalInfo(text: string): Promise<PersonalInfoTransformResponse> {
+  return request<PersonalInfoTransformResponse>('/api/product/privacy/transform', {
+    method: 'POST',
+    ...json({ text }),
   })
 }
-
 export interface NativePickResult {
   path: string
   cancelled: boolean
@@ -1115,6 +1122,7 @@ export async function getConfig(): Promise<ConfigResponse> {
 export interface EndpointModel {
   model: string
   vision: boolean
+  confidential: boolean
 }
 export interface EndpointConfig {
   id: string
@@ -1149,6 +1157,7 @@ export async function getEndpoints(): Promise<EndpointsResponse> {
 export interface EndpointModelInput {
   model: string
   vision: boolean
+  confidential?: boolean
 }
 
 export interface EndpointConfigInput {
@@ -1203,8 +1212,8 @@ export async function deleteEndpoint(id: string): Promise<void> {
   await request<unknown>(`/api/config/endpoints/${encodeURIComponent(id)}`, { method: 'DELETE' })
 }
 
-export async function addEndpointModel(id: string, model: string, vision: boolean): Promise<EndpointMutationResult> {
-  return request<EndpointMutationResult>(`/api/config/endpoints/${encodeURIComponent(id)}/models`, { method: 'POST', ...json({ model, vision }) })
+export async function addEndpointModel(id: string, model: string, vision: boolean, confidential = false): Promise<EndpointMutationResult> {
+  return request<EndpointMutationResult>(`/api/config/endpoints/${encodeURIComponent(id)}/models`, { method: 'POST', ...json({ model, vision, confidential }) })
 }
 
 export async function deleteEndpointModel(id: string, model: string): Promise<void> {
@@ -1300,6 +1309,10 @@ export async function updatePermissionMode(mode: string): Promise<{ ok: boolean;
 
 export async function getVersion(): Promise<unknown> {
   return request<unknown>('/api/version', { cache: 'no-store' })
+}
+
+export async function checkNativeUpdates(): Promise<{ latest: string; available: boolean }> {
+  return request<{ latest: string; available: boolean }>('/api/product/check-updates', { method: 'POST' })
 }
 
 // Managed tunnel (mobile pairing)

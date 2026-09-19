@@ -1,5 +1,5 @@
 // OCTO-FORK: the product's compliance-word engine and its one assembly point —
-// see dev-docs-usdable/需求/20260911/开发计划.md §PR-6a.
+// see the current implementation plan §PR-6a.
 package server
 
 import (
@@ -20,7 +20,7 @@ import (
 // (sensitive.DictFileName), because the package that reads the file is the one
 // that must name it: the dictionary routes in internal/productruntime write
 // that same file and may not import this package (see PR-6b2 in
-// dev-docs-usdable/需求/20260911/开发计划.md).
+// the current implementation plan).
 //
 // WHY IT IS EXPORTED AND WIRED FROM OUTSIDE. The engine is needed on two sides
 // that must not import each other: this package masks model output on the turn

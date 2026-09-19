@@ -44,12 +44,12 @@ export function wireProductEvents(): void {
   // have overwritten a fresher read with no way to tell. The event is a TRIGGER; the
   // number comes from refreshCredits() and nowhere else.
   // OCTO-FORK: P6 credits — see
-  // dev-docs-usdable/需求/2260906/技术方案/P6-入口隐藏与积分.md.
+  // the approved navigation and credits boundary.
   ws.on('credits_update', () => {
     void refreshCredits().catch(() => {
       // Swallowed on purpose: this is an unsolicited refresh the user did not ask
       // for, the number on screen keeps its last value, and the points page reports a
-      // failure at the moment the user asks (CreditsPage.svelte).
+      // failure at the moment the user asks (the account corner refresh action).
     })
   })
 }

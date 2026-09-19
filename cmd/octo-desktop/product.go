@@ -3,7 +3,7 @@ package main
 // OCTO-FORK: assembles this fork's product service into the desktop hub. The
 // whole product vocabulary for cmd/octo-desktop lives in this file so the diff
 // to upstream main.go stays at one line — see
-// dev-docs-usdable/需求/20260911/开发计划.md §PR-2b2a
+// the current implementation plan §PR-2b2a
 
 import (
 	"crypto/rand"
@@ -20,6 +20,7 @@ import (
 	"github.com/open-octo/octo-agent/internal/brand"
 	"github.com/open-octo/octo-agent/internal/catalogstore"
 	"github.com/open-octo/octo-agent/internal/credentialstore"
+	"github.com/open-octo/octo-agent/internal/pii"
 	"github.com/open-octo/octo-agent/internal/productclient"
 	"github.com/open-octo/octo-agent/internal/productprofile"
 	"github.com/open-octo/octo-agent/internal/productruntime"
@@ -67,7 +68,12 @@ import (
 // the one engine, both of which live behind the runtime. internal/server needs
 // the verdict at its three turn entry points and must not learn where the facts
 // came from (开发规范 §3.8) — the same shape as CatalogOffers above.
-func mountProductAPI() (mount func(api func(pattern string, h http.HandlerFunc)), gatewaySender func(app.ReasoningTuning) (agent.Sender, error), catalogOffers func(id string) (offers, known bool), engine *sensitive.Engine, sensitiveInputGate func(text string) (string, bool)) {
+//
+// The sixth return is the immutable personal-information engine. Returning the
+// instance keeps the preview route and authoritative send path on one versioned
+// rule set even when product routes cannot be mounted.
+func mountProductAPI() (mount func(api func(pattern string, h http.HandlerFunc)), gatewaySender func(app.ReasoningTuning) (agent.Sender, error), catalogOffers func(id string) (offers, known bool), catalogModel func(id string) (server.CatalogModelStatus, bool), preferredConfidentialModel func() (string, bool), engine *sensitive.Engine, sensitiveInputGate func(text string) (string, bool), personalInfo pii.Engine) {
+	personalInfo = pii.New()
 	if windowToken() == "" {
 		// Fail closed. Without a token the gate cannot distinguish this window
 		// from any other loopback caller, so mounting the routes would publish
@@ -75,7 +81,7 @@ func mountProductAPI() (mount func(api func(pattern string, h http.HandlerFunc))
 		// which the frontend already renders as "blocked" — the user is told,
 		// and never silently authorized (开发规范 §3.9).
 		slog.Error("product: window token unavailable, product routes not mounted")
-		return nil, nil, nil, nil, nil
+		return nil, nil, nil, nil, nil, nil, nil, personalInfo
 	}
 
 	state, err := productstate.Open(productstate.Options{
@@ -88,7 +94,7 @@ func mountProductAPI() (mount func(api func(pattern string, h http.HandlerFunc))
 	})
 	if err != nil {
 		slog.Error("product: state unavailable, product routes not mounted", "err", err)
-		return nil, nil, nil, nil, nil
+		return nil, nil, nil, nil, nil, nil, nil, personalInfo
 	}
 	if state.Corrupt() {
 		// A damaged file degrades to "not logged in" and is left on disk for
@@ -99,7 +105,7 @@ func mountProductAPI() (mount func(api func(pattern string, h http.HandlerFunc))
 	creds, err := credentialstore.Open(credentialstore.Options{})
 	if err != nil {
 		slog.Error("product: credential store unavailable, product routes not mounted", "err", err)
-		return nil, nil, nil, nil, nil
+		return nil, nil, nil, nil, nil, nil, nil, personalInfo
 	}
 
 	// The catalog cache (PR-4b). A failure here does NOT unmount the routes:
@@ -163,10 +169,14 @@ func mountProductAPI() (mount func(api func(pattern string, h http.HandlerFunc))
 		Creds:            creds,
 		Platform:         platform,
 		Sensitive:        engine,
+		PersonalInfo:     personalInfo,
 		ServerDictionary: serverDict,
 		ControlPlane: productruntime.ControlPlaneStatus{
 			Configured:     profile.ControlPlaneConfigured(),
 			HasTrustedKeys: profile.HasTrustedKeys(),
+			// OCTO-FORK: the frontend must consume the build-profile capability
+			// instead of guessing from the presence of local config.yml entries.
+			AllowEnvironmentModelSource: profile.AllowEnvironmentModelSource,
 		},
 		Catalog: catalog,
 		// The trust anchor and the audience come from their own owners
@@ -200,7 +210,15 @@ func mountProductAPI() (mount func(api func(pattern string, h http.HandlerFunc))
 	renew := productruntime.SessionRenewer{Platform: platform, Tokens: tokens, Creds: creds, State: state}
 	gateway := productruntime.GatewayEndpoint{Host: profile.GatewayHost, Tokens: tokens, Ensure: renew.Ensure}
 
-	return rt.Mount, gateway.Sender, rt.CatalogOffers, engine, rt.SensitiveInputGate
+	catalogModel = func(id string) (server.CatalogModelStatus, bool) {
+		status, known := rt.CatalogModel(id)
+		return server.CatalogModelStatus{
+			Selectable:   status.Selectable,
+			Confidential: status.Confidential,
+			Current:      status.Current,
+		}, known
+	}
+	return rt.Mount, gateway.Sender, rt.CatalogOffers, catalogModel, rt.PreferredConfidentialModel, engine, rt.SensitiveInputGate, personalInfo
 }
 
 // catalogClockSkew tolerates drift between this machine's clock and the

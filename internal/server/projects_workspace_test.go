@@ -113,7 +113,7 @@ func TestProject_RejectsWorkspaceRootAsSourceDir(t *testing.T) {
 	}
 }
 
-// OCTO-FORK: 内置默认工作区从 `~/Octo` 改为数据根下的 `data/workspace/`（便携化） — see dev-docs-usdable/需求/2260906/技术方案/P12-便携打包.md
+// OCTO-FORK: 内置默认工作区从 `~/Octo` 改为数据根下的 `data/workspace/`（便携化） — see the portable packaging design
 // A session carrying the BUILT-IN default workspace (data/workspace/) while the
 // server is configured with a different one still reads as seeded: sessions
 // written before a workspace_dir change never chose that value either.

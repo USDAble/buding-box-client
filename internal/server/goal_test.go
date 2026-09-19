@@ -57,7 +57,7 @@ func goalTestServer(t *testing.T) (*Server, *agent.Session) {
 	t.Helper()
 	tmp := t.TempDir()
 	t.Setenv("HOME", tmp)
-	// OCTO-FORK: 数据根：`~/.octo` → `<exe dir>/data`（硬规则 1） — see dev-docs-usdable/需求/2260906/技术方案/P1-便携数据根.md
+	// OCTO-FORK: 数据根：`~/.octo` → `<exe dir>/data`（硬规则 1） — see the portable data-root boundary
 	t.Setenv("OCTO_DATA_ROOT", tmp)
 	t.Setenv("USERPROFILE", tmp)
 
@@ -768,7 +768,7 @@ func TestChannelGoalCommand_SetsAndStartsTheGoal(t *testing.T) {
 	waitTurnsQuiesced(t, srv)
 }
 
-// OCTO-FORK: 把这道屏障搭在真正被每条回合路径登记的那道门上 — 见 dev-docs-usdable/需求/20260911/需求基线.md `V-109`。
+// OCTO-FORK: 把这道屏障搭在真正被每条回合路径登记的那道门上 — 见 the product baseline `V-109`。
 //
 // waitTurnsQuiesced blocks until no turn is in flight and no new one can start,
 // which is what t.TempDir()'s RemoveAll needs before it releases the data root.

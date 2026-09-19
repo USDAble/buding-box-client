@@ -7,6 +7,8 @@
   import { confirmDialog } from '../../lib/confirm'
   import { showToast } from '../../lib/stores'
 
+  let { compact = false }: { compact?: boolean } = $props()
+
   const enabled = $derived($productState?.prefs.inputSensitiveCheck ?? true)
 
   async function toggle() {
@@ -24,7 +26,7 @@
 
 <div class="sensitive-toggle">
   <button class="row" onclick={toggle} role="switch" aria-checked={enabled}>
-    <span class="lbl">{$t('sensitive.toggle')}</span>
+    {#if !compact}<span class="lbl">{$t('sensitive.toggle')}</span>{/if}
     <span class="toggle" class:on={enabled}>
       <span class="toggle-knob"></span>
     </span>

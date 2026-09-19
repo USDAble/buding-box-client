@@ -6,7 +6,7 @@
   // two entry points in this file, so upstream's import of it would be an unused symbol.
   // isDesktopShell, by contrast, IS upstream's (the URL marker is known at first paint, while
   // nativeShell waits on /api/version) and both of its uses auto-merged in. — see
-  // dev-docs-usdable/需求/20260911/开发计划.md §PR-5b2b
+  // the current implementation plan §PR-5b2b
   import { view, sidebar, sessions, sessionGroups, pinnedSessions, collapsedSessions, editGroupId, editGroupDraft, activeSessionId, selMode, sel, menuFor, editId, editDraft, showToast, mcpServers, createNewSession, createSessionInGroup, clearPendingSessionOpts, accountPanelOpen, cmdkOpen, nativeShell, isDesktopShell, dirLeaf } from '../../lib/stores'
   import * as api from '../../lib/api'
   import { titlebarDblClick } from '../../lib/nativeWindow'
@@ -16,18 +16,16 @@
   // dictionary, not .svelte literals. See 品牌升级方案.md §2.5.
   import { brandShortName } from '../../lib/brand'
   import { confirmDialog } from '../../lib/confirm'
-  import { viewHidden, visibleNav } from '../../lib/features'
+  import { visibleNav } from '../../lib/features'
   import { splitSections, swapWithinSection, parseSectionFold, type SectionFold } from '../../lib/sidebarSections'
   import { SIDEBAR_MIN, SIDEBAR_MAX, CENTER_MIN, readSidebarWidth, saveSidebarWidth } from '../../lib/sidebarWidth'
   import { ago, clockTick } from '../../lib/relTime'
   import { isUnread, sessionSeenAt, sessionTouchedAt } from '../../lib/unread'
-  import { productState } from '../../lib/product'
   import { ws } from '../../lib/ws'
   import OctoLogo from './OctoLogo.svelte'
   import AccountCorner from './AccountCorner.svelte'
   import AccountPanel from './AccountPanel.svelte'
   import ProjectModal from '../overlays/ProjectModal.svelte'
-  import PrivacyMark from '../ui/PrivacyMark.svelte'
   import type { SessionGroup } from '../../lib/types'
 
   // Mac's traffic lights float over the window's top-left corner, which is this
@@ -399,17 +397,18 @@
     ...topNav.map(item => ({ icon: item.icon, title: item.label, v: item.v })),
   ]
 
-  // P6: filter the hidden upstream capability views (mcp/channels/lightapps)
-  // out of navigation WITHOUT touching the arrays themselves, so upstream
-  // additions to these arrays merge cleanly (需求 §5.4.3: 隐藏不删代码).
+  // P6: filter navigation through the product's explicit visible set without
+  // touching the upstream arrays. Hidden entries and future upstream additions
+  // remain implemented and directly routable; they simply receive no sidebar
+  // entry until the product approves one.
   // OCTO-FORK: P6 入口隐藏 — see
-  // dev-docs-usdable/需求/2260906/技术方案/P6-入口隐藏与积分.md.
+  // the approved navigation and credits boundary.
   const visibleTopNav = $derived(visibleNav(topNav))
   const visibleMoreCategories = $derived(visibleNav(moreCategories))
   const visibleRailNav = $derived(visibleNav(railNav))
 
   function navActive(v: string) { return $view === v }
-  function moreActive() { return moreCategories.some(c => c.v === $view) }
+  function moreActive() { return visibleMoreCategories.some(c => c.v === $view) }
 
   function toggleSel(id: string) {
     sel.update(s => { const n = { ...s }; n[id] ? delete n[id] : (n[id] = true); return n })
@@ -972,10 +971,6 @@
             <iconify-icon icon="ant-design:close-outlined" width="13"></iconify-icon>
           </span>
           {:else}
-          <!-- Empty chat_mode is a legacy session and follows the account
-               default, matching the server. OCTO-FORK: P10 隐私模式与 PII 处理 — see
-               dev-docs-usdable/需求/2260906/技术方案/P10-隐私模式与PII.md. -->
-          <PrivacyMark mode={(s as any).chat_mode || $productState?.prefs.defaultChatMode || 'default'} />
           <span class="session-title">{(s as any).name || (s as any).title || s.id}</span>
           <!-- Metadata gives way to the row's actions on hover (CSS, not state:
                the actions are the same width every time, so swapping them in

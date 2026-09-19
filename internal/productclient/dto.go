@@ -3,7 +3,7 @@
 //
 // It is the single place where central-facing field names live (fork spec
 // §3.8). The contract is a proposal until the platform confirms it - see
-// dev-docs-usdable/需求/20260911/中台交付包.md - so keeping every name here means a
+// the control-plane contract - so keeping every name here means a
 // contract change is a single-point edit.
 //
 // This package does not talk to model providers. The gateway is reached through
@@ -97,6 +97,9 @@ const (
 	CodeActivationCodeUsed = "activation_code_used"
 	CodeBoxCodeUnknown     = "box_code_unknown"
 	CodeBoxCodeMismatch    = "box_code_mismatch"
+	CodeBoxAccessDenied    = "box_access_denied"
+	CodeBoxNotFound        = "box_not_found"
+	CodeBoxUnavailable     = "box_unavailable"
 	CodeInvalidRequest     = "invalid_request"
 
 	CodeUnauthorized = "unauthorized"
@@ -109,6 +112,7 @@ const (
 	CodeModelNotAllowed     = "model_not_allowed"
 	CodeInsufficientCredits = "insufficient_credits"
 	CodeRateLimited         = "rate_limited"
+	CodeIdempotencyConflict = "idempotency_conflict"
 	CodeMaintenance         = "maintenance"
 	CodeUpstreamUnavailable = "upstream_unavailable"
 	CodeInternalError       = "internal_error"
@@ -162,6 +166,12 @@ const (
 	// reasons to call this, never carriers of the number (需求基线 E9 rule 2,
 	// decided by a human 2026-09-14).
 	pathCreditsLedger = "/credits/ledger"
+	// pathFeedback accepts the deliberately small, user-authored product
+	// feedback payload. The authenticated account is derived from the bearer.
+	pathFeedback = "/feedback"
+	// pathBox is the account's single currently bound box. The desktop never
+	// probes a LAN address or treats an activation code as a box credential.
+	pathBox = "/box"
 )
 
 // PurposeLogin is the only code purpose this build requests.
@@ -235,6 +245,57 @@ type RefreshData struct {
 	AccessToken             string `json:"accessToken"`
 	RefreshToken            string `json:"refreshToken"`
 	AccessTokenExpiresInSec int    `json:"accessTokenExpiresInSec"`
+}
+
+// FeedbackRequest is the only user-authored payload sent to the product
+// feedback endpoint. Identity and diagnostics are intentionally absent.
+type FeedbackRequest struct {
+	Category     string `json:"category"`
+	Title        string `json:"title"`
+	Content      string `json:"content"`
+	Reproduction string `json:"reproduction,omitempty"`
+	Expected     string `json:"expected,omitempty"`
+	Impact       string `json:"impact"`
+	Contact      string `json:"contact,omitempty"`
+}
+
+// FeedbackData is the minimal acceptance receipt returned by the platform.
+type FeedbackData struct {
+	FeedbackID string `json:"feedbackId"`
+	AcceptedAt string `json:"acceptedAt"`
+}
+
+// BoxData is the safe, account-authorised projection of the one box this
+// product version supports. It deliberately excludes activation codes, LAN
+// addresses, hardware serials, logs, and credentials.
+type BoxData struct {
+	ID              string          `json:"id"`
+	DisplayName     string          `json:"displayName"`
+	State           string          `json:"state"`
+	BoundAt         string          `json:"boundAt"`
+	LastSeenAt      string          `json:"lastSeenAt,omitempty"`
+	SoftwareVersion string          `json:"softwareVersion,omitempty"`
+	Management      BoxManagement   `json:"management"`
+	Capabilities    BoxCapabilities `json:"capabilities"`
+}
+
+type BoxManagement struct {
+	CanView bool `json:"canView"`
+}
+
+type BoxCapabilities struct {
+	PrivateModels BoxCapability `json:"privateModels"`
+	Tools         BoxCapability `json:"tools"`
+	Knowledge     BoxCapability `json:"knowledge"`
+	Automation    BoxCapability `json:"automation"`
+}
+
+// BoxCapability uses states instead of a boolean so an unavailable capability
+// is never confused with a supported capability that happens to have zero
+// items. Valid states are available, unavailable, and coming_soon.
+type BoxCapability struct {
+	State string `json:"state"`
+	Count int    `json:"count,omitempty"`
 }
 
 // BootstrapData is the account summary gathered at startup.

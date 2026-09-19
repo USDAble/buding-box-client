@@ -1,5 +1,5 @@
 // OCTO-FORK: turn refusals that name the control plane's error code (G3) — see
-// dev-docs-usdable/需求/20260911/开发计划.md §PR-5d3.
+// the current implementation plan §PR-5d3.
 package server
 
 import "fmt"

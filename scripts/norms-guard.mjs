@@ -1,7 +1,7 @@
 // scripts/norms-guard.mjs
 //
 // Guards the rule that every AI coding tool touching this repo is told to read
-// and obey dev-docs-usdable/开发规范.md (开发规范 §3.6). The fork's hard rules
+// and obey the fork engineering norms (开发规范 §3.6). The fork's hard rules
 // are only as strong as their discovery: each tool reads a different entry
 // point — Cursor reads .cursor/rules/*.mdc, Claude Code reads CLAUDE.md,
 // Copilot reads .github/copilot-instructions.md, Codex/Gemini CLI/Aider read
@@ -28,7 +28,7 @@ import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 // The canonical fork spec. Every entry point must name this exact path.
-export const NORMS_PATH = 'dev-docs-usdable/开发规范.md'
+export const NORMS_PATH = 'dev-docs-puddingbox/规范/开发规范.md'
 
 // The upstream normative pair (开发规范 §3.6). Both are binding, both must keep
 // pointing at the fork spec, and the canonical file must acknowledge both.

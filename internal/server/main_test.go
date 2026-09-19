@@ -8,7 +8,7 @@ import (
 // TestMain pins HOME for the entire test binary. Turn paths spawn
 // fire-and-forget goroutines (title generation, follow-up suggestions) that
 // can outlive an individual test's t.Setenv("HOME") scope; once the test ends
-// OCTO-FORK: 数据根：`~/.octo` → `<exe dir>/data`（硬规则 1） — see dev-docs-usdable/需求/2260906/技术方案/P1-便携数据根.md
+// OCTO-FORK: 数据根：`~/.octo` → `<exe dir>/data`（硬规则 1） — see the portable data-root boundary
 // the env is restored, and a goroutine that resolves the data root after that would
 // write session files into the developer's real home directory (observed as
 // "stub reply" sessions in the Web UI sidebar). With a process-lifetime temp

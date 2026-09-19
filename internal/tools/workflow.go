@@ -31,7 +31,7 @@ var workflowForeground atomic.Bool
 func SetWorkflowForeground(v bool) { workflowForeground.Store(v) }
 
 // workflowJournalDir overrides the workflow runtime's journal directory
-// OCTO-FORK: 数据根：`~/.octo` → `<exe dir>/data`（硬规则 1） — see dev-docs-usdable/需求/2260906/技术方案/P1-便携数据根.md
+// OCTO-FORK: 数据根：`~/.octo` → `<exe dir>/data`（硬规则 1） — see the portable data-root boundary
 // (data/workflow-journals by default, resolved by internal/workflow).
 // Empty (the zero value) leaves the runtime default in place — every real
 // entry point (CLI, server, IM) never sets this. Tests point it at a temp dir

@@ -19,7 +19,7 @@ import (
 // PidPath returns the path of the backend pid file (data/serve.pid), creating
 // the data root if needed.
 // OCTO-FORK: the portable product keeps the pid next to the executable, not in
-// the host home — see dev-docs-usdable/需求/2260906/技术方案/P1-便携数据根.md.
+// the host home — see the portable data-root boundary.
 func PidPath() (string, error) {
 	root, err := datapath.Root()
 	if err != nil {
@@ -44,7 +44,7 @@ func LogPath() (string, error) {
 // terminal session open — and interleaving them would make both harder to read.
 // OCTO-FORK: upstream routes this through octoDir()/~/.octo; the data root is
 // data/ in this fork and octoDir no longer exists — see
-// dev-docs-usdable/需求/2260906/技术方案/P1-便携数据根.md.
+// the portable data-root boundary.
 func CLILogPath() (string, error) {
 	dir, err := datapath.Sub("logs")
 	if err != nil {

@@ -1,5 +1,5 @@
 // OCTO-FORK: the three product WS events that are not session-scoped, and the
-// one that has to be replayed — see dev-docs-usdable/需求/20260911/开发计划.md §2 PR-8.
+// one that has to be replayed — see the current implementation plan §2 PR-8.
 package server
 
 import (

@@ -240,7 +240,6 @@ func TestPreferencesAreStoredFieldByField(t *testing.T) {
 
 	type prefs struct {
 		Locale              string `json:"locale"`
-		DefaultChatMode     string `json:"defaultChatMode"`
 		InputSensitiveCheck bool   `json:"inputSensitiveCheck"`
 	}
 	read := func() prefs {
@@ -262,7 +261,6 @@ func TestPreferencesAreStoredFieldByField(t *testing.T) {
 		desc string
 	}{
 		{map[string]any{"locale": "en"}, func(p prefs) bool { return p.Locale == "en" }, "locale"},
-		{map[string]any{"defaultChatMode": "privacy"}, func(p prefs) bool { return p.DefaultChatMode == "privacy" }, "defaultChatMode"},
 		{map[string]any{"inputSensitiveCheck": false}, func(p prefs) bool { return !p.InputSensitiveCheck }, "inputSensitiveCheck"},
 	}
 	for _, step := range steps {
@@ -279,7 +277,7 @@ func TestPreferencesAreStoredFieldByField(t *testing.T) {
 	// a zero value for every omitted field would pass each step above and lose
 	// the previous one.
 	got := read()
-	if got.Locale != "en" || got.DefaultChatMode != "privacy" || got.InputSensitiveCheck {
+	if got.Locale != "en" || got.InputSensitiveCheck {
 		t.Fatalf("edits did not accumulate: %+v", got)
 	}
 }
@@ -296,7 +294,6 @@ func TestAPreferenceRefusalNamesTheFieldBesideTheCode(t *testing.T) {
 		field string
 	}{
 		{"unknown locale", map[string]any{"locale": "jp"}, "locale"},
-		{"unknown chat mode", map[string]any{"defaultChatMode": "turbo"}, "defaultChatMode"},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {

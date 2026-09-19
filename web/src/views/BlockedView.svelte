@@ -106,14 +106,15 @@
   }
 
   async function onSendCode() {
-    if (!normalizePhone(phone).ok) {
+    const normalized = normalizePhone(phone)
+    if (!normalized.ok) {
       fieldErrors = { ...fieldErrors, phone: 'invalid_phone' }
       return
     }
     fieldErrors = { ...fieldErrors, phone: '' }
     sending = true
     try {
-      const secs = await sendCode(phone)
+      const secs = await sendCode(normalized.value)
       startCountdown(secs)
       showToast($t('product.code_sent'))
     } catch (e) {
@@ -183,7 +184,8 @@
   async function doSubmit() {
     // Round one — format. Every failure is collected and shown at once.
     const errs: Record<string, string> = {}
-    if (!normalizePhone(phone).ok) errs.phone = 'invalid_phone'
+    const normalizedPhone = normalizePhone(phone)
+    if (!normalizedPhone.ok) errs.phone = 'invalid_phone'
     if (!/^\d{6}$/.test(code)) errs.code = 'invalid_code'
     if (validateNickname(nickname) !== 'ok') errs.nickname = 'nickname_format'
     if (activationForm && !activationCode.trim()) errs.activationCode = 'invalid_activation'
@@ -197,7 +199,7 @@
     submitting = true
     try {
       const result = await login({
-        phone,
+        phone: normalizedPhone.value,
         code,
         nickname,
         activationCode: activationForm ? activationCode.trim() : undefined,
@@ -343,7 +345,7 @@
     <form class="form" onsubmit={onSubmit} novalidate>
       <div class="field">
         <label for="phone">{$t('product.phone_label')}</label>
-        <input id="phone" type="tel" bind:value={phone} placeholder={$t('product.phone_placeholder')} autocomplete="tel" />
+        <input id="phone" type="tel" inputmode="tel" bind:value={phone} placeholder={$t('product.phone_placeholder')} autocomplete="tel" />
         {#if fieldErrors.phone}<p class="field-err">{$t(fieldErrorKey('phone'))}</p>{/if}
       </div>
 

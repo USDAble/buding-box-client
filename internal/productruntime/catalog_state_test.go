@@ -1,4 +1,4 @@
-// OCTO-FORK: PR-4c 三条降级语义与条件刷新 — see dev-docs-usdable/需求/20260911/开发计划.md (§2 PR-4c).
+// OCTO-FORK: PR-4c 三条降级语义与条件刷新 — see the current implementation plan (§2 PR-4c).
 package productruntime
 
 import (
@@ -414,18 +414,18 @@ func TestAbsentCatalogDoesNotAskForKeys(t *testing.T) {
 // package therefore fails here rather than at acceptance.
 func TestNoPathFallsBackToALocalModel(t *testing.T) {
 	type picker struct {
-		Modes []struct {
+		Vendors []struct {
 			Models []struct {
 				ID string `json:"id"`
 			} `json:"models"`
-		} `json:"modes"`
+		} `json:"vendors"`
 	}
 	read := func(t *testing.T, f *catalogFixture) picker {
 		t.Helper()
 		rec := httptest.NewRecorder()
-		f.rt.Handler().ServeHTTP(rec, httptest.NewRequest("GET", "/api/product/chat-modes", nil))
+		f.rt.Handler().ServeHTTP(rec, httptest.NewRequest("GET", "/api/product/models", nil))
 		if rec.Code != 200 {
-			t.Fatalf("GET /api/product/chat-modes = %d", rec.Code)
+			t.Fatalf("GET /api/product/models = %d", rec.Code)
 		}
 		var out picker
 		if err := json.Unmarshal(rec.Body.Bytes(), &out); err != nil {
@@ -437,8 +437,8 @@ func TestNoPathFallsBackToALocalModel(t *testing.T) {
 	// is allowed to produce right now.
 	offered := func(p picker) map[string]bool {
 		seen := map[string]bool{}
-		for _, m := range p.Modes {
-			for _, model := range m.Models {
+		for _, vendor := range p.Vendors {
+			for _, model := range vendor.Models {
 				seen[model.ID] = true
 			}
 		}
@@ -448,6 +448,9 @@ func TestNoPathFallsBackToALocalModel(t *testing.T) {
 		t.Helper()
 		want := map[string]bool{}
 		if f.rt.deps.Catalog == nil {
+			return want
+		}
+		if f.rt.currentCatalogAvailability().State != catalogStateReady {
 			return want
 		}
 		entry, err := f.store.Load()
@@ -523,7 +526,7 @@ func TestNoPathFallsBackToALocalModel(t *testing.T) {
 	// a built-in list with a single entry in it.
 	for _, id := range []string{"buding-", "privacy", "smart"} {
 		if strings.Contains(catalogSource(t), id) {
-			t.Errorf("catalog.go names %q; model ids come from the signed catalog and mode ids from internal/chatmode", id)
+			t.Errorf("catalog.go names %q; model ids come from the signed catalog", id)
 		}
 	}
 }

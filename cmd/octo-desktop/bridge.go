@@ -13,6 +13,8 @@ import (
 	"time"
 
 	"github.com/open-octo/octo-agent/internal/server"
+	"github.com/open-octo/octo-agent/internal/upgrade"
+	"github.com/open-octo/octo-agent/internal/version"
 	"github.com/wailsapp/wails/v3/pkg/application"
 	"github.com/wailsapp/wails/v3/pkg/events"
 	"github.com/wailsapp/wails/v3/pkg/services/notifications"
@@ -42,7 +44,7 @@ type nativeBridge struct {
 	// the shutdown path can reach it across goroutines, hence atomic.
 	// OCTO-FORK: the portable data root can vanish mid-session (removable
 	// media), so the desktop shell needs a freeze signal — see watchdog.go and
-	// dev-docs-usdable/需求/20260911/开发计划0911/ 的 L-E3.
+	// the desktop lifecycle design 的 L-E3.
 	watchdog atomic.Pointer[Watchdog]
 
 	// allowQuit gates the app's ShouldQuit on Windows/Linux, where closing the
@@ -186,7 +188,7 @@ const desktopShellQuery = "shell=octo-desktop"
 // sync (TestShellURL pins the Go side).
 func shellURL(base, hash string) string {
 	// OCTO-FORK: append this fork's window token — see
-	// dev-docs-usdable/需求/20260911/开发计划.md §PR-2b2b.
+	// the current implementation plan §PR-2b2b.
 	//
 	// This is the only place the window URL is built, so it is the only place
 	// the token can enter it. The helper is fork-owned and returns "" when no
@@ -964,6 +966,16 @@ func (b *nativeBridge) SelfUpdate() error {
 	}
 	go startUpdateFlow(b)
 	return nil
+}
+
+// CheckForUpdates is the webview's explicit, read-only lookup. It bypasses the
+// server cache because routine server checks are disabled for portable builds.
+func (b *nativeBridge) CheckForUpdates(ctx context.Context) (string, bool, error) {
+	latest, err := upgrade.Check(ctx)
+	if err != nil {
+		return "", false, err
+	}
+	return latest, upgrade.NeedsUpdate(strings.TrimPrefix(version.Version, "v"), latest), nil
 }
 
 func (b *nativeBridge) OpenExternal(url string) error {

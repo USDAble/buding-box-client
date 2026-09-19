@@ -39,7 +39,7 @@ jobs:
           # Generate the icon+manifest .syso in the package directory so go build
           # links it into the .exe; then build the desktop binary.
           go run -C cmd/octo-desktop ./build/windows/generate-syso amd64 build/windows/icon.ico build/windows/wails.exe.manifest
-          # OCTO-FORK: CI 守卫接线：新增 norms/brand/datapath/agents/server-diff 等 job — see dev-docs-usdable/开发规范.md §3.4
+          # OCTO-FORK: CI 守卫接线：新增 norms/brand/datapath/agents/server-diff 等 job — see the fork engineering norms §3.4
           go build -C cmd/octo-desktop -tags product_production -ldflags "-H windowsgui" -o "$PWD\staging\PuddingBox.exe" .
           Copy-Item LICENSE.txt staging\LICENSE.txt
           # uv.exe is skipifsourcedoesntexist in the .iss, so a check compile that

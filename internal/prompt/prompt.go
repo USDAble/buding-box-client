@@ -64,7 +64,7 @@ const maxIncludeDepth = 5
 // ProjectContextFile. It's a var so tests can point it at a temp file. Returns
 // "" when the data root can't be resolved.
 // OCTO-FORK: the portable product keeps identity files next to the executable,
-// not in the host home — see dev-docs-usdable/需求/2260906/技术方案/P1-便携数据根.md.
+// not in the host home — see the portable data-root boundary.
 var userRulesPath = func() string {
 	p, err := datapath.Join("octorules.md")
 	if err != nil {

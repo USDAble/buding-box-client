@@ -57,7 +57,7 @@ func resolveSymlinks(p string) string {
 // directory (see Dir). Callers that enumerate all project memories (e.g. the
 // serve memory panel) read it instead of hard-coding the layout.
 // OCTO-FORK: the portable product keeps memories next to the executable, not in
-// the host home — see dev-docs-usdable/需求/2260906/技术方案/P1-便携数据根.md.
+// the host home — see the portable data-root boundary.
 func RootDir() (string, error) {
 	return datapath.Join("memories")
 }

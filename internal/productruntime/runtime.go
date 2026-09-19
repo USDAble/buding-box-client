@@ -1,5 +1,5 @@
 // Package productruntime serves the local product API the web UI calls
-// (/api/product/*), defined by dev-docs-usdable/需求/20260911/本地API契约.md.
+// (/api/product/*), defined by the local product API contract.
 //
 // It sits between two contracts: browser-facing on this side, platform-facing on
 // the other (中台交付包.md). It holds no platform field names of its own - the
@@ -21,7 +21,9 @@ import (
 
 	"github.com/open-octo/octo-agent/internal/catalogstore"
 	"github.com/open-octo/octo-agent/internal/credentialstore"
+	"github.com/open-octo/octo-agent/internal/pii"
 	"github.com/open-octo/octo-agent/internal/productclient"
+	"github.com/open-octo/octo-agent/internal/productphone"
 	"github.com/open-octo/octo-agent/internal/productstate"
 	"github.com/open-octo/octo-agent/internal/sensitive"
 )
@@ -40,9 +42,9 @@ type Deps struct {
 	State    *productstate.Store
 	Creds    *credentialstore.Store
 	Platform *productclient.Client
-	// ControlPlane carries the two compile-time profile facts the blocked page
-	// needs before the user types anything: whether this build names a real
-	// control plane, and whether it trusts any signing key.
+	// ControlPlane carries compile-time profile facts needed before the user
+	// types: whether this build names a real control plane, whether it trusts a
+	// signing key, and whether local environment models are an allowed source.
 	//
 	// They are facts about the BUILD, not about the user's data, which is why
 	// they arrive here instead of being read out of product-state.json (E6.1) -
@@ -74,6 +76,9 @@ type Deps struct {
 	// nil means the build did not wire it. The nickname route then refuses the
 	// edit instead of storing an unchecked name — see account.go.
 	Sensitive *sensitive.Engine
+	// PersonalInfo is the immutable built-in masking engine shared with the
+	// server-authoritative send path. nil makes the transform route fail closed.
+	PersonalInfo pii.Engine
 	// ServerDictionary owns the last verified server layer. A nil store removes
 	// only that layer; built-in and user words remain active.
 	ServerDictionary *sensitive.ServerStore
@@ -95,11 +100,12 @@ type CatalogTrust struct {
 	Skew time.Duration
 }
 
-// ControlPlaneStatus is the answer to "can this build reach a control plane at
-// all", as computed by internal/productprofile. See 本地API契约 §2.13.
+// ControlPlaneStatus projects the build capabilities computed by
+// internal/productprofile. See 本地API契约 §2.13.
 type ControlPlaneStatus struct {
-	Configured     bool
-	HasTrustedKeys bool
+	Configured                  bool
+	HasTrustedKeys              bool
+	AllowEnvironmentModelSource bool
 }
 
 // Runtime serves the local product endpoints.
@@ -154,10 +160,12 @@ func (rt *Runtime) Mount(api func(pattern string, h http.HandlerFunc)) {
 	api("GET /api/product/control-plane", rt.handleControlPlane)
 	api("GET /api/product/catalog", rt.handleCatalog)
 	api("GET /api/product/credits", rt.handleCredits)
-	api("GET /api/product/chat-modes", rt.handleChatModes)
+	api("GET /api/product/models", rt.handleModels)
+	api("GET /api/product/box", rt.handleBox)
 	api("POST /api/product/send-code", rt.handleSendCode)
 	api("POST /api/product/login", rt.handleLogin)
 	api("POST /api/product/logout", rt.handleLogout)
+	api("POST /api/product/feedback", rt.handleFeedback)
 	api("PUT /api/product/locale", rt.handleLocale)
 	// PR-6b1 — the account-editing pair. They sit here, in the one list of
 	// product routes, so both adapters (this one and Handler()) stay in step.
@@ -175,118 +183,104 @@ func (rt *Runtime) Mount(api func(pattern string, h http.HandlerFunc)) {
 	// (the turn-path gate) is NOT a route: it is handed to internal/server as
 	// SensitiveInputGate, so a frontend cannot skip it.
 	api("POST /api/product/sensitive/check", rt.handleSensitiveCheck)
+	// OCTO-FORK: expose the immutable built-in privacy-rule registry to the
+	// settings UI without duplicating rule definitions in the frontend.
+	api("GET /api/product/privacy/rules", rt.handlePrivacyRules)
+	api("POST /api/product/privacy/transform", rt.handlePrivacyTransform)
 }
 
-// chatModesDTO is the wire shape of 本地API契约 §2.8.
-//
-// There is deliberately no `fallback` field. The old shape carried one to
-// announce that the built-in list had been substituted for an unreadable
-// data/chat-modes.json, and 需求基线 B1 规则 4 retired both the file and the
-// behaviour; re-adding the field would be the built-in list coming back with a
-// flag on it. A type that cannot express the field is the cheapest way to keep
-// it out (the route test asserts its absence over the wire anyway, because the
-// JSON is a Go/JS boundary and this struct is not what the browser sees).
-//
-// The versions are always present and are empty strings when no catalog was
-// available - not omitted. The frontend compares them to notice that the catalog
-// changed, and "absent" and "empty" would be two spellings of one state.
-type chatModesDTO struct {
-	Modes          []chatModeGroupDTO `json:"modes"`
-	CatalogVersion string             `json:"catalogVersion"`
-	PolicyVersion  string             `json:"policyVersion"`
+type modelsDTO struct {
+	State          string           `json:"state"`
+	CatalogVersion string           `json:"catalogVersion"`
+	Vendors        []modelVendorDTO `json:"vendors"`
 }
 
-type chatModeGroupDTO struct {
-	ID string `json:"id"`
-	// Models is always a JSON array, never null: the picker iterates it, and a
-	// null would make an empty group a different shape from a populated one.
-	Models       []chatModeModelDTO `json:"models"`
-	DefaultModel string             `json:"defaultModel"`
+type modelVendorDTO struct {
+	ID          string            `json:"id"`
+	DisplayName string            `json:"displayName"`
+	Models      []catalogModelDTO `json:"models"`
 }
 
-type chatModeModelDTO struct {
-	ID          string                    `json:"id"`
-	DisplayName productclient.DisplayName `json:"displayName"`
-	CompositeID string                    `json:"compositeId"`
+type catalogModelDTO struct {
+	ID                   string `json:"id"`
+	DisplayName          string `json:"displayName"`
+	CompositeID          string `json:"compositeId"`
+	Confidential         bool   `json:"confidential"`
+	ConfidentialPriority *int   `json:"confidentialPriority,omitempty"`
 }
 
-// handleChatModes is the picker's data source: the signed catalog, projected.
-//
-// It reads the cache and never the network. Fetching belongs to login (PR-4b's
-// single fetch point) and, from PR-4c, to an explicit refresh - so a picker that
-// is opened with no catalog answers "nothing" instead of starting a call behind
-// the user's back, which would also make the response's arrival time depend on
-// the network.
-//
-// No catalog, a damaged cache and a cache this build cannot read all produce the
-// same answer - an empty list - because the picker has exactly one thing to do
-// about all three, and 需求基线 B1 规则 1 forbids the alternative (a local
-// list). Telling them apart is PR-4c's job, and it does it on its own endpoint
-// reporting the cache's state, not by reading it out of this response.
-func (rt *Runtime) handleChatModes(w http.ResponseWriter, r *http.Request) {
-	empty := chatModesDTO{Modes: []chatModeGroupDTO{}}
-
-	if rt.deps.Catalog == nil {
-		writeJSON(w, http.StatusOK, empty)
+// handleModels projects only the last accepted signed catalog. It performs no
+// network access: catalog refresh has its own endpoint and lifecycle, while an
+// opened selector must be a deterministic read of current trust state.
+func (rt *Runtime) handleModels(w http.ResponseWriter, r *http.Request) {
+	availability := rt.currentCatalogAvailability()
+	out := modelsDTO{
+		State:          string(availability.State),
+		CatalogVersion: availability.CatalogVersion,
+		Vendors:        []modelVendorDTO{},
+	}
+	if !availability.ready() || rt.deps.Catalog == nil {
+		writeJSON(w, http.StatusOK, out)
 		return
 	}
 	entry, err := rt.deps.Catalog.Load()
 	if err != nil {
-		// Absence is the ordinary case on a fresh installation, so it is not
-		// worth a warning; a damaged or unreadable cache is, because the user
-		// sees an empty picker and nothing else would explain it.
-		if !errors.Is(err, catalogstore.ErrNoCache) {
-			slog.Warn("product: chat-modes served empty", "err", err)
-		}
-		writeJSON(w, http.StatusOK, empty)
+		slog.Warn("product: models served empty", "err", err)
+		out.State = catalogProjectionFailureState()
+		writeJSON(w, http.StatusOK, out)
 		return
 	}
-
-	// The cached envelope was verified before it was written (catalogstore only
-	// ever holds what fetchCatalog accepted), so this parses rather than
-	// re-verifies: a second signature check here would be a second opinion about
-	// a fact that already has one owner (开发规范 §3.8).
 	policy, err := entry.Envelope.DecodePolicy()
 	if err != nil {
 		slog.Warn("product: cached catalog could not be read back", "err", err, "catalogVersion", entry.CatalogVersion)
-		writeJSON(w, http.StatusOK, empty)
+		out.State = catalogProjectionFailureState()
+		writeJSON(w, http.StatusOK, out)
 		return
 	}
-
-	groups, ignored := projectCatalog(policy)
-	if len(ignored) > 0 {
-		// Reported, not acted on: the mode set is a product constant, so an
-		// unknown id is a platform contract drift an operator needs to see, while
-		// the picker carries on with the modes the product has.
-		slog.Warn("product: catalog names mode ids this build does not have", "modeIds", ignored)
+	vendors, err := projectCatalog(policy)
+	if err != nil {
+		slog.Warn("product: cached catalog could not be projected", "err", err, "catalogVersion", entry.CatalogVersion)
+		out.State = catalogProjectionFailureState()
+		writeJSON(w, http.StatusOK, out)
+		return
 	}
-
-	out := chatModesDTO{
-		Modes:          make([]chatModeGroupDTO, 0, len(groups)),
-		CatalogVersion: entry.CatalogVersion,
-		PolicyVersion:  policy.PolicyVersion,
+	locale := "en"
+	if rt.deps.State != nil {
+		locale = rt.deps.State.PublicState().Prefs.Locale
 	}
-	for _, g := range groups {
-		dto := chatModeGroupDTO{
-			ID:           g.ID,
-			Models:       make([]chatModeModelDTO, 0, len(g.Models)),
-			DefaultModel: g.DefaultModel,
+	for _, vendor := range vendors {
+		row := modelVendorDTO{
+			ID:          vendor.ID,
+			DisplayName: localizeDisplayName(vendor.DisplayName, locale),
+			Models:      make([]catalogModelDTO, 0, len(vendor.Models)),
 		}
-		for _, m := range g.Models {
-			dto.Models = append(dto.Models, chatModeModelDTO{
-				ID:          m.ID,
-				DisplayName: m.DisplayName,
-				CompositeID: m.CompositeID,
+		for _, model := range vendor.Models {
+			row.Models = append(row.Models, catalogModelDTO{
+				ID:                   model.ID,
+				DisplayName:          localizeDisplayName(model.DisplayName, locale),
+				CompositeID:          model.CompositeID,
+				Confidential:         model.Confidential,
+				ConfidentialPriority: model.ConfidentialPriority,
 			})
 		}
-		out.Modes = append(out.Modes, dto)
+		out.Vendors = append(out.Vendors, row)
 	}
 	writeJSON(w, http.StatusOK, out)
 }
 
+func localizeDisplayName(name productclient.DisplayName, locale string) string {
+	if strings.HasPrefix(strings.ToLower(locale), "zh") && name.Zh != "" {
+		return name.Zh
+	}
+	if name.En != "" {
+		return name.En
+	}
+	return name.Zh
+}
+
 // handleControlPlane reports whether this build can reach a control plane at
-// all, so the blocked page can say "this package is misconfigured" before the
-// user spends a round-trip finding out (本地API契约 §2.13, L-B2).
+// all, and whether local models are permitted, so the UI can apply the profile
+// before the user spends a round-trip finding out (本地API契约 §2.13, L-B2).
 //
 // It reads Deps rather than internal/productprofile because it must work in the
 // one case the profile cannot describe: a build whose config is fine on disk
@@ -295,26 +289,27 @@ func (rt *Runtime) handleChatModes(w http.ResponseWriter, r *http.Request) {
 // what "configured" means - that judgement has one owner.
 func (rt *Runtime) handleControlPlane(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, controlPlaneDTO{
-		Configured:     rt.deps.ControlPlane.Configured,
-		HasTrustedKeys: rt.deps.ControlPlane.HasTrustedKeys,
+		Configured:                  rt.deps.ControlPlane.Configured,
+		HasTrustedKeys:              rt.deps.ControlPlane.HasTrustedKeys,
+		AllowEnvironmentModelSource: rt.deps.ControlPlane.AllowEnvironmentModelSource,
 	})
 }
 
-// controlPlaneDTO is the wire shape of 本地API契约 §2.13. Both fields are always
-// present: the frontend distinguishes the four blocked-page outcomes by their
-// values, not by their absence, so omitting a false would collapse two of them.
+// controlPlaneDTO is the wire shape of 本地API契约 §2.13. Every field is always
+// present: false is a build capability decision, not a missing value.
 type controlPlaneDTO struct {
-	Configured     bool `json:"configured"`
-	HasTrustedKeys bool `json:"hasTrustedKeys"`
+	Configured                  bool `json:"configured"`
+	HasTrustedKeys              bool `json:"hasTrustedKeys"`
+	AllowEnvironmentModelSource bool `json:"allowEnvironmentModelSource"`
 }
 
 // handleCatalog reports whether the catalog is usable, and if not why
 // (本地API契约 §2.14, 需求基线 B4/B9).
 //
-// It is a separate endpoint rather than a field on /chat-modes or /state, and
+// It is a separate endpoint rather than a field on /models or /state, and
 // the reason is an ownership one (开发规范 §3.8): usability is a run-time fact
 // about the cache plus the last refresh, while /state mirrors a file on disk and
-// /chat-modes answers "what should the picker show". Only the composer needs the
+// /models answers "what should the picker show". Only the composer needs the
 // answer without opening the picker ("must not start a turn"), and a fact with
 // three readers gets one owner or it gets three drifting copies.
 //
@@ -342,7 +337,8 @@ func (rt *Runtime) handleSendCode(w http.ResponseWriter, r *http.Request) {
 	if !decodeBody(w, r, &req) {
 		return
 	}
-	if !validPhone(req.Phone) {
+	phone, ok := productphone.Normalize(req.Phone)
+	if !ok {
 		// Business-level, NOT field-level. The frontend reads body.code and files
 		// it under the phone input itself; moving this into fieldErrors would
 		// silently lose the message (本地API契约 §2.2).
@@ -355,7 +351,7 @@ func (rt *Runtime) handleSendCode(w http.ResponseWriter, r *http.Request) {
 	}
 
 	data, err := rt.deps.Platform.SendSMS(r.Context(), productclient.SendSMSRequest{
-		Phone:   req.Phone,
+		Phone:   phone,
 		Purpose: productclient.PurposeLogin,
 	})
 	if err != nil {
@@ -383,7 +379,8 @@ func (rt *Runtime) handleLogin(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if !rt.validateLogin(w, req.Phone, req.Code, req.Nickname, req.ActivationCode, req.BoxCode) {
+	phone, ok := productphone.Normalize(req.Phone)
+	if !rt.validateLogin(w, ok, req.Code, req.Nickname, req.ActivationCode, req.BoxCode) {
 		return
 	}
 	if rt.deps.Platform == nil {
@@ -392,7 +389,7 @@ func (rt *Runtime) handleLogin(w http.ResponseWriter, r *http.Request) {
 	}
 
 	data, err := rt.deps.Platform.Login(r.Context(), productclient.LoginRequest{
-		Phone:    req.Phone,
+		Phone:    phone,
 		Code:     req.Code,
 		Nickname: req.Nickname,
 		// Both empty on a later login; the platform treats their absence as
@@ -585,9 +582,9 @@ func (rt *Runtime) handleLocale(w http.ResponseWriter, r *http.Request) {
 // platform's call, and its failures stay distinguishable from these: the split
 // between invalid_activation (shape) and activation_invalid (rejected) is
 // deliberate in the contract (§3).
-func (rt *Runtime) validateLogin(w http.ResponseWriter, phone, code, nickname, activationCode, boxCode string) bool {
+func (rt *Runtime) validateLogin(w http.ResponseWriter, phoneOK bool, code, nickname, activationCode, boxCode string) bool {
 	fields := map[string]string{}
-	if !validPhone(phone) {
+	if !phoneOK {
 		fields["phone"] = productclient.CodeInvalidPhone
 	}
 	if !validCode(code) {
@@ -631,20 +628,6 @@ func decodeBody(w http.ResponseWriter, r *http.Request, into any) bool {
 	if err := json.NewDecoder(r.Body).Decode(into); err != nil {
 		writeCode(w, http.StatusBadRequest, productclient.CodeInvalidRequest, nil)
 		return false
-	}
-	return true
-}
-
-// validPhone is the mainland mobile shape: 11 digits starting with 1. The
-// platform re-validates; this only avoids a round trip for an obvious typo.
-func validPhone(phone string) bool {
-	if len(phone) != 11 || phone[0] != '1' {
-		return false
-	}
-	for _, c := range phone {
-		if c < '0' || c > '9' {
-			return false
-		}
 	}
 	return true
 }

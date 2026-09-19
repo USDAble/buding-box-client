@@ -102,7 +102,7 @@ type Config struct {
 	AccessKey string
 	// Identity supplies the host's Noise static keypair (and, if TunnelID is
 	// unset, the tunnel id). Load it with LoadOrCreateIdentity to persist it in
-	// OCTO-FORK: 数据根：`~/.octo` → `<exe dir>/data`（硬规则 1） — see dev-docs-usdable/需求/2260906/技术方案/P1-便携数据根.md
+	// OCTO-FORK: 数据根：`~/.octo` → `<exe dir>/data`（硬规则 1） — see the portable data-root boundary
 	// the data root. When nil, New generates a throwaway identity — the PoC/test path.
 	Identity *Identity
 	// Logf overrides the logger. nil uses log.Printf.

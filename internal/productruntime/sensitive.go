@@ -17,7 +17,7 @@
 // reader of one fact (§3.8). The nail for that is a real turn: after a PUT, a
 // message containing the new word comes back masked.
 //
-// OCTO-FORK: 本地新增路由（`PR-6b2`）— see dev-docs-usdable/需求/20260911/开发计划.md §PR-6b2.
+// OCTO-FORK: 本地新增路由（`PR-6b2`）— see the current implementation plan §PR-6b2.
 package productruntime
 
 import (

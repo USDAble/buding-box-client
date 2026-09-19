@@ -91,7 +91,7 @@ type WorkflowRunRequest struct {
 	// here).
 	WorkingDir string
 	// JournalDir overrides the workflow runtime's journal directory
-	// OCTO-FORK: 数据根：`~/.octo` → `<exe dir>/data`（硬规则 1） — see dev-docs-usdable/需求/2260906/技术方案/P1-便携数据根.md
+	// OCTO-FORK: 数据根：`~/.octo` → `<exe dir>/data`（硬规则 1） — see the portable data-root boundary
 	// (data/workflow-journals by default). Empty leaves the runtime
 	// default in place — real entry points never set this; tests point it at
 	// a temp dir so running the suite doesn't write into a developer's real

@@ -4,10 +4,10 @@ Generated from .octorules by scripts/sync-agents.mjs. Do not edit directly.
 
 **This file is an entry point, not the spec.** Every AI coding tool that reads or edits this repository MUST read and obey, in this order:
 
-1. **`dev-docs-usdable/开发规范.md`** — this fork's binding engineering norms (branching, the three hard rules, review, testing, DoD).
+1. **`dev-docs-puddingbox/规范/开发规范.md`** — this fork's binding engineering norms (branching, the three hard rules, review, testing, DoD).
 2. **`.octorules`** and **`CLAUDE.md`** — the upstream normative rules, of **equal standing** with the fork spec (开发规范 §3.6). `CLAUDE.md` is the fuller write-up, `.octorules` the short index.
 
-The full `.octorules` text is **inlined below verbatim**, so a tool that reads only this file still receives the upstream rules — including the three hard rules under "Fork rules". `dev-docs-usdable/开发规范.md` and `CLAUDE.md` stay pointers: both exceed the per-file instruction budget Codex imposes (`project_doc_max_bytes`, 32 KiB by default), so they cannot be inlined. Nothing here replaces them.
+The full `.octorules` text is **inlined below verbatim**, so a tool that reads only this file still receives the upstream rules — including the three hard rules under "Fork rules". `dev-docs-puddingbox/规范/开发规范.md` and `CLAUDE.md` stay pointers: both exceed the per-file instruction budget Codex imposes (`project_doc_max_bytes`, 32 KiB by default), so they cannot be inlined. Nothing here replaces them.
 
 `scripts/norms-guard.mjs` and `scripts/sync-agents.mjs --check` (CI `norms-guard` / `agents-guard` jobs, `make norms-check` / `make agents-check`, and the packaging preflight) fail the build if this file is missing, stops pointing at the fork spec, or drifts from `.octorules`.
 
@@ -15,8 +15,8 @@ The full `.octorules` text is **inlined below verbatim**, so a tool that reads o
 
 | Content | Location |
 |---|---|
-| This fork's norms and upstream-merge policy | `dev-docs-usdable/开发规范.md`, `dev-docs-usdable/上游合并策略.md` |
-| This fork's requirements, plans, per-PR design docs | `dev-docs-usdable/需求/<批次>/` |
+| This fork's norms and upstream-merge policy | `dev-docs-puddingbox/规范/开发规范.md`, `dev-docs-puddingbox/规范/上游合并策略.md` |
+| This fork's design and product documents | `dev-docs-puddingbox/` |
 | Upstream architecture decisions | `dev-docs/` — **upstream directory, do not add downstream docs here** |
 
 ---
@@ -25,14 +25,13 @@ The full `.octorules` text is **inlined below verbatim**, so a tool that reads o
 
 # octo-agent Project Rules
 
+# OCTO-FORK: binds the portable-product safety rules to every upstream-agent entry point.
+
 The canonical project guidance for contributors and AI coding agents. Keep this short — substantive design context belongs in `dev-docs/`.
 
 ## Project
 
 `octo-agent` is a Go AI agent CLI (Go 1.25+, single binary). Module path `github.com/open-octo/octo-agent`. Ships as CLI + embedded Web UI + IM bridges (see `octo serve`).
-
-<!-- OCTO-FORK: 本 fork 的规范正文：重写上游规则（三条硬规则 + 五条纪律） — see dev-docs-usdable/开发规范.md §3.6 -->
-**This repository is a downstream fork** shipping the 布丁盒子 / Pudding Box portable desktop product. **The fork-specific rules in `dev-docs-usdable/开发规范.md` are binding, not reference material**, and `.octorules` + `CLAUDE.md` are the binding upstream norms of equal standing (开发规范 §3.6). Upstream merge policy: `dev-docs-usdable/上游合并策略.md`. `scripts/norms-guard.mjs` enforces that every AI-tool entry point (`AGENTS.md`, `.cursor/rules/dev-norms.mdc`, `.github/copilot-instructions.md`, `CLAUDE.md`, this file) points at that spec. The three hard rules under "Fork rules" below override anything here that conflicts.
 
 ## Commands
 
@@ -66,27 +65,7 @@ Dependency direction is one-way: `provider → agent`, `tools → agent`, never 
 
 - **New provider** — implement `provider.Provider` (required) and optionally `provider.StreamingProvider`, `provider.ToolProvider`, `provider.ToolStreamingProvider`. Put it under `internal/provider/<name>/`. Each protocol's wire-format quirks are isolated inside the package; the agent layer must not learn about them.
 - **New tool** — implement `agent.ToolExecutor` and `Definition() agent.ToolDefinition` returning the JSON Schema the LLM sees. Place it under `internal/tools/<name>.go`. Register it in `tools.DefaultRegistry` and add it to `tools.DefaultTools()` if it belongs in the default set.
-- **New skill** — `<data root>/skills/<name>/SKILL.md` with the same frontmatter format Claude Code uses. The skill loader composes existing tools — adding a skill should not require new tool code.
-
-## Fork rules
-
-Enforced by CI. Full text and rationale in `dev-docs-usdable/开发规范.md` §3.
-
-1. **Never resolve a data path yourself.** No `os.UserHomeDir()`, no `".octo"` literal — everything goes through `internal/datapath`. The data root is `<exe dir>/data`, overridable only by `$OCTO_DATA_ROOT`. `~/.octo` is gone from this fork **including the CLI**, which is what lets `datapath-guard` reject the `".octo"` literal with zero exceptions. Genuine host-home access goes in `scripts/homedir-allowlist.txt` with a written reason.
-2. **Never hardcode a brand string.** Interpolate `{brand}` / `{brandShort}` from `branding/brand.json`; `scripts/brand-guard.mjs` (the third leg of `make brand-check`, and the CI `brand-guard` job) fails any product file that types the copy in. Two strings it deliberately does *not* treat as brand copy: "Octo" in the port-conflict message names the *upstream* product, and `BUDING-DEMO-0001` / `buding-*` are fixed ASCII data keys that do not follow the English brand name. Neither is licence-free: the port-conflict copy must carry a `// brand-exception: <why>` marker on the comment line directly above it (需求20260906 §5.1.2 第 6 条 *mandates* naming the upstream product there, because that sentence describes the user having upstream Octo installed — interpolating our brand would tell them to quit the wrong program). `brand-guard` and `TestNativeStringsCarryNoBrandLiteral` read that same marker, so the exception cannot be granted to one and not the other.
-3. **Mark every change to an upstream file** with `// OCTO-FORK: <why> — see <design doc>`. Prefer making an upstream feature unreachable over deleting it; deletions cause delete-vs-modify conflicts git cannot auto-resolve.
-
-Beyond those three, the fork spec adds five discipline rules (`开发规范.md` §3.4–§3.10) that every plan and PR is judged against. They are binding, not advice:
-
-4. **Reuse first (§3.5).** Before creating a package, client, or HTTP path, run a capability search and write it into the plan: what you checked, why it cannot be reused (name the function/field), what the reused shape looks like. ~80% coverage means reuse and add the missing 20%. Reusing-or-not is a human-confirm item.
-5. **Single sources of truth (§3.8).** Contracts, error codes, and DTO field names live in the code: `internal/productclient/dto.go` (wire shapes) plus `internal/productclient/testdata/wire-error-codes.txt` (the code registry) and `internal/productclient/clienttest` (the executable contract) — the old `中台交付包` §3.2/§4.3 ownership was retired on 2026-09-15 and the mid-end interface contract is now regenerated FROM the code. **Model display names come from the signed catalog `displayName`** and the frontend keeps no id→name table (debug/test fallback only). Data paths, brand strings, permission, and mode grouping each have exactly one owner. A derivative doc quotes a one-line conclusion + a link — never a copy of the reasoning or the table.
-6. **Bounded degradation (§3.9).** Every fallback answers: fall back to what, is the user told, when does it recover. Never degrade silently to an unauthorized source, never treat degradation as authorization, fail closed on signature/version/audience/clock checks. **Never write a user-editable file at startup** (an idempotent first-run seed is the only exception — §3.9.1).
-7. **Stop and ask (§3.7).** Reuse-avoidance, breaking an architectural convention, touching auth/credential/data-root/brand/billing/permission/routing, unconventional logic (an extra layer to dodge a rule, one concept stored twice, silent fallback), upstream core files, and using a capability outside its design intent all need explicit human confirmation recorded in the PR: which row, the facts, the choice, who confirmed.
-8. **Write the scope (§3.10).** Every rule says which domain it governs — production vs developer, build-time vs run-time, local vs remote. A rule without a scope gets cited in both directions.
-
-These are ratcheted by `norms-guard`, `datapath-guard`, `brand-guard`, `reuse-guard`, `server-diff-guard`, `release-profile-guard`, and `fork-marker-guard` — all wired into `make *-check`, CI, and the packaging preflight.
-
-Upstream merges use `merge`, never `rebase`, and land as their own PR with no functional changes riding along.
+- **New skill** — `~/.octo/skills/<name>/SKILL.md` with the same frontmatter format Claude Code uses. The skill loader composes existing tools — adding a skill should not require new tool code.
 
 ## Code style
 
@@ -97,10 +76,10 @@ Upstream merges use `merge`, never `rebase`, and land as their own PR with no fu
 
 ## Workflow
 
-- **Branch off latest `v1`** before editing. Feature PRs target `v1` (the product integration branch); `main` is the upstream-tracking branch. Never commit on either directly.
+- **Branch off latest `main`** before editing. Never commit on `main` directly.
 - Push lands via PR only. Squash-and-merge is the project default; force-push only after explicit approval.
 - Commit messages and PR descriptions in English.
-- One feature per PR: one feature / characteristic = one PR = one squash commit. Mass mechanical changes (rename, move) can ride together but should be a single self-contained change set.
+- One concept per PR. Mass mechanical changes (rename, move) can ride together but should be a single self-contained change set.
 
 ## Testing
 
@@ -122,16 +101,18 @@ See `CLAUDE.md` for the full write-up of each incident.
 - Verify external claims (API endpoints, third-party SDK existence, dates) before committing them.
 - If `go test ./...` fails because of an environment issue (missing key, blocked network), say so explicitly rather than commenting out the test.
 
-## Where documentation lives
+## What lives in `dev-docs/`
 
-| Content | Location |
-|---|---|
-| Upstream architecture decisions, verified-fact dumps | `dev-docs/` — one Markdown file per topic |
-| This fork's requirements, plans, per-PR design docs | `dev-docs-usdable/需求/<batch>/` |
-| This fork's engineering norms and upstream-merge policy | `dev-docs-usdable/开发规范.md`, `dev-docs-usdable/上游合并策略.md` |
+Architecture decisions and verified-fact dumps. One Markdown file per topic. Don't commit speculative or unverified claims — verify before writing.
 
-**Do not put downstream documents in `dev-docs/`** — it is an upstream directory, and anything added there conflicts on every merge.
+## Fork rules
 
-Don't commit speculative or unverified claims — verify before writing.
+This fork's binding engineering norms are in `dev-docs-puddingbox/规范/开发规范.md`.
+Read them together with this file and `CLAUDE.md`; all three are binding.
+
+- Never resolve a data path yourself. Product data paths go through `internal/datapath`.
+- Never hardcode a brand string. Product copy comes from `branding/brand.json` through the generated accessors and localization tables.
+- Mark every change to an upstream file with an `OCTO-FORK: <reason>` comment in the file's native comment syntax.
+- Merge upstream changes; never `rebase` fork history onto upstream. Follow `dev-docs-puddingbox/规范/上游合并策略.md`.
 
 <!-- END inlined .octorules -->

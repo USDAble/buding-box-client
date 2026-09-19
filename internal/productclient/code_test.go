@@ -15,7 +15,7 @@ import (
 // speaks (开发规范 §3.8). Every Code* constant this package sends or matches must
 // appear there.
 //
-// It used to be `dev-docs-usdable/需求/20260911/中台交付包.md` §3.2, and this test
+// It used to be `the control-plane contract` §3.2, and this test
 // read that document. That document was deleted on 2026-09-15 (人工拍板): a
 // design-first contract was generating requirements the code had outgrown, so the
 // interface contract is now regenerated from the code rather than ahead of it.

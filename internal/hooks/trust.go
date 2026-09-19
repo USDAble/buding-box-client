@@ -27,7 +27,7 @@ import (
 // documentation (docs/src/content/docs/guides/hooks.md) and the runtime skill
 // doc (internal/skills/defaults/product-help/HOOKS.md) both name it — a renamed
 // directory would make both wrong while fixing nothing. See
-// dev-docs-usdable/需求/2260906/技术方案/P1-便携数据根.md §3 and PQ31.
+// the portable data-root boundary §3 and PQ31.
 func ProjectConfigPath(cwd string) string {
 	if cwd == "" {
 		return ""
@@ -51,7 +51,7 @@ var trustStoreMu sync.Mutex
 // trustStorePath returns data/hooks-trust.json, or "" when the data root is
 // unavailable.
 // OCTO-FORK: the portable product keeps hook trust next to the executable, not
-// in the host home — see dev-docs-usdable/需求/2260906/技术方案/P1-便携数据根.md.
+// in the host home — see the portable data-root boundary.
 func trustStorePath() string {
 	p, err := datapath.Join("hooks-trust.json")
 	if err != nil {

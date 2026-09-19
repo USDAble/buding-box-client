@@ -171,7 +171,7 @@ func TestStoreWatch_StopsWhenTold(t *testing.T) {
 // TestStoreWatch_SampleCreatesNothing is V-105's first nail, and the flake that
 // took three CI rounds was its symptom rather than its subject.
 //
-// OCTO-FORK: added with the read-only sample fix — see dev-docs-usdable/需求/20260911/需求基线.md §5.6.
+// OCTO-FORK: added with the read-only sample fix — see the product baseline §5.6.
 //
 // The watch is a READER of the data root. Its sample used to resolve through the
 // creating accessors — agent.SessionsDir, and sessionGroupsPath via

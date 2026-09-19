@@ -32,7 +32,7 @@ import (
 // surface reads it, so there is one place to answer the question and one place
 // to change it.
 //
-// OCTO-FORK: 便携交付物不做更新 —— see dev-docs-usdable/需求/2260906/技术方案/P2-启动与生命周期.md §5（V-86）
+// OCTO-FORK: 便携交付物不做更新 —— see the desktop startup and lifecycle boundary §5（V-86）
 //
 // The portable directory is the shipped form (需求 §5.1.1), and 需求 §5.1.2 第 13
 // 条 therefore closes both the automatic check and the tray entry: updating a
@@ -78,7 +78,7 @@ func desktopAssetName() string {
 		// .github/workflows/release.yml 上传的名字逐字相同（那里同样写着 PuddingBox，
 		// 并注释要求与这里的匹配器保持同步）。在打包管线把三处 PuddingBox 收敛为
 		// 从 brand.json 生成之前，单方面插值会让两边静默错位，所以字面量留下、理由
-		// 写明；收敛工作记在 V-81。 — see dev-docs-usdable/开发规范.md §3.2
+		// 写明；收敛工作记在 V-81。 — see the fork engineering norms §3.2
 		return "PuddingBox-windows-" + runtime.GOARCH + ".exe"
 	}
 	return ""

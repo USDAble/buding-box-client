@@ -1,34 +1,53 @@
-# Contributing to octo-agent
+# Contributing
 
-Thanks for taking the time to contribute. Every PR is reviewed by a human; bots may also leave comments.
+<!-- OCTO-FORK: concise contributor entry point for the fork's rules and local guards. -->
 
-## Before you start
+This is the short entry point for human contributors. The binding rules are
+[开发规范](dev-docs-puddingbox/规范/开发规范.md), `.octorules`, and `CLAUDE.md`; do
+not copy them into a PR description or a second rule file.
 
-- **Read `.octorules` and `CLAUDE.md`** — they cover the layering, conventions, and common pitfalls. Most "is this PR going to land" questions are answered there.
-- **Skim the design docs** — `dev-docs/` holds the per-feature design notes (sandbox, memory, skills, sub-agents, …). If your change touches an area covered there, keep the doc and your PR in sync.
-- **Open an issue first for substantial work.** Small fixes go straight to PR; new providers, new tools, or anything touching the agent loop benefit from a short upfront discussion.
+## First-time setup
 
-## Workflow
+Use Go 1.25+ and Node 22.22.2+ (`.nvmrc` pins the preferred Node release), then
+enable the versioned hooks once:
 
-1. Fork or branch off the latest `main`. Never commit directly on `main`.
-2. One concept per PR. Mass mechanical changes (renames, file moves) can ride together but should be self-contained.
-3. Run before pushing:
-   ```bash
-   make test       # go test -race ./...
-   make vet
-   make fmt-check
-   ```
-4. Push and open a PR. Squash-and-merge is the default merge style.
-5. Commit messages and PR descriptions in English.
+```sh
+make hooks-install
+```
 
-## What we look for
+The commit hook runs `make quick-check`; the push hook runs `make gate`. Use
+`git commit --no-verify` or `git push --no-verify` only to recover from a local
+tooling outage, never to bypass a known failure.
 
-- **Smallest possible diff.** A bug fix shouldn't surround itself with unrelated cleanup. A refactor PR shouldn't bundle a new feature.
-- **Tests next to the code.** New behavior gets coverage; bug fixes get a regression test that fails before the fix.
-- **No live network in tests.** Use `httptest.NewServer` for HTTP. Real-API smoke tests are run by hand with a personal key, not in CI.
-- **No new third-party dependencies without justification.** If you must add one, explain why the stdlib won't do.
-- **Comments in English, the *why* not the *what*.** Names should already explain *what*. Only write a comment when removing it would lose information (a non-obvious constraint, a workaround for a known bug, a tradeoff that matters).
+## Change checklist
 
-## License
+1. Branch from the current integration base; never commit directly to `main`.
+2. Keep one concept per PR. Discuss data migration, security, account/billing,
+   public API, compatibility, cross-client UX, or broad refactors before code.
+3. Find the owning topic in `dev-docs-puddingbox/`. Update that document rather
+   than creating a duplicate; update API contracts together with their consumer
+   and provider. `make docs-ref-check` keeps maintained links and source
+   references resolvable.
+4. Add focused tests beside changed Go code; use `httptest`, never live APIs.
+   Run the relevant command while iterating and let the hooks run the shared
+   checks before commit/push.
+5. Follow the three hard rules: product data through `internal/datapath`, visible
+   brand data through `branding/brand.json`, and an `OCTO-FORK:` reason beside
+   every fork change to an upstream file.
 
-By contributing, you agree your code is released under the project's [MIT license](LICENSE.txt).
+## Product cross-layer changes
+
+For a product feature that crosses the Web UI, local product API, or central
+platform, one working screen is not enough. Before review, update the owning
+product document, [local API contract](dev-docs-puddingbox/本地API契约.md), and
+[central-platform contract](dev-docs-puddingbox/中台接口契约.md) together. Make
+the Go client, local runtime, `clienttest`, and `productstub` use the same wire
+shape; do not add browser-only mock success or a production fallback fixture.
+
+Use a fresh, dedicated `OCTO_DATA_ROOT` and the real desktop shell to verify the
+user path. This catches stale catalog caches, missing route registration, and
+window-token mistakes that normal browser development cannot see. Record the
+focused automated checks and any required manual path in the PR description.
+
+Commit messages and PR descriptions are English. A passing check is evidence,
+not a substitute for documenting a user-visible behavior or its failure path.

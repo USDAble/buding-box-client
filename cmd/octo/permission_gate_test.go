@@ -22,7 +22,7 @@ func newGate(t *testing.T, mode permission.Mode, stdin string) (agent.Permission
 	}
 	var out bytes.Buffer
 	view := newPlainView(newScannerLineReader(strings.NewReader(stdin), &out), &out, &out, verbosityNormal, false)
-	// OCTO-FORK: 数据根：`~/.octo` → `<exe dir>/data`（硬规则 1） — see dev-docs-usdable/需求/2260906/技术方案/P1-便携数据根.md
+	// OCTO-FORK: 数据根：`~/.octo` → `<exe dir>/data`（硬规则 1） — see the portable data-root boundary
 	// No-op audit logger: test checks must not land in the real data/audit.log.
 	return newCLIGate(eng, view, audit.NewAt("")), &out
 }

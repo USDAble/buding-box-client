@@ -119,28 +119,21 @@ func TestAnEmptyIDIsNeverJudged(t *testing.T) {
 	}
 }
 
-// TestTheGuardAsksThePickerWhatIsSelectable is the reuse requirement (§3.5): the
-// judgement must be projectCatalog's, not a second copy of the eligibility
-// filter. Three models that a naive "is the id in catalog.models?" check would
-// call offered, and that the picker does not offer, so the guard must not either.
-func TestTheGuardAsksThePickerWhatIsSelectable(t *testing.T) {
-	policy := productclient.Policy{
-		Catalog: productclient.Catalog{
-			Models: []productclient.CatalogModel{
-				{ID: "ineligible", Transport: transportGateway, Eligible: false, ModeIDs: []string{"smart"}},
-				{ID: "third-party", Transport: "provider-direct", Eligible: true, ModeIDs: []string{"smart"}},
-				{ID: "no-product-mode", Transport: transportGateway, Eligible: true, ModeIDs: []string{"internal-beta"}},
-				{ID: "selectable", Transport: transportGateway, Eligible: true, ModeIDs: []string{"smart"}},
-			},
+func TestTheGuardReadsEligibilityFromTheCatalogRow(t *testing.T) {
+	policy := productclient.Policy{Catalog: productclient.Catalog{
+		Vendors: []productclient.CatalogVendor{{ID: "vendor"}},
+		Models: []productclient.CatalogModel{
+			{ID: "ineligible", VendorID: "vendor", Transport: productclient.CatalogTransportGateway},
+			{ID: "selectable", VendorID: "vendor", Transport: productclient.CatalogTransportGateway, Eligible: true},
 		},
-	}
+	}}
 
-	for _, id := range []string{"ineligible", "third-party", "no-product-mode"} {
-		if catalogOffersModel(policy, id) {
-			t.Errorf("%q is not selectable in the picker, so it is not offered - the guard must not call it offered", id)
-		}
+	ineligible, known := catalogEligibility(policy, "ineligible")
+	if !known || ineligible.Selectable {
+		t.Fatalf("ineligible = %+v known=%v", ineligible, known)
 	}
-	if !catalogOffersModel(policy, "selectable") {
-		t.Error("an eligible gateway model in a product mode IS offered")
+	selectable, known := catalogEligibility(policy, "selectable")
+	if !known || !selectable.Selectable {
+		t.Fatalf("selectable = %+v known=%v", selectable, known)
 	}
 }

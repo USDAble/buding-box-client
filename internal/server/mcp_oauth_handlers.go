@@ -19,7 +19,7 @@ import (
 // POST …/oauth/start launches the connect in a goroutine with a prompt that
 // builds the authorize URL and blocks waiting for GET …/oauth/callback to
 // deliver the code, while the panel polls GET …/oauth/status until the state
-// OCTO-FORK: 数据根：`~/.octo` → `<exe dir>/data`（硬规则 1） — see dev-docs-usdable/需求/2260906/技术方案/P1-便携数据根.md
+// OCTO-FORK: 数据根：`~/.octo` → `<exe dir>/data`（硬规则 1） — see the portable data-root boundary
 // settles. The token lands in the usual data/mcp-tokens/<server>.json
 // cache, so every later connect (including `octo serve` restarts) reuses it
 // without re-authorizing.

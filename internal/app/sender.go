@@ -64,7 +64,7 @@ type SenderOptions struct {
 	ShowReasoning bool
 }
 
-// OCTO-FORK: sender 装配的推理偏好透传（PR-5b1） — see dev-docs-usdable/需求/20260911/开发计划.md
+// OCTO-FORK: sender 装配的推理偏好透传（PR-5b1） — see the current implementation plan
 // ReasoningTuning is the pair of reasoning preferences a caller hands to a
 // sender factory, in a form that can cross an injection seam.
 //
@@ -342,7 +342,7 @@ func (s sender) SendMessages(ctx context.Context, model, system string, msgs []a
 
 // OCTO-FORK: report unmodelled stream-chunk fields, so the 中台 gateway's
 // `retract` / ledger-terminal events are loud instead of silently dropped —
-// see dev-docs-usdable/需求/20260911/待解决问题.md D-002 (rule 3) and 需求基线 V-90.
+// see the recorded compatibility constraint D-002 (rule 3) and 需求基线 V-90.
 //
 // WHY IT LIVES HERE AND NOT IN THE PROVIDER. internal/provider/openai already
 // detects the fields and hands them to StreamCallbacks; what was missing was a

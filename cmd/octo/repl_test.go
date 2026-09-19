@@ -40,7 +40,7 @@ func (s *stubSender) StreamMessages(
 
 // makeREPLFixture returns a replConfig wired to a stubSender and in-memory
 // buffers. HOME/USERPROFILE is redirected to a temp dir so session files don't
-// OCTO-FORK: 数据根：`~/.octo` → `<exe dir>/data`（硬规则 1） — see dev-docs-usdable/需求/2260906/技术方案/P1-便携数据根.md
+// OCTO-FORK: 数据根：`~/.octo` → `<exe dir>/data`（硬规则 1） — see the portable data-root boundary
 // pollute the data root (USERPROFILE is needed for Windows where os.UserHomeDir()
 // ignores HOME).
 func makeREPLFixture(t *testing.T, input string) (replConfig, *bytes.Buffer, *bytes.Buffer, *stubSender) {

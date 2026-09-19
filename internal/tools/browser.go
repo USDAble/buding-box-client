@@ -169,7 +169,7 @@ func BrowserRecordingsDir() string {
 		return d
 	}
 	// OCTO-FORK: the portable product keeps browser recordings next to the
-	// executable, not in the host home — see dev-docs-usdable/需求/2260906/技术方案/P1-便携数据根.md.
+	// executable, not in the host home — see the portable data-root boundary.
 	dir, _ := datapath.Join("browser-recordings")
 	old, _ := datapath.Join("browser-skills")
 	if _, err := os.Stat(dir); os.IsNotExist(err) {

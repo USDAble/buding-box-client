@@ -24,7 +24,7 @@ probe libwebkitgtk-6.0.so || missing="$missing WebKitGTK-6.0"
 probe libgtk-4.so         || missing="$missing GTK4"
 
 if [ -n "$missing" ]; then
-  # OCTO-FORK: 桌面壳的打包与品牌资产（图标/清单/启动器） — see dev-docs-usdable/需求/2260906/技术方案/P12-便携打包.md
+  # OCTO-FORK: 桌面壳的打包与品牌资产（图标/清单/启动器） — see the portable packaging design
   msg="Pudding Box needs these system libraries, which aren't installed:$missing
 
 Install them and relaunch:

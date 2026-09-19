@@ -65,8 +65,8 @@ func TestARefusedSignInWithdrawsTheLocalActivationClaim(t *testing.T) {
 	if !ok {
 		t.Fatalf("state has no account object: %v", after)
 	}
-	if got := account["phoneMasked"]; got != "138****1234" {
-		t.Errorf("account.phoneMasked = %v, want %q (the refusal is not an un-binding)", got, "138****1234")
+	if got := account["phoneMasked"]; got != "+86****1234" {
+		t.Errorf("account.phoneMasked = %v, want %q (the refusal is not an un-binding)", got, "+86****1234")
 	}
 	if _, ok := after["activation"].(map[string]any); !ok {
 		t.Errorf("the activation record was dropped: %v", after)

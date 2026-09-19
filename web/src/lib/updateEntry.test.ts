@@ -5,11 +5,9 @@
 //
 // The dangerous half of that lives in Go (no outbound lookup, no in-place
 // write-back) and is pinned there — cmd/octo-desktop/updates_disabled_test.go.
-// This is the other half: the product UI must not render a live update
-// affordance, because a live one is also a *lying* one once the shell stops
-// checking. With UpdateCheck off, "Check for Updates" answers "You're on the
-// latest version" — a claim the client never verified (§3.9: a fallback has to
-// say where it fell back to, not invent an answer).
+// This is the other half: the product UI must not offer automatic or in-place
+// updates. AccountPanel is the sole exception: its explicit action reaches the
+// local native bridge for a read-only lookup.
 //
 // WHY A SOURCE SCAN, AND WHY IT FOLLOWS IMPORTS. The failure is a template
 // affordance, not a function's return value, so calling the components would
@@ -117,9 +115,10 @@ describe('the product UI offers no live update entry', () => {
     ).toBe(true)
   })
 
-  it('no reachable component renders a live update affordance', () => {
+  it('only the account panel renders the explicit read-only update check', () => {
     const offenders = [...reachable]
       .filter((path) => {
+        if (path.endsWith(join('layout', 'AccountPanel.svelte'))) return false
         const markup = templateOf(readFileSync(path, 'utf8'))
         return LIVE_UPDATE_MARKERS.some((marker) => markup.includes(marker))
       })
@@ -127,16 +126,14 @@ describe('the product UI offers no live update entry', () => {
 
     expect(
       offenders,
-      'the portable form does not update itself (需求 §5.1.2 第 13 条 / PQ12): its update entry is ' +
-        'a permanent, unusable placeholder using `product.panel.soon` — see AccountPanel.svelte for ' +
-        'the reference shape. A live control is also a lying one, because the shell no longer ' +
-        'checks for releases.',
+      'the portable form permits only AccountPanel’s explicit read-only check; other reachable UI must ' +
+        'not reintroduce automatic checking, download, or in-place update controls.',
     ).toEqual([])
   })
 
   it('the excluded component is excluded because nothing mounts it', () => {
     // The reason VersionBadge.svelte is allowed to keep its live entry is that
-    // it is dead: AboutPage.svelte replaced it (its own comment says so). Pin
+    // it is dead: the Settings About category replaces it. Pin
     // the reason, not the filename — if it is ever mounted again the first two
     // assertions fail, and this one explains why that is intended rather than a
     // scan bug.

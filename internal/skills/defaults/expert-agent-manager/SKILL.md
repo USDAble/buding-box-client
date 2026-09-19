@@ -16,7 +16,7 @@ identifiers (`agent_id`, `/api/agents`, etc.) are unaffected.
 
 octo's multi-agent system lets users define **agent profiles** — each with its
 own system prompt, model, tool allowlist, and IM chat bindings. User-created
-<!-- OCTO-FORK: 技能文档改为数据根语义：用户级数据根改用 <data root>  — see dev-docs-usdable/需求/2260906/技术方案/P1-便携数据根.md -->
+<!-- OCTO-FORK: 技能文档改为数据根语义：用户级数据根改用 <data root>  — see the portable data-root boundary -->
 profiles are stored as Markdown files in `<data root>/agents/<id>.md` (body =
 system prompt, YAML frontmatter = metadata).
 

@@ -14,7 +14,7 @@ import (
 // changed, from broadcasts this process emits as it makes those changes. That
 // covers nothing another process does — and another process routinely does:
 // `octo` in a terminal creates sessions and files them under projects
-// OCTO-FORK: 数据根：`~/.octo` → `<exe dir>/data`（硬规则 1） — see dev-docs-usdable/需求/2260906/技术方案/P1-便携数据根.md
+// OCTO-FORK: 数据根：`~/.octo` → `<exe dir>/data`（硬规则 1） — see the portable data-root boundary
 // (EnsureProjectForDir) against the same data root, and a second `octo serve` or
 // the desktop shell can too.
 //
@@ -139,7 +139,7 @@ func (s *Server) startStoreWatch() {
 //
 // Skipped when the watch never ran: a server shut down without serving has
 // nothing to join, and waiting would burn the whole ctx.
-// OCTO-FORK: the join Scheduler/store-watch shutdown never had — see dev-docs-usdable/需求/20260911/需求基线.md §5.6.
+// OCTO-FORK: the join Scheduler/store-watch shutdown never had — see the product baseline §5.6.
 func (s *Server) joinStoreWatch(ctx context.Context) {
 	if !s.watchStarted.Load() {
 		return

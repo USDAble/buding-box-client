@@ -20,7 +20,7 @@ on:
       - 'packaging/macos/**'
       - 'cmd/octo-desktop/**'
       - 'scripts/package-desktop-macos.sh'
-      # OCTO-FORK: 打包腿要覆盖守卫脚本自身 — see dev-docs-usdable/需求/20260911/需求基线.md §5.6 V-103
+      # OCTO-FORK: 打包腿要覆盖守卫脚本自身 — see the product baseline §5.6 V-103
       # The packager runs scripts/preflight.mjs, which runs the fork guards, so a
       # change under scripts/ is a change to what this job exercises (V-102 stayed
       # red on Windows precisely because the guard moved and nothing that runs it

@@ -12,7 +12,7 @@
 //	OCTO_HOOK_POST_TURN  = /path/to/post-script  (optional)
 //	OCTO_HOOK_TIMEOUT    = 5s                    (optional, default below)
 //
-// OCTO-FORK: 数据根：`~/.octo` → `<exe dir>/data`（硬规则 1） — see dev-docs-usdable/需求/2260906/技术方案/P1-便携数据根.md
+// OCTO-FORK: 数据根：`~/.octo` → `<exe dir>/data`（硬规则 1） — see the portable data-root boundary
 // hooks.yml layered config (data/hooks.yml user-level, .octo/hooks.yml
 // project-level) supersedes the env-var-only v1 surface, but env vars remain
 // the zero-config path for the advanced "wire Hindsight" use case.

@@ -54,7 +54,7 @@ type Registry struct {
 // userSkillsRoot returns data/skills, or "" when the data root can't be
 // resolved. It's a var so tests can point discovery at a temp directory.
 // OCTO-FORK: the portable product keeps skills next to the executable, not in
-// the host home — see dev-docs-usdable/需求/2260906/技术方案/P1-便携数据根.md.
+// the host home — see the portable data-root boundary.
 var userSkillsRoot = func() string {
 	p, err := datapath.Join("skills")
 	if err != nil {

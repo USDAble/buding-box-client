@@ -42,7 +42,7 @@ type HookSpec struct {
 // UserConfigPath returns data/hooks.yml, or "" when the data root is
 // unavailable.
 // OCTO-FORK: the portable product keeps hooks config next to the executable,
-// not in the host home — see dev-docs-usdable/需求/2260906/技术方案/P1-便携数据根.md.
+// not in the host home — see the portable data-root boundary.
 func UserConfigPath() string {
 	p, err := datapath.Join("hooks.yml")
 	if err != nil {

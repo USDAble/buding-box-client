@@ -7,13 +7,27 @@ import { describe, it, expect, beforeEach, vi } from "vitest";
 import { get } from "svelte/store";
 import {
   adoptWindowToken,
+  allowEnvironmentModelSource,
   catalogRetryable,
   catalogState,
   isCatalogState,
   refreshCatalogState,
   windowToken,
 } from "./product";
-import { canStartTurn, catalogNoticeKey } from "./chatMode";
+import { canStartTurn, catalogNoticeKey } from "./modelAvailability";
+import { selectableModels, type SelectableModel } from "./selectableModels";
+
+const catalogRow: SelectableModel = {
+  id: "gateway::model",
+  vendorId: "vendor",
+  vendorName: "Vendor",
+  modelId: "model",
+  displayName: "Model",
+  source: "catalog",
+  confidential: false,
+  trust: "signed-catalog",
+  sourceOrder: 0,
+};
 
 // A fetch stand-in returning a JSON body at a fixed status.
 function fetchReturning(status: number, body: unknown) {
@@ -35,6 +49,8 @@ function inTheShell() {
 beforeEach(() => {
   sessionStorage.clear();
   catalogState.set("ready");
+  allowEnvironmentModelSource.set(false);
+  selectableModels.set([catalogRow]);
   catalogRetryable.set(false);
   window.history.replaceState({}, "", "/");
   vi.unstubAllGlobals();
@@ -142,9 +158,10 @@ describe("B9's four sentences are four different sentences", () => {
 
   it("answers the group-is-empty case only when the catalogue is fine", () => {
     catalogState.set("ready");
-    expect(catalogNoticeKey()).toBe("mode.no_models");
+    selectableModels.set([]);
+    expect(catalogNoticeKey()).toBe("catalog.no_models");
 
     catalogState.set("stale");
-    expect(catalogNoticeKey()).not.toBe("mode.no_models");
+    expect(catalogNoticeKey()).not.toBe("catalog.no_models");
   });
 });

@@ -69,6 +69,10 @@ type ModelEntry struct {
 	// sent and rejected. A legacy file with no `vision:` key is backfilled from
 	// ModelSupportsVision at load (see UnmarshalYAML).
 	Vision bool `yaml:"vision"`
+	// OCTO-FORK: Confidential marks a developer-configured model as eligible
+	// for confidential-session routing. Product builds never derive eligibility
+	// from this local configuration.
+	Confidential bool `yaml:"confidential,omitempty"`
 }
 
 // UnmarshalYAML backfills Vision for legacy config files written before the
@@ -155,6 +159,9 @@ type EndpointModel struct {
 	// model-level capability: the same endpoint may expose a vision model
 	// and a text-only model side by side.
 	Vision bool `yaml:"vision"`
+	// OCTO-FORK: local-only confidential eligibility for developer profiles.
+	// Missing and false are intentionally equivalent.
+	Confidential bool `yaml:"confidential,omitempty"`
 }
 
 // CompositeID returns the "<ID>::<Model>" reference for this endpoint+model.
@@ -637,13 +644,14 @@ func (c Config) DefaultEntry() ModelEntry {
 // ModelEntry from c.Models now read this projection from c.Endpoints.
 func projectToModelEntry(ep Endpoint, m EndpointModel) ModelEntry {
 	return ModelEntry{
-		Provider: ep.Provider,
-		Model:    m.Model,
-		BaseURL:  ep.BaseURL,
-		APIKey:   ep.APIKey,
-		Protocol: ep.Protocol,
-		Headers:  ep.Headers,
-		Vision:   m.Vision,
+		Provider:     ep.Provider,
+		Model:        m.Model,
+		BaseURL:      ep.BaseURL,
+		APIKey:       ep.APIKey,
+		Protocol:     ep.Protocol,
+		Headers:      ep.Headers,
+		Vision:       m.Vision,
+		Confidential: m.Confidential,
 
 		RPM:            ep.RPM,
 		MaxConcurrency: ep.MaxConcurrency,
@@ -1113,7 +1121,7 @@ func Mutate(fn func(*Config) error) error {
 
 // Path returns the absolute path to the config file (data/config.yml).
 // OCTO-FORK: the portable product keeps config next to the executable, not in
-// the host home — see dev-docs-usdable/需求/2260906/技术方案/P1-便携数据根.md.
+// the host home — see the portable data-root boundary.
 func Path() (string, error) {
 	return datapath.Join("config.yml")
 }
@@ -1319,7 +1327,7 @@ func synthesizeEndpointsFromLegacy(entries []ModelEntry) []Endpoint {
 					"dropped_key_len", len(e.APIKey),
 					"dropped_key_fp", keyFingerprint(e.APIKey))
 			}
-			ep.Models = append(ep.Models, EndpointModel{Model: e.Model, Vision: e.Vision})
+			ep.Models = append(ep.Models, EndpointModel{Model: e.Model, Vision: e.Vision, Confidential: e.Confidential})
 		}
 		endpoints = append(endpoints, ep)
 	}

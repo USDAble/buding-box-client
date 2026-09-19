@@ -1,6 +1,6 @@
 # Permission System
 
-<!-- OCTO-FORK: 技能文档改为数据根语义：用户级数据根改用 <data root>  — see dev-docs-usdable/需求/2260906/技术方案/P1-便携数据根.md -->
+<!-- OCTO-FORK: 技能文档改为数据根语义：用户级数据根改用 <data root>  — see the portable data-root boundary -->
 Every tool call — CLI, web, or IM — passes through the same rule-driven engine before it runs. Rules live in `<data root>/permissions.yml` (fully replaces the embedded default list per tool it mentions — it doesn't merge) plus the embedded defaults for everything else. First matching rule wins; no match falls through to `ask`.
 
 ```yaml

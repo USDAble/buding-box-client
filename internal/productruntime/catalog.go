@@ -1,4 +1,4 @@
-// OCTO-FORK: the client's catalog fetch and cache — see dev-docs-usdable/需求/20260911/开发计划.md (PR-4b).
+// OCTO-FORK: the client's catalog fetch and cache — see the current implementation plan (PR-4b).
 package productruntime
 
 import (
@@ -9,7 +9,6 @@ import (
 	"time"
 
 	"github.com/open-octo/octo-agent/internal/catalogstore"
-	"github.com/open-octo/octo-agent/internal/chatmode"
 	"github.com/open-octo/octo-agent/internal/productclient"
 	"github.com/open-octo/octo-agent/internal/productprofile"
 )
@@ -149,6 +148,10 @@ func (a catalogAvailability) needsRefresh() bool {
 	return a.State == catalogStateAbsent || a.State == catalogStateStale
 }
 
+func (a catalogAvailability) ready() bool { return a.State == catalogStateReady }
+
+func catalogProjectionFailureState() string { return string(catalogStateUnverifiable) }
+
 // recordCatalogOutcome remembers the last refresh verdict.
 func (rt *Runtime) recordCatalogOutcome(outcome catalogOutcome) {
 	rt.catalogMu.Lock()
@@ -172,6 +175,14 @@ func (rt *Runtime) currentCatalogAvailability() catalogAvailability {
 	if rt.deps.Catalog != nil {
 		if got, err := rt.deps.Catalog.Load(); err == nil {
 			entry, have = got, true
+			policy, decodeErr := entry.Envelope.DecodePolicy()
+			if decodeErr != nil || productclient.ValidateCatalog(policy.Catalog) != nil {
+				return catalogAvailability{
+					State:          catalogStateUnverifiable,
+					Retryable:      false,
+					CatalogVersion: entry.CatalogVersion,
+				}
+			}
 		}
 	}
 	return assessCatalog(entry, have, rt.lastOutcome(), time.Now())
@@ -424,186 +435,171 @@ func (rt *Runtime) logCatalogOutcome(outcome catalogOutcome, err error) {
 	slog.Warn("product: catalog unavailable", "outcome", string(outcome), "err", err)
 }
 
-// chatModeModel is one row the picker renders (本地API契约 §2.8).
-type chatModeModel struct {
+// catalogModel is the verified row consumed by both the picker projection and
+// the turn guard. Keeping one row shape prevents the UI and routing decisions
+// from acquiring separate definitions of "selectable" or "confidential".
+type catalogModel struct {
+	ID                   string
+	DisplayName          productclient.DisplayName
+	CompositeID          string
+	Confidential         bool
+	ConfidentialPriority *int
+	SourceOrder          int
+}
+
+type catalogVendor struct {
 	ID          string
 	DisplayName productclient.DisplayName
-	// CompositeID is "<gateway endpoint>::<catalog id>", the form a session
-	// stores (需求基线 B8 规则 1). It is built here rather than accepted from the
-	// catalog because the endpoint half is a product constant - the platform
-	// supplies only the id.
-	CompositeID string
+	Models      []catalogModel
 }
 
-// chatModeGroup is one picker group: a product mode id and the models the
-// catalog put under it.
-type chatModeGroup struct {
-	ID string
-	// Models can be empty: the mode is a product constant, so "this group has
-	// nothing eligible right now" is a state the picker shows, not one that
-	// removes the group (PR-4c words it as 分组空).
-	Models []chatModeModel
-	// DefaultModel is a composite id, or empty when the catalog's
-	// defaultModelId did not name a member of this group.
-	DefaultModel string
+// CatalogModelEligibility is the complete catalog answer used at a turn
+// boundary. Current is false when the signed cache is expired or a later
+// verification failed; Selectable and Confidential describe this exact model.
+type CatalogModelEligibility struct {
+	Selectable           bool
+	Confidential         bool
+	ConfidentialPriority *int
+	CatalogVersion       string
+	Current              bool
+	SourceOrder          int
 }
 
-// projectCatalog turns a verified catalog into the picker's groups.
-//
-// It is pure over the policy - no store, no clock, no network - which is what
-// lets every rule below be pinned by constructing a catalog rather than by
-// teaching the signing fixture to produce malformed ones.
-//
-// The rules, and where each comes from:
-//
-//   - Iterate the PRODUCT mode set (internal/chatmode), not the catalog's. A mode
-//     is offered because the product has it; a catalog naming an unknown one is
-//     reported and ignored, never invented (中台交付包 §4.3 catalog.modes.id).
-//   - Group by each model's own ModeIDs. `catalog.modes[]` deliberately carries no
-//     model list, because a second copy of the grouping fact drifts and the picker
-//     would then answer differently depending on which copy it read (同节).
-//   - Keep only eligible && transport == "gateway" models. Both halves matter:
-//     `eligible` is the account's entitlement, `transport` is the rule that keeps
-//     a shipped build from reaching a provider around the gateway (需求基线 C1).
-//   - A default is used only if it names a member of its own group; otherwise it
-//     is dropped and the group keeps its models. The group itself is never
-//     dropped - it is a product constant.
-//
-// It returns the ignored mode ids rather than logging them, so the caller owns
-// the logging and this stays a function of its input.
-func projectCatalog(policy productclient.Policy) ([]chatModeGroup, []string) {
-	catalog := policy.Catalog
-
-	// Models kept per mode id, in catalog order. Building this first means each
-	// rule below is applied once rather than inside the group loop.
-	byMode := map[string][]chatModeModel{}
-	var ignored []string
-	seenIgnored := map[string]bool{}
-	note := func(id string) {
-		if id == "" || chatmode.IsProductMode(id) || seenIgnored[id] {
-			return
-		}
-		seenIgnored[id] = true
-		ignored = append(ignored, id)
+// projectCatalog is the sole projection of the signed vendor/model contract.
+// Semantic validation happens before filtering so a broken reference rejects
+// the whole catalog instead of silently dropping one row.
+func projectCatalog(policy productclient.Policy) ([]catalogVendor, error) {
+	if err := productclient.ValidateCatalog(policy.Catalog); err != nil {
+		return nil, err
 	}
-
-	for _, m := range catalog.Models {
-		if !m.Eligible || m.Transport != transportGateway {
+	vendors := make([]catalogVendor, 0, len(policy.Catalog.Vendors))
+	index := make(map[string]int, len(policy.Catalog.Vendors))
+	for _, vendor := range policy.Catalog.Vendors {
+		index[vendor.ID] = len(vendors)
+		vendors = append(vendors, catalogVendor{
+			ID:          vendor.ID,
+			DisplayName: vendor.DisplayName,
+			Models:      []catalogModel{},
+		})
+	}
+	for sourceOrder, model := range policy.Catalog.Models {
+		if !model.Eligible {
 			continue
 		}
-		row := chatModeModel{
-			ID:          m.ID,
-			DisplayName: m.DisplayName,
-			CompositeID: productprofile.GatewayModelPrefix() + m.ID,
-		}
-		for _, modeID := range m.ModeIDs {
-			if !chatmode.IsProductMode(modeID) {
-				note(modeID)
-				continue
-			}
-			byMode[modeID] = append(byMode[modeID], row)
-		}
+		vendor := &vendors[index[model.VendorID]]
+		vendor.Models = append(vendor.Models, catalogModel{
+			ID:                   model.ID,
+			DisplayName:          model.DisplayName,
+			CompositeID:          productprofile.GatewayModelPrefix() + model.ID,
+			Confidential:         model.Confidential,
+			ConfidentialPriority: model.ConfidentialPriority,
+			SourceOrder:          sourceOrder,
+		})
 	}
+	return vendors, nil
+}
 
-	// The catalog's mode entries supply defaults and nothing else; a mode id the
-	// product does not have is reported here too, because it can appear only here.
-	defaults := map[string]string{}
-	for _, m := range catalog.Modes {
-		if !chatmode.IsProductMode(m.ID) {
-			note(m.ID)
+func catalogEligibility(policy productclient.Policy, id string) (CatalogModelEligibility, bool) {
+	if id == "" {
+		return CatalogModelEligibility{}, false
+	}
+	for sourceOrder, model := range policy.Catalog.Models {
+		if model.ID != id {
 			continue
 		}
-		defaults[m.ID] = m.DefaultModelID
+		return CatalogModelEligibility{
+			Selectable:           model.Eligible,
+			Confidential:         model.Eligible && model.Confidential,
+			ConfidentialPriority: model.ConfidentialPriority,
+			CatalogVersion:       policy.Catalog.Version,
+			SourceOrder:          sourceOrder,
+		}, true
 	}
-
-	groups := make([]chatModeGroup, 0, len(chatmode.IDs()))
-	for _, id := range chatmode.IDs() {
-		models := byMode[id]
-		group := chatModeGroup{ID: id, Models: models}
-		// Membership, not mere existence: a default that is not in this group is
-		// not this group's default (中台交付包 §4.3 `defaultModelId`).
-		if want := defaults[id]; want != "" {
-			for _, m := range models {
-				if m.ID == want {
-					group.DefaultModel = m.CompositeID
-					break
-				}
-			}
-		}
-		groups = append(groups, group)
-	}
-	return groups, ignored
+	return CatalogModelEligibility{CatalogVersion: policy.Catalog.Version}, true
 }
 
-// catalogOffersModel is CatalogOffers' pure half: the membership question with no
-// store and no I/O, so the eligibility rules can be tested without signing an
-// envelope.
-//
-// The ignored half of projectCatalog's return is the list of mode ids the
-// product does not have. It matters to the picker (it is logged there) and not
-// here: a model's presence in a group is the whole question this answers.
-func catalogOffersModel(policy productclient.Policy, id string) bool {
-	groups, _ := projectCatalog(policy)
-	for _, g := range groups {
-		for _, m := range g.Models {
-			if m.ID == id {
-				return true
-			}
-		}
-	}
-	return false
-}
-
-// CatalogOffers answers whether the signed catalog in hand still offers a model
-// id, and whether that question can be answered at all (PR-5e / L-C7).
-//
-// WHY TWO ANSWERS RATHER THAN ONE BOOLEAN. "We hold no catalog", "ours is
-// damaged", "ours will not decode" and "ours does not list this model" are not
-// the same fact, and only the last of them means the model is gone. Collapsing
-// them would put 「该模型已下架，请重新选择」 in front of every turn of a fresh
-// installation - a false statement about the user's session - and B4/B9 already
-// own the sentences for the missing-catalog family (catalogNoticeKey's first
-// three values). known=false therefore means "do not judge, keep today's
-// behaviour": the turn goes to the gateway and the platform answers for it.
-//
-// WHY MEMBERSHIP IS ASKED OF projectCatalog. "Is this model selectable" has to
-// have exactly one definition (开发规范 §3.8). A model that is present but
-// ineligible, or carried by a transport that is not the gateway, is not offered,
-// so a session bound to one is in the same position as a session whose model was
-// deleted: the user has to pick again. Re-deriving that filter here would be the
-// second definition of eligibility, and the two would drift the first time the
-// rule changed.
-//
-// The id is the catalog's own bare id, not the composite <endpoint>::<model>
-// binding: the prefix belongs to internal/server, which is where
-// GatewayModelPrefix is read.
-func (rt *Runtime) CatalogOffers(id string) (offers, known bool) {
+// CatalogModel resolves one bare gateway model against the currently usable
+// signed catalog. The second result says whether the catalog itself could be
+// judged; a missing model in a valid catalog therefore returns known=true with
+// Selectable=false.
+func (rt *Runtime) CatalogModel(id string) (CatalogModelEligibility, bool) {
 	if id == "" || rt.deps.Catalog == nil {
-		return false, false
+		return CatalogModelEligibility{}, false
 	}
 	entry, err := rt.deps.Catalog.Load()
 	if err != nil {
-		// Absence is the ordinary case on a fresh installation and is not worth
-		// a warning; a damaged cache is, for the same reason handleChatModes
-		// logs it - something is wrong and the user sees nothing.
 		if !errors.Is(err, catalogstore.ErrNoCache) {
 			slog.Warn("product: the catalog could not be read for the turn guard", "err", err)
 		}
-		return false, false
+		return CatalogModelEligibility{}, false
 	}
-	// Verified before it was written, so this parses rather than re-verifies -
-	// the same reasoning as handleChatModes.
 	policy, err := entry.Envelope.DecodePolicy()
 	if err != nil {
-		slog.Warn("product: cached catalog could not be read back for the turn guard", "err", err, "catalogVersion", entry.CatalogVersion)
-		return false, false
+		slog.Warn("product: cached catalog could not be decoded for the turn guard", "err", err, "catalogVersion", entry.CatalogVersion)
+		return CatalogModelEligibility{}, false
 	}
-	return catalogOffersModel(policy, id), true
+	if err := productclient.ValidateCatalog(policy.Catalog); err != nil {
+		slog.Warn("product: cached catalog failed semantic validation", "err", err, "catalogVersion", entry.CatalogVersion)
+		return CatalogModelEligibility{}, false
+	}
+	answer, known := catalogEligibility(policy, id)
+	answer.Current = rt.currentCatalogAvailability().State == catalogStateReady
+	if !answer.Current {
+		answer.Selectable = false
+		answer.Confidential = false
+	}
+	return answer, known
 }
 
-// transportGateway is the only transport the catalog may name for a selectable
-// model (中台交付包 §4.3: "只有 eligible=true 且 transport=gateway"). Anything
-// else - including a provider-direct transport a future contract adds - is not
-// selectable from a shipped build, so the constant is the allow-list rather than
-// a deny-list of known-bad values.
-const transportGateway = "gateway"
+// CatalogOffers remains the ordinary-session adapter while internal/server is
+// migrated to the richer CatalogModel result. It intentionally derives from
+// that one result rather than re-projecting catalog rows.
+func (rt *Runtime) CatalogOffers(id string) (offers, known bool) {
+	model, known := rt.CatalogModel(id)
+	return model.Selectable, known
+}
+
+// PreferredConfidentialModel returns the current catalog's highest-priority
+// confidential row as the same composite identity the picker persists. Equal
+// or absent priorities preserve the signed source order.
+func (rt *Runtime) PreferredConfidentialModel() (string, bool) {
+	if rt.deps.Catalog == nil || !rt.currentCatalogAvailability().ready() {
+		return "", false
+	}
+	entry, err := rt.deps.Catalog.Load()
+	if err != nil {
+		return "", false
+	}
+	policy, err := entry.Envelope.DecodePolicy()
+	if err != nil {
+		return "", false
+	}
+	vendors, err := projectCatalog(policy)
+	if err != nil {
+		return "", false
+	}
+	var best *catalogModel
+	priority := func(model catalogModel) int {
+		if model.ConfidentialPriority == nil {
+			return productclient.MinConfidentialPriority
+		}
+		return *model.ConfidentialPriority
+	}
+	for _, vendor := range vendors {
+		for i := range vendor.Models {
+			candidate := vendor.Models[i]
+			if !candidate.Confidential {
+				continue
+			}
+			if best == nil || priority(candidate) > priority(*best) ||
+				(priority(candidate) == priority(*best) && candidate.SourceOrder < best.SourceOrder) {
+				copy := candidate
+				best = &copy
+			}
+		}
+	}
+	if best == nil {
+		return "", false
+	}
+	return best.CompositeID, true
+}

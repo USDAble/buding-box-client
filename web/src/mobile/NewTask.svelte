@@ -8,6 +8,7 @@
   import { sessions, activeSessionId, globalPermissionMode, showToast } from '../lib/stores'
   import * as api from '../lib/api'
   import { t, tr } from '../lib/i18n'
+  import { allowEnvironmentModelSource } from '../lib/product'
 
   let { onCancel, onCreated }: {
     onCancel: () => void
@@ -22,6 +23,11 @@
   let modelId = $state('')
   let models = $state<{ id: string; label: string }[]>([])
   $effect(() => {
+    // OCTO-FORK: product profiles never project config.yml models into the picker.
+    if ($allowEnvironmentModelSource === false) {
+      models = []
+      return
+    }
     api.getEndpoints()
       .then(d => {
         const flat: { id: string; label: string }[] = []

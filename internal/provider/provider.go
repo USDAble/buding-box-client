@@ -113,7 +113,7 @@ type StreamCallbacks struct {
 
 	// OCTO-FORK: OnUnmodelledChunkFields fires when a stream chunk carries a
 	// top-level field the protocol adapter does not model — see
-	// dev-docs-usdable/需求/20260911/待解决问题.md D-002.
+	// the recorded compatibility constraint D-002.
 	//
 	// The control plane's gateway is OpenAI-compatible for content, tool calls and
 	// usage, but its withdrawn-content event (`retract`) and ledger terminal state

@@ -98,7 +98,8 @@ func mountHarnessDelayed(t *testing.T, h *harness, windowToken string, startDela
 		// The same instance the runtime got, which is the point of the fourth
 		// return value (PR-6b1): the turn path and the product routes must not
 		// read the dictionary twice.
-		SensitiveEngine: h.engine,
+		SensitiveEngine:       h.engine,
+		PersonalInfoTransform: h.personalInfo.Transform,
 	})
 	if err != nil {
 		t.Fatalf("server.New: %v", err)

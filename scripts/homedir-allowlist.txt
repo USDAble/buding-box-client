@@ -11,7 +11,7 @@
 # A trailing "/" means the directory matches recursively. Blank lines and
 # lines starting with "#" are ignored. scripts/datapath-guard.mjs reads this
 # file; keep the two in step. Each entry must carry a written reason (see
-# dev-docs-usdable/开发规范.md §3.1).
+# the fork engineering norms §3.1).
 
 internal/datapath/  The data-root resolver itself — the one place product paths are decided.
 internal/tools/read_file.go  Expands a user-typed ~/ path (user intent, not product data).

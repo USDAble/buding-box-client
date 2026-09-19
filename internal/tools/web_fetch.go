@@ -442,7 +442,7 @@ func markdownOutline(lines []string, maxHeadings int) string {
 	return b.String()
 }
 
-// OCTO-FORK: 数据根：`~/.octo` → `<exe dir>/data`（硬规则 1） — see dev-docs-usdable/需求/2260906/技术方案/P1-便携数据根.md
+// OCTO-FORK: 数据根：`~/.octo` → `<exe dir>/data`（硬规则 1） — see the portable data-root boundary
 // writeWebFetchSpillFile persists body under data/tmp and returns the
 // absolute path. The filename is derived from the URL host + a timestamp (so
 // concurrent fetches never collide) and ends with the pid so CleanSpillFiles

@@ -124,7 +124,7 @@ func TestComputerTool_AdvertisedWhenEnabled(t *testing.T) {
 	// `<exe dir>/data`（硬规则 1），`~/.octo` 在本仓根本不存在。setHome 已经把它指向 home，
 	// 所以配置就写在 home 下。改的只是"读到哪一份配置"：上游这处断言（tools.computer.enabled=on
 	// 时要广告出 computer 工具）与数据根无关，不改则工具永远看不见这份 config，测试必然失败。
-	// — see dev-docs-usdable/需求/2260906/技术方案/P1-便携数据根.md
+	// — see the portable data-root boundary
 	cfg := "tools:\n  computer:\n    enabled: \"on\"\n"
 	if err := os.WriteFile(filepath.Join(home, "config.yml"), []byte(cfg), 0o644); err != nil {
 		t.Fatal(err)

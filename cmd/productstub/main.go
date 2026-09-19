@@ -230,6 +230,8 @@ func printFixtures(addr, toolName string, gateway gatewayFlags, inj inject) {
   Endpoints: POST %s/v1/auth/sms/send, /auth/login, /auth/refresh
              GET  %s/v1/client/bootstrap
              GET  %s/v1/catalog/models
+	     GET  %s/v1/box
+	     POST %s/v1/feedback             (structured, user-authored feedback)
              POST %s/v1/chat/completions     (the built-in gateway: streams,
                                               needs a Bearer access token)
 
@@ -247,5 +249,5 @@ func printFixtures(addr, toolName string, gateway gatewayFlags, inj inject) {
 		clienttest.FixtureBoundPhoneActivationCode, clienttest.FixtureBoundPhone,
 		clienttest.FixtureBoxCode,
 		toolLine,
-		base, base, base, base)
+		base, base, base, base, base, base)
 }

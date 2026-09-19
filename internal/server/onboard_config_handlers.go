@@ -162,7 +162,7 @@ func detectOnboardPhase(flagProvider string) string {
 	// some identity set up, so don't nudge. (IdentityPath also finds the legacy
 	// uppercase SOUL.md/USER.md spellings.)
 	// OCTO-FORK: identity files live in the data root, not the host home — see
-	// dev-docs-usdable/需求/2260906/技术方案/P1-便携数据根.md.
+	// the portable data-root boundary.
 	root, err := datapath.Root()
 	if err == nil && identityMissing(root) {
 		return "soul_setup"
@@ -330,6 +330,9 @@ type endpointConfigJSON struct {
 type endpointModelJSON struct {
 	Model  string `json:"model"`
 	Vision bool   `json:"vision"`
+	// OCTO-FORK: developer endpoint models expose their test-only confidential
+	// eligibility; product-profile visibility is controlled by the profile.
+	Confidential bool `json:"confidential"`
 }
 
 // handleGetEndpoints serves the two-level endpoint view. Data comes straight
@@ -359,7 +362,7 @@ func (s *Server) handleGetEndpoints(w http.ResponseWriter, r *http.Request) {
 			Headers:   ep.Headers,
 		}
 		for _, m := range ep.Models {
-			em.Models = append(em.Models, endpointModelJSON{Model: m.Model, Vision: m.Vision})
+			em.Models = append(em.Models, endpointModelJSON{Model: m.Model, Vision: m.Vision, Confidential: m.Confidential})
 		}
 		out.Endpoints = append(out.Endpoints, em)
 	}
@@ -869,8 +872,9 @@ type createEndpointRequest struct {
 }
 
 type endpointModelIn struct {
-	Model  string `json:"model"`
-	Vision bool   `json:"vision"`
+	Model        string `json:"model"`
+	Vision       bool   `json:"vision"`
+	Confidential bool   `json:"confidential"`
 }
 
 type updateEndpointRequest struct {
@@ -910,7 +914,7 @@ func endpointToJSON(ep config.Endpoint) endpointJSONOut {
 		Headers:   ep.Headers,
 	}
 	for _, m := range ep.Models {
-		out.Models = append(out.Models, endpointModelJSON{Model: m.Model, Vision: m.Vision})
+		out.Models = append(out.Models, endpointModelJSON{Model: m.Model, Vision: m.Vision, Confidential: m.Confidential})
 	}
 	return out
 }
@@ -952,7 +956,7 @@ func (s *Server) handleCreateEndpoint(w http.ResponseWriter, r *http.Request) {
 			if m.Model == "" {
 				continue
 			}
-			ep.Models = append(ep.Models, config.EndpointModel{Model: m.Model, Vision: m.Vision})
+			ep.Models = append(ep.Models, config.EndpointModel{Model: m.Model, Vision: m.Vision, Confidential: m.Confidential})
 		}
 		cfg.UpsertEndpoint(ep)
 		created = ep
@@ -1144,7 +1148,7 @@ func (s *Server) handleAddEndpointModel(w http.ResponseWriter, r *http.Request) 
 
 	var updated config.Endpoint
 	if err := config.Mutate(func(cfg *config.Config) error {
-		if err := cfg.UpsertModel(id, config.EndpointModel{Model: req.Model, Vision: req.Vision}); err != nil {
+		if err := cfg.UpsertModel(id, config.EndpointModel{Model: req.Model, Vision: req.Vision, Confidential: req.Confidential}); err != nil {
 			return err
 		}
 		for _, ep := range cfg.Endpoints {

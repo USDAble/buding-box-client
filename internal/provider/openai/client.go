@@ -321,7 +321,7 @@ func (c *Client) Send(ctx context.Context, req provider.Request) (provider.Respo
 			}
 
 			dec := retry.Decision{Retry: retry.RetryableStatus(resp.StatusCode), RetryAfter: retry.RetryAfterHeader(resp.Header)}
-			// OCTO-FORK: the control plane's flat error envelope is read here too — see dev-docs-usdable/需求/20260911/开发计划.md §PR-5d3.
+			// OCTO-FORK: the control plane's flat error envelope is read here too — see the current implementation plan §PR-5d3.
 			return nil, dec, httpErrorFromBody(resp.StatusCode, respBody)
 		}
 

@@ -49,11 +49,10 @@ export const pendingPermissionMode = writable<string>('')
 // above: without this, toggleShowReasoning's `!sid` guard made the switch a
 // silent no-op until a session existed.
 export const pendingShowReasoning = writable<boolean | null>(null)
-// Chat mode (P9) picked on the landing page before any session exists. ''
-// means "no override" — the session born from ensureActiveSession inherits the
-// account's default mode. Consumed once by createSessionForFirstMessage, same
-// shape as pendingModel/pendingPermissionMode. OCTO-FORK: P9 模式与模型.
-export const pendingChatMode = writable<string>('')
+// OCTO-FORK: protection choices for the not-yet-created session. They are
+// submitted atomically with pendingModel on POST /api/sessions.
+export const pendingPersonalInfoProtection = writable<boolean>(true)
+export const pendingConfidentialSession = writable<boolean>(false)
 export const sidebar = writable('full')
 export const cmdkOpen = writable(false)
 // Drives the MCP import-JSON modal. Adding a single server and editing an
@@ -63,16 +62,9 @@ export const cmdkOpen = writable(false)
 export const mcpModalOpen = writable(false)
 // Drives the Settings modal (replaces the old full-page 'settings' view).
 export const settingsModalOpen = writable(false)
-// P5 account panel: the left-side panel that opens from the bottom-left
-// corner. accountPanelPage tracks both the layer ('root' is the navigation
-// list itself) and the open secondary page — one store so the panel can
-// switch in place like a phone settings drill-down. Reset to 'root' every
-// time the panel opens; a reopen must not land on the last page visited.
-// OCTO-FORK: P5 — see
-// dev-docs-usdable/需求/2260906/技术方案/P5-个人中心.md §4.3.
-export type AccountPanelPage = 'root' | 'plan' | 'credits' | 'license' | 'settings' | 'sensitive' | 'help' | 'about'
+// OCTO-FORK: the account corner opens one compact status-and-shortcuts panel.
+// Full editing and destructive actions live in Settings, never in this popup.
 export const accountPanelOpen = writable(false)
-export const accountPanelPage = writable<AccountPanelPage>('root')
 // Optional deep link consumed by the next Settings open: which category, and
 // for 数据管理 which sub-view. Callers that just want the modal set only
 // settingsModalOpen and land on the default category. The modal clears this
@@ -335,11 +327,6 @@ export const chatSuggestion = writable<Record<string, string>>({})
 // Per-session model name, updated on model switch so the Composer chip stays
 // reactive independently of the sessions store array subscription.
 export const chatModel = writable<Record<string, string>>({})
-// Per-session chat mode (P9), updated on mode switch so the Composer chip and
-// ModeMenu stay reactive independently of the sessions store array. Seeded
-// from the session's chat_mode field; empty means the account default.
-// OCTO-FORK: P9 模式与模型选择器.
-export const chatMode = writable<Record<string, string>>({})
 // Live thinking buffer (thinking_delta) shown as a Thoughts block while streaming.
 export const chatThinking = writable<Record<string, string>>({})
 // Live sub-agents, keyed by session. Fed by the sub_agent_event WS stream.
@@ -455,6 +442,8 @@ export function clearPendingSessionOpts() {
   pendingReasoningEffort.set('')
   pendingPermissionMode.set('')
   pendingShowReasoning.set(null)
+  pendingPersonalInfoProtection.set(true)
+  pendingConfidentialSession.set(false)
 }
 
 // Plain "new session" entry point shared by the sidebar button and the

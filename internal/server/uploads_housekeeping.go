@@ -45,7 +45,7 @@ func StartUploadsHousekeeping() {
 // sweep has no reason to spin the directory into existence for an install
 // that has never received an upload.
 // OCTO-FORK: the portable product keeps uploads next to the executable, not in
-// the host home — see dev-docs-usdable/需求/2260906/技术方案/P1-便携数据根.md.
+// the host home — see the portable data-root boundary.
 func uploadsDirPath() (string, error) {
 	return datapath.Join(uploadsDirName)
 }

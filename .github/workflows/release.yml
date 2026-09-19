@@ -123,7 +123,7 @@ jobs:
       - name: Generate Windows icon resource
         shell: pwsh
         working-directory: cmd/octo-desktop
-        # OCTO-FORK: CI 守卫接线：新增 norms/brand/datapath/agents/server-diff 等 job — see dev-docs-usdable/开发规范.md §3.4
+        # OCTO-FORK: CI 守卫接线：新增 norms/brand/datapath/agents/server-diff 等 job — see the fork engineering norms §3.4
         # Pass the release version so the VERSIONINFO file-properties version
         # matches the ldflags-injected version (see generate-syso's [version]).
         run: go run ./build/windows/generate-syso ${{ matrix.arch }} build/windows/icon.ico build/windows/wails.exe.manifest $env:version
@@ -140,7 +140,7 @@ jobs:
         # "up to date" forever. $env:version is set by the staging step above.
         # product_production selects the production runtime profile; a release
         # artifact built without it would be a developer package with every
-        # production rejection disabled (dev-docs-usdable/运行时Profile配置.md).
+        # production rejection disabled (the runtime Profile boundary).
         run: |
           $commit = git rev-parse --short HEAD
           $pkg = "github.com/open-octo/octo-agent/internal/version"

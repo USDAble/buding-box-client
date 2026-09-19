@@ -11,7 +11,7 @@
 // error). A degraded home-directory write would silently break the "host
 // stays clean" acceptance item while looking fine on a developer machine.
 //
-// See dev-docs-usdable/需求/2260906/技术方案/P1-便携数据根.md.
+// See the portable data-root boundary.
 package datapath
 
 import (
@@ -38,7 +38,7 @@ var exePath = os.Executable
 // write refuses instead of silently recreating an empty data/ beside the
 // executable — a directory indistinguishable from a clean install, which would
 // look like success while the user's real data sat on the disconnected disk.
-// See dev-docs-usdable/需求/20260911/开发计划0911/ 的 L-E3 与 P2-启动与生命周期.md §3.4.
+// See the desktop lifecycle design 的 L-E3 与 P2-启动与生命周期.md §3.4.
 var ErrFrozen = errors.New("datapath: the data root is frozen (unavailable)")
 
 // frozen is the process-wide write gate. Freeze/Thaw flip it; the

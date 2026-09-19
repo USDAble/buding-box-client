@@ -1,6 +1,9 @@
 import { describe, it, expect } from 'vitest'
 import { normalizeHash, hashPicksChatTarget } from './hashRouting'
 
+// OCTO-FORK: hidden product navigation entries remain directly addressable so
+// removing a sidebar link does not destroy upstream routes or deep links.
+
 describe('normalizeHash', () => {
   it('keeps the active session id on the chat view', () => {
     expect(normalizeHash('chat', 'sess-42')).toBe('#/chat/sess-42')
@@ -18,12 +21,10 @@ describe('normalizeHash', () => {
   it('percent-encodes session ids for the URL', () => {
     expect(normalizeHash('chat', 'a/b c?d')).toBe('#/chat/a%2Fb%20c%3Fd')
   })
-// OCTO-FORK: 前端适配（webview 路由/构建/入口隐藏） — see dev-docs-usdable/需求/2260906/技术方案/P6-入口隐藏与积分.md
-
-  it('normalizes hidden views to the chat landing (P6)', () => {
-    expect(normalizeHash('mcp', null)).toBe('#/chat')
-    expect(normalizeHash('channels', 'sess-42')).toBe('#/chat/sess-42')
-    expect(normalizeHash('lightapps', null)).toBe('#/chat')
+  it('preserves direct hashes for navigation-hidden views', () => {
+    expect(normalizeHash('mcp', null)).toBe('#/mcp')
+    expect(normalizeHash('channels', 'sess-42')).toBe('#/channels')
+    expect(normalizeHash('lightapps', null)).toBe('#/lightapps')
   })
 })
 

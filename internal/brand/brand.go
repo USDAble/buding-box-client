@@ -8,7 +8,7 @@
 // cannot be rebranded by editing a file next to the executable.
 //
 // Values fall into three classes (see the branding plan under
-// dev-docs-usdable/需求/2260906/), and the accessors mirror them so a caller
+// the product design), and the accessors mirror them so a caller
 // cannot ask for the wrong shape:
 //
 //	A localized copy      Name, ShortName, Tagline, TeamName, Copyright, Text

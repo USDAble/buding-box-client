@@ -17,7 +17,7 @@ import (
 // in a goroutine and is best-effort — the recycle bin working at all never
 // depends on housekeeping having finished.
 // housekeepingDisabled is set by an init() in the test binary so `go test`
-// OCTO-FORK: 数据根：`~/.octo` → `<exe dir>/data`（硬规则 1） — see dev-docs-usdable/需求/2260906/技术方案/P1-便携数据根.md
+// OCTO-FORK: 数据根：`~/.octo` → `<exe dir>/data`（硬规则 1） — see the portable data-root boundary
 // never runs Enforce against the developer's real data/trash (many cmd/octo
 // tests drive runChat/runServe, which call this).
 var housekeepingDisabled bool

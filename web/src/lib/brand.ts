@@ -5,7 +5,7 @@
 // scripts/sync-branding.mjs — never edit it directly.
 //
 // Values fall into three classes (see the branding plan under
-// dev-docs-usdable/需求/2260906/); the accessors mirror them:
+// the product design); the accessors mirror them:
 //
 //   A localized copy      brandName, brandShortName, brandTeamName, brandText, …
 //   B fixed display value brandDisplay

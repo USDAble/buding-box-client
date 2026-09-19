@@ -16,7 +16,7 @@ import (
 // pays for on every turn.
 //
 // bundledFallback marks probes that also resolve via the octo-managed
-// OCTO-FORK: 数据根：`~/.octo` → `<exe dir>/data`（硬规则 1） — see dev-docs-usdable/需求/2260906/技术方案/P1-便携数据根.md
+// OCTO-FORK: 数据根：`~/.octo` → `<exe dir>/data`（硬规则 1） — see the portable data-root boundary
 // data/bin fallback (populated by the Windows/macOS installers — see
 // internal/tools/sandbox.go's withBundledBinPath). Scoped to just uv:
 // every other probe here is a real developer-machine dependency octo never

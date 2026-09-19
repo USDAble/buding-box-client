@@ -195,7 +195,7 @@ func TestMCPOAuth_WebAuthCodeFlow_EndToEnd(t *testing.T) {
 	}
 
 	// The token must be cached for future non-interactive connects.
-	// OCTO-FORK: 数据根：`~/.octo` → `<exe dir>/data`（硬规则 1） — see dev-docs-usdable/需求/2260906/技术方案/P1-便携数据根.md
+	// OCTO-FORK: 数据根：`~/.octo` → `<exe dir>/data`（硬规则 1） — see the portable data-root boundary
 	if _, err := os.Stat(filepath.Join(home, "mcp-tokens", "secure.json")); err != nil {
 		t.Fatalf("token cache not written: %v", err)
 	}

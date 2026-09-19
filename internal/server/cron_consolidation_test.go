@@ -49,7 +49,7 @@ func listTasksForTest(t *testing.T, srv *Server) []taskResponse {
 func TestCreateTask_PersistsDirectory(t *testing.T) {
 	tmp := t.TempDir()
 	t.Setenv("HOME", tmp)
-	// OCTO-FORK: 数据根：`~/.octo` → `<exe dir>/data`（硬规则 1） — see dev-docs-usdable/需求/2260906/技术方案/P1-便携数据根.md
+	// OCTO-FORK: 数据根：`~/.octo` → `<exe dir>/data`（硬规则 1） — see the portable data-root boundary
 	t.Setenv("OCTO_DATA_ROOT", tmp)
 	t.Setenv("USERPROFILE", tmp)
 	srv := mustServer(t, Config{Addr: "127.0.0.1:0", Tools: false})

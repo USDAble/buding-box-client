@@ -15,7 +15,7 @@ import (
 // opened, which leaves the default stderr in place.
 // OCTO-FORK: upstream writes this to ~/.octo/cli.log; the path comes from
 // serveproc.CLILogPath, which resolves under the portable data root here — see
-// dev-docs-usdable/需求/2260906/技术方案/P1-便携数据根.md.
+// the portable data-root boundary.
 //
 // Only the TUI calls this. bubbletea paints the terminal in place, so a log
 // line on stderr lands in the middle of a frame and corrupts it; the headless

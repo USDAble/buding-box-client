@@ -118,7 +118,7 @@ func extracted(bin string) bool {
 
 // octoBinDir returns data/bin, creating it if necessary.
 // OCTO-FORK: the portable product keeps helper binaries next to the executable,
-// not in the host home — see dev-docs-usdable/需求/2260906/技术方案/P1-便携数据根.md.
+// not in the host home — see the portable data-root boundary.
 func octoBinDir() (string, error) {
 	return datapath.Sub("bin")
 }

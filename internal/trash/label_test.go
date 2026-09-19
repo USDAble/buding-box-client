@@ -6,7 +6,7 @@ import (
 	"testing"
 )
 
-// OCTO-FORK: 数据根：`~/.octo` → `<exe dir>/data`（硬规则 1） — see dev-docs-usdable/需求/2260906/技术方案/P1-便携数据根.md
+// OCTO-FORK: 数据根：`~/.octo` → `<exe dir>/data`（硬规则 1） — see the portable data-root boundary
 // stageSession writes a session transcript under data/sessions and moves it
 // into the trash, returning its original path.
 func stageSession(t *testing.T, name, jsonl string) string {

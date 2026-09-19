@@ -26,7 +26,6 @@ const ready = {
   // guard used to require it on both hosts (V-37, retracted).
   gatewayHost: 'https://gateway.example.com',
   trustedKeyIDs: { 'policy-2026-a': 'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=' },
-  startup: { channels: true, tools: true, mcp: true, backgroundTasks: true },
 }
 
 const json = (overrides = {}) => JSON.stringify({ ...ready, ...overrides })

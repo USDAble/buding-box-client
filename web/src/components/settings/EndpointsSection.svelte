@@ -35,6 +35,9 @@
   let fProtocol = $state<'openai' | 'anthropic'>('openai')
   let fModel    = $state('')  // create only: optional first model
   let fVision   = $state(true)
+  // OCTO-FORK: local confidential eligibility exists only for developer
+  // profile testing; the surrounding settings entry is hidden in product.
+  let fConfidential = $state(false)
   // Raw JSON text for the custom-headers textarea; parsed on submit. Unlike
   // fApiKey, this is pre-filled on edit (headers aren't masked like the API
   // key — see design doc "兼容性" for the tradeoff).
@@ -46,6 +49,7 @@
   let addingFor      = $state<string | null>(null)
   let newModel       = $state('')
   let newModelVision = $state(true)
+  let newModelConfidential = $state(false)
 
   // ── popover menu: the catalogue picker behind "+ Add model". Model-level
   // actions (default/Lite/vision helper) are inline icon toggles on each
@@ -197,13 +201,14 @@
     addingFor = ep.id
     newModel = ''
     newModelVision = true
+    newModelConfidential = false
     menu = null
   }
 
   function addCatalogueModel(ep: EndpointConfig, model: string) {
     const vision = presetFor(ep.provider)?.model_vision?.[model] ?? true
     menu = null
-    run(() => api.addEndpointModel(ep.id, model, vision))
+    run(() => api.addEndpointModel(ep.id, model, vision, false))
   }
 
   // Pre-fill the vision flag from the provider catalogue while typing; an
@@ -217,7 +222,7 @@
     const model = newModel.trim()
     if (!model) return
     run(async () => {
-      await api.addEndpointModel(ep.id, model, newModelVision)
+      await api.addEndpointModel(ep.id, model, newModelVision, newModelConfidential)
       addingFor = null
     })
   }
@@ -232,6 +237,7 @@
     fBaseUrl = ''
     fApiKey = ''
     fProtocol = 'openai'
+    fConfidential = false
     fHeadersText = ''
     fIdTouched = false
     applyProviderPreset()
@@ -298,7 +304,7 @@
           api_key: fApiKey || undefined,
           protocol: isCustom ? fProtocol : undefined,
           headers: parsedHeaders,
-          models: model ? [{ model, vision: fVision }] : [],
+          models: model ? [{ model, vision: fVision, confidential: fConfidential }] : [],
         })
         // First usable endpoint on a config with no default yet — point the
         // default at it so the save is immediately effective. Non-fatal: the
@@ -447,6 +453,10 @@
           <input type="checkbox" bind:checked={fVision} disabled={busy} />
           <span>{$t('settings.endpoints.models.vision')}</span>
         </label>
+        <label class="vision-check">
+          <input type="checkbox" bind:checked={fConfidential} disabled={busy} />
+          <span>{$t('settings.endpoints.models.confidential')}</span>
+        </label>
       </div>
     {/if}
 
@@ -540,6 +550,15 @@
                   </button>
                 {/if}
                 <button
+                  class="chip-act"
+                  class:on-confidential={m.confidential}
+                  title={$t('settings.endpoints.models.confidential')}
+                  onclick={() => run(() => api.addEndpointModel(ep.id, m.model, m.vision, !m.confidential))}
+                  disabled={busy}
+                >
+                  <iconify-icon icon={m.confidential ? 'ant-design:safety-certificate-filled' : 'ant-design:safety-certificate-outlined'} width="13"></iconify-icon>
+                </button>
+                <button
                   class="chip-x"
                   title={$t('common.delete')}
                   onclick={(e) => { e.stopPropagation(); removeModel(ep, m.model) }}
@@ -575,6 +594,10 @@
                 <label class="vision-check">
                   <input type="checkbox" bind:checked={newModelVision} disabled={busy} />
                   <span>{$t('settings.endpoints.models.vision')}</span>
+                </label>
+                <label class="vision-check">
+                  <input type="checkbox" bind:checked={newModelConfidential} disabled={busy} />
+                  <span>{$t('settings.endpoints.models.confidential')}</span>
                 </label>
                 <button class="add-ok" onclick={() => submitAddModel(ep)} disabled={busy || !newModel.trim()}>
                   <iconify-icon icon="ant-design:check-outlined" width="13"></iconify-icon>
@@ -674,6 +697,7 @@
 .chip-act.on-default, .chip-act.on-default:disabled { color: var(--success-text); }
 .chip-act.on-lite { color: var(--blue-6); }
 .chip-act.on-vision { color: var(--purple-6, var(--blue-6)); }
+.chip-act.on-confidential { color: var(--success-text); }
 .chip-x {
   height: 100%; padding: 0 8px 0 4px; border: none; background: transparent;
   color: var(--text-quaternary); cursor: pointer; display: inline-flex; align-items: center;

@@ -169,7 +169,7 @@ func stdinIsTTY(r io.Reader) bool {
 // OCTO_HISTORY_FILE wins so users (and tests) can redirect it. Empty
 // return disables history persistence.
 // OCTO-FORK: history lives under data/ next to the executable — see
-// dev-docs-usdable/需求/2260906/技术方案/P1-便携数据根.md.
+// the portable data-root boundary.
 func defaultHistoryFile() string {
 	if env := os.Getenv("OCTO_HISTORY_FILE"); env != "" {
 		return env

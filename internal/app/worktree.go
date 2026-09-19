@@ -57,7 +57,7 @@ func newWorktree(label string) (*worktree, error) {
 	// OCTO-FORK: annotation only — the path itself is upstream's, so this file
 	// carries no behavioural difference. The marker exists because the
 	// octo-literal-allow comment below is our addition; the marker guard counts
-	// any edit to an upstream file. See dev-docs-usdable/需求/2260906/技术方案/P1-便携数据根.md §3.
+	// any edit to an upstream file. See the portable data-root boundary §3.
 	dir := filepath.Join(root, ".octo", "worktrees", name+"-"+suffix) // octo-literal-allow: project-level path in the user's repo, not the data root
 	if err := os.MkdirAll(filepath.Dir(dir), 0o755); err != nil {
 		return nil, fmt.Errorf("worktree dir: %w", err)

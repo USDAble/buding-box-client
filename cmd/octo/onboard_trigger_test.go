@@ -11,7 +11,7 @@ import (
 func TestSoulMissing(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
-	// OCTO-FORK: 数据根：`~/.octo` → `<exe dir>/data`（硬规则 1） — see dev-docs-usdable/需求/2260906/技术方案/P1-便携数据根.md
+	// OCTO-FORK: 数据根：`~/.octo` → `<exe dir>/data`（硬规则 1） — see the portable data-root boundary
 	t.Setenv("OCTO_DATA_ROOT", home)
 	// os.UserHomeDir() reads %USERPROFILE% on Windows, not $HOME.
 	t.Setenv("USERPROFILE", home)

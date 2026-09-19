@@ -136,7 +136,7 @@ var groupMu = &registryLock{}
 // seconds, cachedRegistry stats it once per listing — and resolving through
 // datapath.Root made each of those a write: MkdirAll plus a temporary
 // writability probe in the root (V-105). Writers call ensureRegistryDir first.
-// OCTO-FORK: read-only resolver, split from the writers — see dev-docs-usdable/需求/20260911/需求基线.md §5.6.
+// OCTO-FORK: read-only resolver, split from the writers — see the product baseline §5.6.
 func sessionGroupsPath() (string, error) {
 	return datapath.Join(sessionGroupsFile)
 }

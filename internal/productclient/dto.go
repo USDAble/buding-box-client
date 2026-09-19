@@ -146,9 +146,8 @@ const (
 	pathLogin     = "/auth/login"
 	pathRefresh   = "/auth/refresh"
 	pathBootstrap = "/client/bootstrap"
-	// pathCatalogModels refreshes the catalog without a re-login (中台交付包 §4.1
-	// 第 6 条). It is the one endpoint that answers a conditional request, which
-	// is why the refresh path goes through it rather than through bootstrap.
+	// OCTO-FORK: pathCatalogModels supplies both first load and conditional
+	// refresh, so the product control-plane contract has one directory endpoint.
 	pathCatalogModels = "/catalog/models"
 	// pathSensitiveDictionary is the read-only compliance dictionary snapshot
 	// (需求基线 D5). Its response fields live in SensitiveDictionaryData below;

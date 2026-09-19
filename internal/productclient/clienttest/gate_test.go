@@ -10,7 +10,7 @@ import (
 	"github.com/open-octo/octo-agent/internal/productclient"
 )
 
-// The four Fail* switches share one gate rule: armed when the STATUS is
+// The Fail* switches share one gate rule: armed when the STATUS is
 // non-zero, with the business code as optional metadata. They used to disagree —
 // bootstrap, logout and ledger tested the code; completions tested the status —
 // so FailCompletions(502, "") produced a 502 while FailBootstrap(502, "") left
@@ -36,6 +36,27 @@ func TestABareStatusArmsEveryFailureSwitch(t *testing.T) {
 			arm:  func(s *Server) { s.FailBootstrap(http.StatusBadGateway, "") },
 			request: func(t *testing.T, h http.Handler, token string) *httptest.ResponseRecorder {
 				return get(t, h, "/v1/client/bootstrap", token)
+			},
+			want: http.StatusBadGateway,
+		},
+		{
+			name: "catalog",
+			arm:  func(s *Server) { s.FailCatalog(http.StatusBadGateway, "") },
+			request: func(t *testing.T, h http.Handler, token string) *httptest.ResponseRecorder {
+				return get(t, h, "/v1/catalog/models", token)
+			},
+			want: http.StatusBadGateway,
+		},
+		{
+			name: "feedback",
+			arm:  func(s *Server) { s.FailFeedback(http.StatusBadGateway, "", 0) },
+			request: func(t *testing.T, h http.Handler, token string) *httptest.ResponseRecorder {
+				req := httptest.NewRequest(http.MethodPost, "/v1/feedback", strings.NewReader(`{"category":"other","title":"Question","content":"Description","impact":"low"}`))
+				req.Header.Set("Authorization", "Bearer "+token)
+				req.Header.Set(productclient.HeaderIdempotencyKey, "33333333-3333-4333-8333-333333333333")
+				rec := httptest.NewRecorder()
+				h.ServeHTTP(rec, req)
+				return rec
 			},
 			want: http.StatusBadGateway,
 		},
@@ -98,6 +119,10 @@ func TestAnEmptyStatusIsStillNotAnInjection(t *testing.T) {
 	stub := New()
 	stub.FailBootstrap(http.StatusBadGateway, productclient.CodeUpstreamUnavailable)
 	stub.FailBootstrap(0, "") // the reset
+	stub.FailCatalog(http.StatusBadGateway, productclient.CodeUpstreamUnavailable)
+	stub.FailCatalog(0, "")
+	stub.FailFeedback(http.StatusBadGateway, productclient.CodeUpstreamUnavailable, 1)
+	stub.FailFeedback(0, "", 0)
 	stub.FailLedger(http.StatusBadGateway, productclient.CodeUpstreamUnavailable)
 	stub.FailLedger(0, "")
 
@@ -105,6 +130,17 @@ func TestAnEmptyStatusIsStillNotAnInjection(t *testing.T) {
 	token := signInFor(t, h, "13800001234")
 	if got := get(t, h, "/v1/client/bootstrap", token); got.Code != http.StatusOK {
 		t.Errorf("bootstrap answers %d after a reset, want 200: %s", got.Code, got.Body.String())
+	}
+	if got := get(t, h, "/v1/catalog/models", token); got.Code != http.StatusOK {
+		t.Errorf("catalog answers %d after a reset, want 200: %s", got.Code, got.Body.String())
+	}
+	feedback := httptest.NewRequest(http.MethodPost, "/v1/feedback", strings.NewReader(`{"category":"other","title":"Question","content":"Description","impact":"low"}`))
+	feedback.Header.Set("Authorization", "Bearer "+token)
+	feedback.Header.Set(productclient.HeaderIdempotencyKey, "33333333-3333-4333-8333-333333333333")
+	feedbackRec := httptest.NewRecorder()
+	h.ServeHTTP(feedbackRec, feedback)
+	if feedbackRec.Code != http.StatusOK {
+		t.Errorf("feedback answers %d after a reset, want 200: %s", feedbackRec.Code, feedbackRec.Body.String())
 	}
 	if got := get(t, h, "/v1/credits/ledger", token); got.Code != http.StatusOK {
 		t.Errorf("ledger answers %d after a reset, want 200: %s", got.Code, got.Body.String())
@@ -133,6 +169,62 @@ func TestACodeLessRefusalCarriesNoBusinessCode(t *testing.T) {
 	}
 	if code, ok := body["code"]; ok && code != "" {
 		t.Errorf("a code-less refusal invented code %q", code)
+	}
+}
+
+// OCTO-FORK: keep the development stand-in strict enough to expose feedback
+// contract drift before a central-platform implementation is available.
+func TestFeedbackRejectsPayloadsOutsideTheContract(t *testing.T) {
+	const (
+		phone = "13800001234"
+		key   = "33333333-3333-4333-8333-333333333333"
+	)
+	cases := []struct {
+		name string
+		body string
+		key  string
+		want int
+	}{
+		{
+			name: "accepts the documented payload",
+			body: `{"category":"suggestion","title":"Useful improvement","content":"Please add this workflow.","impact":"normal"}`,
+			key:  key,
+			want: http.StatusOK,
+		},
+		{
+			name: "rejects an unknown field",
+			body: `{"category":"suggestion","title":"Useful improvement","content":"Please add this workflow.","impact":"normal","accountId":"do-not-accept"}`,
+			key:  key,
+			want: http.StatusBadRequest,
+		},
+		{
+			name: "counts unicode title runes",
+			body: `{"category":"bug","title":"` + strings.Repeat("界", 121) + `","content":"Description","impact":"high"}`,
+			key:  key,
+			want: http.StatusBadRequest,
+		},
+		{
+			name: "requires a UUID idempotency key",
+			body: `{"category":"other","title":"Question","content":"Description","impact":"low"}`,
+			key:  "not-a-uuid",
+			want: http.StatusBadRequest,
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			stub := New()
+			h := stub.Handler()
+			req := httptest.NewRequest(http.MethodPost, "/v1/feedback", strings.NewReader(tc.body))
+			req.Header.Set("Authorization", "Bearer "+signInFor(t, h, phone))
+			req.Header.Set("Content-Type", "application/json")
+			req.Header.Set(productclient.HeaderIdempotencyKey, tc.key)
+			rec := httptest.NewRecorder()
+			h.ServeHTTP(rec, req)
+			if rec.Code != tc.want {
+				t.Errorf("feedback = %d, want %d: %s", rec.Code, tc.want, rec.Body.String())
+			}
+		})
 	}
 }
 

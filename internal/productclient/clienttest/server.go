@@ -20,10 +20,12 @@ package clienttest
 import (
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"strings"
 	"sync"
 	"time"
+	"unicode/utf8"
 
 	"github.com/open-octo/octo-agent/internal/productclient"
 	"github.com/open-octo/octo-agent/internal/productphone"
@@ -113,6 +115,8 @@ type Server struct {
 	lastEffort       *string // reasoning_effort as received: nil means the field was ABSENT, "" means present and empty
 	bootstrapStatus  int     // non-zero: bootstrap fails with this status and code
 	bootstrapCode    string  // the code that failure carries
+	catalogStatus    int     // non-zero: catalog endpoint fails with this status and code
+	catalogCode      string  // the code that failure carries
 	logoutStatus     int     // non-zero: logout fails with this status and code
 	logoutCode       string  // the code that failure carries
 	ledgerStatus     int     // non-zero: the ledger read fails with this status and code
@@ -120,6 +124,9 @@ type Server struct {
 	ledgerBalance    *int64  // nil means fixtureBalanceMicroCredits
 	ledgerNoBalance  bool    // answer without balanceMicroCredits at all (a malformed answer)
 	ledgerCount      int     // ledger reads served, so "one per trigger" is checkable
+	feedbackStatus   int     // non-zero: feedback endpoint fails with this status and code
+	feedbackCode     string  // the code that failure carries
+	feedbackRetrySec int     // optional retryAfterSec for a feedback refusal
 	tamperPolicy     bool    // sign correctly, then change a byte of the payload
 	omitPolicy       bool    // answer bootstrap with no envelope at all
 	catalogVersion   string  // "" means FixturePolicyVersion
@@ -137,7 +144,8 @@ type Server struct {
 	completionStatus int
 	completionCode   string
 
-	catalogRefreshCount int  // refresh endpoint hits, so "exactly once" is checkable
+	catalogInitialCount int  // unconditional signed-directory reads
+	catalogRefreshCount int  // conditional signed-directory reads
 	unchangedInBody     bool // spell "nothing new" as {"unchanged":true} instead of 304
 	dictionaryVersion   string
 	dictionaryWords     []string
@@ -262,6 +270,27 @@ func (s *Server) FailBootstrap(status int, code string) {
 	s.bootstrapCount = 0 // start counting from the injection
 	s.bootstrapStatus = status
 	s.bootstrapCode = code
+}
+
+// FailCatalog makes every model-directory request fail with the given status
+// and business code. It is separate from the legacy bootstrap fixture because
+// the desktop runtime obtains both its first and conditional catalog here.
+func (s *Server) FailCatalog(status int, code string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.catalogStatus = status
+	s.catalogCode = code
+}
+
+// FailFeedback makes the explicit feedback endpoint return the supplied
+// refusal. retryAfterSec is meaningful for rate_limited and lets the desktop
+// exercise the server-owned cooldown without inventing a local threshold.
+func (s *Server) FailFeedback(status int, code string, retryAfterSec int) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.feedbackStatus = status
+	s.feedbackCode = code
+	s.feedbackRetrySec = retryAfterSec
 }
 
 // FailLogout makes every logout attempt fail with the given status and business
@@ -488,10 +517,18 @@ func (s *Server) BootstrapCount() int {
 	return s.bootstrapCount
 }
 
+// CatalogInitialCount reports unconditional signed-directory reads. It proves
+// first load and forced account changes use the same catalog route without
+// conflating those reads with conditional refreshes.
+func (s *Server) CatalogInitialCount() int {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.catalogInitialCount
+}
+
 // CatalogRefreshCount reports how many conditional-refresh attempts arrived.
-// Unlike BootstrapCount it is not reset by a fault injection: the assertions it
-// serves are "exactly one refresh happened" and "no refresh happened", and both
-// need the count to survive the switch that caused them.
+// It is deliberately separate from CatalogInitialCount: callers use its exact
+// value to prove an expired cache triggered one, and only one, refresh.
 func (s *Server) CatalogRefreshCount() int {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -954,31 +991,49 @@ func (s *Server) handleLogout(w http.ResponseWriter, r *http.Request) {
 	writeData(w, http.StatusOK, nil)
 }
 
+// OCTO-FORK: the development stand-in enforces the product's bounded feedback
+// contract and can return the shared rate_limited cooldown semantics.
 // handleFeedback mirrors the small protected contract used by the desktop
 // feedback form. It holds only enough in-memory data to prove idempotency.
 func (s *Server) handleFeedback(w http.ResponseWriter, r *http.Request) {
-	var req productclient.FeedbackRequest
-	if !decode(w, r, &req) {
+	token := bearer(r)
+	s.mu.Lock()
+	_, authorised := s.access[token]
+	s.mu.Unlock()
+	if !authorised {
+		writeError(w, http.StatusUnauthorized, productclient.CodeUnauthorized, "")
 		return
 	}
+	s.mu.Lock()
+	feedbackStatus, feedbackCode, feedbackRetrySec := s.feedbackStatus, s.feedbackCode, s.feedbackRetrySec
+	s.mu.Unlock()
+	if feedbackStatus != 0 {
+		writeErrorRetryAfter(w, feedbackStatus, feedbackCode, feedbackRetrySec)
+		return
+	}
+
+	var req productclient.FeedbackRequest
+	if !decodeFeedback(w, r, &req) {
+		return
+	}
+	normalizeFeedback(&req)
 	if !validFeedback(req) {
 		writeError(w, http.StatusBadRequest, productclient.CodeInvalidRequest, "")
 		return
 	}
 	key := r.Header.Get(productclient.HeaderIdempotencyKey)
-	if key == "" {
+	if !validFeedbackUUID(key) {
 		writeError(w, http.StatusBadRequest, productclient.CodeInvalidRequest, "")
 		return
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	phone, ok := s.access[bearer(r)]
+	phone, ok := s.access[token]
 	if !ok {
 		writeError(w, http.StatusUnauthorized, productclient.CodeUnauthorized, "")
 		return
 	}
 	compoundKey := phone + "\x00" + key
-	normalizeFeedback(&req)
 	if existing, ok := s.feedback[compoundKey]; ok {
 		if existing.req != req {
 			writeError(w, http.StatusConflict, productclient.CodeIdempotencyConflict, "")
@@ -1003,7 +1058,16 @@ func validFeedback(req productclient.FeedbackRequest) bool {
 	if req.Impact != "low" && req.Impact != "normal" && req.Impact != "high" {
 		return false
 	}
-	return strings.TrimSpace(req.Title) != "" && strings.TrimSpace(req.Content) != ""
+	return runeLengthInRange(req.Title, 1, 120) &&
+		runeLengthInRange(req.Content, 1, 4000) &&
+		runeLengthInRange(req.Reproduction, 0, 2000) &&
+		runeLengthInRange(req.Expected, 0, 2000) &&
+		runeLengthInRange(req.Contact, 0, 200)
+}
+
+func runeLengthInRange(v string, min, max int) bool {
+	n := utf8.RuneCountInString(v)
+	return n >= min && n <= max
 }
 
 func normalizeFeedback(req *productclient.FeedbackRequest) {
@@ -1136,8 +1200,8 @@ func (s *Server) handleCreditsLedger(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-// handleCatalogModels serves the conditional catalog refresh (中台交付包 §4.1 第 6
-// 条, §4.3).
+// handleCatalogModels serves both the first model directory and its conditional
+// refresh. An empty knownVersion asks for a complete signed snapshot.
 //
 // It answers "nothing new" in whichever spelling the test selected, because the
 // contract lets the platform choose and the client owes both. A 304 has no body
@@ -1147,7 +1211,17 @@ func (s *Server) handleCatalogModels(w http.ResponseWriter, r *http.Request) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	s.catalogRefreshCount++
+	if r.URL.Query().Get("knownVersion") == "" {
+		s.catalogInitialCount++
+	} else {
+		s.catalogRefreshCount++
+	}
+	// OCTO-FORK: the desktop's only active directory endpoint needs its own
+	// failure fixture, rather than inheriting legacy bootstrap behaviour.
+	if s.catalogStatus != 0 {
+		writeError(w, s.catalogStatus, s.catalogCode, "")
+		return
+	}
 	if _, ok := s.access[bearer(r)]; !ok {
 		writeError(w, http.StatusUnauthorized, productclient.CodeUnauthorized, "")
 		return
@@ -1160,13 +1234,16 @@ func (s *Server) handleCatalogModels(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusNotModified)
 		return
 	}
+	if s.omitPolicy {
+		writeData(w, http.StatusOK, map[string]any{"unchanged": false})
+		return
+	}
 	envelope, err := s.policyEnvelope()
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, productclient.CodeInternalError, "")
 		return
 	}
-	// The same flattened shape bootstrap uses, so a signed catalog has one
-	// spelling on the wire (中台交付包 §4.3).
+	// One flattened signed-policy shape is used for initial and refresh reads.
 	writeData(w, http.StatusOK, struct {
 		productclient.PolicyEnvelope
 		Unchanged bool `json:"unchanged"`
@@ -1560,6 +1637,41 @@ func decode(w http.ResponseWriter, r *http.Request, into any) bool {
 	return true
 }
 
+// decodeFeedback is deliberately stricter than the generic decoder: feedback
+// is a bounded public payload, so accepting an unknown field would make the
+// stand-in claim a privacy contract the real endpoint does not enforce.
+func decodeFeedback(w http.ResponseWriter, r *http.Request, into *productclient.FeedbackRequest) bool {
+	dec := json.NewDecoder(http.MaxBytesReader(w, r.Body, 1<<20))
+	dec.DisallowUnknownFields()
+	if err := dec.Decode(into); err != nil {
+		writeError(w, http.StatusBadRequest, productclient.CodeInvalidRequest, "")
+		return false
+	}
+	if err := dec.Decode(&struct{}{}); err != io.EOF {
+		writeError(w, http.StatusBadRequest, productclient.CodeInvalidRequest, "")
+		return false
+	}
+	return true
+}
+
+func validFeedbackUUID(v string) bool {
+	if len(v) != 36 {
+		return false
+	}
+	for i := 0; i < len(v); i++ {
+		if i == 8 || i == 13 || i == 18 || i == 23 {
+			if v[i] != '-' {
+				return false
+			}
+			continue
+		}
+		if !((v[i] >= '0' && v[i] <= '9') || (v[i] >= 'a' && v[i] <= 'f') || (v[i] >= 'A' && v[i] <= 'F')) {
+			return false
+		}
+	}
+	return true
+}
+
 func writeData(w http.ResponseWriter, status int, data any) {
 	w.Header().Set("Content-Type", "application/json; charset=utf-8")
 	w.WriteHeader(status)
@@ -1598,6 +1710,16 @@ func writeError(w http.ResponseWriter, status int, code, field string) {
 	body := map[string]any{"code": code}
 	if field != "" {
 		body["field"] = field
+	}
+	_ = json.NewEncoder(w).Encode(body)
+}
+
+func writeErrorRetryAfter(w http.ResponseWriter, status int, code string, retryAfterSec int) {
+	w.Header().Set("Content-Type", "application/json; charset=utf-8")
+	w.WriteHeader(status)
+	body := map[string]any{"code": code}
+	if retryAfterSec > 0 {
+		body["retryAfterSec"] = retryAfterSec
 	}
 	_ = json.NewEncoder(w).Encode(body)
 }

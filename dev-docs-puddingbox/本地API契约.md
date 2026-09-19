@@ -184,7 +184,7 @@
 
 该接口只传递上述 JSON 字段：`contact` 是用户自愿输入的唯一可选联系方式，不能由帐户手机号补填。不得读取、派生或附加聊天内容、会话历史、附件、OCR、上传文件、工具调用、模型输入输出、日志、数据根路径、手机号、token、原始设备标识或任何“默认诊断包”。运行时不持久化正文，也不在失败后后台重发；界面可在内存中保留表单，交由用户明确再次提交。
 
-本地字段错误使用 `400 {"fieldErrors":{"category":"invalid_value"}}`、`{"fieldErrors":{"title":"invalid_length"}}`、`{"fieldErrors":{"content":"invalid_length"}}` 或相应可选字段错误；错误 JSON 或非法 idempotency key 为 `400 {"code":"invalid_request"}`。平台拒绝映射为稳定的 `401 unauthorized`、`403 feedback_not_allowed`、`409 idempotency_conflict`、`429 feedback_rate_limited`（含 `retryAfterSec`）或 `503 network_unavailable` / `upstream_unavailable`；未知平台业务码不透传，返回 `503 upstream_unavailable`。成功、失败或重试均不得改变 `ProductStateDTO`。
+本地字段错误使用 `400 {"fieldErrors":{"category":"invalid_value"}}`、`{"fieldErrors":{"title":"invalid_length"}}`、`{"fieldErrors":{"content":"invalid_length"}}` 或相应可选字段错误；错误 JSON 或非法 idempotency key 为 `400 {"code":"invalid_request"}`。平台拒绝映射为稳定的 `401 unauthorized`、`403 feedback_not_allowed`、`409 idempotency_conflict`、`429 rate_limited`（含 `retryAfterSec`）或 `503 network_unavailable` / `upstream_unavailable`；未知平台业务码不透传，返回 `503 upstream_unavailable`。成功、失败或重试均不得改变 `ProductStateDTO`。
 
 ## 盒子投影不泄露设备连接细节
 
@@ -250,7 +250,7 @@
 | `confidential_model_unavailable` | 已锁定私密会话在回合开始前失去可用的合格模型；不得回退普通模型。 |
 | `feedback_not_allowed` | 当前已认证账户不可提交反馈；不结束本地会话。 |
 | `idempotency_conflict` | 同一反馈幂等键被用于不同正文；保留表单，要求用户重新发起一次提交。 |
-| `feedback_rate_limited` | 控制面对反馈节流；可携带 `retryAfterSec`，界面禁用提交至该时刻。 |
+| `rate_limited` | 控制面对反馈节流；可携带 `retryAfterSec`，界面禁用提交至该时刻。 |
 | `unauthorized` | 会话刷新被明确拒绝；本地以 401 回产品门。 |
 
 ## 验证与变更

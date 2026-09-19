@@ -155,8 +155,11 @@ func (c *Client) Refresh(ctx context.Context, refreshToken string) (*RefreshData
 	return &out, nil
 }
 
-// Bootstrap fetches the account summary. It is the authenticated call the app
-// makes at startup, so it is also the call that exercises token refresh.
+// OCTO-FORK: the product runtime's initial directory read no longer uses the
+// mixed upstream bootstrap response.
+// Bootstrap exposes the legacy upstream account-summary capability. Product
+// runtime startup uses CatalogModels and CreditsLedger instead; this method is
+// retained for upstream-compatible callers and their tests.
 func (c *Client) Bootstrap(ctx context.Context) (*BootstrapData, error) {
 	var out BootstrapData
 	if err := c.doAuthorized(ctx, http.MethodGet, pathBootstrap, nil, &out); err != nil {

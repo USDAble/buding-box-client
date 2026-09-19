@@ -576,7 +576,7 @@ func TestCatalogIsCachedAndVerifiesOfflineAfterLogin(t *testing.T) {
 		t.Errorf("expiresAt = %s is already in the past", cached.ExpiresAt)
 	}
 
-	before := m.platform.BootstrapCount()
+	before := m.platform.CatalogRefreshCount()
 	policy, err := cached.Envelope.Verify(productclient.VerifyOptions{
 		TrustedKeys: map[string]string{clienttest.FixtureSigningKeyID: clienttest.FixtureSigningPublicKey()},
 		Audience:    brand.Load().BrandID,
@@ -589,7 +589,7 @@ func TestCatalogIsCachedAndVerifiesOfflineAfterLogin(t *testing.T) {
 	if len(policy.Catalog.Models) == 0 {
 		t.Error("the cached catalog has no models; there is nothing for the picker to show")
 	}
-	if after := m.platform.BootstrapCount(); after != before {
+	if after := m.platform.CatalogRefreshCount(); after != before {
 		t.Errorf("verifying the cache cost %d extra platform call(s); it must be readable offline", after-before)
 	}
 }
@@ -601,7 +601,8 @@ func TestCatalogIsCachedAndVerifiesOfflineAfterLogin(t *testing.T) {
 func TestACatalogFailureDoesNotBlockTheLogin(t *testing.T) {
 	cases := map[string]func(m *mountedHarness){
 		"the catalog cannot be fetched": func(m *mountedHarness) {
-			m.platform.FailBootstrap(502, productclient.CodeUpstreamUnavailable)
+			// OCTO-FORK: login's directory fetch uses the dedicated catalog route.
+			m.platform.FailCatalog(502, productclient.CodeUpstreamUnavailable)
 		},
 		"the signature does not cover what arrived": func(m *mountedHarness) {
 			m.platform.TamperPolicy()
@@ -646,8 +647,8 @@ func TestARolledBackCatalogDoesNotReplaceTheCache(t *testing.T) {
 	}
 }
 
-// TestSessionExpiryIsReachableThroughBootstrap is L-A6 end to end, and it is
-// the first test that can exist: bootstrap is the first authorised platform call
+// TestSessionExpiryIsReachableThroughCatalog is L-A6 end to end, and it is
+// the first test that can exist: catalog is the first authorised platform call
 // any production code makes, so before PR-4b the "refresh refused -> clear the
 // credential -> back to the blocked page" path had no way to run (V-29).
 //
@@ -656,7 +657,7 @@ func TestARolledBackCatalogDoesNotReplaceTheCache(t *testing.T) {
 // first authorised call is refused, with the refresh refused too. The activation
 // code is consumed by the platform before it refuses - that is inherent to the
 // fault, and not something the client can undo.
-func TestSessionExpiryIsReachableThroughBootstrap(t *testing.T) {
+func TestSessionExpiryIsReachableThroughCatalog(t *testing.T) {
 	m := newMountedHarness(t)
 	m.platform.RefuseSessionsAfterLogin()
 

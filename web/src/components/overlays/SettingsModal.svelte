@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { onDestroy } from 'svelte'
   import Segment from '../ui/Segment.svelte'
   import ThemePackPicker from '../ui/ThemePackPicker.svelte'
   import Switch from '../ui/Switch.svelte'
@@ -85,6 +86,8 @@
   let feedbackReceipt = $state('')
   let feedbackError = $state('')
   let feedbackKey = $state('')
+  let feedbackCooldownSec = $state(0)
+  let feedbackCooldownTimer: ReturnType<typeof setInterval> | undefined
   let box = $state<BoxDTO | null>(null)
   let boxLoading = $state(false)
   let boxError = $state(false)
@@ -537,6 +540,9 @@
   }
 
   async function sendFeedback() {
+    // OCTO-FORK: feedback rate limits are a server-owned retry window, surfaced
+    // here without discarding the idempotency key or the user's form contents.
+    if (feedbackCooldownSec > 0) return
     const title = feedbackTitle.trim()
     const content = feedbackContent.trim()
     feedbackError = ''
@@ -571,13 +577,39 @@
       feedbackContact = ''
       feedbackKey = ''
     } catch (e: any) {
-      feedbackError = e instanceof ProductError && Object.keys(e.fieldErrors).length > 0
-        ? $t('settings.help.feedback_length')
-        : $t('settings.help.feedback_failed')
+      const retryAfterSec = e instanceof ProductError && e.code === 'rate_limited'
+        ? e.retryAfterSec
+        : null
+      if (retryAfterSec !== null && retryAfterSec > 0) {
+        startFeedbackCooldown(retryAfterSec)
+        feedbackError = $t('settings.help.feedback_rate_limited').replace('{seconds}', String(feedbackCooldownSec))
+      } else {
+        feedbackError = e instanceof ProductError && Object.keys(e.fieldErrors).length > 0
+          ? $t('settings.help.feedback_length')
+          : $t('settings.help.feedback_failed')
+      }
     } finally {
       feedbackSubmitting = false
     }
   }
+
+  function startFeedbackCooldown(seconds: number) {
+    const until = Date.now() + seconds * 1000
+    if (feedbackCooldownTimer) clearInterval(feedbackCooldownTimer)
+    const tick = () => {
+      feedbackCooldownSec = Math.max(0, Math.ceil((until - Date.now()) / 1000))
+      if (feedbackCooldownSec === 0 && feedbackCooldownTimer) {
+        clearInterval(feedbackCooldownTimer)
+        feedbackCooldownTimer = undefined
+      }
+    }
+    tick()
+    feedbackCooldownTimer = setInterval(tick, 250)
+  }
+
+  onDestroy(() => {
+    if (feedbackCooldownTimer) clearInterval(feedbackCooldownTimer)
+  })
 
   async function loadBox() {
     boxLoading = true
@@ -815,7 +847,7 @@
                 <div class="feedback-grid"><label><span>{$t('settings.help.feedback_reproduction')}</span><textarea class="sinput feedback-short" bind:value={feedbackReproduction} maxlength="2000"></textarea></label><label><span>{$t('settings.help.feedback_expected')}</span><textarea class="sinput feedback-short" bind:value={feedbackExpected} maxlength="2000"></textarea></label></div>
                 <label><span>{$t('settings.help.feedback_contact')}</span><input class="sinput" bind:value={feedbackContact} maxlength="200" /></label>
                 {#if feedbackError}<p class="account-error">{feedbackError}</p>{/if}{#if feedbackReceipt}<p class="feedback-success">{$t('settings.help.feedback_sent').replace('{id}', feedbackReceipt)}</p>{/if}
-                <button class="btns" onclick={sendFeedback} disabled={feedbackSubmitting}>{feedbackSubmitting ? $t('common.saving') : $t('settings.help.feedback_submit')}</button>
+                <button class="btns" onclick={sendFeedback} disabled={feedbackSubmitting || feedbackCooldownSec > 0}>{feedbackSubmitting ? $t('common.saving') : feedbackCooldownSec > 0 ? $t('settings.help.feedback_retry').replace('{seconds}', String(feedbackCooldownSec)) : $t('settings.help.feedback_submit')}</button>
               </div>
             {/if}
           </section>

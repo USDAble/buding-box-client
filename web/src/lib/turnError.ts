@@ -50,6 +50,8 @@ import { tr } from './i18n'
 // cannot succeed, so the honest state is that this path has no copy until it has the
 // behaviour.
 export const TURN_ERROR_KEYS: Record<string, string> = {
+	confidential_model_required: 'privacy.private_model_required',
+	confidential_model_unavailable: 'turn_error.confidential_model_unavailable',
   insufficient_credits: 'turn_error.insufficient_credits',
   model_withdrawn: 'session.model_withdrawn',
   model_not_found: 'session.model_withdrawn',

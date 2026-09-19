@@ -126,11 +126,10 @@ func (s *Store) Load() (Entry, error) {
 
 // Put stores a catalog.
 //
-// The write happens only when the version advances (需求基线 B2 规则 4): on a USB
-// stick that is the difference between a read and a write on every sign-in. An
-// equal version is a no-op, and an older one is refused - neither is an error the
-// caller has to act on, which is why the caller compares outcomes rather than
-// checking for these two before calling.
+// The write happens when the version advances, or when the same verified catalog
+// is reissued with a later expiry. The latter is the one safe exception to the
+// usual no-write-on-equal-version rule: an expired signature needs replacement
+// bytes even when the model rows did not change. An older version is refused.
 func (s *Store) Put(entry Entry) error {
 	if entry.CatalogVersion == "" {
 		return fmt.Errorf("%w: entry carries no catalog version", ErrNotByteExact)
@@ -157,6 +156,13 @@ func (s *Store) Put(entry Entry) error {
 		// comparing against it would compare against nothing.
 		switch cmp := compareCatalogVersions(entry.CatalogVersion, s.current.CatalogVersion); {
 		case cmp == 0:
+			// OCTO-FORK: an expired catalog asks for an unconditional, freshly
+			// signed snapshot. Same model rows with a later verified expiry must
+			// replace the stale cache; identical or shorter-lived replies stay
+			// no-ops, preserving the normal USB-write budget and replay defence.
+			if entry.ExpiresAt.After(s.current.ExpiresAt) {
+				break
+			}
 			s.clearError()
 			return nil
 		case cmp < 0:

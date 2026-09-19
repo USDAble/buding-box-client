@@ -285,10 +285,8 @@ func TestARolledBackCatalogIsRefusedAndTheCacheIsUntouched(t *testing.T) {
 	}
 }
 
-// TestAnEqualVersionIsNotRewritten is 需求基线 B2 规则 4: write only when the
-// version advances. A login that fetches the same catalog must not touch the
-// drive - on a USB stick that is the difference between a read and a write on
-// every sign-in.
+// TestAnEqualVersionIsNotRewritten is the ordinary same-version path: a login
+// that fetches the same currently valid catalog must not touch the drive.
 func TestAnEqualVersionIsNotRewritten(t *testing.T) {
 	s, root := openStore(t)
 	priv, _ := signingPair(t)
@@ -308,6 +306,29 @@ func TestAnEqualVersionIsNotRewritten(t *testing.T) {
 	}
 	if string(readRaw(t, cachePath(root))) != string(before) {
 		t.Error("the cache was rewritten for an unchanged catalog version")
+	}
+}
+
+func TestAnEqualVersionWithLaterExpiryReplacesTheStaleLease(t *testing.T) {
+	s, _ := openStore(t)
+	priv, _ := signingPair(t)
+	raw := policyBytes(t, testCatalogVersion)
+	first := entry(t, priv, raw, testCatalogVersion)
+	if err := s.Put(first); err != nil {
+		t.Fatalf("Put first lease: %v", err)
+	}
+
+	second := entry(t, priv, raw, testCatalogVersion)
+	second.ExpiresAt = first.ExpiresAt.Add(time.Hour)
+	if err := s.Put(second); err != nil {
+		t.Fatalf("Put reissued lease: %v", err)
+	}
+	loaded, err := s.Load()
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if !loaded.ExpiresAt.Equal(second.ExpiresAt) {
+		t.Errorf("expiresAt = %s, want later reissued lease %s", loaded.ExpiresAt, second.ExpiresAt)
 	}
 }
 

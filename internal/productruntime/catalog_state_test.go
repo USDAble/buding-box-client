@@ -12,6 +12,8 @@ import (
 	"time"
 
 	"github.com/open-octo/octo-agent/internal/catalogstore"
+	"github.com/open-octo/octo-agent/internal/credentialstore"
+	"github.com/open-octo/octo-agent/internal/productstate"
 )
 
 // These tests are PR-4c's judgement: "when the catalog is unusable, what does
@@ -171,7 +173,10 @@ func TestAFailedVerificationIsTerminal(t *testing.T) {
 	}
 
 	before := f.platform.CatalogRefreshCount()
-	after := f.rt.refreshCatalogOnDemand(context.Background())
+	after, err := f.rt.refreshCatalogOnDemand(context.Background())
+	if err != nil {
+		t.Fatalf("refresh on demand = %v", err)
+	}
 
 	if n := f.platform.CatalogRefreshCount(); n != before {
 		t.Errorf("the platform was asked %d more times after a failed verification; B4 forbids retrying that answer", n-before)
@@ -254,16 +259,9 @@ func TestUnchangedAnswerIsRecognisedInBothSpellings(t *testing.T) {
 
 // TestStaleCatalogTriggersOneRefreshOnDemand is B3's "TTL 到期后下一次开选择器触发
 // 刷新", and it pins two things at once: exactly one attempt per read (not zero,
-// not a loop), and the honest outcome of the two ways that attempt can end.
-//
-// The second subtest is the uncomfortable one and it is deliberate. When our copy
-// has expired but its version is still the platform's current one, the platform
-// answers "unchanged" — and unchanged means the signature and the freshness claim
-// are the same, so the catalog is STILL expired. Refreshing cannot fix that, and
-// pretending otherwise (by extending the expiry locally, or by reporting ready)
-// would hand the user a catalog the platform stopped vouching for. 中台交付包 §4.3
-// therefore owes the client a new signed catalog rather than a 304 for one it has
-// let lapse.
+// not a loop), and that a stale cache is recovered only from a newly signed
+// full snapshot. It deliberately omits knownVersion for the retry: a 304 has no
+// bytes with which to replace an expired signature window.
 func TestStaleCatalogTriggersOneRefreshOnDemand(t *testing.T) {
 	t.Run("the refresh brings a newer catalog", func(t *testing.T) {
 		f := newCatalogFixture(t)
@@ -282,33 +280,44 @@ func TestStaleCatalogTriggersOneRefreshOnDemand(t *testing.T) {
 		// catalog arriving, and leaving a one-second TTL in place would make the
 		// replacement expire on arrival and report stale for a second reason.
 		f.platform.SetCatalogTTL(0)
-		avail := f.rt.refreshCatalogOnDemand(context.Background())
+		initialBefore := f.platform.CatalogInitialCount()
+		avail, err := f.rt.refreshCatalogOnDemand(context.Background())
+		if err != nil {
+			t.Fatalf("refresh on demand = %v", err)
+		}
 
-		if n := f.platform.CatalogRefreshCount(); n != 1 {
-			t.Errorf("the refresh endpoint was called %d times, want exactly 1", n)
+		if n := f.platform.CatalogInitialCount(); n != initialBefore+1 {
+			t.Errorf("full catalog requests = %d, want %d after the stale cache", n, initialBefore+1)
+		}
+		if n := f.platform.CatalogRefreshCount(); n != 0 {
+			t.Errorf("conditional catalog requests = %d, want 0 for an expired cache", n)
 		}
 		if avail.State != catalogStateReady {
 			t.Errorf("state = %q, want %q once a fresh catalog arrived", avail.State, catalogStateReady)
 		}
 	})
 
-	t.Run("the platform says the held version is current", func(t *testing.T) {
+	t.Run("the same catalog version is reissued with a fresh signed lease", func(t *testing.T) {
 		f := newCatalogFixture(t)
 		f.signIn()
 		f.platform.SetCatalogTTL(1)
 		f.prime()
 
-		avail := f.rt.refreshCatalogOnDemand(context.Background())
+		f.platform.SetCatalogTTL(120)
+		initialBefore := f.platform.CatalogInitialCount()
+		avail, err := f.rt.refreshCatalogOnDemand(context.Background())
+		if err != nil {
+			t.Fatalf("refresh on demand = %v", err)
+		}
 
-		if n := f.platform.CatalogRefreshCount(); n != 1 {
-			t.Errorf("the refresh endpoint was called %d times, want exactly 1", n)
+		if n := f.platform.CatalogInitialCount(); n != initialBefore+1 {
+			t.Errorf("full catalog requests = %d, want %d after the stale cache", n, initialBefore+1)
 		}
-		if avail.State != catalogStateStale {
-			t.Errorf("state = %q, want %q: an unchanged answer about an expired catalog leaves it expired",
-				avail.State, catalogStateStale)
+		if n := f.platform.CatalogRefreshCount(); n != 0 {
+			t.Errorf("conditional catalog requests = %d, want 0 for an expired cache", n)
 		}
-		if !avail.Retryable {
-			t.Error("retryable = false, want true: a later refresh can still succeed")
+		if avail.State != catalogStateReady {
+			t.Errorf("state = %q, want %q once the reissued lease is cached", avail.State, catalogStateReady)
 		}
 	})
 }
@@ -364,6 +373,32 @@ func TestTheCatalogEndpointReportsTheState(t *testing.T) {
 	}
 	if second["expiresAt"] != "" {
 		t.Errorf("expiresAt = %q, want an empty string when there is no cache to describe", second["expiresAt"])
+	}
+}
+
+func TestCatalogEndpointEndsARefusedSessionInsteadOfReportingStale(t *testing.T) {
+	f := newCatalogFixture(t)
+	if err := f.rt.deps.State.ApplyLogin(productstate.LoginOutcome{
+		PhoneMasked: "138****1234", Nickname: "tester", BoxCode: "BOX-TEST",
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if err := f.rt.deps.Creds.Save(credentialstore.Credential{
+		RefreshToken: "refused-after-stub-restart", InstallID: f.rt.deps.State.InstallID(),
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	rec := httptest.NewRecorder()
+	f.rt.Handler().ServeHTTP(rec, httptest.NewRequest("GET", "/api/product/catalog", nil))
+	if rec.Code != 401 {
+		t.Fatalf("GET /api/product/catalog = %d, want 401 after refresh-token refusal: %s", rec.Code, rec.Body.String())
+	}
+	if f.rt.deps.State.PublicState().LoggedIn {
+		t.Fatal("catalog refresh refusal left the UI in a logged-in state")
+	}
+	if _, present, err := f.rt.deps.Creds.Load(); err != nil || present {
+		t.Fatalf("credential after catalog refresh refusal = present:%v err:%v, want removed", present, err)
 	}
 }
 

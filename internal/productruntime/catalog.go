@@ -246,16 +246,12 @@ func (a catalogAvailability) toDTO() catalogAvailabilityDTO {
 // on one file with no owner. Exactly one function starts a fetch; a test asserts
 // it over the source (catalog_test.go).
 //
-// knownVersion chooses which platform call it is, and the choice is the whole of
-// the conditional-request feature (PR-4c, 中台交付包 §4.3):
+// knownVersion chooses the shape of the one catalog request (中台接口契约.md):
 //
-//   - empty — an unconditional snapshot, taken from the login response. That is
-//     the login path (the account may have changed, so a version comparison
-//     would be answering the wrong question) and the no-cache path (there is no
-//     version to send).
-//   - non-empty — the dedicated refresh endpoint, told which version we hold, so
-//     the platform can answer "nothing new". Standing up a second endpoint for
-//     the no-cache case would be a second way to fetch one catalog.
+//   - empty — an unconditional snapshot. It is used after login and where there
+//     is no cache, because there is no safe version to offer.
+//   - non-empty — a conditional request, told which version we hold, so the
+//     platform can answer "nothing new" when that signed policy remains usable.
 //
 // It returns the outcome for the caller to report. An error accompanies every
 // outcome except catalogReady, so a caller that logs only errors still sees a
@@ -350,18 +346,13 @@ func (rt *Runtime) fetchCatalog(ctx context.Context, knownVersion string) (catal
 // grow a second caller: two places that decide how to ask is the same defect as
 // two places that fetch (开发规范 §3.8).
 func (rt *Runtime) obtainCatalogEnvelope(ctx context.Context, knownVersion string) (productclient.PolicyEnvelope, bool, error) {
-	if knownVersion != "" {
-		data, err := rt.deps.Platform.CatalogModels(ctx, knownVersion)
-		if err != nil {
-			return productclient.PolicyEnvelope{}, false, err
-		}
-		return data.PolicyEnvelope, data.Unchanged, nil
-	}
-	data, err := rt.deps.Platform.Bootstrap(ctx)
+	// OCTO-FORK: one signed catalog endpoint serves both first fetch and refresh,
+	// so the central platform does not need a misleading bootstrap dependency.
+	data, err := rt.deps.Platform.CatalogModels(ctx, knownVersion)
 	if err != nil {
 		return productclient.PolicyEnvelope{}, false, err
 	}
-	return data.PolicyEnvelope, false, nil
+	return data.PolicyEnvelope, data.Unchanged, nil
 }
 
 // refreshCatalog is the ONE entry point that starts a fetch, for callers that
@@ -370,8 +361,8 @@ func (rt *Runtime) obtainCatalogEnvelope(ctx context.Context, knownVersion strin
 // force selects between B3's two refresh triggers:
 //
 //   - true — "换账号强制刷新". The account may have changed, so a version
-//     comparison would answer the wrong question; the snapshot comes from the
-//     login response.
+//     comparison would answer the wrong question; the catalog endpoint receives
+//     an unconditional request.
 //   - false — "陈旧时按需刷新". The version we hold is offered so the platform
 //     can answer "nothing new" and the cache is left untouched.
 //

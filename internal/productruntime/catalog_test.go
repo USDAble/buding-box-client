@@ -26,7 +26,7 @@ import (
 // outcomes exist for PR-4c to consume, and no caller outside this package has
 // any business deciding what they mean.
 //
-// PR-4b is also where L-A6 becomes reachable end to end, because bootstrap is
+// PR-4b is also where L-A6 becomes reachable end to end, because the catalog is
 // the first authorised platform call any production code makes. The mounted
 // tests (mount_test.go) walk that road; this file pins the outcomes.
 
@@ -166,7 +166,7 @@ func TestCatalogOutcomesAreDistinguishable(t *testing.T) {
 		},
 		"the platform answered 5xx": {
 			inject: func(f *catalogFixture) {
-				f.platform.FailBootstrap(502, productclient.CodeUpstreamUnavailable)
+				f.platform.FailCatalog(502, productclient.CodeUpstreamUnavailable)
 			},
 			want: catalogTransport,
 		},
@@ -183,7 +183,7 @@ func TestCatalogOutcomesAreDistinguishable(t *testing.T) {
 			},
 			want: catalogRolledBack,
 		},
-		"bootstrap carries no signed policy": {
+		"the catalog response carries no signed policy": {
 			inject: func(f *catalogFixture) { f.platform.OmitPolicy() },
 			want:   catalogUnavailable,
 		},
@@ -213,7 +213,7 @@ func TestCatalogOutcomesAreDistinguishable(t *testing.T) {
 func TestAFailedFetchLeavesTheCacheAlone(t *testing.T) {
 	cases := map[string]func(f *catalogFixture){
 		"the signature does not verify":   func(f *catalogFixture) { f.platform.TamperPolicy() },
-		"the platform is unreachable":     func(f *catalogFixture) { f.platform.FailBootstrap(502, productclient.CodeUpstreamUnavailable) },
+		"the platform is unreachable":     func(f *catalogFixture) { f.platform.FailCatalog(502, productclient.CodeUpstreamUnavailable) },
 		"the version rolls back":          func(f *catalogFixture) { f.platform.SetCatalogVersion("2026-09-01.0") },
 		"the envelope is missing":         func(f *catalogFixture) { f.platform.OmitPolicy() },
 		"the audience is another product": func(f *catalogFixture) { f.platform.SetPolicyAudience("someone-else") },
@@ -255,8 +255,27 @@ func TestNoCatalogStoreMeansNoFetch(t *testing.T) {
 	if outcome != catalogUnavailable {
 		t.Errorf("outcome = %q (err %v), want %q", outcome, err, catalogUnavailable)
 	}
-	if n := f.platform.BootstrapCount(); n != 0 {
+	if n := f.platform.CatalogRefreshCount(); n != 0 {
 		t.Errorf("the platform was asked %d times without a store to keep the answer", n)
+	}
+	if n := f.platform.CatalogInitialCount(); n != 0 {
+		t.Errorf("the platform was asked %d initial times without a store to keep the answer", n)
+	}
+}
+
+// OCTO-FORK: first load and refresh must share the named catalog contract, not
+// silently fall back to the legacy mixed bootstrap endpoint.
+func TestFirstCatalogFetchUsesTheCatalogEndpoint(t *testing.T) {
+	f := newCatalogFixture(t)
+	f.signIn()
+	if outcome, err := f.rt.refreshCatalog(context.Background(), true); outcome != catalogReady || err != nil {
+		t.Fatalf("first catalog fetch = %q (err %v), want ready", outcome, err)
+	}
+	if got := f.platform.CatalogInitialCount(); got != 1 {
+		t.Errorf("unconditional catalog requests = %d, want 1", got)
+	}
+	if got := f.platform.BootstrapCount(); got != 0 {
+		t.Errorf("legacy bootstrap requests = %d, want 0", got)
 	}
 }
 
@@ -270,14 +289,14 @@ func TestNoCatalogStoreMeansNoFetch(t *testing.T) {
 // It reads the source rather than the behaviour because a behavioural test can
 // only observe the call sites it happens to exercise - a third one added later,
 // on a path no test walks, would pass silently. The definition in productclient
-// is not a match: the pattern requires a receiver, so `) Bootstrap(` does not
+// is not a match: the pattern requires a receiver, so a DTO definition does not
 // count.
 func TestOnlyOnePlaceFetchesTheCatalog(t *testing.T) {
 	root := repoRoot(t)
 	allowed := map[string]bool{
 		filepath.Join("internal", "productruntime", "catalog.go"): true,
 	}
-	call := regexp.MustCompile(`\.Bootstrap\(`)
+	call := regexp.MustCompile(`\.CatalogModels\(`)
 
 	var found []string
 	err := filepath.WalkDir(root, func(path string, d os.DirEntry, err error) error {

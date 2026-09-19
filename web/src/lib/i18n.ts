@@ -549,6 +549,9 @@ export const en: Record<string, string> = {
   "settings.help.feedback_submit": "Send feedback",
   "settings.help.feedback_length": "Enter a 1–120 character title and 1–4,000 character description; optional fields have their stated limits.",
   "settings.help.feedback_failed": "Feedback could not be sent. Your text is still here; please try again.",
+  // OCTO-FORK: feedback shares the central rate_limited code and shows its retry window.
+  "settings.help.feedback_rate_limited": "Feedback is temporarily limited. Try again in {seconds} seconds.",
+  "settings.help.feedback_retry": "Try again in {seconds}s",
   "settings.help.feedback_sent": "Sent. Receipt: {id}",
   "settings.help.website_soon": "The official website is coming soon.",
   "settings.about.version_desc": "Currently installed {brand} version",
@@ -1805,6 +1808,8 @@ export const zh: Record<string, string> = {
   "settings.help.feedback_submit": "提交反馈",
   "settings.help.feedback_length": "请输入 1–120 个字符的标题和 1–4000 个字符的详细描述；可选字段须符合标注的长度限制。",
   "settings.help.feedback_failed": "反馈发送失败。内容已保留，请重试。",
+  "settings.help.feedback_rate_limited": "反馈提交过于频繁，请在 {seconds} 秒后重试。",
+  "settings.help.feedback_retry": "{seconds} 秒后重试",
   "settings.help.feedback_sent": "已提交，回执：{id}",
   "settings.help.website_soon": "官网即将上线。",
   "settings.about.version_desc": "当前安装的{brand}版本",

@@ -153,7 +153,8 @@ func TestLocalEndpointCRUDCanServeAStreamingTurn(t *testing.T) {
 	conn := subscribeConn(srv, sess.ID)
 	srv.doAgentTurn(sess, "hello from the local model", nil, nil)
 	var textDeltas []string
-	for _, event := range turnEvents(t, conn, sess.ID) {
+	ordinaryEvents := turnEvents(t, conn, sess.ID)
+	for _, event := range ordinaryEvents {
 		if event["type"] == "text_delta" {
 			if delta, ok := event["text"].(string); ok {
 				textDeltas = append(textDeltas, delta)
@@ -163,9 +164,7 @@ func TestLocalEndpointCRUDCanServeAStreamingTurn(t *testing.T) {
 	if got := strings.Join(textDeltas, "|"); got != "local |reply" {
 		t.Fatalf("browser text deltas = %q, want both upstream SSE chunks preserved", got)
 	}
-	drainForEvent(t, conn, func(event map[string]any) bool {
-		return event["type"] == "next_message_suggestion"
-	})
+	assertSuggestionDelivered(t, conn, ordinaryEvents)
 	if ordinaryStreamingCalls.Load() != 1 {
 		t.Fatalf("ordinary streaming calls = %d, want 1", ordinaryStreamingCalls.Load())
 	}
@@ -200,7 +199,8 @@ func TestLocalEndpointCRUDCanServeAStreamingTurn(t *testing.T) {
 	privateConn := subscribeConn(srv, private.ID)
 	srv.doAgentTurn(private, "hello from the local model", nil, nil)
 	textDeltas = nil
-	for _, event := range turnEvents(t, privateConn, private.ID) {
+	privateEvents := turnEvents(t, privateConn, private.ID)
+	for _, event := range privateEvents {
 		if event["type"] == "text_delta" {
 			if delta, ok := event["text"].(string); ok {
 				textDeltas = append(textDeltas, delta)
@@ -210,9 +210,7 @@ func TestLocalEndpointCRUDCanServeAStreamingTurn(t *testing.T) {
 	if got := strings.Join(textDeltas, "|"); got != "private |reply" {
 		t.Fatalf("private browser text deltas = %q, want both upstream SSE chunks preserved", got)
 	}
-	drainForEvent(t, privateConn, func(event map[string]any) bool {
-		return event["type"] == "next_message_suggestion"
-	})
+	assertSuggestionDelivered(t, privateConn, privateEvents)
 	if privateStreamingCalls.Load() != 1 {
 		t.Fatalf("private streaming calls = %d, want 1", privateStreamingCalls.Load())
 	}
@@ -230,4 +228,21 @@ func TestLocalEndpointCRUDCanServeAStreamingTurn(t *testing.T) {
 		t.Fatalf("private session did not lock and persist its streamed reply: policy=%+v messages=%+v",
 			privatePersisted.ProtectionPolicy, privatePersisted.Messages)
 	}
+}
+
+// assertSuggestionDelivered accepts the event from either side of the turn-end
+// boundary. Suggestions are independent follow-up work, so they may be queued
+// immediately before the final idle update or just after it; turnEvents keeps
+// every event it consumed while waiting for idle. Looking only after that call
+// made this test discard a valid early suggestion and intermittently timeout.
+func assertSuggestionDelivered(t *testing.T, conn *wsConn, events []map[string]any) {
+	t.Helper()
+	for _, event := range events {
+		if event["type"] == "next_message_suggestion" {
+			return
+		}
+	}
+	drainForEvent(t, conn, func(event map[string]any) bool {
+		return event["type"] == "next_message_suggestion"
+	})
 }

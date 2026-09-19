@@ -27,13 +27,26 @@ func (s *personalInfoRecordingSender) SendMessages(_ context.Context, _, _ strin
 	return agent.Reply{Content: "stub reply"}, nil
 }
 
-func (s *personalInfoRecordingSender) firstUserText() string {
+func (s *personalInfoRecordingSender) sawUserText(want string) bool {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	if len(s.userTexts) == 0 {
-		return ""
+	for _, text := range s.userTexts {
+		if text == want {
+			return true
+		}
 	}
-	return s.userTexts[0]
+	return false
+}
+
+func (s *personalInfoRecordingSender) sawUnmasked(fragment string) bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	for _, text := range s.userTexts {
+		if strings.Contains(text, fragment) {
+			return true
+		}
+	}
+	return false
 }
 
 func TestPersonalInfoRESTTurnMasksBeforeModelAndPersistence(t *testing.T) {
@@ -221,7 +234,11 @@ func TestEditedMessageIsMaskedBeforeRerunAndPersistence(t *testing.T) {
 			lastUserText(loaded.Messages) == "联系 <手机号>" &&
 			loaded.Messages[1].Role == agent.RoleAssistant && loaded.Messages[1].Content == "stub reply"
 	})
-	if sender.firstUserText() != "联系 <手机号>" || lastUserText(loaded.Messages) != "联系 <手机号>" {
+	// The server may make an unrelated auxiliary model call before the rerun
+	// (for example, a title/suggestion task). The product guarantee is stronger
+	// than call order: the edited prompt reaches the model masked, and no model
+	// call receives its source value.
+	if !sender.sawUserText("联系 <手机号>") || sender.sawUnmasked(personalInfoFixture) || lastUserText(loaded.Messages) != "联系 <手机号>" {
 		t.Fatal("edited text was not masked before the rerun and persistence")
 	}
 	if strings.Contains(sessionBytes(t, sess), personalInfoFixture) {

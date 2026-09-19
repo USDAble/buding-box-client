@@ -1248,6 +1248,7 @@ export const en: Record<string, string> = {
   // never render the server's sentence — for a gateway refusal that sentence is
   // `openai: HTTP 4xx: {"code":…}`, which is raw English JSON on a Chinese screen.
   // The fallback is for codes nobody has seen yet, not for the ones in the registry.
+  "turn_error.confidential_model_unavailable": "This conversation's private model is no longer eligible. Choose another private model to continue.",
   "turn_error.insufficient_credits": "Not enough points. Top up and try again.",
   // The gateway throttles the turn (429). Distinct from the control plane's tier
   // copy: there is no retryAfterSec on turn_error, so this one promises no countdown.
@@ -2478,6 +2479,7 @@ export const zh: Record<string, string> = {
   "catalog.unverifiable": "模型列表未通过校验，已停止使用；平台更新后会自动恢复。",
   // PR-5e / L-C7：目录本身是好的，但**本会话**绑定的模型已不在其中。
   "session.model_withdrawn": "该模型已下架，请重新选择。",
+  "turn_error.confidential_model_unavailable": "此会话的私密模型已不再符合条件，请重新选择私密模型后继续。",
   "turn_error.insufficient_credits": "余额不足，请充值后重试。",
   // 网关这一侧的 429。与拦截页那一档不同：turn_error 上没有 retryAfterSec，
   // 所以这句话不许诺倒计时（中台接口清单 §2.4 的 `rate_limited` 行）。

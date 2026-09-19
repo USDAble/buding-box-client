@@ -83,6 +83,8 @@ describe('the mapping table is the single owner of code → copy', () => {
 // control-plane only and cannot reach turn_error, so inventing copy for them here would
 // map a path they never travel.
 const GATEWAY_CODES = [
+	'confidential_model_required',
+	'confidential_model_unavailable',
   'model_withdrawn',
   'insufficient_credits',
   'rate_limited',

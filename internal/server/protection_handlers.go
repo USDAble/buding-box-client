@@ -165,21 +165,26 @@ func (s *Server) resolveSessionModel(modelID string) (modelConfig, model string,
 }
 
 func (s *Server) confidentialModelEligible(modelID string) bool {
+	// OCTO-FORK: a developer-local endpoint is not a missing central catalog
+	// row. Keep the two identities separate so a usable signed catalog cannot
+	// revoke the local private-model test path.
+	isGatewayModel := s.cfg.GatewayModelPrefix != "" && strings.HasPrefix(modelID, s.cfg.GatewayModelPrefix)
+	if !s.cfg.RequireGateway && !isGatewayModel {
+		cfg, _ := config.Load()
+		if modelID == "" || modelID == "default" {
+			return cfg.DefaultEntry().Confidential
+		}
+		if entry, ok := cfg.EntryByModel(modelID); ok {
+			return entry.Confidential
+		}
+	}
 	if s.cfg.CatalogModel != nil {
 		catalogID := strings.TrimPrefix(modelID, s.cfg.GatewayModelPrefix)
 		if status, known := s.cfg.CatalogModel(catalogID); known {
 			return status.Current && status.Selectable && status.Confidential
 		}
 	}
-	if s.cfg.RequireGateway {
-		return false
-	}
-	cfg, _ := config.Load()
-	if modelID == "" || modelID == "default" {
-		return cfg.DefaultEntry().Confidential
-	}
-	entry, ok := cfg.EntryByModel(modelID)
-	return ok && entry.Confidential
+	return false
 }
 
 func (s *Server) preferredConfidentialModel() (modelConfig, model string, ok bool) {

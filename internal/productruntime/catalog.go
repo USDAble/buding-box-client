@@ -194,10 +194,10 @@ func (rt *Runtime) currentCatalogAvailability() catalogAvailability {
 // It refreshes at most once per call, and only when needsRefresh says so, so the
 // two rules that matter are both visible here: opening the picker cannot become a
 // retry loop, and a failed verification cannot be retried by looking at it.
-func (rt *Runtime) refreshCatalogOnDemand(ctx context.Context) catalogAvailability {
+func (rt *Runtime) refreshCatalogOnDemand(ctx context.Context) (catalogAvailability, error) {
 	before := rt.currentCatalogAvailability()
 	if !before.needsRefresh() {
-		return before
+		return before, nil
 	}
 	if _, err := rt.refreshCatalog(ctx, false); err != nil {
 		// Reported, not returned: the state below is the answer to the question
@@ -206,8 +206,9 @@ func (rt *Runtime) refreshCatalogOnDemand(ctx context.Context) catalogAvailabili
 		// choose between "we could not ask" and "the answer is no", which is the
 		// distinction the four states exist to make.
 		rt.logCatalogOutcome(rt.lastOutcome(), err)
+		return rt.currentCatalogAvailability(), err
 	}
-	return rt.currentCatalogAvailability()
+	return rt.currentCatalogAvailability(), nil
 }
 
 // catalogAvailabilityDTO is the wire shape of 本地API契约 §2.14.
@@ -252,6 +253,8 @@ func (a catalogAvailability) toDTO() catalogAvailabilityDTO {
 //     is no cache, because there is no safe version to offer.
 //   - non-empty — a conditional request, told which version we hold, so the
 //     platform can answer "nothing new" when that signed policy remains usable.
+//     An expired entry never supplies this value: it needs a newly signed
+//     snapshot, not a 304 that carries no replacement bytes.
 //
 // It returns the outcome for the caller to report. An error accompanies every
 // outcome except catalogReady, so a caller that logs only errors still sees a
@@ -363,8 +366,9 @@ func (rt *Runtime) obtainCatalogEnvelope(ctx context.Context, knownVersion strin
 //   - true — "换账号强制刷新". The account may have changed, so a version
 //     comparison would answer the wrong question; the catalog endpoint receives
 //     an unconditional request.
-//   - false — "陈旧时按需刷新". The version we hold is offered so the platform
-//     can answer "nothing new" and the cache is left untouched.
+//   - false — "陈旧时按需刷新". Only an unexpired cache supplies its version;
+//     an expired or unreadable cache asks for a complete replacement instead of
+//     accepting a 304 with no new signed bytes.
 //
 // It records the outcome, because the availability judgement below needs the
 // most recent verdict and no store can answer it: the cache records what was
@@ -377,8 +381,12 @@ func (rt *Runtime) refreshCatalog(ctx context.Context, force bool) (catalogOutco
 		// method is also reached from the endpoint, which must answer with the
 		// absent state rather than panic when the build has nowhere to keep a
 		// catalog.
+		// OCTO-FORK: an expired local lease has no safe knownVersion. Asking
+		// conditionally would accept a 304 with no replacement signature and
+		// leave the picker unable to recover from its own stale cache.
 		if rt.deps.Catalog != nil {
-			if entry, err := rt.deps.Catalog.Load(); err == nil {
+			if entry, err := rt.deps.Catalog.Load(); err == nil &&
+				(entry.ExpiresAt.IsZero() || time.Now().Before(entry.ExpiresAt)) {
 				known = entry.CatalogVersion
 			}
 		}

@@ -171,9 +171,8 @@ type Server struct {
 }
 
 type feedbackRecord struct {
-	category string
-	content  string
-	receipt  productclient.FeedbackData
+	req     productclient.FeedbackRequest
+	receipt productclient.FeedbackData
 }
 
 // toolResultSeen is one role:"tool" message as the client sent it back: the
@@ -628,6 +627,7 @@ func (s *Server) Handler() http.Handler {
 	// back the value it had just read off disk (V-28).
 	mux.HandleFunc("GET "+"/v1/credits/ledger", s.handleCreditsLedger)
 	mux.HandleFunc("POST "+"/v1/feedback", s.handleFeedback)
+	mux.HandleFunc("GET "+"/v1/box", s.handleBox)
 	// The built-in gateway half (需求基线 C1). It lives on the same stand-in as
 	// the control plane because the developer profile points both hosts at this
 	// one process (internal/productprofile/profiles/developer.json), and a
@@ -961,7 +961,7 @@ func (s *Server) handleFeedback(w http.ResponseWriter, r *http.Request) {
 	if !decode(w, r, &req) {
 		return
 	}
-	if req.Category != "bug" && req.Category != "suggestion" && req.Category != "other" || strings.TrimSpace(req.Content) == "" {
+	if !validFeedback(req) {
 		writeError(w, http.StatusBadRequest, productclient.CodeInvalidRequest, "")
 		return
 	}
@@ -978,8 +978,9 @@ func (s *Server) handleFeedback(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	compoundKey := phone + "\x00" + key
+	normalizeFeedback(&req)
 	if existing, ok := s.feedback[compoundKey]; ok {
-		if existing.category != req.Category || existing.content != strings.TrimSpace(req.Content) {
+		if existing.req != req {
 			writeError(w, http.StatusConflict, productclient.CodeIdempotencyConflict, "")
 			return
 		}
@@ -991,8 +992,53 @@ func (s *Server) handleFeedback(w http.ResponseWriter, r *http.Request) {
 		FeedbackID: fmt.Sprintf("fb_%03d", s.seq),
 		AcceptedAt: s.now().UTC().Format(time.RFC3339),
 	}
-	s.feedback[compoundKey] = feedbackRecord{category: req.Category, content: strings.TrimSpace(req.Content), receipt: receipt}
+	s.feedback[compoundKey] = feedbackRecord{req: req, receipt: receipt}
 	writeData(w, http.StatusOK, receipt)
+}
+
+func validFeedback(req productclient.FeedbackRequest) bool {
+	if req.Category != "bug" && req.Category != "suggestion" && req.Category != "other" {
+		return false
+	}
+	if req.Impact != "low" && req.Impact != "normal" && req.Impact != "high" {
+		return false
+	}
+	return strings.TrimSpace(req.Title) != "" && strings.TrimSpace(req.Content) != ""
+}
+
+func normalizeFeedback(req *productclient.FeedbackRequest) {
+	req.Title = strings.TrimSpace(req.Title)
+	req.Content = strings.TrimSpace(req.Content)
+	req.Reproduction = strings.TrimSpace(req.Reproduction)
+	req.Expected = strings.TrimSpace(req.Expected)
+	req.Contact = strings.TrimSpace(req.Contact)
+}
+
+// handleBox is a deterministic development fixture for the single-box contract.
+// It is served only by productstub/clienttest; production data always comes from
+// the central platform.
+func (s *Server) handleBox(w http.ResponseWriter, r *http.Request) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if _, ok := s.access[bearer(r)]; !ok {
+		writeError(w, http.StatusUnauthorized, productclient.CodeUnauthorized, "")
+		return
+	}
+	writeData(w, http.StatusOK, productclient.BoxData{
+		ID:              "box_demo_0001",
+		DisplayName:     "Development fixture box",
+		State:           "online",
+		BoundAt:         "2026-09-01T00:00:00Z",
+		LastSeenAt:      s.now().UTC().Format(time.RFC3339),
+		SoftwareVersion: "0.1.0-dev",
+		Management:      productclient.BoxManagement{CanView: true},
+		Capabilities: productclient.BoxCapabilities{
+			PrivateModels: productclient.BoxCapability{State: "available", Count: 1},
+			Tools:         productclient.BoxCapability{State: "coming_soon"},
+			Knowledge:     productclient.BoxCapability{State: "coming_soon"},
+			Automation:    productclient.BoxCapability{State: "coming_soon"},
+		},
+	})
 }
 
 func (s *Server) handleBootstrap(w http.ResponseWriter, r *http.Request) {

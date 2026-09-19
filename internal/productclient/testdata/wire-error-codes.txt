@@ -49,9 +49,11 @@
 403 safety_blocked
 403 content_restricted
 403 account_restricted
+403 box_access_denied
 
 # 404
 404 model_not_found
+404 box_not_found
 
 # 409 — a request with this id is already in flight; do not start a second model
 # call, query its status instead.
@@ -64,6 +66,7 @@
 
 # 503
 503 maintenance
+503 box_unavailable
 
 # 5xx — retry with bounded backoff, and for a repeated clientRequestId query the
 # request status before deciding whether to resend.

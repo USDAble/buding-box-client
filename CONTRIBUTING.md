@@ -35,5 +35,19 @@ tooling outage, never to bypass a known failure.
    brand data through `branding/brand.json`, and an `OCTO-FORK:` reason beside
    every fork change to an upstream file.
 
+## Product cross-layer changes
+
+For a product feature that crosses the Web UI, local product API, or central
+platform, one working screen is not enough. Before review, update the owning
+product document, [local API contract](dev-docs-puddingbox/本地API契约.md), and
+[central-platform contract](dev-docs-puddingbox/中台接口契约.md) together. Make
+the Go client, local runtime, `clienttest`, and `productstub` use the same wire
+shape; do not add browser-only mock success or a production fallback fixture.
+
+Use a fresh, dedicated `OCTO_DATA_ROOT` and the real desktop shell to verify the
+user path. This catches stale catalog caches, missing route registration, and
+window-token mistakes that normal browser development cannot see. Record the
+focused automated checks and any required manual path in the PR description.
+
 Commit messages and PR descriptions are English. A passing check is evidence,
 not a substitute for documenting a user-visible behavior or its failure path.

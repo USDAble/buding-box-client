@@ -388,14 +388,24 @@ export interface FeedbackReceipt {
   acceptedAt: string;
 }
 
+export interface FeedbackForm {
+  category: "bug" | "suggestion" | "other";
+  title: string;
+  content: string;
+  reproduction?: string;
+  expected?: string;
+  impact: "low" | "normal" | "high";
+  contact?: string;
+}
+
 // submitFeedback sends only the fields visible in the help form. The form owns
 // its draft and retry key in memory; neither is persisted or supplemented with
 // chat and diagnostic data here.
-export async function submitFeedback(category: "bug" | "suggestion" | "other", content: string, idempotencyKey: string): Promise<FeedbackReceipt> {
+export async function submitFeedback(form: FeedbackForm, idempotencyKey: string): Promise<FeedbackReceipt> {
   const res = await productFetch("/api/product/feedback", {
     method: "POST",
     headers: jsonHeaders(),
-    body: JSON.stringify({ category, content, idempotencyKey }),
+    body: JSON.stringify({ ...form, idempotencyKey }),
   });
   const body = (await res.json().catch(() => ({}))) as Record<string, unknown>;
   if (!res.ok) {
@@ -403,6 +413,35 @@ export async function submitFeedback(category: "bug" | "suggestion" | "other", c
       (body.retryAfterSec as number) ?? null);
   }
   return body as unknown as FeedbackReceipt;
+}
+
+export interface BoxCapability {
+  state: "available" | "unavailable" | "coming_soon";
+  count?: number;
+}
+
+export interface BoxDTO {
+  id: string;
+  displayName: string;
+  state: "online" | "offline" | "degraded" | "attention" | "unknown";
+  boundAt: string;
+  lastSeenAt?: string;
+  softwareVersion?: string;
+  management: { canView: boolean };
+  capabilities: {
+    privateModels: BoxCapability;
+    tools: BoxCapability;
+    knowledge: BoxCapability;
+    automation: BoxCapability;
+  };
+}
+
+// getBox reads the account's one server-authorised box. A failure is surfaced
+// to the view; it is never converted into a made-up offline box.
+export async function getBox(): Promise<BoxDTO> {
+  const res = await productFetch("/api/product/box", { headers: windowTokenHeaders() });
+  if (!res.ok) throw new ProductError(res.status);
+  return await res.json() as BoxDTO;
 }
 
 // ─── P4 login form ──────────────────────────────────────────────────────────

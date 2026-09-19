@@ -90,18 +90,19 @@ func TestFeedbackPreservesItsIdempotencyKey(t *testing.T) {
 	}
 	ctx := context.Background()
 	key := "0b6f0f6e-0000-4000-8000-000000000009"
-	first, err := h.client.Feedback(ctx, productclient.FeedbackRequest{Category: "suggestion", Content: "Add shortcuts"}, key)
+	request := productclient.FeedbackRequest{Category: "suggestion", Title: "Keyboard shortcuts", Content: "Add shortcuts", Impact: "normal"}
+	first, err := h.client.Feedback(ctx, request, key)
 	if err != nil {
 		t.Fatalf("first feedback: %v", err)
 	}
-	second, err := h.client.Feedback(ctx, productclient.FeedbackRequest{Category: "suggestion", Content: "Add shortcuts"}, key)
+	second, err := h.client.Feedback(ctx, request, key)
 	if err != nil {
 		t.Fatalf("repeated feedback: %v", err)
 	}
 	if first.FeedbackID == "" || first.FeedbackID != second.FeedbackID || first.AcceptedAt != second.AcceptedAt {
 		t.Errorf("repeated receipt = %+v, want same non-empty receipt as %+v", second, first)
 	}
-	_, err = h.client.Feedback(ctx, productclient.FeedbackRequest{Category: "bug", Content: "Different payload"}, key)
+	_, err = h.client.Feedback(ctx, productclient.FeedbackRequest{Category: "bug", Title: "Different payload", Content: "Different payload", Impact: "high"}, key)
 	if got := code(err); got != productclient.CodeIdempotencyConflict {
 		t.Errorf("conflicting feedback code = %q, want %q (err %v)", got, productclient.CodeIdempotencyConflict, err)
 	}

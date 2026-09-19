@@ -14,10 +14,11 @@
   import { getMode, setMode, type ThemeMode } from '../../lib/theme'
   import { notificationsEnabled, setNotificationsEnabled } from '../../lib/notifications'
   import { openUrl } from '../../lib/externalLinks'
+  import { brandLink } from '../../lib/brand'
   import { confirmDialog } from '../../lib/confirm'
   import { ago, clockTick } from '../../lib/relTime'
   import * as api from '../../lib/api'
-  import { allowEnvironmentModelSource, productState, updateNickname, ProductError, logout, submitFeedback } from '../../lib/product'
+  import { allowEnvironmentModelSource, productState, updateNickname, ProductError, logout, submitFeedback, getBox, type BoxDTO } from '../../lib/product'
   // OCTO-FORK: account and safety controls are product-owned settings, kept
   // out of the compact account popup so it stays single-level.
   import { validateNickname } from '../../lib/nickname'
@@ -64,7 +65,7 @@
   let upgradeMode   = $state<'cli' | 'installer'>('cli')
   let loading       = $state(true)
 
-  let cat = $state<'general' | 'account' | 'safety' | 'help' | 'endpoints' | 'agent' | 'mobile' | 'experimental' | 'data' | 'about'>('general')
+  let cat = $state<'general' | 'account' | 'safety' | 'box' | 'help' | 'endpoints' | 'agent' | 'mobile' | 'experimental' | 'data' | 'about'>('general')
   let modalEl = $state<HTMLDivElement | null>(null)
   const accountNickname = $derived($productState?.account?.nickname ?? '')
   const accountPhone = $derived($productState?.account?.phoneMasked ?? '—')
@@ -73,11 +74,20 @@
   let nicknameErr = $state<'' | 'nickname_format' | 'nickname_sensitive'>('')
   let savingNickname = $state(false)
   let feedbackCategory = $state<'bug' | 'suggestion' | 'other'>('suggestion')
+  let feedbackTitle = $state('')
   let feedbackContent = $state('')
+  let feedbackReproduction = $state('')
+  let feedbackExpected = $state('')
+  let feedbackImpact = $state<'low' | 'normal' | 'high'>('normal')
+  let feedbackContact = $state('')
+  let helpTab = $state<'guides' | 'feedback'>('guides')
   let feedbackSubmitting = $state(false)
   let feedbackReceipt = $state('')
   let feedbackError = $state('')
   let feedbackKey = $state('')
+  let box = $state<BoxDTO | null>(null)
+  let boxLoading = $state(false)
+  let boxError = $state(false)
 
   // 数据管理 has its own two-level nav — a list of managed things, and one
   // sub-view per thing — because unlike every other category here it isn't a
@@ -262,6 +272,7 @@
     { key: 'general',   icon: 'ant-design:sliders-outlined',       label: 'settings.general' },
     { key: 'account',   icon: 'ant-design:user-outlined',          label: 'settings.account' },
     { key: 'safety',    icon: 'ant-design:safety-outlined',        label: 'settings.safety' },
+    { key: 'box',       icon: 'lucide:box',                         label: 'settings.box' },
     { key: 'help',      icon: 'ant-design:question-circle-outlined', label: 'settings.help' },
     // OCTO-FORK: product profiles hide local model management from the
     // server-projected capability; null keeps plain octo serve behavior.
@@ -305,6 +316,12 @@
       nicknameErr = ''
       modalEl?.focus()
     }
+  })
+
+  // A box read is deliberately tied to its own top-level page. Opening an
+  // unrelated setting must not create an invisible control-plane request.
+  $effect(() => {
+    if ($settingsModalOpen && cat === 'box') void loadBox()
   })
 
   async function loadConfig() {
@@ -520,27 +537,71 @@
   }
 
   async function sendFeedback() {
+    const title = feedbackTitle.trim()
     const content = feedbackContent.trim()
     feedbackError = ''
     feedbackReceipt = ''
-    if (Array.from(content).length < 1 || Array.from(content).length > 4000) {
+    if (
+      Array.from(title).length < 1 || Array.from(title).length > 120 ||
+      Array.from(content).length < 1 || Array.from(content).length > 4000 ||
+      Array.from(feedbackReproduction.trim()).length > 2000 ||
+      Array.from(feedbackExpected.trim()).length > 2000 ||
+      Array.from(feedbackContact.trim()).length > 200
+    ) {
       feedbackError = $t('settings.help.feedback_length')
       return
     }
     feedbackSubmitting = true
     try {
       if (!feedbackKey) feedbackKey = crypto.randomUUID()
-      const receipt = await submitFeedback(feedbackCategory, content, feedbackKey)
+      const receipt = await submitFeedback({
+        category: feedbackCategory,
+        title,
+        content,
+        reproduction: feedbackReproduction.trim(),
+        expected: feedbackExpected.trim(),
+        impact: feedbackImpact,
+        contact: feedbackContact.trim(),
+      }, feedbackKey)
       feedbackReceipt = receipt.feedbackId
+      feedbackTitle = ''
       feedbackContent = ''
+      feedbackReproduction = ''
+      feedbackExpected = ''
+      feedbackContact = ''
       feedbackKey = ''
     } catch (e: any) {
-      feedbackError = e instanceof ProductError && e.fieldErrors.content
+      feedbackError = e instanceof ProductError && Object.keys(e.fieldErrors).length > 0
         ? $t('settings.help.feedback_length')
         : $t('settings.help.feedback_failed')
     } finally {
       feedbackSubmitting = false
     }
+  }
+
+  async function loadBox() {
+    boxLoading = true
+    boxError = false
+    try {
+      box = await getBox()
+    } catch {
+      box = null
+      boxError = true
+    } finally {
+      boxLoading = false
+    }
+  }
+
+  function openHelpCenter() {
+    const url = brandLink('external', 'helpCenter')
+    if (url) openUrl(url)
+  }
+
+  function formatBoxTime(value: string | undefined): string {
+    if (!value) return '—'
+    const parsed = new Date(value)
+    if (Number.isNaN(parsed.getTime())) return '—'
+    return parsed.toLocaleString(language === 'zh' ? 'zh-CN' : 'en-US')
   }
 
   function close() {
@@ -696,28 +757,68 @@
         {:else if cat === 'safety'}
           <SafetyPrivacySection />
 
+        {:else if cat === 'box'}
+          <section class="box-center" aria-label={$t('settings.box')}>
+            <div class="center-hero">
+              <div><h2>{$t('settings.box.title')}</h2><p>{$t('settings.box.desc')}</p></div>
+              <button class="btns secondary" onclick={loadBox} disabled={boxLoading}>{boxLoading ? $t('settings.box.refreshing') : $t('settings.box.refresh')}</button>
+            </div>
+            {#if boxLoading && !box}
+              <div class="center-empty">{$t('settings.box.loading')}</div>
+            {:else if boxError}
+              <div class="center-empty"><strong>{$t('settings.box.unavailable_title')}</strong><p>{$t('settings.box.unavailable_desc')}</p></div>
+            {:else if box}
+              <div class="box-summary">
+                <div class="box-mark"><iconify-icon icon="lucide:box" width="28"></iconify-icon></div>
+                <div class="box-title"><h3>{box.displayName}</h3><span class:online={box.state === 'online'} class="box-state">{$t(`settings.box.state.${box.state}`)}</span></div>
+                <span class="box-id">{box.id}</span>
+              </div>
+              <div class="box-info-grid">
+                <div class="info-card"><span>{$t('settings.box.bound_at')}</span><strong>{formatBoxTime(box.boundAt)}</strong></div>
+                <div class="info-card"><span>{$t('settings.box.last_seen')}</span><strong>{formatBoxTime(box.lastSeenAt)}</strong></div>
+                <div class="info-card"><span>{$t('settings.box.version')}</span><strong>{box.softwareVersion || '—'}</strong></div>
+              </div>
+              <h3 class="section-heading">{$t('settings.box.capabilities')}</h3>
+              <div class="capability-grid">
+                {#each [
+                  ['privateModels', 'lucide:shield-check'], ['tools', 'lucide:wrench'], ['knowledge', 'lucide:book-open'], ['automation', 'lucide:workflow']
+                ] as [key, icon]}
+                  {@const capability = box.capabilities[key as keyof typeof box.capabilities]}
+                  <div class="capability-card">
+                    <iconify-icon icon={icon} width="18"></iconify-icon>
+                    <div><strong>{$t(`settings.box.capability.${key}`)}</strong><span>{$t(`settings.box.capability_state.${capability.state}`).replace('{n}', String(capability.count ?? 0))}</span></div>
+                  </div>
+                {/each}
+              </div>
+              <p class="box-notice">{$t('settings.box.notice')}</p>
+            {/if}
+          </section>
+
         {:else if cat === 'help'}
-          <div class="card2 help-card">
-            <h3>{$t('settings.help.faq_title')}</h3>
-            <details open><summary>{$t('settings.help.models_q')}</summary><p>{$t('settings.help.models_a')}</p></details>
-            <details><summary>{$t('settings.help.personal_q')}</summary><p>{$t('settings.help.personal_a')}</p></details>
-            <details><summary>{$t('settings.help.private_q')}</summary><p>{$t('settings.help.private_a')}</p></details>
-            <details><summary>{$t('settings.help.unavailable_q')}</summary><p>{$t('settings.help.unavailable_a')}</p></details>
-            <h3>{$t('settings.help.feedback_title')}</h3>
-            <p class="setd">{$t('settings.help.feedback_notice')}</p>
-            <label class="help-label" for="feedback-category">{$t('settings.help.feedback_category')}</label>
-            <select id="feedback-category" class="sinput" bind:value={feedbackCategory}>
-              <option value="bug">{$t('settings.help.feedback_bug')}</option>
-              <option value="suggestion">{$t('settings.help.feedback_suggestion')}</option>
-              <option value="other">{$t('settings.help.feedback_other')}</option>
-            </select>
-            <label class="help-label" for="feedback-content">{$t('settings.help.feedback_content')}</label>
-            <textarea id="feedback-content" class="sinput feedback-content" bind:value={feedbackContent} maxlength="4000"></textarea>
-            {#if feedbackError}<p class="account-error">{feedbackError}</p>{/if}
-            {#if feedbackReceipt}<p class="feedback-success">{$t('settings.help.feedback_sent').replace('{id}', feedbackReceipt)}</p>{/if}
-            <button class="btns" onclick={sendFeedback} disabled={feedbackSubmitting}>{feedbackSubmitting ? $t('common.saving') : $t('settings.help.feedback_submit')}</button>
-            <p class="setd">{$t('settings.help.website_soon')}</p>
-          </div>
+          <section class="help-center" aria-label={$t('settings.help')}>
+            <div class="center-hero"><div><h2>{$t('settings.help.title')}</h2><p>{$t('settings.help.subtitle')}</p></div>{#if brandLink('external', 'helpCenter')}<button class="btns secondary" onclick={openHelpCenter}>{$t('settings.help.full')}</button>{/if}</div>
+            <div class="center-tabs" role="tablist"><button class:active={helpTab === 'guides'} onclick={() => helpTab = 'guides'} role="tab">{$t('settings.help.guides')}</button><button class:active={helpTab === 'feedback'} onclick={() => helpTab = 'feedback'} role="tab">{$t('settings.help.feedback_title')}</button></div>
+            {#if helpTab === 'guides'}
+              <div class="help-guide-grid">
+                <details open><summary>{$t('settings.help.models_q')}</summary><p>{$t('settings.help.models_a')}</p></details>
+                <details><summary>{$t('settings.help.personal_q')}</summary><p>{$t('settings.help.personal_a')}</p></details>
+                <details><summary>{$t('settings.help.private_q')}</summary><p>{$t('settings.help.private_a')}</p></details>
+                <details><summary>{$t('settings.help.box_q')}</summary><p>{$t('settings.help.box_a')}</p></details>
+                <details><summary>{$t('settings.help.unavailable_q')}</summary><p>{$t('settings.help.unavailable_a')}</p></details>
+              </div>
+            {:else}
+              <div class="feedback-form">
+                <div class="feedback-intro"><h3>{$t('settings.help.feedback_title')}</h3><p>{$t('settings.help.feedback_notice')}</p></div>
+                <div class="feedback-grid"><label><span>{$t('settings.help.feedback_category')}</span><select class="sinput" bind:value={feedbackCategory}><option value="bug">{$t('settings.help.feedback_bug')}</option><option value="suggestion">{$t('settings.help.feedback_suggestion')}</option><option value="other">{$t('settings.help.feedback_other')}</option></select></label><label><span>{$t('settings.help.feedback_impact')}</span><select class="sinput" bind:value={feedbackImpact}><option value="low">{$t('settings.help.feedback_impact_low')}</option><option value="normal">{$t('settings.help.feedback_impact_normal')}</option><option value="high">{$t('settings.help.feedback_impact_high')}</option></select></label></div>
+                <label><span>{$t('settings.help.feedback_title_label')}</span><input class="sinput" bind:value={feedbackTitle} maxlength="120" /></label>
+                <label><span>{$t('settings.help.feedback_content')}</span><textarea class="sinput feedback-content" bind:value={feedbackContent} maxlength="4000"></textarea></label>
+                <div class="feedback-grid"><label><span>{$t('settings.help.feedback_reproduction')}</span><textarea class="sinput feedback-short" bind:value={feedbackReproduction} maxlength="2000"></textarea></label><label><span>{$t('settings.help.feedback_expected')}</span><textarea class="sinput feedback-short" bind:value={feedbackExpected} maxlength="2000"></textarea></label></div>
+                <label><span>{$t('settings.help.feedback_contact')}</span><input class="sinput" bind:value={feedbackContact} maxlength="200" /></label>
+                {#if feedbackError}<p class="account-error">{feedbackError}</p>{/if}{#if feedbackReceipt}<p class="feedback-success">{$t('settings.help.feedback_sent').replace('{id}', feedbackReceipt)}</p>{/if}
+                <button class="btns" onclick={sendFeedback} disabled={feedbackSubmitting}>{feedbackSubmitting ? $t('common.saving') : $t('settings.help.feedback_submit')}</button>
+              </div>
+            {/if}
+          </section>
 
         {:else if cat === 'endpoints'}
           <EndpointsSection />
@@ -1139,12 +1240,45 @@ select.sinput { cursor: pointer; }
 .archived-actions { display: flex; align-items: center; gap: 8px; flex: 0 0 auto; }
   .btns.danger { color: var(--error); }
   .btns.danger:hover:not(:disabled) { background: var(--error-bg); border-color: var(--error-border); }
-  .help-card { display: flex; flex-direction: column; gap: 12px; }
-  .help-card h3 { margin: 0; font-size: 14px; color: var(--text); }
-  .help-card details { border-bottom: 1px solid var(--border-secondary); padding-bottom: 10px; }
-  .help-card summary { cursor: pointer; color: var(--text); font-weight: 600; }
-  .help-card details p { margin: 8px 0 0; color: var(--text-tertiary); line-height: 1.55; }
-  .help-label { color: var(--text-secondary); font-size: 12px; }
-  .feedback-content { min-height: 112px; resize: vertical; }
+  .btns.secondary { background: var(--active-blue-bg); border-color: transparent; color: var(--blue-6); }
+  .center-hero { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; padding-bottom: 18px; }
+  .center-hero h2 { margin: 0; color: var(--text-heading); font-size: 19px; letter-spacing: -.02em; }
+  .center-hero p { margin: 6px 0 0; max-width: 48ch; color: var(--text-secondary); font-size: 13px; line-height: 1.55; }
+  .center-empty { padding: 42px 18px; border: 1px dashed var(--border); border-radius: 12px; text-align: center; color: var(--text-secondary); }
+  .center-empty strong { display: block; color: var(--text); margin-bottom: 6px; }
+  .center-empty p { margin: 0; font-size: 13px; }
+  .box-summary { display: flex; align-items: center; gap: 12px; padding: 16px; border: 1px solid var(--border); border-radius: 12px; background: linear-gradient(135deg, var(--active-blue-bg), var(--bg-container)); }
+  .box-mark { width: 46px; height: 46px; border-radius: 12px; color: var(--blue-6); background: var(--bg-container); display: grid; place-items: center; border: 1px solid var(--border); }
+  .box-title { min-width: 0; flex: 1; }
+  .box-title h3 { margin: 0 0 4px; font-size: 14px; color: var(--text); }
+  .box-state { display: inline-flex; align-items: center; gap: 4px; font-size: 12px; color: var(--text-secondary); }
+  .box-state.online { color: var(--success); }
+  .box-id { max-width: 130px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text-tertiary); font: 11px var(--font-mono); }
+  .box-info-grid, .capability-grid, .feedback-grid, .help-guide-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+  .box-info-grid { margin-top: 10px; grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .info-card, .capability-card { padding: 12px; border: 1px solid var(--border-secondary); border-radius: 10px; background: var(--bg-container); }
+  .info-card { display: flex; flex-direction: column; gap: 5px; min-width: 0; }
+  .info-card span { color: var(--text-tertiary); font-size: 11px; }
+  .info-card strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text); font-size: 12px; font-weight: 500; }
+  .section-heading { margin: 22px 0 10px; color: var(--text); font-size: 14px; }
+  .capability-card { display: flex; align-items: flex-start; gap: 9px; color: var(--blue-6); }
+  .capability-card div { display: flex; flex-direction: column; gap: 3px; color: var(--text); }
+  .capability-card strong { font-size: 12px; }
+  .capability-card span { color: var(--text-tertiary); font-size: 11px; }
+  .box-notice { margin: 14px 0 0; color: var(--text-tertiary); font-size: 12px; line-height: 1.5; }
+  .center-tabs { display: flex; gap: 4px; padding: 4px; margin-bottom: 16px; background: var(--bg-layout); border-radius: 9px; width: fit-content; }
+  .center-tabs button { border: none; background: transparent; color: var(--text-secondary); border-radius: 6px; padding: 6px 12px; font: 13px inherit; cursor: pointer; }
+  .center-tabs button.active { background: var(--bg-container); color: var(--text); box-shadow: 0 1px 2px rgba(0,0,0,.08); }
+  .help-guide-grid details { padding: 14px; border: 1px solid var(--border-secondary); border-radius: 10px; }
+  .help-guide-grid summary { cursor: pointer; color: var(--text); font-size: 13px; font-weight: 600; }
+  .help-guide-grid p { margin: 9px 0 0; color: var(--text-secondary); font-size: 12px; line-height: 1.55; }
+  .feedback-form { display: flex; flex-direction: column; gap: 12px; padding: 16px; border: 1px solid var(--border); border-radius: 12px; }
+  .feedback-intro h3 { margin: 0; color: var(--text); font-size: 15px; }
+  .feedback-intro p { margin: 5px 0 0; color: var(--text-secondary); font-size: 12px; line-height: 1.5; }
+  .feedback-form label { display: flex; flex-direction: column; gap: 6px; color: var(--text-secondary); font-size: 12px; }
+  .feedback-form .sinput { width: 100%; box-sizing: border-box; }
+  .feedback-content { height: 120px; padding: 9px 10px; resize: vertical; }
+  .feedback-short { height: 76px; padding: 9px 10px; resize: vertical; }
   .feedback-success { color: var(--success); margin: 0; font-size: 13px; }
+  @media (max-width: 640px) { .box-info-grid, .capability-grid, .feedback-grid, .help-guide-grid { grid-template-columns: 1fr; } .center-hero { flex-direction: column; } }
 </style>

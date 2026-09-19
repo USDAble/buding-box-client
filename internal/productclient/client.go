@@ -231,6 +231,17 @@ func (c *Client) Feedback(ctx context.Context, req FeedbackRequest, idempotencyK
 	return &out, nil
 }
 
+// Box reads the authenticated account's single bound box from the control
+// plane. The control plane remains the authority for reachability and capability
+// state; the desktop deliberately has no direct box-network path.
+func (c *Client) Box(ctx context.Context) (*BoxData, error) {
+	var out BoxData
+	if err := c.doAuthorized(ctx, http.MethodGet, pathBox, nil, &out); err != nil {
+		return nil, err
+	}
+	return &out, nil
+}
+
 // CatalogModels refreshes the catalog without a re-login, conditionally on the
 // version the caller already holds (中台交付包 §4.3).
 //

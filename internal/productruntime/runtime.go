@@ -161,6 +161,7 @@ func (rt *Runtime) Mount(api func(pattern string, h http.HandlerFunc)) {
 	api("GET /api/product/catalog", rt.handleCatalog)
 	api("GET /api/product/credits", rt.handleCredits)
 	api("GET /api/product/models", rt.handleModels)
+	api("GET /api/product/box", rt.handleBox)
 	api("POST /api/product/send-code", rt.handleSendCode)
 	api("POST /api/product/login", rt.handleLogin)
 	api("POST /api/product/logout", rt.handleLogout)

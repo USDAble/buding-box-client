@@ -11,7 +11,9 @@ func TestFeedbackForwardsOnlyValidatedFormData(t *testing.T) {
 
 	status, body := h.do(http.MethodPost, "/api/product/feedback", map[string]any{
 		"category":       "suggestion",
+		"title":          "Keyboard shortcuts",
 		"content":        "  Add a keyboard shortcut.  ",
+		"impact":         "normal",
 		"idempotencyKey": "0b6f0f6e-0000-4000-8000-000000000001",
 	})
 	if status != http.StatusOK {
@@ -22,7 +24,7 @@ func TestFeedbackForwardsOnlyValidatedFormData(t *testing.T) {
 	}
 
 	status, body = h.do(http.MethodPost, "/api/product/feedback", map[string]any{
-		"category": "suggestion", "content": "", "idempotencyKey": "0b6f0f6e-0000-4000-8000-000000000002",
+		"category": "suggestion", "title": "No content", "content": "", "impact": "normal", "idempotencyKey": "0b6f0f6e-0000-4000-8000-000000000002",
 	})
 	if status != http.StatusBadRequest {
 		t.Fatalf("empty feedback status = %d body = %v, want 400", status, body)

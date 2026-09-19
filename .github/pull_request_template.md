@@ -34,6 +34,8 @@ Please confirm before requesting review. See [CONTRIBUTING.md](../CONTRIBUTING.m
 
 - [ ] All tests pass
 - [ ] Coverage does not drop; new code has new tests
+<!-- OCTO-FORK: product features cross local and central contracts, so review must verify their shared fixture and desktop path. -->
+- [ ] Relevant product/API changes update both contracts, `clienttest` / `productstub`, and the desktop verification path
 - [ ] Commit messages and this PR are written in English
 - [ ] This branch was created from the latest `main` and is currently up to date with it
 

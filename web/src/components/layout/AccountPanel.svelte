@@ -157,6 +157,11 @@
       <span>{$t('product.panel.safety_privacy')}</span>
       <iconify-icon class="chevron" icon="lucide:chevron-right" width="14"></iconify-icon>
     </button>
+    <button class="action-row" onclick={() => openSettings('box')}>
+      <iconify-icon icon="lucide:box" width="15"></iconify-icon>
+      <span>{$t('product.panel.box')}</span>
+      <iconify-icon class="chevron" icon="lucide:chevron-right" width="14"></iconify-icon>
+    </button>
     <button class="action-row" onclick={() => openSettings('general')}>
       <iconify-icon icon="ant-design:setting-outlined" width="15"></iconify-icon>
       <span>{$t('nav.settings')}</span>

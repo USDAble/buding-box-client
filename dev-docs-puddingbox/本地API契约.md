@@ -80,6 +80,7 @@
 | PUT | `/api/product/nickname` | 状态存储与敏感词引擎 | 保存昵称并返回 `{state}`。 |
 | PUT | `/api/product/prefs` | 状态存储 | 更新偏好并返回 `{state}`。 |
 | GET | `/api/product/models` | 最后一次已接受的签名目录缓存 | 返回厂商/模型只读投影；不触发网络、不混入本地 endpoint。 |
+| GET | `/api/product/box` | 平台客户端与可用平台会话 | 返回当前帐号唯一已绑定盒子的安全投影；不读本地缓存、不探测局域网。 |
 | GET / PUT | `/api/product/sensitive/dict` | 数据根与词库文件 | 读取或覆盖用户敏感词。 |
 | POST | `/api/product/sensitive/dict/import` | 数据根与词库文件 | 合并导入敏感词。 |
 | POST | `/api/product/sensitive/check` | 敏感词引擎可选 | 输入框即时检测。 |
@@ -170,10 +171,10 @@
 `POST /api/product/feedback` 是“帮助与反馈”页使用的桌面产品路由，而不是浏览器直连中台。它接收：
 
 ```json
-{"category":"bug|suggestion|other","content":"用户主动填写的反馈正文","idempotencyKey":"uuid"}
+{"category":"bug|suggestion|other","title":"用户填写的标题","content":"用户主动填写的详细描述","reproduction":"可选复现步骤","expected":"可选期望结果","impact":"low|normal|high","contact":"可选联系方式","idempotencyKey":"uuid"}
 ```
 
-`category` 必须为三个枚举之一；`content` 去除首尾空白后必须为 1–4000 个 Unicode 字符；`idempotencyKey` 必须为 UUID，单次点击重试必须复用同一值。成功返回控制面已接受的最小回执：
+`category` 必须为三个枚举之一；`title` 去除首尾空白后为 1–120 个 Unicode 字符，`content` 为 1–4000；`reproduction`、`expected` 各至多 2000，`contact` 至多 200；`impact` 必须为 `low`、`normal` 或 `high`。`idempotencyKey` 必须为 UUID，单次点击重试必须复用同一值。成功返回控制面已接受的最小回执：
 
 ```json
 {"feedbackId":"fb_...","acceptedAt":"2026-09-19T00:00:00Z"}
@@ -181,9 +182,33 @@
 
 运行时以当前平台会话调用控制面 `POST /feedback`，将 `idempotencyKey` 原样置入 `Idempotency-Key`，但不把 access token、安装标识或平台响应中的诊断 `message` 返回给 Web UI。账户身份、时间戳和请求元数据由控制面从认证与标准请求头取得；前端不得提交或伪造它们。
 
-该接口只传递上述 JSON 字段：不得读取、派生或附加聊天内容、会话历史、附件、OCR、上传文件、工具调用、模型输入输出、日志、数据根路径、手机号、token、原始设备标识或任何“默认诊断包”。运行时不持久化正文，也不在失败后后台重发；界面可在内存中保留表单，交由用户明确再次提交。
+该接口只传递上述 JSON 字段：`contact` 是用户自愿输入的唯一可选联系方式，不能由帐户手机号补填。不得读取、派生或附加聊天内容、会话历史、附件、OCR、上传文件、工具调用、模型输入输出、日志、数据根路径、手机号、token、原始设备标识或任何“默认诊断包”。运行时不持久化正文，也不在失败后后台重发；界面可在内存中保留表单，交由用户明确再次提交。
 
-本地字段错误使用 `400 {"fieldErrors":{"category":"invalid_value"}}` 或 `{"fieldErrors":{"content":"invalid_length"}}`；错误 JSON 或非法 idempotency key 为 `400 {"code":"invalid_request"}`。平台拒绝映射为稳定的 `401 unauthorized`、`403 feedback_not_allowed`、`409 idempotency_conflict`、`429 feedback_rate_limited`（含 `retryAfterSec`）或 `503 network_unavailable` / `upstream_unavailable`；未知平台业务码不透传，返回 `503 upstream_unavailable`。成功、失败或重试均不得改变 `ProductStateDTO`。
+本地字段错误使用 `400 {"fieldErrors":{"category":"invalid_value"}}`、`{"fieldErrors":{"title":"invalid_length"}}`、`{"fieldErrors":{"content":"invalid_length"}}` 或相应可选字段错误；错误 JSON 或非法 idempotency key 为 `400 {"code":"invalid_request"}`。平台拒绝映射为稳定的 `401 unauthorized`、`403 feedback_not_allowed`、`409 idempotency_conflict`、`429 feedback_rate_limited`（含 `retryAfterSec`）或 `503 network_unavailable` / `upstream_unavailable`；未知平台业务码不透传，返回 `503 upstream_unavailable`。成功、失败或重试均不得改变 `ProductStateDTO`。
+
+## 盒子投影不泄露设备连接细节
+
+`GET /api/product/box` 返回当前帐号唯一已绑定盒子；当前版本没有“未绑定”的成功空对象。中台没有该资源、帐号无权访问或会话失效分别通过稳定平台错误映射给界面，界面显示可行动错误而不造一个离线盒子。
+
+```json
+{
+  "id":"box_...",
+  "displayName":"我的布丁盒子",
+  "state":"online|offline|degraded|attention|unknown",
+  "boundAt":"RFC3339",
+  "lastSeenAt":"RFC3339（可选）",
+  "softwareVersion":"可选展示版本",
+  "management":{"canView":true},
+  "capabilities":{
+    "privateModels":{"state":"available|unavailable|coming_soon","count":1},
+    "tools":{"state":"...","count":0},
+    "knowledge":{"state":"...","count":0},
+    "automation":{"state":"...","count":0}
+  }
+}
+```
+
+它是平台授权后的展示投影，不是桌面到盒子的管理协议。不得出现 `boxCode`、activation code、内网/公网地址、端口、硬件序列号、日志、模型 endpoint、密钥、token 或任何可用来绕过控制面的字段。每次读取都经当前平台会话；本地不缓存状态，用户点击刷新才发起下一次读取。开发替身可以返回固定数据，但该夹具只存在于 `productstub`，正式产品没有 Mock 降级。
 
 ## 会话路由与 WebSocket
 

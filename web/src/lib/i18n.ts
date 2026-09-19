@@ -597,6 +597,33 @@ export const en: Record<string, string> = {
   "composer.session_agent": "Expert bound to this session (locked after the first turn)",
   "composer.assign_agent": "Assign agent — changeable until this session's first turn",
   "composer.manage_models": "Manage models in Settings…",
+  "model.confidential": "Private",
+  "privacy.security_title": "Safety & privacy",
+  "privacy.content_safety_desc": "Checks message text; output protection stays on.",
+  "privacy.personal_info": "Personal information protection",
+  "privacy.personal_info_desc": "Mask supported personal data before sending.",
+  "privacy.private_session": "Private session",
+  "privacy.private_session_desc": "Use private models only for this session.",
+  "privacy.private_session_banner": "Private session · Private models only",
+  "privacy.output_protection": "Output and nickname protection",
+  "privacy.always_on": "Always on",
+  "privacy.locked_after_start": "Locked after the first accepted message",
+  "privacy.private_model_required": "A private session can only use a private model.",
+  "privacy.private_model_ordinary": "A private model is selected; this is still a regular session.",
+  "privacy.no_private_model": "No private model is currently available.",
+  "privacy.auto_switched": "Switched to private model: {model}",
+  "privacy.applied": "Masked {count} personal-data item(s): {categories}",
+  "privacy.attachments_not_scanned": "Attachment contents are not automatically masked in this release.",
+  "privacy.transform_failed": "Personal information protection failed. Please retry.",
+  "privacy.category.cn_resident_id": "resident ID",
+  "privacy.category.cn_mobile": "mobile number",
+  "privacy.category.email": "email",
+  "privacy.category.bank_card": "bank card",
+  "privacy.category.vin": "VIN",
+  "privacy.category.ip_address": "IP address",
+  "privacy.category.pem_private_key": "private key",
+  "privacy.category.secret_token": "access credential",
+  "privacy.category.sms_otp": "verification code",
   "tools.title.read_file": "Read file",
   "tools.title.write_file": "Write file",
   "tools.title.edit_file": "Edit file",
@@ -1045,9 +1072,6 @@ export const en: Record<string, string> = {
   "product.tier.dismiss": "Got it",
   // OCTO-FORK: P5 account panel — see
   // dev-docs-usdable/需求/2260906/技术方案/P5-个人中心.md.
-  "product.mode.privacy": "Privacy",
-  "product.mode.smart": "Smart",
-  "product.mode.default": "Default",
   "product.panel.back": "Back",
   "product.panel.points_value": "{n} points",
   "product.panel.plan": "Plan",
@@ -1079,8 +1103,6 @@ export const en: Record<string, string> = {
   "product.panel.nickname": "Nickname",
   "product.panel.phone": "Phone",
   "product.panel.language": "Language",
-  "product.panel.default_mode": "Default mode for new sessions",
-  "product.panel.default_mode_note": "Used when you start a new session; you can still switch within a conversation",
   "product.panel.full_settings": "Open full settings",
   "product.panel.nickname_saved": "Nickname updated",
   "product.panel.help.test_code": "Test verification code: 123456",
@@ -1124,15 +1146,12 @@ export const en: Record<string, string> = {
   "sensitive.hit_notice": "Contains sensitive content. Sensitive words have been replaced — review and send again.",
   // OCTO-FORK: P9 模式与模型选择器 — see
   // dev-docs-usdable/需求/2260906/技术方案/P9-模式与模型.md §5.
-  "mode.privacy": "Privacy",
-  "mode.smart": "Smart",
-  "mode.default": "Default",
-  "mode.no_models": "No models available in this mode",
+  "catalog.no_models": "No models are currently available",
   "catalog.absent": "The model list has not been downloaded yet. Check your connection and try again.",
   "catalog.stale": "The model list needs an online update before you can send a message.",
   "catalog.unverifiable": "The model list could not be verified, so it is not being used. It will recover after the platform is updated.",
   // PR-5e / L-C7: the catalogue is fine, but this conversation is bound to a model
-  // it no longer offers. Distinct from mode.no_models (nothing to pick at all) and
+  // it no longer offers. Distinct from catalog.no_models (nothing to pick at all) and
   // from catalog.stale (the list itself needs a refresh) — all three end in "you
   // cannot send", and only this one is about the model THIS session chose.
   "session.model_withdrawn": "The model this conversation uses is no longer available. Pick another one to continue.",
@@ -1159,13 +1178,6 @@ export const en: Record<string, string> = {
   "turn_error.invalid_request": "The request was malformed. Please try once more.",
   "turn_error.internal_error": "Something went wrong on the service side. Please try again later.",
   "turn_error.unknown": "request failed",
-  // OCTO-FORK: P10 隐私模式与 PII 处理 — see
-  // dev-docs-usdable/需求/2260906/技术方案/P10-隐私模式与PII.md.
-  "privacy.mode_label": "Privacy mode",
-  "privacy.notice": "Privacy mode: personal information such as phone numbers is processed before sending.",
-  "privacy.notice_detail": "Only content subsequently sent to the model is processed; the chat still shows your original text. This release demonstrates 11-digit phone numbers.",
-  "privacy.expand": "Show privacy details",
-  "privacy.collapse": "Hide privacy details",
 };
 
 export const zh: Record<string, string> = {
@@ -1760,6 +1772,33 @@ export const zh: Record<string, string> = {
   "composer.session_agent": "本会话绑定的专家（第一轮对话后不可更改）",
   "composer.assign_agent": "指派专家 · 本会话开始对话前均可修改",
   "composer.manage_models": "在设置中管理模型…",
+  "model.confidential": "私密",
+  "privacy.security_title": "安全与隐私",
+  "privacy.content_safety_desc": "检查消息文本；输出保护始终开启。",
+  "privacy.personal_info": "个人信息保护",
+  "privacy.personal_info_desc": "发送前自动脱敏已支持的个人信息。",
+  "privacy.private_session": "私密会话",
+  "privacy.private_session_desc": "本会话仅使用私密模型。",
+  "privacy.private_session_banner": "私密会话 · 仅使用私密模型",
+  "privacy.output_protection": "输出与昵称保护",
+  "privacy.always_on": "始终开启",
+  "privacy.locked_after_start": "首条消息被接受后已锁定",
+  "privacy.private_model_required": "私密会话只能使用私密模型。",
+  "privacy.private_model_ordinary": "已选择私密模型；当前仍是普通会话。",
+  "privacy.no_private_model": "当前没有可用的私密模型。",
+  "privacy.auto_switched": "已切换到私密模型：{model}",
+  "privacy.applied": "已自动脱敏 {count} 处个人信息：{categories}",
+  "privacy.attachments_not_scanned": "本期暂不自动脱敏附件内容。",
+  "privacy.transform_failed": "个人信息保护处理失败，请重试。",
+  "privacy.category.cn_resident_id": "身份证号",
+  "privacy.category.cn_mobile": "手机号",
+  "privacy.category.email": "邮箱",
+  "privacy.category.bank_card": "银行卡号",
+  "privacy.category.vin": "车辆识别码",
+  "privacy.category.ip_address": "IP 地址",
+  "privacy.category.pem_private_key": "私钥",
+  "privacy.category.secret_token": "访问凭据",
+  "privacy.category.sms_otp": "验证码",
   "tools.title.read_file": "读取文件",
   "tools.title.write_file": "写入文件",
   "tools.title.edit_file": "编辑文件",
@@ -2193,9 +2232,6 @@ export const zh: Record<string, string> = {
   "product.tier.dismiss": "知道了",
   // OCTO-FORK: P5 account panel — see
   // dev-docs-usdable/需求/2260906/技术方案/P5-个人中心.md.
-  "product.mode.privacy": "隐私",
-  "product.mode.smart": "智能",
-  "product.mode.default": "默认",
   "product.panel.back": "返回",
   "product.panel.points_value": "积分 {n}",
   "product.panel.plan": "套餐版本",
@@ -2227,8 +2263,6 @@ export const zh: Record<string, string> = {
   "product.panel.nickname": "昵称",
   "product.panel.phone": "手机号",
   "product.panel.language": "语言",
-  "product.panel.default_mode": "新会话默认模式",
-  "product.panel.default_mode_note": "新建会话时默认使用的模式，单个对话内仍可切换",
   "product.panel.full_settings": "打开完整设置",
   "product.panel.nickname_saved": "昵称已更新",
   "product.panel.help.test_code": "测试验证码：123456",
@@ -2271,10 +2305,7 @@ export const zh: Record<string, string> = {
   "sensitive.hit_notice": "包含敏感内容，已替换敏感词，确认后可再次发送。",
   // OCTO-FORK: P9 模式与模型选择器 — see
   // dev-docs-usdable/需求/2260906/技术方案/P9-模式与模型.md §5.
-  "mode.privacy": "隐私",
-  "mode.smart": "智能",
-  "mode.default": "默认",
-  "mode.no_models": "该模式下暂无可用模型",
+  "catalog.no_models": "当前暂无可用模型",
   "catalog.absent": "模型列表尚未下载，请检查网络后重试。",
   "catalog.stale": "模型列表需要联网更新后才能发送消息。",
   "catalog.unverifiable": "模型列表未通过校验，已停止使用；平台更新后会自动恢复。",
@@ -2294,13 +2325,6 @@ export const zh: Record<string, string> = {
   "turn_error.invalid_request": "请求格式有误，请重试一次。",
   "turn_error.internal_error": "服务出错了，请稍后重试。",
   "turn_error.unknown": "请求失败",
-  // OCTO-FORK: P10 隐私模式与 PII 处理 — see
-  // dev-docs-usdable/需求/2260906/技术方案/P10-隐私模式与PII.md.
-  "privacy.mode_label": "隐私模式",
-  "privacy.notice": "隐私模式：发送前会处理手机号等个人信息。",
-  "privacy.notice_detail": "只处理随后发给模型的内容；你在对话框里看到的仍是原文。本期演示 11 位手机号。",
-  "privacy.expand": "展开隐私说明",
-  "privacy.collapse": "收起隐私说明",
 };
 
 const dictionaries: Record<string, Record<string, string>> = { en, zh };

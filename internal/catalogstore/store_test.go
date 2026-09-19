@@ -67,9 +67,13 @@ func policyBytes(t *testing.T, version string) []byte {
 		Catalog: productclient.Catalog{
 			Version: version,
 			TTLSec:  3600,
+			Vendors: []productclient.CatalogVendor{{ID: "buding"}},
 			Models: []productclient.CatalogModel{{
 				ID:          "buding-cloud-pro",
+				VendorID:    "buding",
 				DisplayName: productclient.DisplayName{Zh: "布丁「专业版」", En: `Tools & Agents <beta> "x"\y`},
+				Transport:   productclient.CatalogTransportGateway,
+				Eligible:    true,
 			}},
 		},
 	}); err != nil {

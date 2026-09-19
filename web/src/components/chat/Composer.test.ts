@@ -4,6 +4,7 @@ import { locale } from '../../lib/i18n'
 import { productState } from '../../lib/product'
 import { activeSessionId } from '../../lib/stores'
 import { checkSensitive } from '../../lib/sensitive'
+import { transformPersonalInfo } from '../../lib/api'
 import Composer from './Composer.svelte'
 
 // V-58 / PR-5d3: the composer must not turn a zero balance into a UI conclusion.
@@ -28,6 +29,7 @@ vi.mock('../../lib/api', () => ({
   listMcpServers: vi.fn(async () => ({ servers: [] })),
   getMcpServer: vi.fn(async () => ({})),
   listSessions: vi.fn(async () => []),
+  transformPersonalInfo: vi.fn(async (text: string) => ({ hit: false, masked: text, matches: [], ruleVersion: 'builtin-1' })),
 }))
 
 vi.mock('../../lib/ws', () => ({
@@ -48,13 +50,13 @@ function setBalance(balance: number) {
     activated: true,
     credits: { balance },
     plan: { name: '' },
-    prefs: { locale: 'zh', inputSensitiveCheck: true, defaultChatMode: 'default' },
+    prefs: { locale: 'zh', inputSensitiveCheck: true },
     suppressOnboarding: true,
   } as never)
 }
 
-function render() {
-  app = mount(Composer, { target, props: {} }) as Record<string, unknown>
+function render(onSend?: (text: string, files?: any[], queued?: boolean) => void) {
+  app = mount(Composer, { target, props: { onSend } }) as Record<string, unknown>
   flushSync()
 }
 
@@ -83,6 +85,7 @@ beforeEach(() => {
   locale.set('zh')
   activeSessionId.set('s1')
   vi.mocked(checkSensitive).mockResolvedValue({ hit: false, masked: '' } as never)
+  vi.mocked(transformPersonalInfo).mockImplementation(async (text: string) => ({ hit: false, masked: text, matches: [], ruleVersion: 'builtin-1' }))
   target = document.createElement('div')
   document.body.appendChild(target)
 })
@@ -129,5 +132,37 @@ describe('the composer does not decide quota', () => {
     expect(text).not.toBe('')
     expect(text).not.toContain('积分不足')
     expect(target.querySelector('[data-composer-notices]')).not.toBeNull()
+  })
+})
+
+describe('personal information preview', () => {
+  it('sends only the masked text and reports aggregate categories', async () => {
+    setBalance(1)
+    vi.mocked(transformPersonalInfo).mockResolvedValue({
+      hit: true,
+      masked: '电话 [PHONE]',
+      matches: [{ category: 'cn_mobile', count: 1 }],
+      ruleVersion: 'builtin-1',
+    })
+    const onSend = vi.fn()
+    render(onSend)
+
+    await sendWord('电话 13800138000')
+
+    expect(onSend).toHaveBeenCalledWith('电话 [PHONE]', undefined, false)
+    expect(JSON.stringify(onSend.mock.calls)).not.toContain('13800138000')
+    expect(noticeText()).toContain('已自动脱敏 1 处个人信息')
+  })
+
+  it('keeps the draft and sends nothing when the preview fails', async () => {
+    setBalance(1)
+    vi.mocked(transformPersonalInfo).mockRejectedValue(new Error('preview unavailable'))
+    const onSend = vi.fn()
+    render(onSend)
+
+    await sendWord('电话 13800138000')
+
+    expect(onSend).not.toHaveBeenCalled()
+    expect((target.querySelector('textarea') as HTMLTextAreaElement).value).toContain('13800138000')
   })
 })

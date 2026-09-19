@@ -27,7 +27,7 @@ function firstActivationState() {
     activated: false,
     credits: { balance: 0 },
     plan: { name: '' },
-    prefs: { locale: 'zh', inputSensitiveCheck: true, defaultChatMode: 'default' },
+    prefs: { locale: 'zh', inputSensitiveCheck: true },
     suppressOnboarding: true,
   }
 }

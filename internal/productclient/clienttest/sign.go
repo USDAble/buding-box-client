@@ -121,23 +121,29 @@ func fixturePolicy(now time.Time, version, audience string, ttlSec int, ineligib
 		Catalog: productclient.Catalog{
 			Version: version,
 			TTLSec:  ttlSec,
+			Vendors: []productclient.CatalogVendor{
+				{ID: "buding", DisplayName: productclient.DisplayName{Zh: "布丁模型", En: "Pudding Models"}},
+				{ID: "partner", DisplayName: productclient.DisplayName{Zh: "合作模型", En: "Partner Models"}},
+			},
 			Models: []productclient.CatalogModel{
 				{
-					ID:               "buding-privacy-1",
-					DisplayName:      productclient.DisplayName{Zh: "布丁隐私版", En: "Pudding Private"},
-					ModeIDs:          []string{"privacy"},
-					Transport:        "gateway",
-					Capabilities:     map[string]bool{"stream": true, "tools": true},
-					MaxContextTokens: 32000,
-					MaxOutputTokens:  4096,
-					Eligible:         offered("buding-privacy-1"),
-					PricingVersion:   "2026-09-a",
+					ID:                   "buding-privacy-1",
+					VendorID:             "buding",
+					DisplayName:          productclient.DisplayName{Zh: "布丁隐私版", En: "Pudding Private"},
+					Transport:            productclient.CatalogTransportGateway,
+					Capabilities:         map[string]bool{"stream": true, "tools": true},
+					MaxContextTokens:     32000,
+					MaxOutputTokens:      4096,
+					Eligible:             offered("buding-privacy-1"),
+					Confidential:         offered("buding-privacy-1"),
+					ConfidentialPriority: intPtr(100),
+					PricingVersion:       "2026-09-a",
 				},
 				{
 					ID:               "buding-cloud-pro",
+					VendorID:         "buding",
 					DisplayName:      productclient.DisplayName{Zh: "布丁专业版", En: "Pudding Pro"},
-					ModeIDs:          []string{"smart", "default"},
-					Transport:        "gateway",
+					Transport:        productclient.CatalogTransportGateway,
 					Capabilities:     map[string]bool{"stream": true, "tools": true, "vision": true},
 					MaxContextTokens: 128000,
 					MaxOutputTokens:  8192,
@@ -146,9 +152,9 @@ func fixturePolicy(now time.Time, version, audience string, ttlSec int, ineligib
 				},
 				{
 					ID:               "buding-cloud-fast",
+					VendorID:         "partner",
 					DisplayName:      productclient.DisplayName{Zh: "布丁快速版", En: "Pudding Fast"},
-					ModeIDs:          []string{"default"},
-					Transport:        "gateway",
+					Transport:        productclient.CatalogTransportGateway,
 					Capabilities:     map[string]bool{"stream": true},
 					MaxContextTokens: 32000,
 					MaxOutputTokens:  4096,
@@ -156,14 +162,11 @@ func fixturePolicy(now time.Time, version, audience string, ttlSec int, ineligib
 					PricingVersion:   "2026-09-a",
 				},
 			},
-			Modes: []productclient.CatalogMode{
-				{ID: "privacy", DefaultModelID: "buding-privacy-1"},
-				{ID: "smart", DefaultModelID: "buding-cloud-pro"},
-				{ID: "default", DefaultModelID: "buding-cloud-fast"},
-			},
 		},
 	}
 }
+
+func intPtr(v int) *int { return &v }
 
 // signedPolicy builds the envelope as it travels: the policy is marshalled once,
 // that exact byte sequence is signed, and the same bytes are what the client

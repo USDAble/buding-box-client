@@ -12,7 +12,8 @@
     pendingReasoningEffort,
     pendingPermissionMode,
     pendingShowReasoning,
-    pendingChatMode,
+    pendingPersonalInfoProtection,
+    pendingConfidentialSession,
     globalReasoningEffort,
     resolveProjectForDir,
     prependSession,
@@ -31,7 +32,6 @@
     chatPermMode,
     chatReasoningEffort,
     chatShowReasoning,
-    chatMode,
     chatSuggestion,
     chatThinking,
     chatSubAgents,
@@ -70,7 +70,7 @@
   } from '../lib/stores'
   import { ws, wsState, wsReconnect } from '../lib/ws'
   import * as api from '../lib/api'
-  import { canStartTurn, catalogNoticeKey } from '../lib/chatMode'
+  import { canStartTurn, catalogNoticeKey } from '../lib/modelAvailability'
   // OCTO-FORK: turn failures are read by CODE, not by the server's sentence (G3 / C8) — see dev-docs-usdable/需求/20260911/开发计划.md §PR-5d3.
   import { turnErrorView } from '../lib/turnError'
   import { refreshCredits } from '../lib/product'
@@ -928,6 +928,24 @@ import QuestionModal from '../components/overlays/QuestionModal.svelte'
       })
     }))
 
+    // OCTO-FORK: an old client or bypassed preview may still be transformed by
+    // the authoritative send path. Show only aggregate metadata from that
+    // event; never reconstruct or request the source value.
+    cleanups.push(ws.on('privacy_applied', (ev: any) => {
+      if (ev.session_id && ev.session_id !== sid) return
+      const categories = Array.isArray(ev.categories)
+        ? ev.categories.map((category: string) => {
+            const key = `privacy.category.${category}`
+            const label = $t(key)
+            return label === key ? category : label
+          })
+        : []
+      const notice = $t('privacy.applied')
+        .replace('{count}', String(typeof ev.count === 'number' ? ev.count : 0))
+        .replace('{categories}', categories.join(', '))
+      showToast(notice)
+    }))
+
     cleanups.push(ws.on('history_user_message', (ev) => {
       if ((ev as any).session_id && (ev as any).session_id !== sid) return
       const content = (ev as any).content ?? ''
@@ -1242,9 +1260,6 @@ import QuestionModal from '../components/overlays/QuestionModal.svelte'
       }
       if (typeof (ev as any).show_reasoning === 'boolean') {
         chatShowReasoning.update(r => ({ ...r, [sid]: (ev as any).show_reasoning }))
-      }
-      if (typeof (ev as any).chat_mode === 'string' && (ev as any).chat_mode) {
-        chatMode.update(m => ({ ...m, [sid]: (ev as any).chat_mode }))
       }
       if (typeof (ev as any).working_dir === 'string' && (ev as any).working_dir) {
         chatWorkingDir.update(w => ({ ...w, [sid]: (ev as any).working_dir }))
@@ -2245,12 +2260,12 @@ import QuestionModal from '../components/overlays/QuestionModal.svelte'
       // the sidebar's "+" caret can pin per new session, falling back to the
       // globally active one.
       const model = get(pendingModel)
-      const chatModePick = get(pendingChatMode)
       const opts: api.CreateSessionOpts = {
         source: 'manual',
         agent_profile: get(pendingAgent) || get(activeAgent),
         ...(model ? { model } : {}),
-        ...(chatModePick ? { chat_mode: chatModePick } : {}),
+        personal_info_protection: get(pendingPersonalInfoProtection),
+        confidential_session: get(pendingConfidentialSession),
       }
       // Where the session lands. An explicitly chosen group (the sidebar's
       // per-group "+") wins outright. Otherwise a working directory picked on
@@ -2282,7 +2297,8 @@ import QuestionModal from '../components/overlays/QuestionModal.svelte'
       pendingAgent.set('')
       pendingGroupId.set('')
       pendingWorkingDir.set('')
-      pendingChatMode.set('')
+      pendingPersonalInfoProtection.set(true)
+      pendingConfidentialSession.set(false)
       const reasoningPick = get(pendingReasoningEffort)
       pendingReasoningEffort.set('')
       const permPick = get(pendingPermissionMode)
@@ -2386,7 +2402,7 @@ import QuestionModal from '../components/overlays/QuestionModal.svelte'
     // typed it to send it; discarding it to make a refusal look tidy is the same
     // loss the `!active` branch above refuses to accept.
     // Both halves are asked of the same session: "may a turn start" and "why
-    // not" are one judgement with one owner (chatMode.ts), so the sentence can
+    // not" are one judgement with one owner (modelAvailability.ts), so the sentence can
     // never describe a state the gate did not check (PR-5e).
     const currentSid = get(activeSessionId)
     if (!canStartTurn(currentSid)) {

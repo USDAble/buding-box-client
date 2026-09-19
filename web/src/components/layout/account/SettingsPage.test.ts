@@ -9,7 +9,7 @@ import SettingsPage from './SettingsPage.svelte'
 // PR-6c / L-D3 前端半边：昵称的两档拒绝（格式 / 敏感词）必须在账户面板上以
 // 不同文案呈现，而不是静默失败或混为一谈（§6.4.3 / V-23：一个返回字符串的
 // 函数证明不了用户看见什么，所以每条断言读渲染树或 toast store）。同一页的
-// 语言/默认模式切换是 L-E5 的偏好半边 —— 断言它走 updatePrefs。
+// 语言切换是 L-E5 的偏好半边 —— 断言它走 updatePrefs。
 //
 // 这里 mock 的只有 updateNickname / updatePrefs（本地 API）；组件挂载、输入、
 // 点击、字段错误渲染、toast store 都是生产路径。
@@ -34,7 +34,7 @@ function setState(overrides: Record<string, unknown> = {}) {
     account: { nickname: '', phoneMasked: '', lastLoginAt: '' },
     credits: { balance: 0 },
     plan: { name: '' },
-    prefs: { locale: 'zh', inputSensitiveCheck: true, defaultChatMode: 'default' },
+    prefs: { locale: 'zh', inputSensitiveCheck: true },
     suppressOnboarding: true,
   }
   productState.set({ ...base, ...overrides } as never)
@@ -125,17 +125,4 @@ describe('SettingsPage nickname and preferences', () => {
     expect(err).not.toContain('格式')
   })
 
-  // 交付物 #1 / L-E5 偏好半边：默认模式切换 → updatePrefs 被调（defaultChatMode）。
-  it('persists a default-mode change through updatePrefs', async () => {
-    setState()
-    render()
-
-    const privacy = [...target.querySelectorAll<HTMLButtonElement>('button.mode')].find(
-      (b) => b.textContent?.includes('隐私'),
-    )
-    privacy?.click()
-    await settle()
-
-    expect(updatePrefs).toHaveBeenCalledWith({ defaultChatMode: 'privacy' })
-  })
 })

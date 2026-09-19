@@ -649,7 +649,7 @@ func startHub(app *application.App, bridge *nativeBridge, settings desktopSettin
 	// internal/server must not hold either (it would have to import a fork
 	// package, which the dependency direction forbids). The sixth value is the
 	// immutable personal-information engine shared by preview and send paths.
-	mountProduct, gatewaySender, catalogOffers, engine, sensitiveInputGate, personalInfo := mountProductAPI()
+	mountProduct, gatewaySender, catalogOffers, catalogModel, preferredConfidentialModel, engine, sensitiveInputGate, personalInfo := mountProductAPI()
 
 	// Immutable for the life of the process, and the owner of both facts the
 	// turn-path policy needs (see RequireGateway below), so it is read once.
@@ -710,6 +710,10 @@ func startHub(app *application.App, bridge *nativeBridge, settings desktopSettin
 		// runtime's own, so "which models exist" keeps one owner; the shell only
 		// forwards it.
 		CatalogOffers: catalogOffers,
+		// OCTO-FORK: richer signed-catalog qualification and deterministic
+		// confidential auto-selection — see 安全与隐私实施设计「阶段三」。
+		CatalogModel:               catalogModel,
+		PreferredConfidentialModel: preferredConfidentialModel,
 		// OCTO-FORK: the process's one compliance-word engine — see
 		// dev-docs-usdable/需求/20260911/开发计划.md §PR-6b1. Forwarded, not
 		// built here: the assembly above owns it, so the turn path and the

@@ -159,7 +159,7 @@ func (rt *Runtime) Mount(api func(pattern string, h http.HandlerFunc)) {
 	api("GET /api/product/control-plane", rt.handleControlPlane)
 	api("GET /api/product/catalog", rt.handleCatalog)
 	api("GET /api/product/credits", rt.handleCredits)
-	api("GET /api/product/chat-modes", rt.handleChatModes)
+	api("GET /api/product/models", rt.handleModels)
 	api("POST /api/product/send-code", rt.handleSendCode)
 	api("POST /api/product/login", rt.handleLogin)
 	api("POST /api/product/logout", rt.handleLogout)
@@ -183,111 +183,93 @@ func (rt *Runtime) Mount(api func(pattern string, h http.HandlerFunc)) {
 	api("POST /api/product/privacy/transform", rt.handlePrivacyTransform)
 }
 
-// chatModesDTO is the wire shape of 本地API契约 §2.8.
-//
-// There is deliberately no `fallback` field. The old shape carried one to
-// announce that the built-in list had been substituted for an unreadable
-// data/chat-modes.json, and 需求基线 B1 规则 4 retired both the file and the
-// behaviour; re-adding the field would be the built-in list coming back with a
-// flag on it. A type that cannot express the field is the cheapest way to keep
-// it out (the route test asserts its absence over the wire anyway, because the
-// JSON is a Go/JS boundary and this struct is not what the browser sees).
-//
-// The versions are always present and are empty strings when no catalog was
-// available - not omitted. The frontend compares them to notice that the catalog
-// changed, and "absent" and "empty" would be two spellings of one state.
-type chatModesDTO struct {
-	Modes          []chatModeGroupDTO `json:"modes"`
-	CatalogVersion string             `json:"catalogVersion"`
-	PolicyVersion  string             `json:"policyVersion"`
+type modelsDTO struct {
+	State          string           `json:"state"`
+	CatalogVersion string           `json:"catalogVersion"`
+	Vendors        []modelVendorDTO `json:"vendors"`
 }
 
-type chatModeGroupDTO struct {
-	ID string `json:"id"`
-	// Models is always a JSON array, never null: the picker iterates it, and a
-	// null would make an empty group a different shape from a populated one.
-	Models       []chatModeModelDTO `json:"models"`
-	DefaultModel string             `json:"defaultModel"`
+type modelVendorDTO struct {
+	ID          string            `json:"id"`
+	DisplayName string            `json:"displayName"`
+	Models      []catalogModelDTO `json:"models"`
 }
 
-type chatModeModelDTO struct {
-	ID          string                    `json:"id"`
-	DisplayName productclient.DisplayName `json:"displayName"`
-	CompositeID string                    `json:"compositeId"`
+type catalogModelDTO struct {
+	ID                   string `json:"id"`
+	DisplayName          string `json:"displayName"`
+	CompositeID          string `json:"compositeId"`
+	Confidential         bool   `json:"confidential"`
+	ConfidentialPriority *int   `json:"confidentialPriority,omitempty"`
 }
 
-// handleChatModes is the picker's data source: the signed catalog, projected.
-//
-// It reads the cache and never the network. Fetching belongs to login (PR-4b's
-// single fetch point) and, from PR-4c, to an explicit refresh - so a picker that
-// is opened with no catalog answers "nothing" instead of starting a call behind
-// the user's back, which would also make the response's arrival time depend on
-// the network.
-//
-// No catalog, a damaged cache and a cache this build cannot read all produce the
-// same answer - an empty list - because the picker has exactly one thing to do
-// about all three, and 需求基线 B1 规则 1 forbids the alternative (a local
-// list). Telling them apart is PR-4c's job, and it does it on its own endpoint
-// reporting the cache's state, not by reading it out of this response.
-func (rt *Runtime) handleChatModes(w http.ResponseWriter, r *http.Request) {
-	empty := chatModesDTO{Modes: []chatModeGroupDTO{}}
-
-	if rt.deps.Catalog == nil {
-		writeJSON(w, http.StatusOK, empty)
+// handleModels projects only the last accepted signed catalog. It performs no
+// network access: catalog refresh has its own endpoint and lifecycle, while an
+// opened selector must be a deterministic read of current trust state.
+func (rt *Runtime) handleModels(w http.ResponseWriter, r *http.Request) {
+	availability := rt.currentCatalogAvailability()
+	out := modelsDTO{
+		State:          string(availability.State),
+		CatalogVersion: availability.CatalogVersion,
+		Vendors:        []modelVendorDTO{},
+	}
+	if !availability.ready() || rt.deps.Catalog == nil {
+		writeJSON(w, http.StatusOK, out)
 		return
 	}
 	entry, err := rt.deps.Catalog.Load()
 	if err != nil {
-		// Absence is the ordinary case on a fresh installation, so it is not
-		// worth a warning; a damaged or unreadable cache is, because the user
-		// sees an empty picker and nothing else would explain it.
-		if !errors.Is(err, catalogstore.ErrNoCache) {
-			slog.Warn("product: chat-modes served empty", "err", err)
-		}
-		writeJSON(w, http.StatusOK, empty)
+		slog.Warn("product: models served empty", "err", err)
+		out.State = catalogProjectionFailureState()
+		writeJSON(w, http.StatusOK, out)
 		return
 	}
-
-	// The cached envelope was verified before it was written (catalogstore only
-	// ever holds what fetchCatalog accepted), so this parses rather than
-	// re-verifies: a second signature check here would be a second opinion about
-	// a fact that already has one owner (开发规范 §3.8).
 	policy, err := entry.Envelope.DecodePolicy()
 	if err != nil {
 		slog.Warn("product: cached catalog could not be read back", "err", err, "catalogVersion", entry.CatalogVersion)
-		writeJSON(w, http.StatusOK, empty)
+		out.State = catalogProjectionFailureState()
+		writeJSON(w, http.StatusOK, out)
 		return
 	}
-
-	groups, ignored := projectCatalog(policy)
-	if len(ignored) > 0 {
-		// Reported, not acted on: the mode set is a product constant, so an
-		// unknown id is a platform contract drift an operator needs to see, while
-		// the picker carries on with the modes the product has.
-		slog.Warn("product: catalog names mode ids this build does not have", "modeIds", ignored)
+	vendors, err := projectCatalog(policy)
+	if err != nil {
+		slog.Warn("product: cached catalog could not be projected", "err", err, "catalogVersion", entry.CatalogVersion)
+		out.State = catalogProjectionFailureState()
+		writeJSON(w, http.StatusOK, out)
+		return
 	}
-
-	out := chatModesDTO{
-		Modes:          make([]chatModeGroupDTO, 0, len(groups)),
-		CatalogVersion: entry.CatalogVersion,
-		PolicyVersion:  policy.PolicyVersion,
+	locale := "en"
+	if rt.deps.State != nil {
+		locale = rt.deps.State.PublicState().Prefs.Locale
 	}
-	for _, g := range groups {
-		dto := chatModeGroupDTO{
-			ID:           g.ID,
-			Models:       make([]chatModeModelDTO, 0, len(g.Models)),
-			DefaultModel: g.DefaultModel,
+	for _, vendor := range vendors {
+		row := modelVendorDTO{
+			ID:          vendor.ID,
+			DisplayName: localizeDisplayName(vendor.DisplayName, locale),
+			Models:      make([]catalogModelDTO, 0, len(vendor.Models)),
 		}
-		for _, m := range g.Models {
-			dto.Models = append(dto.Models, chatModeModelDTO{
-				ID:          m.ID,
-				DisplayName: m.DisplayName,
-				CompositeID: m.CompositeID,
+		for _, model := range vendor.Models {
+			row.Models = append(row.Models, catalogModelDTO{
+				ID:                   model.ID,
+				DisplayName:          localizeDisplayName(model.DisplayName, locale),
+				CompositeID:          model.CompositeID,
+				Confidential:         model.Confidential,
+				ConfidentialPriority: model.ConfidentialPriority,
 			})
 		}
-		out.Modes = append(out.Modes, dto)
+		out.Vendors = append(out.Vendors, row)
 	}
 	writeJSON(w, http.StatusOK, out)
+}
+
+func localizeDisplayName(name productclient.DisplayName, locale string) string {
+	if strings.HasPrefix(strings.ToLower(locale), "zh") && name.Zh != "" {
+		return name.Zh
+	}
+	if name.En != "" {
+		return name.En
+	}
+	return name.Zh
 }
 
 // handleControlPlane reports whether this build can reach a control plane at
@@ -318,10 +300,10 @@ type controlPlaneDTO struct {
 // handleCatalog reports whether the catalog is usable, and if not why
 // (本地API契约 §2.14, 需求基线 B4/B9).
 //
-// It is a separate endpoint rather than a field on /chat-modes or /state, and
+// It is a separate endpoint rather than a field on /models or /state, and
 // the reason is an ownership one (开发规范 §3.8): usability is a run-time fact
 // about the cache plus the last refresh, while /state mirrors a file on disk and
-// /chat-modes answers "what should the picker show". Only the composer needs the
+// /models answers "what should the picker show". Only the composer needs the
 // answer without opening the picker ("must not start a turn"), and a fact with
 // three readers gets one owner or it gets three drifting copies.
 //

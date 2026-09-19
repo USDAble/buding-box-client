@@ -27,41 +27,95 @@ import (
 // keeps no id -> name table of its own, because a local table would shadow the
 // server's copy and keep showing a stale name after a rename (需求基线 B6).
 type DisplayName struct {
-	Zh string `json:"zh"`
+	Zh string `json:"zh-CN"`
 	En string `json:"en"`
+}
+
+// CatalogVendor is the stable parent shown by the model selector. Identity is
+// deliberately separate from DisplayName: names may change or be localised,
+// while VendorID remains the grouping key stored in the signed contract.
+type CatalogVendor struct {
+	ID          string      `json:"id"`
+	DisplayName DisplayName `json:"displayName"`
 }
 
 // CatalogModel is one selectable model. ID is the stable technical key used in
 // gateway requests, sessions and ledgers; it is ASCII and never localised.
 type CatalogModel struct {
-	ID               string          `json:"id"`
-	DisplayName      DisplayName     `json:"displayName"`
-	ModeIDs          []string        `json:"modeIds"`
-	Transport        string          `json:"transport"`
-	Capabilities     map[string]bool `json:"capabilities"`
-	MaxContextTokens int             `json:"maxContextTokens"`
-	MaxOutputTokens  int             `json:"maxOutputTokens"`
-	Eligible         bool            `json:"eligible"`
-	PricingVersion   string          `json:"pricingVersion"`
+	ID                   string          `json:"id"`
+	VendorID             string          `json:"vendorId"`
+	DisplayName          DisplayName     `json:"displayName"`
+	Transport            string          `json:"transport"`
+	Capabilities         map[string]bool `json:"capabilities"`
+	MaxContextTokens     int             `json:"maxContextTokens"`
+	MaxOutputTokens      int             `json:"maxOutputTokens"`
+	Eligible             bool            `json:"eligible"`
+	Confidential         bool            `json:"confidential"`
+	ConfidentialPriority *int            `json:"confidentialPriority,omitempty"`
+	PricingVersion       string          `json:"pricingVersion"`
 }
 
-// CatalogMode carries only the mode metadata a model cannot express. Grouping
-// itself (which model sits under which mode) is read from CatalogModel.ModeIDs
-// and deliberately not repeated here: two copies of one fact drift apart, and
-// the picker would then disagree with itself depending on which it read
-// (中台交付包 §4.3「catalog.modes 的形状」, 开发规范 §3.8).
-type CatalogMode struct {
-	ID             string `json:"id"`
-	DefaultModelID string `json:"defaultModelId"`
-}
-
-// Catalog is the model list plus the modes it is grouped into. Version is the
-// catalog's own version, distinct from the policy version that covers it.
+// Catalog is the vendor hierarchy plus its model rows. Version is the catalog's
+// own version, distinct from the policy version that covers it.
 type Catalog struct {
-	Version string         `json:"version"`
-	TTLSec  int            `json:"ttlSec"`
-	Models  []CatalogModel `json:"models"`
-	Modes   []CatalogMode  `json:"modes"`
+	Version string          `json:"version"`
+	TTLSec  int             `json:"ttlSec"`
+	Vendors []CatalogVendor `json:"vendors"`
+	Models  []CatalogModel  `json:"models"`
+}
+
+const (
+	CatalogTransportGateway = "gateway"
+	MinConfidentialPriority = 0
+	MaxConfidentialPriority = 1_000_000
+)
+
+// ValidateCatalog applies the semantic half of the signed catalog contract.
+// Signature verification proves who sent the bytes; it does not make broken
+// references or contradictory eligibility safe to consume. Any invalid row
+// rejects the whole catalog so different consumers cannot repair it in
+// different ways.
+func ValidateCatalog(c Catalog) error {
+	vendors := make(map[string]struct{}, len(c.Vendors))
+	for _, vendor := range c.Vendors {
+		if vendor.ID == "" {
+			return fmt.Errorf("%w: catalog vendor id is empty", ErrPolicyMalformed)
+		}
+		if _, duplicate := vendors[vendor.ID]; duplicate {
+			return fmt.Errorf("%w: duplicate catalog vendor id %q", ErrPolicyMalformed, vendor.ID)
+		}
+		vendors[vendor.ID] = struct{}{}
+	}
+
+	models := make(map[string]struct{}, len(c.Models))
+	for _, model := range c.Models {
+		if model.ID == "" {
+			return fmt.Errorf("%w: catalog model id is empty", ErrPolicyMalformed)
+		}
+		if _, duplicate := models[model.ID]; duplicate {
+			return fmt.Errorf("%w: duplicate catalog model id %q", ErrPolicyMalformed, model.ID)
+		}
+		models[model.ID] = struct{}{}
+		if _, known := vendors[model.VendorID]; !known {
+			return fmt.Errorf("%w: catalog model %q references unknown vendor %q", ErrPolicyMalformed, model.ID, model.VendorID)
+		}
+		if model.Transport != CatalogTransportGateway {
+			return fmt.Errorf("%w: catalog model %q has unsupported transport %q", ErrPolicyMalformed, model.ID, model.Transport)
+		}
+		if model.Confidential && !model.Eligible {
+			return fmt.Errorf("%w: confidential catalog model %q is not eligible", ErrPolicyMalformed, model.ID)
+		}
+		if model.ConfidentialPriority != nil {
+			priority := *model.ConfidentialPriority
+			if !model.Confidential {
+				return fmt.Errorf("%w: non-confidential catalog model %q carries confidentialPriority", ErrPolicyMalformed, model.ID)
+			}
+			if priority < MinConfidentialPriority || priority > MaxConfidentialPriority {
+				return fmt.Errorf("%w: catalog model %q confidentialPriority %d is outside %d..%d", ErrPolicyMalformed, model.ID, priority, MinConfidentialPriority, MaxConfidentialPriority)
+			}
+		}
+	}
+	return nil
 }
 
 // Policy is the signed envelope's payload.

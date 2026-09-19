@@ -285,7 +285,6 @@
               show_reasoning: typeof ev.show_reasoning === 'boolean' ? ev.show_reasoning : s.show_reasoning,
               permission_mode: typeof ev.permission_mode === 'string' ? ev.permission_mode : s.permission_mode,
               reasoning_effort: typeof ev.reasoning_effort === 'string' ? ev.reasoning_effort : s.reasoning_effort,
-              chat_mode: typeof ev.chat_mode === 'string' ? ev.chat_mode : s.chat_mode,
             }
           : s
         )

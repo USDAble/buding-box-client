@@ -45,7 +45,7 @@ beforeEach(() => {
     activated: true,
     credits: { balance: 0 },
     plan: { name: '' },
-    prefs: { locale: 'zh', inputSensitiveCheck: true, defaultChatMode: 'default' },
+    prefs: { locale: 'zh', inputSensitiveCheck: true },
     suppressOnboarding: true,
   } as never)
   target = document.createElement('div')

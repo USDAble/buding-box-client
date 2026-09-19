@@ -28,7 +28,6 @@ import (
 	"net/http"
 	"unicode"
 
-	"github.com/open-octo/octo-agent/internal/chatmode"
 	"github.com/open-octo/octo-agent/internal/productclient"
 )
 
@@ -91,7 +90,6 @@ func (rt *Runtime) handleNickname(w http.ResponseWriter, r *http.Request) {
 func (rt *Runtime) handlePrefs(w http.ResponseWriter, r *http.Request) {
 	var req struct {
 		Locale              *string `json:"locale"`
-		DefaultChatMode     *string `json:"defaultChatMode"`
 		InputSensitiveCheck *bool   `json:"inputSensitiveCheck"`
 	}
 	if !decodeBody(w, r, &req) {
@@ -102,12 +100,7 @@ func (rt *Runtime) handlePrefs(w http.ResponseWriter, r *http.Request) {
 		writeValueRefusal(w, "locale")
 		return
 	}
-	if req.DefaultChatMode != nil && !rt.validDefaultChatMode(*req.DefaultChatMode) {
-		writeValueRefusal(w, "defaultChatMode")
-		return
-	}
-
-	if err := rt.deps.State.SetPrefs(req.Locale, req.InputSensitiveCheck, req.DefaultChatMode); err != nil {
+	if err := rt.deps.State.SetPrefs(req.Locale, req.InputSensitiveCheck); err != nil {
 		writeCode(w, http.StatusInternalServerError, productclient.CodeInternalError, nil)
 		return
 	}
@@ -120,20 +113,6 @@ func (rt *Runtime) handlePrefs(w http.ResponseWriter, r *http.Request) {
 // and the reason it is absent from fieldLevelCodes.
 func writeValueRefusal(w http.ResponseWriter, field string) {
 	writeCode(w, http.StatusBadRequest, codeInvalidValue, map[string]any{"field": field})
-}
-
-// validDefaultChatMode answers whether id names one of the product's groups.
-//
-// 本地API契约 §2.7 says "a mode that exists in the §2.8 catalog". The predicate
-// used is chatmode.IsProductMode — the owner of the grouping fact (§3.8) — and
-// the reading is deliberate: the catalog cache is legitimately empty offline
-// (never fetched, or a fresh data root), and making a preference write depend on
-// it would mean an offline user cannot change their default mode at all. What
-// §2.7 rules out is a value that names no group, and that question is the
-// grouping owner's. Read narrowly, the catalog copy of the set is a projection
-// of the same three ids, so the two disagree only in which failure they produce.
-func (rt *Runtime) validDefaultChatMode(id string) bool {
-	return chatmode.IsProductMode(id)
 }
 
 // nicknameVerdict is the outcome of the compliance question.

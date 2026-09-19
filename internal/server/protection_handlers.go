@@ -88,8 +88,13 @@ func (s *Server) handleUpdateSessionProtection(w http.ResponseWriter, r *http.Re
 		eligibilityID = model
 	}
 	if *req.ConfidentialSession && !s.confidentialModelEligible(eligibilityID) {
-		writeProtectionError(w, codeConfidentialModelRequired, "confidential session requires an eligible confidential model")
-		return
+		var ok bool
+		modelConfig, model, ok = s.preferredConfidentialModel()
+		if !ok {
+			writeProtectionError(w, codeConfidentialModelRequired, "confidential session requires an eligible confidential model")
+			return
+		}
+		updateModel = true
 	}
 
 	policy := agent.ProtectionPolicy{
@@ -145,17 +150,25 @@ func (s *Server) resolveSessionModel(modelID string) (modelConfig, model string,
 			}
 			return "", entry.Model, nil
 		}
-	} else if modelID == "default" {
-		return "", "", fmt.Errorf("product profile requires a gateway catalog model")
+	} else {
+		if modelID == "default" {
+			return "", "", fmt.Errorf("product profile requires a gateway catalog model")
+		}
+		// OCTO-FORK: an empty prefix matches every string; product mode must
+		// fail closed unless the desktop shell supplied the gateway namespace.
+		if s.cfg.GatewayModelPrefix == "" || !strings.HasPrefix(modelID, s.cfg.GatewayModelPrefix) {
+			return "", "", fmt.Errorf("product profile requires a gateway catalog model")
+		}
+		return modelID, strings.TrimPrefix(modelID, s.cfg.GatewayModelPrefix), nil
 	}
 	return "", modelID, nil
 }
 
 func (s *Server) confidentialModelEligible(modelID string) bool {
-	if s.cfg.ConfidentialModel != nil {
+	if s.cfg.CatalogModel != nil {
 		catalogID := strings.TrimPrefix(modelID, s.cfg.GatewayModelPrefix)
-		if eligible, known := s.cfg.ConfidentialModel(catalogID); known {
-			return eligible
+		if status, known := s.cfg.CatalogModel(catalogID); known {
+			return status.Current && status.Selectable && status.Confidential
 		}
 	}
 	if s.cfg.RequireGateway {
@@ -167,6 +180,43 @@ func (s *Server) confidentialModelEligible(modelID string) bool {
 	}
 	entry, ok := cfg.EntryByModel(modelID)
 	return ok && entry.Confidential
+}
+
+func (s *Server) preferredConfidentialModel() (modelConfig, model string, ok bool) {
+	if s.cfg.PreferredConfidentialModel != nil {
+		if id, found := s.cfg.PreferredConfidentialModel(); found {
+			modelConfig, model, err := s.resolveSessionModel(id)
+			if err == nil && s.confidentialModelEligible(protectionModelID(modelConfig, model)) {
+				return modelConfig, model, true
+			}
+		}
+	}
+	if s.cfg.RequireGateway {
+		return "", "", false
+	}
+	cfg, _ := config.Load()
+	if entry := cfg.DefaultEntry(); entry.Model != "" && entry.Confidential {
+		if cfg.Default != "" {
+			return cfg.Default, entry.Model, true
+		}
+	}
+	for _, endpoint := range cfg.Endpoints {
+		for _, candidate := range endpoint.Models {
+			if candidate.Confidential {
+				return endpoint.ID + "::" + candidate.Model, candidate.Model, true
+			}
+		}
+	}
+	return "", "", false
+}
+
+func protectionModelID(values ...string) string {
+	for _, value := range values {
+		if value != "" {
+			return value
+		}
+	}
+	return ""
 }
 
 func (s *Server) validateConfidentialSession(sess *agent.Session) error {

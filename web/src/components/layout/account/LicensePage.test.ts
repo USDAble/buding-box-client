@@ -33,7 +33,7 @@ function setState(overrides: Record<string, unknown> = {}) {
     account: { phoneMasked: '138****8000', nickname: 'n', lastLoginAt: '' },
     credits: { balance: 0 },
     plan: { name: '' },
-    prefs: { locale: 'zh', inputSensitiveCheck: true, defaultChatMode: 'default' },
+    prefs: { locale: 'zh', inputSensitiveCheck: true },
     suppressOnboarding: true,
   }
   productState.set({ ...base, ...overrides } as never)

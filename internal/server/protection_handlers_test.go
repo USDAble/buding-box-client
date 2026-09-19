@@ -18,8 +18,8 @@ func TestProtectionUpdatePersistsPolicyAndModelAtomically(t *testing.T) {
 	}
 	srv := mustServer(t, Config{
 		Addr: "127.0.0.1:0",
-		ConfidentialModel: func(id string) (bool, bool) {
-			return id == "private", true
+		CatalogModel: func(id string) (CatalogModelStatus, bool) {
+			return CatalogModelStatus{Selectable: true, Confidential: id == "private", Current: true}, true
 		},
 	})
 
@@ -44,8 +44,8 @@ func TestCreateSessionPersistsRequestedProtectionWithModel(t *testing.T) {
 	setTestHome(t)
 	srv := mustServer(t, Config{
 		Addr: "127.0.0.1:0",
-		ConfidentialModel: func(id string) (bool, bool) {
-			return id == "private", true
+		CatalogModel: func(id string) (CatalogModelStatus, bool) {
+			return CatalogModelStatus{Selectable: true, Confidential: id == "private", Current: true}, true
 		},
 	})
 	w := doJSON(t, srv, http.MethodPost, "/api/sessions",
@@ -101,8 +101,8 @@ func TestProtectionUpdateFailureLeavesOldState(t *testing.T) {
 	}
 	srv := mustServer(t, Config{
 		Addr: "127.0.0.1:0",
-		ConfidentialModel: func(string) (bool, bool) {
-			return false, true
+		CatalogModel: func(string) (CatalogModelStatus, bool) {
+			return CatalogModelStatus{Selectable: true, Current: true}, true
 		},
 	})
 
@@ -120,6 +120,65 @@ func TestProtectionUpdateFailureLeavesOldState(t *testing.T) {
 	}
 	if got.ProtectionPolicy != agent.DefaultProtectionPolicy() || got.Model != "public" {
 		t.Fatalf("failed update changed state: policy=%+v model=%q", got.ProtectionPolicy, got.Model)
+	}
+}
+
+func TestProtectionUpdateAutoSelectsPreferredConfidentialModel(t *testing.T) {
+	setTestHome(t)
+	sess := agent.NewSession("public", "")
+	if err := sess.Save(); err != nil {
+		t.Fatal(err)
+	}
+	srv := mustServer(t, Config{
+		Addr: "127.0.0.1:0",
+		CatalogModel: func(id string) (CatalogModelStatus, bool) {
+			return CatalogModelStatus{Selectable: true, Confidential: id == "private", Current: true}, true
+		},
+		PreferredConfidentialModel: func() (string, bool) { return "private", true },
+	})
+
+	w := doJSON(t, srv, http.MethodPatch, "/api/sessions/"+sess.ID+"/protection",
+		`{"personal_info_protection":true,"confidential_session":true}`)
+	if w.Code != http.StatusOK {
+		t.Fatalf("PATCH = %d: %s", w.Code, w.Body.String())
+	}
+	got, err := agent.LoadSession(sess.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.Model != "private" || !got.ProtectionPolicy.ConfidentialSession {
+		t.Fatalf("model=%q policy=%+v", got.Model, got.ProtectionPolicy)
+	}
+}
+
+func TestConfidentialSessionCannotSwitchToOrdinaryModel(t *testing.T) {
+	setTestHome(t)
+	sess := agent.NewSession("private", "")
+	policy := agent.DefaultProtectionPolicy()
+	policy.ConfidentialSession = true
+	if err := sess.SetProtectionPolicyAndModel(policy, "", "private", false); err != nil {
+		t.Fatal(err)
+	}
+	sess.LockProtectionPolicy()
+	if err := sess.Save(); err != nil {
+		t.Fatal(err)
+	}
+	srv := mustServer(t, Config{
+		Addr: "127.0.0.1:0",
+		CatalogModel: func(id string) (CatalogModelStatus, bool) {
+			return CatalogModelStatus{Selectable: true, Confidential: id == "private", Current: true}, true
+		},
+	})
+	w := doJSON(t, srv, http.MethodPatch, "/api/sessions/"+sess.ID+"/model", `{"model_id":"ordinary"}`)
+	if w.Code != http.StatusConflict || !strings.Contains(w.Body.String(), `"code":"confidential_model_required"`) {
+		t.Fatalf("PATCH model = %d: %s", w.Code, w.Body.String())
+	}
+	got, err := agent.LoadSession(sess.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.Model != "private" {
+		t.Fatalf("refused switch changed model to %q", got.Model)
 	}
 }
 
@@ -197,7 +256,9 @@ func TestConfidentialQualificationIsRecheckedBeforeEveryTurn(t *testing.T) {
 	eligible := true
 	srv := mustServer(t, Config{
 		Addr: "127.0.0.1:0", Tools: false,
-		ConfidentialModel: func(string) (bool, bool) { return eligible, true },
+		CatalogModel: func(string) (CatalogModelStatus, bool) {
+			return CatalogModelStatus{Selectable: true, Confidential: eligible, Current: true}, true
+		},
 	})
 	eligible = false
 
@@ -227,10 +288,7 @@ func TestProductProfileDoesNotQualifyLocalConfidentialModel(t *testing.T) {
 		t.Fatal("product profile must not derive confidential eligibility from local config")
 	}
 	modelConfig, model, err := srv.resolveSessionModel("local::private")
-	if err != nil {
-		t.Fatal(err)
-	}
-	if modelConfig != "" || model != "local::private" {
-		t.Fatalf("product resolution consulted local config: model_config=%q model=%q", modelConfig, model)
+	if err == nil {
+		t.Fatalf("product resolution accepted local config: model_config=%q model=%q", modelConfig, model)
 	}
 }

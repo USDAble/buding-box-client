@@ -3,9 +3,10 @@
   import { onDestroy, onMount, untrack, tick } from 'svelte'
   import {
     running, activeSessionId, chatStreaming, sessions, sessionGroups,
-    chatContextUsage, chatWorkingDir, chatPermMode, chatReasoningEffort, chatShowReasoning, showToast, chatGoal, chatModel, chatMode,
+    chatContextUsage, chatWorkingDir, chatPermMode, chatReasoningEffort, chatShowReasoning, showToast, chatGoal, chatModel,
     globalPermissionMode, globalReasoningEffort, nativeShell, localAccess, activeAgent, pendingModel, view, settingsModalOpen,
-    pendingAgent, pendingWorkingDir, pendingGroupId, pendingReasoningEffort, pendingPermissionMode, pendingShowReasoning, pendingChatMode,
+    pendingAgent, pendingWorkingDir, pendingGroupId, pendingReasoningEffort, pendingPermissionMode, pendingShowReasoning,
+    pendingPersonalInfoProtection, pendingConfidentialSession,
     normalizeDir, dirLeaf, projectsClaimingDir,
   } from '../../lib/stores'
   import { ws } from '../../lib/ws'
@@ -20,10 +21,9 @@
   import { getMcpServer } from '../../lib/api'
   import ComposerNotices, { type Notice } from './ComposerNotices.svelte'
   import SensitiveToggle from './SensitiveToggle.svelte'
-  import PrivacyBar from './PrivacyBar.svelte'
-  import PrivacyMark from '../ui/PrivacyMark.svelte'
-  import { allowEnvironmentModelSource, productState } from '../../lib/product'
+  import { allowEnvironmentModelSource, catalogState, productState } from '../../lib/product'
   import { checkSensitive } from '../../lib/sensitive'
+  import { loadSelectableModels, type SelectableModel } from '../../lib/selectableModels'
 
   let { onSend }: { onSend?: (text: string, files?: any[], queued?: boolean) => void } = $props()
 
@@ -592,6 +592,7 @@
 
   // Full-width slash replacement + autocomplete trigger on input.
   function onInput() {
+    privacyApplied = null
     handleSlashInput()
   }
 
@@ -633,6 +634,7 @@
 
   let isStreaming = $derived($chatStreaming[sid] ?? false)
   let currentSession = $derived($sessions.find(s => s.id === sid) ?? null)
+  let models = $state<SelectableModel[]>([])
 
   // Session meta chips — pull live values from per-session stores, fall back
   // to the session record, then to sensible defaults.
@@ -642,23 +644,28 @@
   // ensureActiveSession creates will actually run on, so the blank new-chat
   // view names it instead of showing a dash.
   let defaultModelName = $state('')
-  let modelName = $derived(
-    $chatModel[sid] || currentSession?.model || currentSession?.model_id
-    || ($pendingModel ? $pendingModel.split('::').pop() : '')
-    || defaultModelName || '—',
-  )
-  // The current mode for the privacy mark: the session's own attribute, then
-  // a blank-view pending choice, then the account default.
-  // OCTO-FORK: P10 隐私模式与 PII 处理 — see
-  // dev-docs-usdable/需求/2260906/技术方案/P10-隐私模式与PII.md.
-  let currentMode = $derived(
-    $chatMode[sid] || currentSession?.chat_mode || (!sid ? $pendingChatMode : '')
-    || $productState?.prefs.defaultChatMode || 'default',
-  )
+  let defaultModelId = $state('')
+  let modelName = $derived.by(() => {
+    const binding = currentSession?.model_id || (!sid ? $pendingModel : '') || defaultModelId
+    const row = models.find(model => model.id === binding)
+      ?? models.find(model => model.modelId === ($chatModel[sid] || currentSession?.model))
+    return row?.displayName || $chatModel[sid] || currentSession?.model
+      || (binding ? binding.split('::').pop() : '') || defaultModelName || '—'
+  })
   // A pending pick belongs to the blank new-chat view only. Once a session is
   // active (auto-created — which consumed it — or picked/created any other
   // way), drop any leftover so it can't leak into a later blank view.
-  $effect(() => { if (sid) { pendingModel.set(''); pendingReasoningEffort.set(''); pendingChatMode.set('') } })
+  $effect(() => { if (sid) { pendingModel.set(''); pendingReasoningEffort.set('') } })
+
+  let personalInfoProtection = $derived(
+    sid ? (currentSession?.protection_policy?.personal_info_protection ?? true) : $pendingPersonalInfoProtection,
+  )
+  let confidentialSession = $derived(
+    sid ? (currentSession?.protection_policy?.confidential_session ?? false) : $pendingConfidentialSession,
+  )
+  let protectionLocked = $derived(
+    sid ? (currentSession?.protection_policy?.locked ?? ((currentSession as any)?.turn_count ?? 0) > 0) : false,
+  )
   // "" (off) is a legitimate resolved value, not "no data yet" — only fall
   // back to a default (?? only skips null/undefined, not "") when neither
   // source has reported anything at all. On the landing page (no sid) that
@@ -760,9 +767,8 @@
   // ── model + reasoning pickers ──────────────────────────────────────────────
   // Show every configured endpoint/model entry. The composite id keeps models
   // with the same name on different endpoints independently selectable.
-  let models = $state<{ id: string; model: string; endpoint: string }[]>([])
-  let defaultModelId = $state('')
   let modelMenu = $state(false)
+  let securityMenu = $state(false)
   let reasonMenu = $state(false)
   // The landing page's project picker: search + list + create + open-folder.
   let projMenu = $state(false)
@@ -776,14 +782,14 @@
   let permMenu = $state(false)
 
   let modelGroups = $derived.by(() => {
-    const out: { endpoint: string; items: { id: string; model: string }[] }[] = []
+    const out: { vendorId: string; vendorName: string; items: SelectableModel[] }[] = []
     for (const m of models) {
-      let group = out.find(item => item.endpoint === m.endpoint)
+      let group = out.find(item => item.vendorId === m.vendorId)
       if (!group) {
-        group = { endpoint: m.endpoint, items: [] }
+        group = { vendorId: m.vendorId, vendorName: m.vendorName, items: [] }
         out.push(group)
       }
-      group.items.push({ id: m.id, model: m.model })
+      group.items.push(m)
     }
     return out
   })
@@ -795,6 +801,7 @@
     if (!sid) return $pendingModel || defaultModelId
     return defaultModelId.split('::').pop() === modelName ? defaultModelId : ''
   })
+  let activeModel = $derived(models.find(model => model.id === activeModelId) ?? null)
 
   // ── agent assignment ───────────────────────────────────────────────────────
   // agent_profile can be (re)assigned right up until the session's first turn
@@ -860,30 +867,15 @@
   let modelsFetchSeq = 0
   async function refreshModels() {
     const seq = ++modelsFetchSeq
-    // OCTO-FORK: a product profile must not even load local endpoint models;
-    // the signed gateway catalog becomes its sole model source in phase three.
-    if (get(allowEnvironmentModelSource) === false) {
-      models = []
-      defaultModelId = ''
-      defaultModelName = ''
-      return
-    }
     try {
-      const ep = await api.getEndpoints()
+      const allowLocal = get(allowEnvironmentModelSource) !== false
+      const result = await loadSelectableModels(allowLocal)
       if (seq !== modelsFetchSeq) return
-      const flat: { id: string; model: string; endpoint: string }[] = []
-      for (const endpoint of ep.endpoints) {
-        for (const model of endpoint.models) {
-          flat.push({
-            id: `${endpoint.id}::${model.model}`,
-            model: model.model,
-            endpoint: endpoint.id,
-          })
-        }
-      }
-      models = flat
-      defaultModelId = ep.default?.includes('::') ? ep.default : ''
-      defaultModelName = ep.default?.split('::').pop() ?? ''
+      catalogState.set(result.state)
+      models = result.models
+      defaultModelId = result.defaultModelId
+      defaultModelName = result.models.find(model => model.id === result.defaultModelId)?.displayName
+        ?? result.defaultModelId.split('::').pop() ?? ''
     } catch { /* keep the previous list */ }
   }
 
@@ -900,10 +892,15 @@
     } catch { /* leave empty */ }
   })
 
-  async function pickModel(model: { id: string; model: string; endpoint: string }) {
+  async function pickModel(model: SelectableModel) {
     modelMenu = false
+    if (confidentialSession && !model.confidential) {
+      showToast($t('privacy.private_model_required'), 'error')
+      return
+    }
     if (!sid) {
       pendingModel.set(model.id)
+      if (model.confidential && !confidentialSession) showToast($t('privacy.private_model_ordinary'), 'info')
       queueMicrotask(() => textareaEl?.focus())
       return
     }
@@ -915,6 +912,46 @@
       chatModel.update(values => ({ ...values, [sid]: result.model }))
     } catch (e: any) {
       showToast(e.message ?? 'Failed to switch model', 'error')
+    }
+  }
+
+  let protectionBusy = $state(false)
+  async function updateProtection(personal: boolean, confidential: boolean) {
+    if (protectionLocked || protectionBusy) return
+    if (!sid) {
+      if (confidential) {
+        await refreshModels()
+        const preferred = models.find(model => model.confidential)
+        if (!preferred) {
+          showToast($t('privacy.no_private_model'), 'error')
+          return
+        }
+        if (activeModelId !== preferred.id) {
+          pendingModel.set(preferred.id)
+          showToast($t('privacy.auto_switched').replace('{model}', preferred.displayName), 'info')
+        }
+      }
+      pendingPersonalInfoProtection.set(personal)
+      pendingConfidentialSession.set(confidential)
+      return
+    }
+    protectionBusy = true
+    try {
+      const result = await api.setSessionProtection(sid, {
+        personal_info_protection: personal,
+        confidential_session: confidential,
+      })
+      sessions.update(list => list.map((session: any) => session.id === sid
+        ? { ...session, ...result.session, model: result.model, model_id: result.model_id }
+        : session))
+      chatModel.update(values => ({ ...values, [sid]: result.model }))
+      if (confidential && result.model !== modelName) {
+        showToast($t('privacy.auto_switched').replace('{model}', result.model), 'info')
+      }
+    } catch (error: any) {
+      showToast(error?.message ?? $t('product.send_failed'), 'error')
+    } finally {
+      protectionBusy = false
     }
   }
 
@@ -986,7 +1023,7 @@
     }
   }
 
-  function closeMenus() { modelMenu = false; reasonMenu = false; agentMenu = false; permMenu = false; projMenu = false; claimChoices = null }
+  function closeMenus() { modelMenu = false; securityMenu = false; reasonMenu = false; agentMenu = false; permMenu = false; projMenu = false; claimChoices = null }
 
   // The landing page's project list: claimants-only while an ambiguous folder
   // pick is being resolved, otherwise every project, filtered by the query.
@@ -1105,6 +1142,13 @@
   // 下次发送重新检测时按结果更新。用 $state 而非 derived 内部局部变量，
   // 因为 send() 需要读写它（命中置位 / 未命中清除）。
   let sensitiveHit = $state(false)
+  let privacyApplied = $state<{ count: number; categories: string[] } | null>(null)
+
+  function privacyCategoryLabel(category: string): string {
+    const key = `privacy.category.${category}`
+    const label = $t(key)
+    return label === key ? category : label
+  }
 
   const notices = $derived.by<Notice[]>(() => {
     const list: Notice[] = []
@@ -1112,6 +1156,15 @@
     // 命中/清除即时反映到通知条。
     if (sensitiveHit) {
       list.push({ id: 'sensitive', level: 'warn', text: $t('sensitive.hit_notice'), slot: 'below' })
+    }
+    if (personalInfoProtection && attachments.length > 0) {
+      list.push({ id: 'privacy-attachments', level: 'warn', text: $t('privacy.attachments_not_scanned'), slot: 'above' })
+    }
+    if (privacyApplied) {
+      const summary = $t('privacy.applied')
+        .replace('{count}', String(privacyApplied.count))
+        .replace('{categories}', privacyApplied.categories.map(privacyCategoryLabel).join(', '))
+      list.push({ id: 'privacy-applied', level: 'info', text: summary, slot: 'above' })
     }
     // OCTO-FORK: 「余额为 0 ⇒ 积分不足」的本地提示在这里删掉了（V-58，PR-5d3）。
     // 它不编数字（余额确实来自中台），错在**替中台下结论**：PQ8 明写「客户端
@@ -1165,15 +1218,38 @@
     }
     sensitiveHit = false
 
+    // OCTO-FORK: product windows replace the draft with the irreversible local
+    // transform before history, optimistic UI or WebSocket code can see it.
+    // Plain `octo serve` has no product route; its server-side preprocessing
+    // remains the authoritative boundary.
+    let outgoing = v
+    if ($productState && personalInfoProtection && v) {
+      try {
+        const result = await api.transformPersonalInfo(v)
+        outgoing = result.masked
+        if (result.hit) {
+          privacyApplied = {
+            count: result.matches.reduce((sum, match) => sum + match.count, 0),
+            categories: result.matches.map(match => match.category),
+          }
+        } else {
+          privacyApplied = null
+        }
+      } catch (error: any) {
+        showToast(error?.message ?? $t('privacy.transform_failed'), 'error')
+        return
+      }
+    }
+
     const files = attachments.length ? [...attachments] : undefined
-    pushHistory(sid, v)
+    pushHistory(sid, outgoing)
     // Enter sends whenever no menu row is highlighted, so the menu can outlive
     // the message it was opened over. Close it with the text it belongs to.
     hideSlashMenu()
     text = ''
     attachments = []
     if (onSend) {
-      onSend(v, files, queued)
+      onSend(outgoing, files, queued)
     } else {
       running.set(true)
     }
@@ -1372,7 +1448,12 @@
     {#if noticesAbove.length > 0}
       <ComposerNotices notices={noticesAbove} />
     {/if}
-    <PrivacyBar mode={currentMode} />
+    {#if confidentialSession}
+      <div class="private-session-banner">
+        <iconify-icon icon="lucide:shield-check" width="14"></iconify-icon>
+        <span>{$t('privacy.private_session_banner')}</span>
+      </div>
+    {/if}
     <div
       class="input-card"
       class:drag-over={dragOver}
@@ -1459,7 +1540,6 @@
       {#if noticesBelow.length > 0}
         <ComposerNotices notices={noticesBelow} />
       {/if}
-      <SensitiveToggle />
       {#if slashMenu}
         <div class="skill-menu" bind:this={skillMenuEl}>
           {#each filteredItems() as item, i (item.kind + ':' + (item.kind === 'builtin' ? item.name : item.kind === 'skill' ? item.skill.name : item.kind === 'workflow' ? item.workflow.name : item.kind === 'mcp-server' ? item.name : item.kind === 'agent' ? item.id : item.kind === 'agent-create' ? '' : item.server + '/' + item.tool.name))}
@@ -1521,9 +1601,53 @@
           <iconify-icon icon="ant-design:paper-clip-outlined" width="13"></iconify-icon>
         </button>
         <div class="picker">
+          <button class="meta-chip" onclick={(e) => { e.stopPropagation(); const open = securityMenu; closeMenus(); securityMenu = !open }}>
+            <iconify-icon icon="lucide:shield-check" width="13"></iconify-icon>
+            <span>{confidentialSession ? $t('privacy.private_session') : $t('privacy.security_title')}</span>
+            <iconify-icon icon="lucide:chevron-down" width="12"></iconify-icon>
+          </button>
+          {#if securityMenu}
+            <div class="menu security-menu" onclick={(e) => e.stopPropagation()}>
+              <div class="security-heading">{$t('privacy.security_title')}</div>
+              <div class="security-row global-setting">
+                <div>
+                  <div class="security-name">{$t('sensitive.toggle')}</div>
+                  <div class="security-desc">{$t('privacy.content_safety_desc')}</div>
+                </div>
+                <SensitiveToggle compact />
+              </div>
+              <button class="security-row" disabled={protectionLocked || protectionBusy} onclick={() => updateProtection(!personalInfoProtection, confidentialSession)}>
+                <div>
+                  <div class="security-name">{$t('privacy.personal_info')}</div>
+                  <div class="security-desc">{protectionLocked ? $t('privacy.locked_after_start') : $t('privacy.personal_info_desc')}</div>
+                </div>
+                <span class="toggle" class:on={personalInfoProtection}><span class="toggle-knob"></span></span>
+              </button>
+              <button class="security-row" disabled={protectionLocked || protectionBusy} onclick={() => updateProtection(personalInfoProtection, !confidentialSession)}>
+                <div>
+                  <div class="security-name">{$t('privacy.private_session')}</div>
+                  <div class="security-desc">{protectionLocked ? $t('privacy.locked_after_start') : $t('privacy.private_session_desc')}</div>
+                </div>
+                <span class="toggle" class:on={confidentialSession}><span class="toggle-knob"></span></span>
+              </button>
+              <div class="security-row always-on">
+                <div>
+                  <div class="security-name">{$t('privacy.output_protection')}</div>
+                  <div class="security-desc">{$t('privacy.always_on')}</div>
+                </div>
+              </div>
+            </div>
+          {/if}
+        </div>
+        <div class="picker">
           <button class="meta-chip" onclick={(e) => { e.stopPropagation(); const open = modelMenu; closeMenus(); modelMenu = !open; if (!open) void refreshModels() }}>
             <iconify-icon icon="ant-design:robot-outlined" width="13"></iconify-icon>
-            <PrivacyMark mode={currentMode} label />
+            {#if activeModel?.confidential}
+              <span class="confidential-badge" title={$t('model.confidential')}>
+                <iconify-icon icon="lucide:shield-check" width="12"></iconify-icon>
+                {$t('model.confidential')}
+              </span>
+            {/if}
             <span class="mono">{modelName}</span>
             <iconify-icon icon="lucide:chevron-down" width="12"></iconify-icon>
           </button>
@@ -1532,18 +1656,32 @@
               {#if models.length === 0}
                 <div class="menu-empty">{$t('chat.no_models')}</div>
               {:else}
-                {#each modelGroups as group (group.endpoint)}
-                  <div class="menu-label mono">{group.endpoint}</div>
+                {#each modelGroups as group (group.vendorId)}
+                  <div class="menu-label">{group.vendorName}</div>
                   {#each group.items as model (model.id)}
-                    <button class="menu-item" class:active={activeModelId ? model.id === activeModelId : model.model === modelName} onclick={() => pickModel({ id: model.id, model: model.model, endpoint: group.endpoint })}>
-                      <span class="mi-name mono">{model.model}</span>
+                    <button
+                      class="menu-item"
+                      class:active={activeModelId ? model.id === activeModelId : model.modelId === modelName}
+                      disabled={confidentialSession && !model.confidential}
+                      title={confidentialSession && !model.confidential ? $t('privacy.private_model_required') : undefined}
+                      onclick={() => pickModel(model)}
+                    >
+                      {#if model.confidential}
+                        <span class="confidential-badge">
+                          <iconify-icon icon="lucide:shield-check" width="12"></iconify-icon>
+                          {$t('model.confidential')}
+                        </span>
+                      {/if}
+                      <span class="mi-name mono">{model.displayName}</span>
                     </button>
                   {/each}
                 {/each}
-                <div class="menu-divider"></div>
-                <button class="menu-item manage" onclick={() => { modelMenu = false; settingsModalOpen.set(true) }}>
-                  <span class="mi-name">{$t('composer.manage_models')}</span>
-                </button>
+                {#if $allowEnvironmentModelSource !== false}
+                  <div class="menu-divider"></div>
+                  <button class="menu-item manage" onclick={() => { modelMenu = false; settingsModalOpen.set(true) }}>
+                    <span class="mi-name">{$t('composer.manage_models')}</span>
+                  </button>
+                {/if}
               {/if}
             </div>
           {/if}
@@ -1667,10 +1805,30 @@
 }
 .menu-item:hover { background: var(--active-blue-bg); }
 .menu-item.active { background: var(--active-blue-bg); }
+.menu-item:disabled { cursor: not-allowed; opacity: 0.5; }
+.menu-item:disabled:hover { background: transparent; }
 .menu-divider { height: 1px; background: var(--border-secondary); margin: 4px 0; }
 .menu-item.toggle-item { flex-direction: row; justify-content: space-between; align-items: center; }
 .menu-item.toggle-item:disabled { cursor: default; opacity: 0.5; }
 .menu-item.toggle-item:disabled:hover { background: none; }
+.private-session-banner {
+  display: flex; align-items: center; gap: 6px; padding: 7px 10px;
+  color: var(--success); background: var(--success-bg); border-radius: 8px;
+  font-size: 12px; font-weight: 600;
+}
+.security-menu { min-width: 300px; padding: 6px; }
+.security-heading { padding: 4px 8px 7px; font-size: 12px; font-weight: 700; color: var(--text); }
+.security-row {
+  width: 100%; display: flex; align-items: center; justify-content: space-between; gap: 14px;
+  border: none; background: transparent; padding: 8px; border-radius: 8px; text-align: left;
+  font-family: inherit; cursor: pointer;
+}
+.security-row:hover { background: var(--hover-neutral); }
+.security-row:disabled { cursor: default; opacity: 0.72; }
+.security-row:disabled:hover, .security-row.always-on:hover, .security-row.global-setting:hover { background: transparent; }
+.security-row.global-setting, .security-row.always-on { cursor: default; }
+.security-name { font-size: 12px; color: var(--text); font-weight: 600; }
+.security-desc { margin-top: 2px; max-width: 220px; font-size: 10px; color: var(--text-tertiary); }
 .toggle {
   width: 30px; height: 16px; border-radius: 9999px; background: var(--border);
   position: relative; cursor: pointer; transition: background 0.15s ease;
@@ -1684,6 +1842,10 @@
 }
 .toggle.on .toggle-knob { transform: translateX(14px); }
 .mi-name { font-size: 13px; color: var(--text); }
+.confidential-badge {
+  display: inline-flex; align-items: center; gap: 3px; color: var(--success);
+  font-size: 10px; font-weight: 600; white-space: nowrap;
+}
 .mi-name.with-icon, .skill-name.with-icon { display: inline-flex; align-items: center; gap: 6px; }
 .menu-empty { padding: 8px 10px; font-size: 12px; color: var(--text-tertiary); }
 .reasoning-eye { color: var(--success); }

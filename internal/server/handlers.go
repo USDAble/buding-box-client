@@ -58,11 +58,6 @@ type sessionItem struct {
 	TurnCount      int       `json:"turn_count"`
 	WorkingDir     string    `json:"working_dir,omitempty"`
 	PermissionMode string    `json:"permission_mode,omitempty"`
-	// OCTO-FORK: the session-level chat mode (see Session.ChatMode and
-	// 本地API契约 §1.5). Sent verbatim; when empty the client falls back to the
-	// account default (prefs.defaultChatMode) on its own, because that value
-	// lives in the fork's product state and internal/server must not read it.
-	ChatMode string `json:"chat_mode,omitempty"`
 	// OCTO-FORK: the server is authoritative for protection state and lock;
 	// clients must not infer either from local message history.
 	ProtectionPolicy    agent.ProtectionPolicy `json:"protection_policy"`
@@ -144,24 +139,21 @@ func (srv *Server) toSessionItem(s *agent.Session, source, agentProfile string) 
 	}
 	_, pm, re, sr, ctxUsage := srv.sessionStatusFields(s)
 	return sessionItem{
-		ID:             s.ID,
-		Name:           name,
-		Title:          title,
-		CreatedAt:      s.CreatedAt,
-		UpdatedAt:      updated,
-		Model:          s.Model,
-		ModelID:        s.ModelConfig,
-		Status:         srv.sessionStatus(s.ID),
-		Source:         source,
-		AgentProfile:   agentProfile,
-		Pinned:         false,
-		TotalTasks:     0,
-		TurnCount:      s.TurnCount(),
-		WorkingDir:     srv.sessionCwd(s),
-		PermissionMode: pm,
-		// OCTO-FORK: verbatim — no "effective value" resolution here. See
-		// sessionItem.ChatMode.
-		ChatMode:            s.ChatMode,
+		ID:                  s.ID,
+		Name:                name,
+		Title:               title,
+		CreatedAt:           s.CreatedAt,
+		UpdatedAt:           updated,
+		Model:               s.Model,
+		ModelID:             s.ModelConfig,
+		Status:              srv.sessionStatus(s.ID),
+		Source:              source,
+		AgentProfile:        agentProfile,
+		Pinned:              false,
+		TotalTasks:          0,
+		TurnCount:           s.TurnCount(),
+		WorkingDir:          srv.sessionCwd(s),
+		PermissionMode:      pm,
 		ProtectionPolicy:    s.ProtectionPolicy,
 		ReasoningEffort:     re,
 		ShowReasoning:       sr,
@@ -542,26 +534,11 @@ func (s *Server) handleCreateSession(w http.ResponseWriter, r *http.Request) {
 	model := s.model
 	modelConfig := ""
 	if req.Model != "" {
-		model = req.Model
-		// The web modal sends a config entry id; the session binds to that
-		// entry so its turns run on the entry's sender. A non-matching value
-		// stays a raw model string on the default sender. The binding stores
-		// the id AS RECEIVED: collapsing a composite "<endpoint>::<model>" id
-		// to the bare model name (as this once did) loses the endpoint half,
-		// so a later EntryByModel re-resolution could land on a DIFFERENT
-		// endpoint exposing the same model name.
-		// OCTO-FORK: product profiles never bind sessions to local endpoints;
-		// only developer profiles may resolve the environment-backed config.
-		if !s.cfg.RequireGateway {
-			cfg, err := config.Load()
-			if err == nil {
-				if e, ok := cfg.EntryByModel(req.Model); ok {
-					modelConfig = req.Model
-					if e.Model != "" {
-						model = e.Model
-					}
-				}
-			}
+		var err error
+		modelConfig, model, err = s.resolveSessionModel(req.Model)
+		if err != nil {
+			writeError(w, http.StatusBadRequest, err.Error())
+			return
 		}
 	}
 	if model == "" {
@@ -588,8 +565,12 @@ func (s *Server) handleCreateSession(w http.ResponseWriter, r *http.Request) {
 		eligibilityID = model
 	}
 	if policy.ConfidentialSession && !s.confidentialModelEligible(eligibilityID) {
-		writeProtectionError(w, codeConfidentialModelRequired, "confidential session requires an eligible confidential model")
-		return
+		var ok bool
+		modelConfig, model, ok = s.preferredConfidentialModel()
+		if !ok {
+			writeProtectionError(w, codeConfidentialModelRequired, "confidential session requires an eligible confidential model")
+			return
+		}
 	}
 
 	agentProfile := req.AgentProfile

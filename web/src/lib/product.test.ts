@@ -104,7 +104,7 @@ describe("refreshProductState", () => {
 
   it("sets ready when the window is logged in", async () => {
     sessionStorage.setItem("octo_window_token", "tok");
-    const state = { schemaVersion: 1, loggedIn: true, activated: true, credits: { balance: 1 }, plan: { name: "" }, prefs: { locale: "", inputSensitiveCheck: false, defaultChatMode: "" } };
+    const state = { schemaVersion: 1, loggedIn: true, activated: true, credits: { balance: 1 }, plan: { name: "" }, prefs: { locale: "", inputSensitiveCheck: false } };
     vi.stubGlobal("fetch", fetchReturning(200, state));
 
     await refreshProductState();
@@ -115,7 +115,7 @@ describe("refreshProductState", () => {
 
   it("sets blocked when the window is not logged in", async () => {
     sessionStorage.setItem("octo_window_token", "tok");
-    vi.stubGlobal("fetch", fetchReturning(200, { schemaVersion: 1, loggedIn: false, activated: false, credits: { balance: 0 }, plan: { name: "" }, prefs: { locale: "", inputSensitiveCheck: false, defaultChatMode: "" } }));
+    vi.stubGlobal("fetch", fetchReturning(200, { schemaVersion: 1, loggedIn: false, activated: false, credits: { balance: 0 }, plan: { name: "" }, prefs: { locale: "", inputSensitiveCheck: false } }));
 
     await refreshProductState();
 
@@ -143,7 +143,7 @@ describe("logout", () => {
       json: async () =>
         String(input).includes("/logout")
           ? {}
-          : { schemaVersion: 1, loggedIn: false, activated: true, credits: { balance: 0 }, plan: { name: "" }, prefs: { locale: "", inputSensitiveCheck: false, defaultChatMode: "" } },
+          : { schemaVersion: 1, loggedIn: false, activated: true, credits: { balance: 0 }, plan: { name: "" }, prefs: { locale: "", inputSensitiveCheck: false } },
     }));
     vi.stubGlobal("fetch", fetchMock);
 
@@ -178,7 +178,7 @@ describe("logout", () => {
                 account: { phoneMasked: "138****1234", nickname: "tester", lastLoginAt: "" },
                 credits: { balance: 0 },
                 plan: { name: "" },
-                prefs: { locale: "", inputSensitiveCheck: false, defaultChatMode: "" },
+                prefs: { locale: "", inputSensitiveCheck: false },
               },
       })),
     );
@@ -215,7 +215,7 @@ describe("noteSessionLost", () => {
       account: { phoneMasked: "138****1234", nickname: "tester", lastLoginAt: "" },
       credits: { balance: 0 },
       plan: { name: "" },
-      prefs: { locale: "", inputSensitiveCheck: false, defaultChatMode: "" },
+      prefs: { locale: "", inputSensitiveCheck: false },
       suppressOnboarding: true,
     } as ProductStateDTO);
 
@@ -283,7 +283,7 @@ describe("login", () => {
   const stateDTO = {
     schemaVersion: 1, loggedIn: true, activated: true,
     credits: { balance: 1 }, plan: { name: "" },
-    prefs: { locale: "", inputSensitiveCheck: false, defaultChatMode: "" },
+    prefs: { locale: "", inputSensitiveCheck: false },
   };
 
   it("stores the state and flips to ready on success", async () => {
@@ -391,7 +391,7 @@ describe("blocked-page selection (L-B2)", () => {
   const stateBody = {
     schemaVersion: 1, loggedIn: false, activated: false,
     credits: { balance: 0 }, plan: { name: "" },
-    prefs: { locale: "", inputSensitiveCheck: false, defaultChatMode: "" },
+    prefs: { locale: "", inputSensitiveCheck: false },
   };
 
   it("selects the unconfigured page when the build names no control plane", async () => {

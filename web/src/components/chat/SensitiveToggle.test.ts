@@ -32,7 +32,7 @@ function setPrefs(inputSensitiveCheck: boolean) {
     account: { nickname: '', phoneMasked: '', lastLoginAt: '' },
     credits: { balance: 0 },
     plan: { name: '' },
-    prefs: { locale: 'zh', inputSensitiveCheck, defaultChatMode: 'default' },
+    prefs: { locale: 'zh', inputSensitiveCheck },
     suppressOnboarding: true,
   } as never)
 }

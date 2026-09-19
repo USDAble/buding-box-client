@@ -6,10 +6,9 @@
   import { avatarInitial, avatarColor } from '../../../lib/avatar'
 
   // Settings secondary page (P5). Not a second settings modal: account info
-  // (nickname / masked phone), language, and the new-session default mode live
-  // here; everything else routes to the full settings modal via the button at
-  // the bottom. The default-mode value is what P9 reads when creating a
-  // session (出厂 default group). Autostart has no row *here*: the full settings
+  // (nickname / masked phone) and language live here; everything else routes
+  // to the full settings modal via the button at the bottom. Autostart has no row
+  // *here*: the full settings
   // modal owns it, gated on the native shell alone, so a portable build does
   // still render that switch — 需求 §5.1.2 第 9 条 requires it hidden there
   // (V-85). Startup rules: P2-启动与生命周期.md §5. This comment used to claim an
@@ -17,7 +16,6 @@
 
   const nickname = $derived($productState?.account?.nickname ?? '')
   const currentLocale = $derived($productState?.prefs?.locale || $locale)
-  const currentMode = $derived($productState?.prefs?.defaultChatMode || 'default')
 
   // Page mounts fresh per open (AccountPanel swaps pages in place), so draft
   // starts from the store each time the user enters Settings. Read the store
@@ -68,15 +66,6 @@
     }
   }
 
-  async function pickDefaultMode(m: 'privacy' | 'smart' | 'default') {
-    if (m === currentMode) return
-    try {
-      await updatePrefs({ defaultChatMode: m })
-    } catch {
-      showToast($t('product.send_failed'), 'error')
-    }
-  }
-
   function openFullSettings() {
     // Leave the panel open underneath: the full-settings modal is a true modal
     // (its own .backdrop + Esc), so closing it lands the user back on this
@@ -84,11 +73,6 @@
     settingsModalOpen.set(true)
   }
 
-  const modes: { id: 'privacy' | 'smart' | 'default'; key: string }[] = [
-    { id: 'privacy', key: 'product.mode.privacy' },
-    { id: 'smart', key: 'product.mode.smart' },
-    { id: 'default', key: 'product.mode.default' },
-  ]
 </script>
 
 <div class="settings">
@@ -125,21 +109,6 @@
       <button class:on={currentLocale === 'zh'} onclick={() => pickLang('zh')}>中文</button>
       <button class:on={currentLocale === 'en'} onclick={() => pickLang('en')}>EN</button>
     </div>
-  </section>
-
-  <section class="block">
-    <h3 class="block-title">{$t('product.panel.default_mode')}</h3>
-    <div class="mode-list">
-      {#each modes as m}
-        <button class="mode" class:on={currentMode === m.id} onclick={() => pickDefaultMode(m.id)}>
-          <span class="mode-name">{$t(m.key)}</span>
-          {#if currentMode === m.id}
-            <iconify-icon icon="ant-design:check-outlined" width="14" style="color:var(--blue-6)"></iconify-icon>
-          {/if}
-        </button>
-      {/each}
-    </div>
-    <p class="hint">{$t('product.panel.default_mode_note')}</p>
   </section>
 
   <button class="full-settings" onclick={openFullSettings}>
@@ -183,17 +152,6 @@
     font-size: 13px; color: var(--text-secondary); padding: 6px 16px; cursor: pointer;
   }
   .seg button.on { background: var(--active-blue-bg); color: var(--blue-6); font-weight: 600; }
-  .mode-list { display: flex; flex-direction: column; border: 1px solid var(--border-secondary); border-radius: 10px; overflow: hidden; }
-  .mode {
-    display: flex; align-items: center; justify-content: space-between;
-    padding: 9px 12px; border: none; background: transparent;
-    border-bottom: 1px solid var(--border-secondary);
-    font-family: inherit; font-size: 13px; color: var(--text); cursor: pointer;
-  }
-  .mode:last-child { border-bottom: none; }
-  .mode:hover { background: var(--hover-neutral); }
-  .mode.on { color: var(--blue-6); font-weight: 600; background: var(--active-blue-bg); }
-  .hint { margin: 0; font-size: 12px; color: var(--text-tertiary); line-height: 1.6; }
   .full-settings {
     display: flex; align-items: center; justify-content: center; gap: 6px;
     height: 34px; border: 1px solid var(--border); border-radius: 8px;

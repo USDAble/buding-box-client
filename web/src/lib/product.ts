@@ -52,7 +52,6 @@ export interface ProductStateDTO {
   prefs: {
     locale: string;
     inputSensitiveCheck: boolean;
-    defaultChatMode: string;
   };
   /** P9: desktop builds suppress the first-run "set up an API key" wizard (the
    *  window token is already wired to the product backend, so onboarding is a
@@ -283,12 +282,8 @@ export function isCatalogState(value?: string | null): value is CatalogState {
   return value === "ready" || value === "absent" || value === "stale" || value === "unverifiable";
 }
 
-// canStartTurn and catalogNoticeKey — "may a new turn start?" and "if not, why?" —
-// live together in chatMode.ts as of PR-5e. They were split across two modules
-// (the first here, the second there) while the question had one half; L-C7 gave it
-// a second, and a two-module answer would have had this module importing the
-// projection both ways round. What stays here is the FACT (catalogState) and its
-// owner; what moved is the question asked of it.
+// The pre-turn decision lives in modelAvailability.ts. This module owns only
+// the control-plane facts it consumes.
 
 // refreshProductState loads the (de-identified) state and derives the phase.
 // Outside the desktop shell there is no gate, so the phase is ready outright.
@@ -551,7 +546,6 @@ export async function setProductLocale(locale: "zh" | "en"): Promise<void> {
 
 export interface AccountPrefs {
   locale?: "zh" | "en";
-  defaultChatMode?: string;
   /** Input sensitive-word check toggle (P8); omitted means "leave unchanged". */
   inputSensitiveCheck?: boolean;
 }
@@ -577,9 +571,8 @@ export async function updateNickname(nickname: string): Promise<ProductStateDTO>
 }
 
 /**
- * Saves preference edits (PUT /api/product/prefs): locale and/or the default
- * chat mode for new sessions (P9 reads defaultChatMode when creating a
- * session). Unchanged fields may be omitted. Throws ProductError with
+ * Saves preference edits (PUT /api/product/prefs). Unchanged fields may be
+ * omitted. Throws ProductError with
  * `code` = "invalid_value" on an unknown value, with the offending field name
  * travelling inside the ProductError's fieldErrors map (product.ts builds it from
  * body.field) — the same refusal shape PUT /api/product/locale answers with.

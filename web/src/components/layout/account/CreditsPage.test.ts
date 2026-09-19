@@ -56,7 +56,7 @@ function setBalance(balance: number) {
     activated: true,
     credits: { balance },
     plan: { name: '' },
-    prefs: { locale: 'zh', inputSensitiveCheck: true, defaultChatMode: 'default' },
+    prefs: { locale: 'zh', inputSensitiveCheck: true },
     suppressOnboarding: true,
   } as never)
 }

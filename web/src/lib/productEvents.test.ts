@@ -60,7 +60,7 @@ function stateWith(balance: number): ProductStateDTO {
     account: null,
     credits: { balance },
     plan: { name: 'basic' },
-    prefs: { locale: 'zh', inputSensitiveCheck: false, defaultChatMode: 'chat' },
+    prefs: { locale: 'zh', inputSensitiveCheck: false },
     suppressOnboarding: true,
   }
 }

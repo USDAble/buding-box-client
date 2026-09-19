@@ -291,10 +291,23 @@ type Config struct {
 	// nil means unchanged upstream behavior: the CLI, `octo serve` and every test
 	// that predates this field.
 	CatalogOffers func(id string) (offers, known bool)
-	// OCTO-FORK: product builds take confidential-model eligibility from the
-	// current signed catalog through this seam. Developer builds may instead
-	// use EndpointModel.Confidential; product builds never do.
-	ConfidentialModel func(id string) (eligible, known bool)
+	// OCTO-FORK: the signed catalog's full model qualification. Unlike the old
+	// membership-only guard, this carries freshness and confidential eligibility
+	// from one authoritative row. nil keeps non-product entry points unchanged.
+	CatalogModel func(id string) (CatalogModelStatus, bool)
+	// OCTO-FORK: the signed catalog's highest-priority current confidential
+	// model, already rendered as the composite session binding. Developer builds
+	// may fall back to their local confidential markers when this has no answer.
+	PreferredConfidentialModel func() (modelID string, ok bool)
+}
+
+// CatalogModelStatus is the package-neutral qualification internal/server
+// needs at routing boundaries. The product runtime owns how these fields are
+// derived from the signed catalog; the server only enforces the result.
+type CatalogModelStatus struct {
+	Selectable   bool
+	Confidential bool
+	Current      bool
 }
 
 // Server is the HTTP server skeleton. It owns the mux, the agent factory,
@@ -1144,13 +1157,6 @@ func (s *Server) registerRoutes() {
 	s.api("PATCH /api/sessions/{id}/reasoning_effort", s.handleUpdateSessionReasoningEffort)
 	s.api("PATCH /api/sessions/{id}/show_reasoning", s.handleUpdateSessionShowReasoning)
 	s.api("PATCH /api/sessions/{id}/permission_mode", s.handleUpdateSessionPermissionMode)
-	// OCTO-FORK: PATCH /api/sessions/{id}/chat_mode — the session-level chat mode
-	// (需求基线 B5 规则 6). Path spelled with an underscore like its five
-	// siblings above; the picker used to PUT a `chat-mode` (hyphen) path that no
-	// server ever registered, which is why a real build answered 404 to the
-	// first of a model switch's two requests (V-46). See
-	// dev-docs-usdable/需求/20260911/本地API契约.md §1.5.
-	s.api("PATCH /api/sessions/{id}/chat_mode", s.handleUpdateSessionChatMode)
 	s.api("PATCH /api/sessions/{id}/working_dir", s.handleUpdateSessionWorkingDir)
 	s.api("PATCH /api/sessions/{id}/agent_profile", s.handleUpdateSessionAgentProfile)
 	s.api("GET /api/sessions/{id}/goal", s.handleGetSessionGoal)
@@ -2015,7 +2021,11 @@ func (s *Server) senderForSession(sess *agent.Session) (agent.Sender, string) {
 		// order is the requirement, not a detail. After the nil check, because a
 		// build with no gateway is a fault the catalog cannot explain. known=false
 		// falls through — see the field. Nothing is sent on this path (L-C7).
-		if s.cfg.CatalogOffers != nil {
+		if s.cfg.CatalogModel != nil {
+			if status, known := s.cfg.CatalogModel(bare); known && (!status.Current || !status.Selectable) {
+				return failingSender{err: errModelNotListed(bare)}, bare
+			}
+		} else if s.cfg.CatalogOffers != nil {
 			if offers, known := s.cfg.CatalogOffers(bare); known && !offers {
 				return failingSender{err: errModelNotListed(bare)}, bare
 			}

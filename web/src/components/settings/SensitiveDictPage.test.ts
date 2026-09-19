@@ -1,11 +1,11 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { flushSync, mount, unmount } from 'svelte'
 import { get } from 'svelte/store'
-import { locale } from '../../../lib/i18n'
-import { fetchDict, importWords, saveDict } from '../../../lib/sensitiveDict'
-import { RequestError } from '../../../lib/api'
-import { confirmDialog } from '../../../lib/confirm'
-import { toasts } from '../../../lib/stores'
+import { locale } from '../../lib/i18n'
+import { fetchDict, importWords, saveDict } from '../../lib/sensitiveDict'
+import { RequestError } from '../../lib/api'
+import { confirmDialog } from '../../lib/confirm'
+import { toasts } from '../../lib/stores'
 import SensitiveDictPage from './SensitiveDictPage.svelte'
 
 // PR-6c / L-D4a+b+c 前端半边：词库页读回的三层（内置 / 用户）要上屏，导入要
@@ -16,8 +16,8 @@ import SensitiveDictPage from './SensitiveDictPage.svelte'
 // confirmDialog；parseDictText / normalizeWord 等纯函数走真实实现（它们也是
 // 导入流程的一部分）。
 
-vi.mock('../../../lib/sensitiveDict', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('../../../lib/sensitiveDict')>()
+vi.mock('../../lib/sensitiveDict', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../../lib/sensitiveDict')>()
   return {
     ...actual,
     fetchDict: vi.fn(async () => ({ builtin: [], user: [] })),
@@ -27,7 +27,7 @@ vi.mock('../../../lib/sensitiveDict', async (importOriginal) => {
   }
 })
 
-vi.mock('../../../lib/confirm', () => ({
+vi.mock('../../lib/confirm', () => ({
   confirmDialog: vi.fn(async () => true),
 }))
 

@@ -6,6 +6,16 @@ import (
 	"github.com/open-octo/octo-agent/internal/pii"
 )
 
+// handlePrivacyRules projects the versioned built-in registry for presentation.
+// It deliberately returns identifiers only: localized labels live in the UI,
+// while detection patterns and source examples must never leave internal/pii.
+func (rt *Runtime) handlePrivacyRules(w http.ResponseWriter, r *http.Request) {
+	writeJSON(w, http.StatusOK, map[string]any{
+		"ruleVersion": pii.RuleVersion,
+		"rules":       pii.RuleIDs(),
+	})
+}
+
 // handlePrivacyTransform previews the same irreversible transform enforced by
 // the server send path. Product routes inherit authentication, the window gate,
 // and Cache-Control: no-store from the registrar supplied to Runtime.Mount.

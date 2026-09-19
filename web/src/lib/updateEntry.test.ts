@@ -136,7 +136,7 @@ describe('the product UI offers no live update entry', () => {
 
   it('the excluded component is excluded because nothing mounts it', () => {
     // The reason VersionBadge.svelte is allowed to keep its live entry is that
-    // it is dead: AboutPage.svelte replaced it (its own comment says so). Pin
+    // it is dead: the Settings About category replaces it. Pin
     // the reason, not the filename — if it is ever mounted again the first two
     // assertions fail, and this one explains why that is intended rather than a
     // scan bug.

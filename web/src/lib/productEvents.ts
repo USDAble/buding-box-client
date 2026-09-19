@@ -49,7 +49,7 @@ export function wireProductEvents(): void {
     void refreshCredits().catch(() => {
       // Swallowed on purpose: this is an unsolicited refresh the user did not ask
       // for, the number on screen keeps its last value, and the points page reports a
-      // failure at the moment the user asks (CreditsPage.svelte).
+      // failure at the moment the user asks (the account corner refresh action).
     })
   })
 }

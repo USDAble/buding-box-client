@@ -45,7 +45,7 @@
 | 产品门 | `403 {"error":"product_gate"}` | 窗口令牌无效时前端回到产品门。 |
 | 字段级 | `400 {"fieldErrors":{"<field>":"<code>"}}` | 能定位到输入框的校验失败。 |
 | 业务级 | `400`、`403` 或 `409` 加 `{"code":"<code>"}` | 不能归属单一输入框的业务结果；`phoneMasked` 可随 `phone_mismatch` 返回。 |
-| 限流 | `429 {"retryAfterSec":<int>}` | 仅验证码发送使用。 |
+| 限流 | `429 {"retryAfterSec":<int>}` | 验证码发送与产品反馈使用。 |
 
 `{"field":"<field>","code":"invalid_value"}` 是本地值校验的专用形状，不属于 `fieldErrors`。旧端点的 `{"error":"..."}` 或 `{"message":"..."}` 仅作兼容读取，不是新增接口的默认信封。
 
@@ -83,10 +83,12 @@
 | GET / PUT | `/api/product/sensitive/dict` | 数据根与词库文件 | 读取或覆盖用户敏感词。 |
 | POST | `/api/product/sensitive/dict/import` | 数据根与词库文件 | 合并导入敏感词。 |
 | POST | `/api/product/sensitive/check` | 敏感词引擎可选 | 输入框即时检测。 |
+| GET | `/api/product/privacy/rules` | 无；注册表编译进运行时 | 返回内置个人信息规则的只读版本和稳定 ID。 |
 | POST | `/api/product/privacy/transform` | 产品运行时已组装个人信息引擎 | 在本机生成自动脱敏文本和提示摘要；不是发送安全边界。 |
 | GET | `/api/product/control-plane` | 无平台请求 | 返回本构建的控制面可用性。 |
 | GET | `/api/product/catalog` | 目录缓存；需要刷新时还依赖平台会话 | 返回目录可用性。 |
 | GET | `/api/product/credits` | 平台客户端与可用平台会话 | 从账本刷新余额并返回 `{state}`。 |
+| POST | `/api/product/feedback` | 平台客户端与可用平台会话 | 校验并转发用户主动填写的产品反馈；实现前该路由不存在。 |
 
 所有已挂载的产品端点都先经过上节的窗口门，但没有本表以外的 handler 级“登录要求”。例如 `state` 必须在登录前可读，`locale` 必须能在登录页保存；而 `logout`、偏好或词库路由的处理器本身不先检查 `loggedIn`。前端应根据状态和接口结果组织流程，后端涉及平台的调用则由平台会话决定是否能成功。
 
@@ -138,6 +140,7 @@
 - `PUT /api/product/sensitive/dict` 用 `{"user":[...]}` 完整替换用户词，返回实际持久化后的 `{"user":[...]}`。归一化后为空的词返回 `{"code":"invalid_word","word":"<原词>"}`，整次写入不得改变文件；重复词和内置词被去重。
 - `POST /api/product/sensitive/dict/import` 用 `{"words":[...],"dryRun":<bool>}` 合并导入，返回 `{"added":<int>,"skipped":<int>}`。空词、重复词和内置同形词计入 `skipped`；`dryRun:true` 绝不写盘。
 - `POST /api/product/sensitive/check` 接收 `{"text":"..."}`，始终返回 `{"hit":<bool>,"masked":"..."}`。这是输入提示，不是安全边界；实际发送链路必须再次检测。
+- `GET /api/product/privacy/rules` 返回 `{"ruleVersion":"builtin-1","rules":["cn_resident_id","..."]}`。它是 `internal/pii` 内置注册表的只读投影，供“设置 → 安全与隐私”的个人信息规则页展示；不得返回正则、命中原文、样例或逐规则开关，也不依赖个人信息引擎是否已组装。
 
 ## 运行时可用性与余额
 
@@ -160,6 +163,26 @@
 目录状态由本地运行时单点判定：`ready` 为有效缓存，`absent` 为没有缓存，`stale` 为缓存过期且刷新失败，`unverifiable` 为验签失败。`unverifiable` 不可由用户重试恢复，因此 `retryable:false`；其他缺失或过期状态可触发一次条件刷新。前端只映射状态到文案，不能重新推断状态。
 
 `GET /api/product/credits` 从中台账本刷新余额、写入状态投影并返回 `{"state": ProductStateDTO}`。登录和 WebSocket 只可触发这条刷新路径，不能成为余额的第二个写入来源。会话失效清凭证并回产品门；其他平台失败不覆盖已有余额。
+
+## 产品反馈由本地运行时代理
+
+`POST /api/product/feedback` 是待实现的桌面产品路由，供“帮助与反馈”页使用，而不是浏览器直连中台。它接收：
+
+```json
+{"category":"bug|suggestion|other","content":"用户主动填写的反馈正文","idempotencyKey":"uuid"}
+```
+
+`category` 必须为三个枚举之一；`content` 去除首尾空白后必须为 1–4000 个 Unicode 字符；`idempotencyKey` 必须为 UUID，单次点击重试必须复用同一值。成功返回控制面已接受的最小回执：
+
+```json
+{"feedbackId":"fb_...","acceptedAt":"2026-09-19T00:00:00Z"}
+```
+
+运行时以当前平台会话调用控制面 `POST /feedback`，将 `idempotencyKey` 原样置入 `Idempotency-Key`，但不把 access token、安装标识或平台响应中的诊断 `message` 返回给 Web UI。账户身份、时间戳和请求元数据由控制面从认证与标准请求头取得；前端不得提交或伪造它们。
+
+该接口只传递上述 JSON 字段：不得读取、派生或附加聊天内容、会话历史、附件、OCR、上传文件、工具调用、模型输入输出、日志、数据根路径、手机号、token、原始设备标识或任何“默认诊断包”。运行时不持久化正文，也不在失败后后台重发；界面可在内存中保留表单，交由用户明确再次提交。
+
+本地字段错误使用 `400 {"fieldErrors":{"category":"invalid_value"}}` 或 `{"fieldErrors":{"content":"invalid_length"}}`；错误 JSON 或非法 idempotency key 为 `400 {"code":"invalid_request"}`。平台拒绝映射为稳定的 `401 unauthorized`、`403 feedback_not_allowed`、`409 idempotency_conflict`、`429 feedback_rate_limited`（含 `retryAfterSec`）或 `503 network_unavailable` / `upstream_unavailable`；未知平台业务码不透传，返回 `503 upstream_unavailable`。成功、失败或重试均不得改变 `ProductStateDTO`。
 
 ## 会话路由与 WebSocket
 
@@ -199,6 +222,9 @@
 | `session_policy_locked` | 首个用户回合已经落库，保护策略不可再改变。 |
 | `confidential_model_required` | 请求开启私密会话或切换模型时，提交的模型不具备私密资格。 |
 | `confidential_model_unavailable` | 已锁定私密会话在回合开始前失去可用的合格模型；不得回退普通模型。 |
+| `feedback_not_allowed` | 当前已认证账户不可提交反馈；不结束本地会话。 |
+| `idempotency_conflict` | 同一反馈幂等键被用于不同正文；保留表单，要求用户重新发起一次提交。 |
+| `feedback_rate_limited` | 控制面对反馈节流；可携带 `retryAfterSec`，界面禁用提交至该时刻。 |
 | `unauthorized` | 会话刷新被明确拒绝；本地以 401 回产品门。 |
 
 ## 验证与变更

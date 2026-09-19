@@ -6,14 +6,14 @@
 
 ## 范围与非目标
 
-Profile 提供控制面地址、签名公钥、开发能力开关和既有运行时能力声明。桌面组装读取它一次，进而构造中台客户端、签名目录验证与模型网关策略。账户、refresh token、词库、目录缓存、余额和偏好属于数据根或中台响应，不能回写 Profile。
+Profile 提供控制面地址、签名公钥和开发能力开关。桌面组装读取它一次，进而构造中台客户端、签名目录验证与模型网关策略。账户、refresh token、词库、目录缓存、余额和偏好属于数据根或中台响应，不能回写 Profile。
 
 不做以下事情：
 
 - 不从 `config.yml`、环境变量、命令行、数据根、Web UI 或缓存选择生产控制面。
 - 不在地址或可信密钥缺失时回退到默认 host、localhost 或未验证目录。
 - 不将私钥、提供方 key、用户 bearer/refresh token 或用户偏好放入 Profile。
-- 不把 `startup` 字段误写成入口隐藏或授权策略；能力是否对用户可见由其他模块决定。
+- 不用 Profile 承载既有 channels、tools、MCP 或后台任务的启动、入口隐藏或授权策略；这些能力仍由各自模块拥有。
 
 ## 构建选择与不可变性
 
@@ -21,7 +21,7 @@ Profile 提供控制面地址、签名公钥、开发能力开关和既有运行
 
 | 构建条件 | 嵌入文件 | `name` | 用途 |
 | --- | --- | --- | --- |
-| 默认（无 `product_production`） | `profiles/developer.json` | `developer` | 本地开发、桌面热重载和 `productstub` 联调。 |
+| 默认（无 `product_production`） | `profiles/developer.json` | `developer` | 本地开发、桌面热重载和本地测试/Sandbox（含 `productstub`）联调。 |
 | `-tags product_production` | `profiles/production.json` | `production` | 生产桌面包。 |
 
 默认构建是开发 Profile，因此“能编译、能运行”不代表“可发布”。`make release-profile-check` 专门防止打包时遗漏 `product_production`；生产交付还应运行 `make release-config-check`，检查嵌入的生产内容。
@@ -40,9 +40,8 @@ Profile JSON 解析或校验失败会在首次读取时 panic，构建不能靠�
 | `allowDevWebview` | 是否允许 `OCTO_DESKTOP_DEV_URL` 改变桌面 webview 地址。 | 仅桌面开发 Profile 使用。 |
 | `allowEnvironmentModelSource` | 是否允许不经产品控制面的模型来源。 | 反向导出为 `RequireGateway`；目标设计还用同一事实控制本地模型列表与管理入口。 |
 | `allowDataRootOverride` | 声明开发 Profile 允许数据根覆盖。 | **当前没有运行时代码读取此字段**；不能把它当作对 `OCTO_DATA_ROOT` 的实际生产限制。 |
-| `startup` | channels、tools、MCP、backgroundTasks 的既有能力声明。 | **当前仅被 Profile 测试断言为全部保留**，尚非启动或可见性开关。 |
 
-后两项是重要的当前事实：schema 有字段不等于该字段已经形成运行时控制。文档不能宣称生产构建已通过 `allowDataRootOverride` 禁用环境覆盖，或通过 `startup` 禁用能力；若未来要赋予这两项实际行为，需要代码、发布兼容性和验证方案先经过讨论。
+`allowDataRootOverride` 是重要的当前事实：schema 有字段不等于该字段已经形成运行时控制。文档不能宣称生产构建已通过它禁用环境覆盖；本轮明确暂不接入该行为，未来若要接入，需要先讨论发布兼容性和验证方案。
 
 ## 地址与签名信任边界
 
@@ -63,7 +62,9 @@ Profile
 
 ## 两种 Profile 的实际差异
 
-开发 Profile 当前连接 `http://127.0.0.1:8788`：控制面地址带 `/v1`，网关地址为裸 host，并信任 `productstub` 的开发签名键。它允许 `OCTO_DESKTOP_DEV_URL` 将真实桌面窗口指向 Vite；见 `开发与联调.md`。
+开发 Profile 同时承担日常开发和本地测试/Sandbox：当前默认连接 `http://127.0.0.1:8788` 的 `productstub`，控制面地址带 `/v1`，网关地址为裸 host，并信任其开发签名键。当前不新增第三个 Profile；需要接入受控 Sandbox 时，仍由 developer Profile 编译进对应地址和公钥，而不是在运行时接收任意 host。它允许 `OCTO_DESKTOP_DEV_URL` 将真实桌面窗口指向 Vite；见 `开发与联调.md`。
+
+developer Profile 允许本地模型来源，因此它验证的是本地客户端、控制面契约和开发模型闭环，不等同于生产 Profile 的“只允许可信目录和 gateway”限制。发布前仍必须用 production Profile 的自动检查和嵌入式桌面验收验证产品边界。
 
 生产 Profile 禁止 `allowDevWebview`、`allowEnvironmentModelSource` 与 `allowDataRootOverride` 三个开发能力；校验层面只要任一为 true 就拒绝启动。桌面壳据 `allowDevWebview` 决定是否读取 `OCTO_DESKTOP_DEV_URL`，生产构建忽略该变量并始终加载进程内服务的嵌入 Web UI。
 

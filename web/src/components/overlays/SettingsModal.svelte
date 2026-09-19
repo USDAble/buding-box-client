@@ -3,6 +3,7 @@
   import ThemePackPicker from '../ui/ThemePackPicker.svelte'
   import Switch from '../ui/Switch.svelte'
   import EndpointsSection from '../settings/EndpointsSection.svelte'
+  import SafetyPrivacySection from '../settings/SafetyPrivacySection.svelte'
   import QrCode from '../ui/QrCode.svelte'
   import FileRecallView from '../../views/FileRecallView.svelte'
   import ProfileView from '../../views/ProfileView.svelte'
@@ -16,7 +17,10 @@
   import { confirmDialog } from '../../lib/confirm'
   import { ago, clockTick } from '../../lib/relTime'
   import * as api from '../../lib/api'
-  import { allowEnvironmentModelSource } from '../../lib/product'
+  import { allowEnvironmentModelSource, productState, updateNickname, ProductError, logout } from '../../lib/product'
+  // OCTO-FORK: account and safety controls are product-owned settings, kept
+  // out of the compact account popup so it stays single-level.
+  import { validateNickname } from '../../lib/nickname'
 
   const LICENSE_URL = 'https://github.com/open-octo/octo-agent/blob/main/LICENSE.txt'
 
@@ -60,8 +64,14 @@
   let upgradeMode   = $state<'cli' | 'installer'>('cli')
   let loading       = $state(true)
 
-  let cat = $state<'general' | 'endpoints' | 'agent' | 'mobile' | 'experimental' | 'data' | 'about'>('general')
+  let cat = $state<'general' | 'account' | 'safety' | 'endpoints' | 'agent' | 'mobile' | 'experimental' | 'data' | 'about'>('general')
   let modalEl = $state<HTMLDivElement | null>(null)
+  const accountNickname = $derived($productState?.account?.nickname ?? '')
+  const accountPhone = $derived($productState?.account?.phoneMasked ?? '—')
+  const accountLicense = $derived($productState?.activation?.expiresAt ?? '')
+  let nicknameDraft = $state('')
+  let nicknameErr = $state<'' | 'nickname_format' | 'nickname_sensitive'>('')
+  let savingNickname = $state(false)
 
   // 数据管理 has its own two-level nav — a list of managed things, and one
   // sub-view per thing — because unlike every other category here it isn't a
@@ -244,6 +254,8 @@
 
   const categories: { key: typeof cat, icon: string, label: string }[] = $derived([
     { key: 'general',   icon: 'ant-design:sliders-outlined',       label: 'settings.general' },
+    { key: 'account',   icon: 'ant-design:user-outlined',          label: 'settings.account' },
+    { key: 'safety',    icon: 'ant-design:safety-outlined',        label: 'settings.safety' },
     // OCTO-FORK: product profiles hide local model management from the
     // server-projected capability; null keeps plain octo serve behavior.
     ...($allowEnvironmentModelSource === false ? [] : [{ key: 'endpoints' as const, icon: 'ant-design:api-outlined', label: 'settings.endpoints.title' }]),
@@ -282,6 +294,8 @@
       api.getTunnelPairing().then(p => { tunnelPairing = p }).catch(() => {})
       theme = modeToThemeLabel[getMode()] ?? 'Light'
       fontSize = storedFontSize()
+      nicknameDraft = $productState?.account?.nickname ?? ''
+      nicknameErr = ''
       modalEl?.focus()
     }
   })
@@ -463,6 +477,41 @@
     }
   }
 
+  async function saveNickname() {
+    const name = nicknameDraft.trim()
+    if (validateNickname(name) !== 'ok') {
+      nicknameErr = 'nickname_format'
+      return
+    }
+    savingNickname = true
+    nicknameErr = ''
+    try {
+      await updateNickname(name)
+      nicknameDraft = name
+      showToast($t('product.panel.nickname_saved'))
+    } catch (e) {
+      nicknameErr = e instanceof ProductError && e.code === 'nickname_sensitive'
+        ? 'nickname_sensitive'
+        : 'nickname_format'
+    } finally {
+      savingNickname = false
+    }
+  }
+
+  async function signOut() {
+    const ok = await confirmDialog($t('product.panel.logout_confirm'), {
+      title: $t('product.panel.logout'), danger: true, confirmLabel: $t('product.panel.logout'),
+    })
+    if (!ok) return
+    try {
+      const result = await logout()
+      settingsModalOpen.set(false)
+      if (!result.revoked) showToast($t('product.panel.logout_not_revoked'), 'error')
+    } catch {
+      showToast($t('product.send_failed'), 'error')
+    }
+  }
+
   function close() {
     settingsModalOpen.set(false)
   }
@@ -576,6 +625,45 @@
             </div>
             <Switch checked={$notificationsEnabled} onchange={(v) => setNotificationsEnabled(v)} />
           </div>
+
+        {:else if cat === 'account'}
+          <div class="setrow">
+            <div class="seti">
+              <span class="setl">{$t('product.panel.nickname')}</span>
+              <span class="setd">{$t('settings.account.nickname_desc')}</span>
+              {#if nicknameErr}
+                <span class="account-error">{$t(nicknameErr === 'nickname_sensitive' ? 'product.err_nickname_sensitive' : 'product.err_nickname')}</span>
+              {/if}
+            </div>
+            <div class="account-edit">
+              <input class="sinput" bind:value={nicknameDraft} maxlength="16" spellcheck="false" />
+              <button class="btns" onclick={saveNickname} disabled={savingNickname || nicknameDraft.trim() === accountNickname}>
+                {savingNickname ? $t('common.saving') : $t('common.save')}
+              </button>
+            </div>
+          </div>
+          <div class="setrow">
+            <div class="seti">
+              <span class="setl">{$t('product.panel.phone')}</span>
+              <span class="setd">{$t('settings.account.phone_desc')}</span>
+            </div>
+            <span class="setver">{accountPhone}</span>
+          </div>
+          <div class="setrow">
+            <div class="seti">
+              <span class="setl">{$t('product.panel.license')}</span>
+              <span class="setd">{$t('settings.account.license_desc')}</span>
+            </div>
+            <span class="setver">{accountLicense || '—'}</span>
+          </div>
+          <div class="danger-zone">
+            <span class="danger-title">{$t('settings.account.security')}</span>
+            <p>{$t('settings.account.signout_desc')}</p>
+            <button class="btns danger" onclick={signOut}>{$t('product.panel.logout')}</button>
+          </div>
+
+        {:else if cat === 'safety'}
+          <SafetyPrivacySection />
 
         {:else if cat === 'endpoints'}
           <EndpointsSection />
@@ -803,8 +891,7 @@
                  UpdateCheck 关掉之后它只会回答"已是最新版本" —— 那是假话，server 根本没查
                  （§3.9：回落必须说得出落到哪，不能静默撒一个看不出来的谎）。所以整个活入口
                  换成占位，文案与个人中心那一处共用同一个键。
-                 AboutPage.svelte 早已记下同一意图（"the check-for-updates entry stays a
-                 disabled placeholder … P2 closes auto-update"），此处是那笔账的收尾。
+                 设置的关于分类已承载同一意图，此处是那笔账的收尾。
                  上游的 checkUpdate/loadVersion 脚本留在原地不动（硬规则 3：宁可到不了，也不删）。
                  — see dev-docs-usdable/需求/2260906/技术方案/P2-启动与生命周期.md §5（V-86） -->
             <div class="setrow">
@@ -911,6 +998,12 @@
 }
 select.sinput { cursor: pointer; }
 .sinput:focus { border-color: var(--blue-6); box-shadow: 0 0 0 2px var(--focus-ring); }
+.account-edit { display: flex; align-items: center; gap: 8px; flex: 0 0 auto; }
+.account-edit .sinput { width: 150px; }
+.account-error { color: var(--error); font-size: 12px; margin-top: 3px; }
+.danger-zone { margin-top: 24px; padding: 16px; border: 1px solid var(--error-border, var(--border)); border-radius: 9px; display: flex; flex-direction: column; align-items: flex-start; gap: 10px; }
+.danger-title { color: var(--error); font-size: 13px; font-weight: 600; }
+.danger-zone p { margin: 0; color: var(--text-secondary); font-size: 12px; line-height: 1.5; }
 
 /* ── buttons ───────────────────────────────────────────────────────────────── */
 .btns {

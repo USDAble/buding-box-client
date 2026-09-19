@@ -5,11 +5,34 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"reflect"
 	"strings"
 	"testing"
 
+	"github.com/open-octo/octo-agent/internal/pii"
 	"github.com/open-octo/octo-agent/internal/productruntime"
 )
+
+func TestPrivacyRulesExposeTheBuiltinRegistryWithoutAnEngine(t *testing.T) {
+	rt := productruntime.New(productruntime.Deps{})
+	status, raw := requestRuntime(t, rt, http.MethodGet, "/api/product/privacy/rules", "")
+	if status != http.StatusOK {
+		t.Fatalf("rules status = %d, body = %s", status, raw)
+	}
+	var body struct {
+		RuleVersion string   `json:"ruleVersion"`
+		Rules       []string `json:"rules"`
+	}
+	if err := json.Unmarshal([]byte(raw), &body); err != nil {
+		t.Fatalf("decode rules response: %v", err)
+	}
+	if body.RuleVersion != pii.RuleVersion {
+		t.Fatalf("ruleVersion = %q, want %q", body.RuleVersion, pii.RuleVersion)
+	}
+	if !reflect.DeepEqual(body.Rules, pii.RuleIDs()) {
+		t.Fatalf("rules = %#v, want registered IDs %#v", body.Rules, pii.RuleIDs())
+	}
+}
 
 func TestPrivacyTransformReturnsVersionedMaskedResult(t *testing.T) {
 	m := newMountedHarness(t)

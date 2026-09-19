@@ -180,6 +180,9 @@ func (rt *Runtime) Mount(api func(pattern string, h http.HandlerFunc)) {
 	// (the turn-path gate) is NOT a route: it is handed to internal/server as
 	// SensitiveInputGate, so a frontend cannot skip it.
 	api("POST /api/product/sensitive/check", rt.handleSensitiveCheck)
+	// OCTO-FORK: expose the immutable built-in privacy-rule registry to the
+	// settings UI without duplicating rule definitions in the frontend.
+	api("GET /api/product/privacy/rules", rt.handlePrivacyRules)
 	api("POST /api/product/privacy/transform", rt.handlePrivacyTransform)
 }
 

@@ -381,6 +381,14 @@ export async function getProductModels(): Promise<ProductModelsResponse> {
   return request<ProductModelsResponse>('/api/product/models')
 }
 
+export interface PersonalInfoRulesResponse {
+  ruleVersion: string
+  rules: string[]
+}
+export async function getPersonalInfoRules(): Promise<PersonalInfoRulesResponse> {
+  return request<PersonalInfoRulesResponse>('/api/product/privacy/rules')
+}
+
 export interface PersonalInfoMatchSummary {
   category: string
   count: number

@@ -1,19 +1,16 @@
 <script lang="ts">
-  import { t } from '../../../lib/i18n'
-  import { showToast } from '../../../lib/stores'
-  import { confirmDialog } from '../../../lib/confirm'
-  import { RequestError } from '../../../lib/api'
+  import { t } from '../../lib/i18n'
+  import { showToast } from '../../lib/stores'
+  import { confirmDialog } from '../../lib/confirm'
+  import { RequestError } from '../../lib/api'
   import {
     fetchDict, saveDict, importWords, exportDict,
     normalizeWord, isUsableWord, containsWord, parseDictText,
     type SensitiveDict,
-  } from '../../../lib/sensitiveDict'
+  } from '../../lib/sensitiveDict'
 
-  // Sensitive-word dictionary page (P13). The file data/sensitive-words.txt
-  // is the single source of truth — this page is only its editor. Built-in
-  // words are read-only; user words are add/delete/edit plus import/export.
-  // OCTO-FORK: P13 — see
-  // dev-docs-usdable/需求/2260906/技术方案/P13-词库管理界面.md.
+  // OCTO-FORK: this Settings section edits the one user dictionary file;
+  // built-in words remain read-only and personal-info rules stay separate.
 
   let dict = $state<SensitiveDict>({ builtin: [], user: [] })
   let loading = $state(true)

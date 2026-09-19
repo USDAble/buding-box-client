@@ -1,7 +1,7 @@
 <script lang="ts">
   import { t } from '../../lib/i18n'
   import { productState } from '../../lib/product'
-  import { accountPanelOpen, accountPanelPage } from '../../lib/stores'
+  import { accountPanelOpen } from '../../lib/stores'
   import { avatarInitial, avatarColor } from '../../lib/avatar'
 
   // Bottom-left account corner (P5), replacing the old "settings + version"
@@ -28,8 +28,6 @@
     if ($accountPanelOpen) {
       accountPanelOpen.set(false)
     } else {
-      // Reopening always lands on the navigation list, not the last subpage.
-      accountPanelPage.set('root')
       accountPanelOpen.set(true)
     }
   }

@@ -1311,6 +1311,10 @@ export async function getVersion(): Promise<unknown> {
   return request<unknown>('/api/version', { cache: 'no-store' })
 }
 
+export async function checkNativeUpdates(): Promise<{ latest: string; available: boolean }> {
+  return request<{ latest: string; available: boolean }>('/api/product/check-updates', { method: 'POST' })
+}
+
 // Managed tunnel (mobile pairing)
 
 export interface TunnelPairing {

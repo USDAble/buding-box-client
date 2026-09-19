@@ -88,7 +88,8 @@
 | GET | `/api/product/control-plane` | 无平台请求 | 返回本构建的控制面可用性。 |
 | GET | `/api/product/catalog` | 目录缓存；需要刷新时还依赖平台会话 | 返回目录可用性。 |
 | GET | `/api/product/credits` | 平台客户端与可用平台会话 | 从账本刷新余额并返回 `{state}`。 |
-| POST | `/api/product/feedback` | 平台客户端与可用平台会话 | 校验并转发用户主动填写的产品反馈；实现前该路由不存在。 |
+| POST | `/api/product/feedback` | 平台客户端与可用平台会话 | 校验并转发用户主动填写的产品反馈，返回最小回执。 |
+| POST | `/api/product/check-updates` | 桌面壳、产品门 | 用户主动触发一次只读版本查询，返回 `{latest,available}`；不下载、不安装。 |
 
 所有已挂载的产品端点都先经过上节的窗口门，但没有本表以外的 handler 级“登录要求”。例如 `state` 必须在登录前可读，`locale` 必须能在登录页保存；而 `logout`、偏好或词库路由的处理器本身不先检查 `loggedIn`。前端应根据状态和接口结果组织流程，后端涉及平台的调用则由平台会话决定是否能成功。
 
@@ -98,7 +99,7 @@
 
 `GET /api/product/state` 直接返回 `ProductStateDTO`。读取失败时前端进入可恢复的产品门状态，不应无限加载。
 
-`POST /api/product/send-code` 接收 `{"phone":"<11 位>"}`，成功返回 `{"cooldownSec":60}`。手机号格式错误使用业务级 `invalid_phone`，不是 `fieldErrors.phone`；冷却期返回 `retryAfterSec`。验证码响应可以预留人机校验字段，但当前接口不把它当作必填流程。
+`POST /api/product/send-code` 接收 E.164 形式的 `{"phone":"+<国家码><号码>"}`，成功返回 `{"cooldownSec":60}`。为兼容既有中国用户，11 位大陆手机号或无 `+` 的 `86` 前缀在本地归一为 `+86` 后再发送；界面支持空格、短横线、括号与全角数字输入。手机号格式错误使用业务级 `invalid_phone`，不是 `fieldErrors.phone`；冷却期返回 `retryAfterSec`。验证码响应可以预留人机校验字段，但当前接口不把它当作必填流程。
 
 ### 登录与激活
 
@@ -166,7 +167,7 @@
 
 ## 产品反馈由本地运行时代理
 
-`POST /api/product/feedback` 是待实现的桌面产品路由，供“帮助与反馈”页使用，而不是浏览器直连中台。它接收：
+`POST /api/product/feedback` 是“帮助与反馈”页使用的桌面产品路由，而不是浏览器直连中台。它接收：
 
 ```json
 {"category":"bug|suggestion|other","content":"用户主动填写的反馈正文","idempotencyKey":"uuid"}

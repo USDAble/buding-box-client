@@ -57,6 +57,7 @@
 # call, query its status instead.
 409 request_in_progress
 409 duplicate_request
+409 idempotency_conflict
 
 # 429 — cool down for retryAfterSec; never retry concurrently.
 429 rate_limited

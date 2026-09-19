@@ -220,6 +220,17 @@ func (c *Client) CreditsLedger(ctx context.Context) (*CreditsLedgerData, error) 
 	return &out, nil
 }
 
+// Feedback submits one user-authored product feedback item. The idempotency
+// key is preserved across the authorised retry, so a refreshed access token
+// cannot turn one click into two platform records.
+func (c *Client) Feedback(ctx context.Context, req FeedbackRequest, idempotencyKey string) (*FeedbackData, error) {
+	var out FeedbackData
+	if err := c.doAuthorizedWithKey(ctx, http.MethodPost, pathFeedback, req, &out, idempotencyKey); err != nil {
+		return nil, err
+	}
+	return &out, nil
+}
+
 // CatalogModels refreshes the catalog without a re-login, conditionally on the
 // version the caller already holds (中台交付包 §4.3).
 //
@@ -313,8 +324,12 @@ func (c *Client) EnsureToken(ctx context.Context) error {
 // doAuthorized performs an authenticated call with exactly one refresh and one
 // replay when the access token is rejected (§C2 规则 4/5).
 func (c *Client) doAuthorized(ctx context.Context, method, path string, body, out any) error {
+	return c.doAuthorizedWithKey(ctx, method, path, body, out, "")
+}
+
+func (c *Client) doAuthorizedWithKey(ctx context.Context, method, path string, body, out any, idempotencyKey string) error {
 	stale := c.creds.AccessToken()
-	err := c.do(ctx, method, path, body, out, stale, "")
+	err := c.do(ctx, method, path, body, out, stale, idempotencyKey)
 	if err == nil {
 		return nil
 	}
@@ -338,7 +353,7 @@ func (c *Client) doAuthorized(ctx context.Context, method, path string, body, ou
 		return rerr
 	}
 
-	if rerr := c.do(ctx, method, path, body, out, c.creds.AccessToken(), ""); rerr != nil {
+	if rerr := c.do(ctx, method, path, body, out, c.creds.AccessToken(), idempotencyKey); rerr != nil {
 		if isUnauthorized(rerr) {
 			c.creds.Clear()
 		}

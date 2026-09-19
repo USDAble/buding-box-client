@@ -23,6 +23,7 @@ import (
 	"github.com/open-octo/octo-agent/internal/credentialstore"
 	"github.com/open-octo/octo-agent/internal/pii"
 	"github.com/open-octo/octo-agent/internal/productclient"
+	"github.com/open-octo/octo-agent/internal/productphone"
 	"github.com/open-octo/octo-agent/internal/productstate"
 	"github.com/open-octo/octo-agent/internal/sensitive"
 )
@@ -163,6 +164,7 @@ func (rt *Runtime) Mount(api func(pattern string, h http.HandlerFunc)) {
 	api("POST /api/product/send-code", rt.handleSendCode)
 	api("POST /api/product/login", rt.handleLogin)
 	api("POST /api/product/logout", rt.handleLogout)
+	api("POST /api/product/feedback", rt.handleFeedback)
 	api("PUT /api/product/locale", rt.handleLocale)
 	// PR-6b1 — the account-editing pair. They sit here, in the one list of
 	// product routes, so both adapters (this one and Handler()) stay in step.
@@ -334,7 +336,8 @@ func (rt *Runtime) handleSendCode(w http.ResponseWriter, r *http.Request) {
 	if !decodeBody(w, r, &req) {
 		return
 	}
-	if !validPhone(req.Phone) {
+	phone, ok := productphone.Normalize(req.Phone)
+	if !ok {
 		// Business-level, NOT field-level. The frontend reads body.code and files
 		// it under the phone input itself; moving this into fieldErrors would
 		// silently lose the message (本地API契约 §2.2).
@@ -347,7 +350,7 @@ func (rt *Runtime) handleSendCode(w http.ResponseWriter, r *http.Request) {
 	}
 
 	data, err := rt.deps.Platform.SendSMS(r.Context(), productclient.SendSMSRequest{
-		Phone:   req.Phone,
+		Phone:   phone,
 		Purpose: productclient.PurposeLogin,
 	})
 	if err != nil {
@@ -375,7 +378,8 @@ func (rt *Runtime) handleLogin(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if !rt.validateLogin(w, req.Phone, req.Code, req.Nickname, req.ActivationCode, req.BoxCode) {
+	phone, ok := productphone.Normalize(req.Phone)
+	if !rt.validateLogin(w, ok, req.Code, req.Nickname, req.ActivationCode, req.BoxCode) {
 		return
 	}
 	if rt.deps.Platform == nil {
@@ -384,7 +388,7 @@ func (rt *Runtime) handleLogin(w http.ResponseWriter, r *http.Request) {
 	}
 
 	data, err := rt.deps.Platform.Login(r.Context(), productclient.LoginRequest{
-		Phone:    req.Phone,
+		Phone:    phone,
 		Code:     req.Code,
 		Nickname: req.Nickname,
 		// Both empty on a later login; the platform treats their absence as
@@ -577,9 +581,9 @@ func (rt *Runtime) handleLocale(w http.ResponseWriter, r *http.Request) {
 // platform's call, and its failures stay distinguishable from these: the split
 // between invalid_activation (shape) and activation_invalid (rejected) is
 // deliberate in the contract (§3).
-func (rt *Runtime) validateLogin(w http.ResponseWriter, phone, code, nickname, activationCode, boxCode string) bool {
+func (rt *Runtime) validateLogin(w http.ResponseWriter, phoneOK bool, code, nickname, activationCode, boxCode string) bool {
 	fields := map[string]string{}
-	if !validPhone(phone) {
+	if !phoneOK {
 		fields["phone"] = productclient.CodeInvalidPhone
 	}
 	if !validCode(code) {
@@ -623,20 +627,6 @@ func decodeBody(w http.ResponseWriter, r *http.Request, into any) bool {
 	if err := json.NewDecoder(r.Body).Decode(into); err != nil {
 		writeCode(w, http.StatusBadRequest, productclient.CodeInvalidRequest, nil)
 		return false
-	}
-	return true
-}
-
-// validPhone is the mainland mobile shape: 11 digits starting with 1. The
-// platform re-validates; this only avoids a round trip for an obvious typo.
-func validPhone(phone string) bool {
-	if len(phone) != 11 || phone[0] != '1' {
-		return false
-	}
-	for _, c := range phone {
-		if c < '0' || c > '9' {
-			return false
-		}
 	}
 	return true
 }

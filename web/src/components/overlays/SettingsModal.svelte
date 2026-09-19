@@ -17,7 +17,7 @@
   import { confirmDialog } from '../../lib/confirm'
   import { ago, clockTick } from '../../lib/relTime'
   import * as api from '../../lib/api'
-  import { allowEnvironmentModelSource, productState, updateNickname, ProductError, logout } from '../../lib/product'
+  import { allowEnvironmentModelSource, productState, updateNickname, ProductError, logout, submitFeedback } from '../../lib/product'
   // OCTO-FORK: account and safety controls are product-owned settings, kept
   // out of the compact account popup so it stays single-level.
   import { validateNickname } from '../../lib/nickname'
@@ -64,7 +64,7 @@
   let upgradeMode   = $state<'cli' | 'installer'>('cli')
   let loading       = $state(true)
 
-  let cat = $state<'general' | 'account' | 'safety' | 'endpoints' | 'agent' | 'mobile' | 'experimental' | 'data' | 'about'>('general')
+  let cat = $state<'general' | 'account' | 'safety' | 'help' | 'endpoints' | 'agent' | 'mobile' | 'experimental' | 'data' | 'about'>('general')
   let modalEl = $state<HTMLDivElement | null>(null)
   const accountNickname = $derived($productState?.account?.nickname ?? '')
   const accountPhone = $derived($productState?.account?.phoneMasked ?? '—')
@@ -72,6 +72,12 @@
   let nicknameDraft = $state('')
   let nicknameErr = $state<'' | 'nickname_format' | 'nickname_sensitive'>('')
   let savingNickname = $state(false)
+  let feedbackCategory = $state<'bug' | 'suggestion' | 'other'>('suggestion')
+  let feedbackContent = $state('')
+  let feedbackSubmitting = $state(false)
+  let feedbackReceipt = $state('')
+  let feedbackError = $state('')
+  let feedbackKey = $state('')
 
   // 数据管理 has its own two-level nav — a list of managed things, and one
   // sub-view per thing — because unlike every other category here it isn't a
@@ -256,6 +262,7 @@
     { key: 'general',   icon: 'ant-design:sliders-outlined',       label: 'settings.general' },
     { key: 'account',   icon: 'ant-design:user-outlined',          label: 'settings.account' },
     { key: 'safety',    icon: 'ant-design:safety-outlined',        label: 'settings.safety' },
+    { key: 'help',      icon: 'ant-design:question-circle-outlined', label: 'settings.help' },
     // OCTO-FORK: product profiles hide local model management from the
     // server-projected capability; null keeps plain octo serve behavior.
     ...($allowEnvironmentModelSource === false ? [] : [{ key: 'endpoints' as const, icon: 'ant-design:api-outlined', label: 'settings.endpoints.title' }]),
@@ -512,6 +519,30 @@
     }
   }
 
+  async function sendFeedback() {
+    const content = feedbackContent.trim()
+    feedbackError = ''
+    feedbackReceipt = ''
+    if (Array.from(content).length < 1 || Array.from(content).length > 4000) {
+      feedbackError = $t('settings.help.feedback_length')
+      return
+    }
+    feedbackSubmitting = true
+    try {
+      if (!feedbackKey) feedbackKey = crypto.randomUUID()
+      const receipt = await submitFeedback(feedbackCategory, content, feedbackKey)
+      feedbackReceipt = receipt.feedbackId
+      feedbackContent = ''
+      feedbackKey = ''
+    } catch (e: any) {
+      feedbackError = e instanceof ProductError && e.fieldErrors.content
+        ? $t('settings.help.feedback_length')
+        : $t('settings.help.feedback_failed')
+    } finally {
+      feedbackSubmitting = false
+    }
+  }
+
   function close() {
     settingsModalOpen.set(false)
   }
@@ -664,6 +695,29 @@
 
         {:else if cat === 'safety'}
           <SafetyPrivacySection />
+
+        {:else if cat === 'help'}
+          <div class="card2 help-card">
+            <h3>{$t('settings.help.faq_title')}</h3>
+            <details open><summary>{$t('settings.help.models_q')}</summary><p>{$t('settings.help.models_a')}</p></details>
+            <details><summary>{$t('settings.help.personal_q')}</summary><p>{$t('settings.help.personal_a')}</p></details>
+            <details><summary>{$t('settings.help.private_q')}</summary><p>{$t('settings.help.private_a')}</p></details>
+            <details><summary>{$t('settings.help.unavailable_q')}</summary><p>{$t('settings.help.unavailable_a')}</p></details>
+            <h3>{$t('settings.help.feedback_title')}</h3>
+            <p class="setd">{$t('settings.help.feedback_notice')}</p>
+            <label class="help-label" for="feedback-category">{$t('settings.help.feedback_category')}</label>
+            <select id="feedback-category" class="sinput" bind:value={feedbackCategory}>
+              <option value="bug">{$t('settings.help.feedback_bug')}</option>
+              <option value="suggestion">{$t('settings.help.feedback_suggestion')}</option>
+              <option value="other">{$t('settings.help.feedback_other')}</option>
+            </select>
+            <label class="help-label" for="feedback-content">{$t('settings.help.feedback_content')}</label>
+            <textarea id="feedback-content" class="sinput feedback-content" bind:value={feedbackContent} maxlength="4000"></textarea>
+            {#if feedbackError}<p class="account-error">{feedbackError}</p>{/if}
+            {#if feedbackReceipt}<p class="feedback-success">{$t('settings.help.feedback_sent').replace('{id}', feedbackReceipt)}</p>{/if}
+            <button class="btns" onclick={sendFeedback} disabled={feedbackSubmitting}>{feedbackSubmitting ? $t('common.saving') : $t('settings.help.feedback_submit')}</button>
+            <p class="setd">{$t('settings.help.website_soon')}</p>
+          </div>
 
         {:else if cat === 'endpoints'}
           <EndpointsSection />
@@ -1083,6 +1137,14 @@ select.sinput { cursor: pointer; }
 .archived-name { font-size: 13px; color: var(--text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .archived-meta { font-size: 11px; color: var(--text-tertiary); }
 .archived-actions { display: flex; align-items: center; gap: 8px; flex: 0 0 auto; }
-.btns.danger { color: var(--error); }
-.btns.danger:hover:not(:disabled) { background: var(--error-bg); border-color: var(--error-border); }
+  .btns.danger { color: var(--error); }
+  .btns.danger:hover:not(:disabled) { background: var(--error-bg); border-color: var(--error-border); }
+  .help-card { display: flex; flex-direction: column; gap: 12px; }
+  .help-card h3 { margin: 0; font-size: 14px; color: var(--text); }
+  .help-card details { border-bottom: 1px solid var(--border-secondary); padding-bottom: 10px; }
+  .help-card summary { cursor: pointer; color: var(--text); font-weight: 600; }
+  .help-card details p { margin: 8px 0 0; color: var(--text-tertiary); line-height: 1.55; }
+  .help-label { color: var(--text-secondary); font-size: 12px; }
+  .feedback-content { min-height: 112px; resize: vertical; }
+  .feedback-success { color: var(--success); margin: 0; font-size: 13px; }
 </style>

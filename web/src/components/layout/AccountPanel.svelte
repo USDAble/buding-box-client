@@ -2,6 +2,7 @@
   import { t, tr } from '../../lib/i18n'
   import { productState, refreshCredits } from '../../lib/product'
   import { accountPanelOpen, openSettingsAt, showToast } from '../../lib/stores'
+  import * as api from '../../lib/api'
   import { avatarInitial, avatarColor } from '../../lib/avatar'
   import { licenseView } from '../../lib/license'
   import { dismissIntent } from '../../lib/globalKeys'
@@ -27,6 +28,8 @@
 
   let rootEl = $state<HTMLDivElement | null>(null)
   let refreshing = $state(false)
+
+  let checkingUpdate = $state(false)
   let pos = $state({ left: '0px', width: '0px', bottom: '0px', maxHeight: '0px' })
 
   function portal(node: HTMLElement) {
@@ -91,7 +94,17 @@
 
   function upgrade() { showToast(tr('product.panel.upgrade_soon')) }
   function recharge() { showToast(tr('product.panel.recharge_soon')) }
-  function helpAndFeedback() { showToast(tr('product.panel.feedback_unavailable')) }
+  async function checkUpdates() {
+    if (checkingUpdate) return
+    checkingUpdate = true
+    try {
+      const result = await api.checkNativeUpdates()
+      showToast(result.available
+        ? $t('settings.update_available').replaceAll('{version}', result.latest)
+        : $t('settings.update.uptodate'), result.available ? 'warning' : 'success')
+    } catch { showToast($t('product.send_failed'), 'error') }
+    finally { checkingUpdate = false }
+  }
 </script>
 
 <div
@@ -149,9 +162,14 @@
       <span>{$t('nav.settings')}</span>
       <iconify-icon class="chevron" icon="lucide:chevron-right" width="14"></iconify-icon>
     </button>
-    <button class="action-row" onclick={helpAndFeedback}>
+    <button class="action-row" onclick={() => openSettings('help')}>
       <iconify-icon icon="ant-design:question-circle-outlined" width="15"></iconify-icon>
       <span>{$t('product.panel.help')}</span>
+      <iconify-icon class="chevron" icon="lucide:chevron-right" width="14"></iconify-icon>
+    </button>
+    <button class="action-row" onclick={checkUpdates} disabled={checkingUpdate}>
+      <iconify-icon icon="ant-design:reload-outlined" width="15"></iconify-icon>
+      <span>{checkingUpdate ? $t('settings.update.checking') : $t('settings.update.check')}</span>
     </button>
     <button class="action-row" onclick={() => openSettings('about')}>
       <iconify-icon icon="ant-design:info-circle-outlined" width="15"></iconify-icon>

@@ -13,6 +13,8 @@ import (
 	"time"
 
 	"github.com/open-octo/octo-agent/internal/server"
+	"github.com/open-octo/octo-agent/internal/upgrade"
+	"github.com/open-octo/octo-agent/internal/version"
 	"github.com/wailsapp/wails/v3/pkg/application"
 	"github.com/wailsapp/wails/v3/pkg/events"
 	"github.com/wailsapp/wails/v3/pkg/services/notifications"
@@ -964,6 +966,16 @@ func (b *nativeBridge) SelfUpdate() error {
 	}
 	go startUpdateFlow(b)
 	return nil
+}
+
+// CheckForUpdates is the webview's explicit, read-only lookup. It bypasses the
+// server cache because routine server checks are disabled for portable builds.
+func (b *nativeBridge) CheckForUpdates(ctx context.Context) (string, bool, error) {
+	latest, err := upgrade.Check(ctx)
+	if err != nil {
+		return "", false, err
+	}
+	return latest, upgrade.NeedsUpdate(strings.TrimPrefix(version.Version, "v"), latest), nil
 }
 
 func (b *nativeBridge) OpenExternal(url string) error {

@@ -17,11 +17,13 @@ package main
 import (
 	"context"
 	_ "embed"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"log"
 	"log/slog"
 	"net"
+	"net/http"
 	"net/url"
 	"os"
 	"path/filepath"
@@ -650,6 +652,21 @@ func startHub(app *application.App, bridge *nativeBridge, settings desktopSettin
 	// package, which the dependency direction forbids). The sixth value is the
 	// immutable personal-information engine shared by preview and send paths.
 	mountProduct, gatewaySender, catalogOffers, catalogModel, preferredConfidentialModel, engine, sensitiveInputGate, personalInfo := mountProductAPI()
+	// OCTO-FORK: keep the portable-only manual lookup in the desktop assembly,
+	// registered through the existing product gate rather than changing upstream
+	// native routes. It can discover a release but cannot download or install it.
+	mountProductAndUpdate := func(api func(pattern string, h http.HandlerFunc)) {
+		mountProduct(api)
+		api("POST /api/product/check-updates", func(w http.ResponseWriter, r *http.Request) {
+			latest, available, err := bridge.CheckForUpdates(r.Context())
+			if err != nil {
+				http.Error(w, "update check unavailable", http.StatusServiceUnavailable)
+				return
+			}
+			w.Header().Set("Content-Type", "application/json; charset=utf-8")
+			_ = json.NewEncoder(w).Encode(map[string]any{"latest": latest, "available": available})
+		})
+	}
 
 	// Immutable for the life of the process, and the owner of both facts the
 	// turn-path policy needs (see RequireGateway below), so it is read once.
@@ -671,6 +688,8 @@ func startHub(app *application.App, bridge *nativeBridge, settings desktopSettin
 		// 那层拦不住本壳 —— 它默认是开的，而设置页那枚开关已换成占位（SettingsModal 的
 		// general 分类）—— 所以"关掉更新"的真实开关只有本字段一处：两处都关，才是零出站。
 		// 桌面壳自己的原地更新流程（托盘 + 更新 toast，startUpdateFlow）同样受本字段所关。
+		// OCTO-FORK: routine version reads must remain offline. The account
+		// popover's explicit action calls NativeBridge directly instead.
 		UpdateCheck: productUpdatesEnabled,
 		Native:      bridge,
 		// The desktop server runs in-process — there is no supervisor to
@@ -682,7 +701,7 @@ func startHub(app *application.App, bridge *nativeBridge, settings desktopSettin
 		// OCTO-FORK: our product routes and the built-in gateway's sender, both
 		// from one assembly so they share one credential holder — see
 		// mountProductAPI and the current implementation plan §PR-5a.
-		MountAPI: mountProduct,
+		MountAPI: mountProductAndUpdate,
 		// OCTO-FORK: the product gate's window identity — see
 		// the current implementation plan §PR-2b2b. Generated here
 		// because this runs before the first window is shown, which is what lets

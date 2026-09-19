@@ -383,6 +383,28 @@ export async function refreshCredits(): Promise<number> {
   return body.state.credits.balance;
 }
 
+export interface FeedbackReceipt {
+  feedbackId: string;
+  acceptedAt: string;
+}
+
+// submitFeedback sends only the fields visible in the help form. The form owns
+// its draft and retry key in memory; neither is persisted or supplemented with
+// chat and diagnostic data here.
+export async function submitFeedback(category: "bug" | "suggestion" | "other", content: string, idempotencyKey: string): Promise<FeedbackReceipt> {
+  const res = await productFetch("/api/product/feedback", {
+    method: "POST",
+    headers: jsonHeaders(),
+    body: JSON.stringify({ category, content, idempotencyKey }),
+  });
+  const body = (await res.json().catch(() => ({}))) as Record<string, unknown>;
+  if (!res.ok) {
+    throw new ProductError(res.status, (body.fieldErrors as Record<string, string>) ?? {}, (body.code as string) ?? null,
+      (body.retryAfterSec as number) ?? null);
+  }
+  return body as unknown as FeedbackReceipt;
+}
+
 // ─── P4 login form ──────────────────────────────────────────────────────────
 //
 // send-code / login / locale round-trips for the blocked (login) page. Errors

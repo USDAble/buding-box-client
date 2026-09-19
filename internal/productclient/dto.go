@@ -109,6 +109,7 @@ const (
 	CodeModelNotAllowed     = "model_not_allowed"
 	CodeInsufficientCredits = "insufficient_credits"
 	CodeRateLimited         = "rate_limited"
+	CodeIdempotencyConflict = "idempotency_conflict"
 	CodeMaintenance         = "maintenance"
 	CodeUpstreamUnavailable = "upstream_unavailable"
 	CodeInternalError       = "internal_error"
@@ -162,6 +163,9 @@ const (
 	// reasons to call this, never carriers of the number (需求基线 E9 rule 2,
 	// decided by a human 2026-09-14).
 	pathCreditsLedger = "/credits/ledger"
+	// pathFeedback accepts the deliberately small, user-authored product
+	// feedback payload. The authenticated account is derived from the bearer.
+	pathFeedback = "/feedback"
 )
 
 // PurposeLogin is the only code purpose this build requests.
@@ -235,6 +239,19 @@ type RefreshData struct {
 	AccessToken             string `json:"accessToken"`
 	RefreshToken            string `json:"refreshToken"`
 	AccessTokenExpiresInSec int    `json:"accessTokenExpiresInSec"`
+}
+
+// FeedbackRequest is the only user-authored payload sent to the product
+// feedback endpoint. Identity and diagnostics are intentionally absent.
+type FeedbackRequest struct {
+	Category string `json:"category"`
+	Content  string `json:"content"`
+}
+
+// FeedbackData is the minimal acceptance receipt returned by the platform.
+type FeedbackData struct {
+	FeedbackID string `json:"feedbackId"`
+	AcceptedAt string `json:"acceptedAt"`
 }
 
 // BootstrapData is the account summary gathered at startup.

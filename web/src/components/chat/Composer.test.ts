@@ -136,6 +136,8 @@ afterEach(() => {
   pendingConfidentialSession.set(false)
   toasts.set([])
   takeDraft('s1')
+  sessionStorage.clear()
+  vi.unstubAllGlobals()
 })
 
 describe('the composer does not decide quota', () => {
@@ -206,6 +208,36 @@ describe('personal information preview', () => {
 
     expect(onSend).not.toHaveBeenCalled()
     expect((target.querySelector('textarea') as HTMLTextAreaElement).value).toContain('13800138000')
+  })
+})
+
+// OCTO-FORK: the picker must refresh catalog availability through the local
+// runtime owner before it reads the downstream model-cache projection.
+describe('catalog refresh before model projection', () => {
+  it('checks the catalog at mount and when opening the model picker', async () => {
+    // A desktop token makes refreshCatalogState use the local availability
+    // endpoint. The endpoint itself decides whether a central refresh is
+    // necessary; a ready answer here represents the no-network-cache case.
+    sessionStorage.setItem('octo_window_token', 'catalog-token')
+    const catalogFetch = vi.fn(async () => ({
+      ok: true,
+      status: 200,
+      statusText: '',
+      json: async () => ({ state: 'ready', retryable: false }),
+    }))
+    vi.stubGlobal('fetch', catalogFetch)
+
+    render()
+    await settle()
+    expect(catalogFetch).toHaveBeenCalledTimes(1)
+    expect(catalogFetch).toHaveBeenCalledWith('/api/product/catalog', expect.objectContaining({ cache: 'no-store' }))
+
+    const picker = target.querySelector('iconify-icon[icon="ant-design:robot-outlined"]')?.closest('button') as HTMLButtonElement
+    expect(picker).toBeTruthy()
+    picker.click()
+    await settle()
+
+    expect(catalogFetch).toHaveBeenCalledTimes(2)
   })
 })
 

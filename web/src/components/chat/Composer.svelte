@@ -21,7 +21,7 @@
   import { getMcpServer } from '../../lib/api'
   import ComposerNotices, { type Notice } from './ComposerNotices.svelte'
   import SensitiveToggle from './SensitiveToggle.svelte'
-  import { allowEnvironmentModelSource, catalogState, productState } from '../../lib/product'
+  import { allowEnvironmentModelSource, catalogState, productState, refreshCatalogState } from '../../lib/product'
   import { checkSensitive } from '../../lib/sensitive'
   import { loadSelectableModels, type SelectableModel } from '../../lib/selectableModels'
 
@@ -868,6 +868,14 @@
   async function refreshModels() {
     const seq = ++modelsFetchSeq
     try {
+      // OCTO-FORK: refresh the signed catalog through its single runtime owner
+      // before the picker projects the cached model rows.
+      // /models is deliberately a cache-only projection. Ask the separate
+      // availability owner first so a missing or expired catalog gets its one
+      // permitted conditional refresh before the picker reads that projection.
+      // A ready cache adds no platform request, and an unverifiable catalog is
+      // not retried by merely reopening the menu.
+      await refreshCatalogState()
       const allowLocal = get(allowEnvironmentModelSource) !== false
       const result = await loadSelectableModels(allowLocal)
       if (seq !== modelsFetchSeq) return

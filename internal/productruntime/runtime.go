@@ -316,7 +316,15 @@ type controlPlaneDTO struct {
 // The read performs B3's on-demand refresh, so opening the picker is what renews
 // a lapsed catalog; refreshCatalogOnDemand owns how often that can happen.
 func (rt *Runtime) handleCatalog(w http.ResponseWriter, r *http.Request) {
-	writeJSON(w, http.StatusOK, rt.refreshCatalogOnDemand(r.Context()).toDTO())
+	availability, err := rt.refreshCatalogOnDemand(r.Context())
+	if IsSessionExpired(err) {
+		// OCTO-FORK: a refused refresh token is not a stale catalog. Returning
+		// the normal authorization result lets productFetch move the UI back to
+		// login instead of leaving a developer session with only local models.
+		rt.failPlatform(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, availability.toDTO())
 }
 
 // handleState is the first call the UI makes: it decides whether the window

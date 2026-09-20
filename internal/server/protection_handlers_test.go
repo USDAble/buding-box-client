@@ -292,3 +292,25 @@ func TestProductProfileDoesNotQualifyLocalConfidentialModel(t *testing.T) {
 		t.Fatalf("product resolution accepted local config: model_config=%q model=%q", modelConfig, model)
 	}
 }
+
+func TestDeveloperProfileKeepsLocalConfidentialModelSeparateFromCatalog(t *testing.T) {
+	setTestHome(t)
+	seedModels(t, config.Config{Endpoints: []config.Endpoint{{
+		ID: "deepseek", Provider: "openai", Models: []config.EndpointModel{{Model: "deepseek-flash", Confidential: true}},
+	}}})
+	// OCTO-FORK: a valid catalog deliberately reports an unlisted local model as
+	// ineligible. The developer path must still use the locally configured mark.
+	srv := mustServer(t, Config{
+		Addr:               "127.0.0.1:0",
+		GatewayModelPrefix: "buding-gateway::",
+		CatalogModel: func(string) (CatalogModelStatus, bool) {
+			return CatalogModelStatus{Current: true}, true
+		},
+	})
+	if !srv.confidentialModelEligible("deepseek::deepseek-flash") {
+		t.Fatal("developer-local confidential model was rejected by an unrelated catalog")
+	}
+	if srv.confidentialModelEligible("buding-gateway::unlisted") {
+		t.Fatal("gateway model must not inherit a local endpoint's confidential mark")
+	}
+}

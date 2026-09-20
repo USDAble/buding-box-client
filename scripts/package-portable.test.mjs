@@ -14,6 +14,7 @@ import { fileURLToPath } from 'node:url'
 
 import {
   resolveTarget,
+  resolvePackageProfile,
   renderUsageNote,
   checkDataFiles,
   checkDevResiduals,
@@ -47,6 +48,20 @@ test('resolveTarget: defaults to windows/amd64 and -dev version', () => {
     goarch: 'arm64',
     version: '0.5.0',
   })
+})
+
+test('resolvePackageProfile: separates sealed production and test artifacts', () => {
+  assert.deepEqual(resolvePackageProfile({}), {
+    name: 'production',
+    buildTags: 'embedrg product_production',
+    suffix: '',
+  })
+  assert.deepEqual(resolvePackageProfile({ PACKAGE_PROFILE: 'test' }), {
+    name: 'test',
+    buildTags: 'embedrg product_test',
+    suffix: '-test',
+  })
+  assert.throws(() => resolvePackageProfile({ PACKAGE_PROFILE: 'developer' }), /unknown PACKAGE_PROFILE/)
 })
 
 test('renderUsageNote: replaces brand placeholders', () => {

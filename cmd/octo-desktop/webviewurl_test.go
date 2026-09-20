@@ -1,4 +1,7 @@
-//go:build !product_production
+//go:build !product_production && !product_test
+
+// OCTO-FORK: product_test is a sealed package profile and must not run the
+// developer-only WebView override checks in this file.
 
 package main
 
@@ -14,7 +17,7 @@ import "testing"
 // (webviewurl_production_test.go, `product_production` tag), because the
 // profile is a compile-time choice and a single test binary cannot be both.
 //
-// The test binary is built without product_production, so Current() is the
+// The test binary is built without either package tag, so Current() is the
 // developer profile here — profiles/developer.json sets allowDevWebview true.
 func TestDeveloperProfileHonoursTheDevWebviewURL(t *testing.T) {
 	const v = "http://localhost:5173"

@@ -38,6 +38,7 @@ const DEFAULT_VERSION = '0.0.0-dev'
 // immutable production profile; see the buildExe comment and
 // the runtime Profile boundary.
 export const BUILD_TAGS = 'embedrg product_production'
+export const TEST_BUILD_TAGS = 'embedrg product_test'
 // The pre-filled data/ files. The portable package ships an empty template so
 // the user can see and edit it (P12 §3.1).
 //
@@ -56,6 +57,13 @@ export function resolveTarget(env = process.env) {
   const goarch = env.GOARCH || 'amd64'
   const version = (env.VERSION || DEFAULT_VERSION).replace(/^v/, '').trim()
   return { goos, goarch, version }
+}
+
+export function resolvePackageProfile(env = process.env) {
+  const profile = env.PACKAGE_PROFILE || 'production'
+  if (profile === 'production') return { name: profile, buildTags: BUILD_TAGS, suffix: '' }
+  if (profile === 'test') return { name: profile, buildTags: TEST_BUILD_TAGS, suffix: '-test' }
+  throw new Error(`unknown PACKAGE_PROFILE=${JSON.stringify(profile)}; expected production or test`)
 }
 
 function gitShortHead(root) {
@@ -524,7 +532,7 @@ async function copyDir(src, dest) {
   }
 }
 
-async function buildExe({ root, brand, target, dest }) {
+async function buildExe({ root, brand, target, dest, buildTags }) {
   const modDir = path.join(root, 'cmd', 'octo-desktop')
   const exeName = brand.identifiers.current.exeName
   const out = path.join(dest, exeName)
@@ -545,13 +553,10 @@ async function buildExe({ root, brand, target, dest }) {
 
   const commit = process.env.COMMIT || gitShortHead(root)
   const ldflags = `-H windowsgui -X ${VERSION_PKG}.Version=${target.version} -X ${VERSION_PKG}.Commit=${commit}`
-  // product_production selects the immutable production profile (see
-  // the runtime Profile boundary). Packaged artifacts are standard
-  // production binaries; a distributor that omitted the tag would ship a
-  // developer package with every production rejection disabled. Keep in sync
-  // with release.yml / package-desktop-macos.sh / package-desktop-linux.sh;
-  // scripts/release-profile-guard.mjs fails CI if any of them drifts.
-  execFileSync('go', ['build', '-trimpath', '-tags', BUILD_TAGS, '-ldflags', ldflags, '-o', out, '.'], {
+  // A package selects either product_production or product_test. Neither is a
+  // developer build: both profiles reject developer webviews and ambient model
+  // sources. Production remains the default and is guarded separately.
+  execFileSync('go', ['build', '-trimpath', '-tags', buildTags, '-ldflags', ldflags, '-o', out, '.'], { // release-profile-guard:allow — resolvePackageProfile defaults to production and explicitly selects either sealed package profile
     cwd: modDir,
     stdio: 'inherit',
     env,
@@ -620,6 +625,14 @@ async function main() {
 
   const brand = await loadBrand(root)
   const target = resolveTarget()
+  let packageProfile
+  try {
+    packageProfile = resolvePackageProfile()
+  } catch (error) {
+    console.error(error.message)
+    process.exitCode = 2
+    return
+  }
   if (target.goos !== 'windows') {
     console.error(`便携交付只支持 windows，收到 GOOS=${target.goos}`)
     process.exitCode = 2
@@ -629,20 +642,27 @@ async function main() {
   // Refuse to build a shipped artifact from a tree the fork guards reject —
   // CI runs them on the commit, but packaging can start from a dirty or stale
   // checkout and would otherwise silently produce a developer package.
-  const preflight = await runPreflight(root)
+  const preflight = await runPreflight(root, { profile: packageProfile.name })
   if (preflight.failureCount > 0) {
     process.exitCode = 1
     return
   }
 
-  const dirName = brand.identifiers.current.portableDirName
+  if (packageProfile.name === 'test') {
+    execFileSync('make', ['test-profile-check'], {
+      cwd: root,
+      stdio: 'inherit',
+    })
+  }
+
+  const dirName = `${brand.identifiers.current.portableDirName}${packageProfile.suffix}`
   const exeName = brand.identifiers.current.exeName
   const dest = path.join(root, 'dist', dirName)
 
   console.log(`==> 构建 ${exeName} (${target.goos}/${target.goarch}, ${target.version})`)
   await fs.rm(dest, { recursive: true, force: true })
   await fs.mkdir(dest, { recursive: true })
-  await buildExe({ root, brand, target, dest })
+  await buildExe({ root, brand, target, dest, buildTags: packageProfile.buildTags })
   await assemble({ root, brand, target, dest })
 
   console.log(`==> 产物自检 ${dirName}/`)

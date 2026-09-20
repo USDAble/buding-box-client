@@ -1,4 +1,4 @@
-//go:build !product_production
+//go:build !product_production && !product_test
 
 package productprofile
 

@@ -26,5 +26,3 @@ it('keeps cached cards on refresh failure, hides IDs and uses the real expert ac
   input.value = 'missing'; input.dispatchEvent(new Event('input', { bubbles: true })); flushSync()
   expect(target.querySelector('.agent-card')).toBeNull()
 })
-
-

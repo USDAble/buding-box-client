@@ -99,7 +99,6 @@ func (rt *Runtime) directory(w http.ResponseWriter, r *http.Request, kind string
 			case <-r.Context().Done():
 				return
 			}
-			continue
 		}
 		pending := &capabilityFlight{done: make(chan struct{})}
 		cache.fetching[kind] = pending

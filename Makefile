@@ -66,13 +66,14 @@ RG_EMBED_BIN := $(RG_EMBED_DIR)/rg
         node-check docs-ref-check quick-check hooks-install gate web-gate \
         brand brand-check datapath-check norms-check agents agents-check \
         sensitive-norm-check \
-        reuse-check server-diff-check release-profile-check release-config-check \
-        preflight-check \
+		reuse-check server-diff-check release-profile-check release-config-check \
+		preflight-check test-profile-check \
         eval-build eval-list eval \
         rg-embed rg-embed-clean \
         bundle-tools-windows bundle-tools-macos \
-        web-build web-dev dev build-full desktop desktop-dev desktop-app desktop-appimage \
-        desktop-portable desktop-portable-all portable-check
+		web-build web-dev dev build-full desktop desktop-dev desktop-app desktop-appimage \
+		desktop-portable desktop-portable-all desktop-test-app desktop-test-appimage \
+		desktop-test-portable portable-check
 
 all: test
 
@@ -181,11 +182,20 @@ desktop-dev:
 desktop-app: web-build
 	bash scripts/package-desktop-macos.sh
 
+# Test desktop package: chooses the sealed testing Profile. Its checked-in
+# configuration starts the loopback Central Platform stand-in; switch that
+# profile to the HTTPS testing platform when it becomes available.
+desktop-test-app: web-build
+	PACKAGE_PROFILE=test bash scripts/package-desktop-macos.sh
+
 # Package the desktop shell into a portable Linux AppImage (Linux only; needs
 # the GTK4/WebKitGTK 6.0 dev packages + downloads appimagetool). GTK4/WebKitGTK
 # are taken from the host — the AppRun launcher preflights them.
 desktop-appimage: web-build
 	bash scripts/package-desktop-linux.sh
+
+desktop-test-appimage: web-build
+	PACKAGE_PROFILE=test bash scripts/package-desktop-linux.sh
 
 # Portable Windows directory — the product's PRIMARY deliverable. One command
 # builds the GUI exe (VERSIONINFO + icon injected), assembles PuddingBox/
@@ -194,6 +204,10 @@ desktop-appimage: web-build
 desktop-portable: web-build brand-check
 	$(MAKE) rg-embed GOOS=windows GOARCH=amd64
 	node scripts/package-portable.mjs
+
+desktop-test-portable: web-build brand-check
+	$(MAKE) rg-embed GOOS=windows GOARCH=amd64
+	PACKAGE_PROFILE=test node scripts/package-portable.mjs
 
 # One command for BOTH portable deliverables: the Windows PuddingBox/ directory
 # (cross-compiled — works from any host) and the macOS .app bundle (native;
@@ -368,6 +382,12 @@ release-profile-check:
 release-config-check:
 	node scripts/release-config-guard.mjs
 	node --test scripts/release-config-guard.test.mjs
+
+# Verifies the test-only immutable Profile and its fixture trust anchor. The
+# test package commands run this before compiling product_test binaries.
+test-profile-check:
+	go test -tags product_test ./internal/productprofile ./internal/productclient/clienttest
+	cd cmd/octo-desktop && go test -tags product_test .
 
 # ── local developer entry points ─────────────────────────────────────────────
 # Node is checked before npm/Vite so an old system Node produces one actionable

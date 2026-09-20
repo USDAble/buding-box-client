@@ -249,11 +249,19 @@ export const ROUTE_TABLE_CEILING = 2
 //   interfaces (internal/app/sensitive_sender.go), so failing to forward one is a
 //   build error instead of a runtime degradation.
 //
+//   The 2026-09-20 platform integration raises server.go 660 → 672. Its
+//   measured 12-line increase is the remaining wiring for the platform-skill
+//   loader, per-turn middle-tier identity, and recognition of published
+//   platform experts. The skill fetch itself remains in fork-owned
+//   internal/productruntime and internal/tools; server.go only keeps the
+//   Config seam and the existing routing decisions where those facts are used.
+//   The ceiling equals the new measurement, with no added headroom.
+//
 //   A raise that cannot answer those three points should be a fold instead.
 export const DEBT_CEILINGS = [
   {
     file: 'internal/server/server.go',
-    ceiling: 660,
+    ceiling: 672,
     why:
       'the product seam and the data-root migration: Config.MountAPI/WindowToken/RequireGateway/ControlPlaneReady plumbing, the productAPI registrar (a method value, not a call site), V-36/PR-5c/PR-5b1 gates on the turn path, and Config.CatalogOffers + its guard (PR-5e, L-C7). ' +
       'Measured 2026-09-14 at 533 after excluding marker lines (see the marker note in forkDiffLines) and after trimming the PR-5e prose to pointers into 开发计划 §PR-5e; of the added lines the large majority are prose explaining those seams. ' +
@@ -269,7 +277,7 @@ export const DEBT_CEILINGS = [
       'V-105 added 11 (ninth raise), all of it the shutdown joins: the watchDone channel the store watch closes on its way out, the watchStarted flag that skips the join when the watch never ran, the test seam that makes the ordering observable, the make() for the channel, the two call lines in doShutdown, and five lines of prose — see the ninth raise note above. ' +
       'WHY NO SMALLER FORM: the fields are on Server because that is where the struct is declared and Config is the only construction channel; doShutdown is upstream\'s own method, so no fork-side wrapper reaches it; and watchStop is the ask, while a join needs the channel that answers. Stripping every comment still measures 571, over the previous 565 — so this raise could not have been avoided by trimming prose. ' +
       'WHAT WAS MOVED OUT FIRST: both joins themselves live in internal/server/store_watch.go (+48) and internal/server/tasks_handlers.go (+34), neither of which this guard ratchets. Only the wiring lands here. ' +
-      'The 2026-09-18 raise adds the PersonalInfoTransform construction seam and includes earlier protection-policy wiring. Rules and preprocessing live in fork-owned files; Config and Server are the only injection boundary. The 660 ceiling is 14 lines above the measured 646 and is not permission for unrelated behavior.',
+      'The 2026-09-18 raise adds the PersonalInfoTransform construction seam and includes earlier protection-policy wiring. Rules and preprocessing live in fork-owned files; Config and Server are the only injection boundary. The 660 ceiling is 14 lines above the measured 646 and is not permission for unrelated behavior. The 2026-09-20 platform integration then adds the narrow Config seam for the publication-bound skill loader, model/session identity forwarding at the existing gateway sender call, and published-expert recognition at the existing profile and validation decisions. The loader, publication data and tool behavior remain fork-owned; the 672 ceiling equals the measured post-integration value and adds no new slack.',
     convergence:
       'P0-01A C (the apiProduct fold is dead — see the R1 note; what remains is the registrar and the product-state move, P0-01A D). PR-5e adds nothing to fold: its 37 lines are the floor for a turn-path guard, and they shrink only if upstream grows a pre-send hook. The 11 V-105 lines shrink only if upstream joins its own background goroutines on Shutdown — the join belongs upstream, and this is the fork paying for it in the meantime',
   },

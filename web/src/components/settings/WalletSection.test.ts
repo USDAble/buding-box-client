@@ -37,7 +37,6 @@ it('retries a lost reply with the same persisted key and waits for server paid b
  expect(target.textContent).not.toContain('服务端已确认支付及入账');expect(target.querySelector('img')).not.toBeNull();const before=walletReads;paid=true;button('查询支付结果').click();await vi.waitFor(()=>expect(target.textContent).toContain('服务端已确认支付及入账'));await vi.waitFor(()=>expect(walletReads).toBeGreaterThan(before));expect(intent).toBeNull()
  await unmount(app!);app=undefined;render();await vi.waitFor(()=>expect(target.textContent).toContain('已支付'));button('查看／继续').click();await vi.waitFor(()=>expect(target.textContent).toContain('server-order-001'))
 })
-
 it('does not allow creation until the existing intent can be read',async()=>{
  const original=globalThis.fetch
  vi.stubGlobal('fetch',vi.fn(async(input:any,init:any)=>String(input).endsWith('/recharge/intent')&&(!init?.method||init.method==='GET')?Promise.reject(new Error('unreadable intent')):original(input,init)))
@@ -79,4 +78,3 @@ it('loads usage only on demand, prevents repeat queries and retains applied date
  button('加载更多').click();await vi.waitFor(()=>expect(requests).toHaveLength(3))
  expect(requests[2]).toContain('date_from=2026-09-01');expect(requests[2]).toContain('include_summary=false');expect(target.textContent).toContain('5')
 })
-

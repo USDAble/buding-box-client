@@ -16,6 +16,7 @@ import (
 const (
 	Production = "production"
 	Developer  = "developer"
+	Testing    = "testing"
 )
 
 // Placeholder control-plane hosts for a release that has not been given the
@@ -106,6 +107,7 @@ type Profile struct {
 	AllowDevWebview             bool              `json:"allowDevWebview"`
 	AllowEnvironmentModelSource bool              `json:"allowEnvironmentModelSource"`
 	AllowDataRootOverride       bool              `json:"allowDataRootOverride"`
+	StartLocalStandin           bool              `json:"startLocalStandin"`
 	APIHost                     string            `json:"apiHost"`
 	GatewayHost                 string            `json:"gatewayHost"`
 	TrustedKeyIDs               map[string]string `json:"trustedKeyIDs"`
@@ -131,6 +133,12 @@ func Current() Profile {
 
 // IsProduction reports whether this binary is a standard production package.
 func (p Profile) IsProduction() bool { return p.Name == Production }
+
+// UsesLocalStandin reports whether this test package owns the loopback Central
+// Platform stand-in named by its profile. It is deliberately a build-time
+// capability: a user, environment variable or config file must not switch a
+// package between the fixture and a real control plane.
+func (p Profile) UsesLocalStandin() bool { return p.Name == Testing && p.StartLocalStandin }
 
 // ControlPlaneConfigured reports whether the profile names a real control
 // plane. Empty addresses and `.invalid` placeholders are unconfigured. Callers must
@@ -183,6 +191,28 @@ func (p Profile) Validate() error {
 		}
 		if err := validateHost("gatewayHost", p.GatewayHost, true, true); err != nil {
 			return err
+		}
+	case Testing:
+		// A test package follows the production trust boundary: it never exposes
+		// developer webviews or ambient model sources. Its only permitted
+		// plaintext transport is the fixture it starts for itself on loopback.
+		if p.AllowDevWebview || p.AllowEnvironmentModelSource || p.AllowDataRootOverride {
+			return fmt.Errorf("testing profile enables a developer source")
+		}
+		if p.StartLocalStandin {
+			if p.APIHost != "http://127.0.0.1:8788/v1" || p.GatewayHost != "http://127.0.0.1:8788" {
+				return fmt.Errorf("testing profile with local stand-in must use its fixed loopback hosts")
+			}
+		} else {
+			if err := validateHost("apiHost", p.APIHost, true, true); err != nil {
+				return err
+			}
+			if err := validateHost("gatewayHost", p.GatewayHost, true, true); err != nil {
+				return err
+			}
+		}
+		if len(p.TrustedKeyIDs) == 0 {
+			return fmt.Errorf("testing profile must trust at least one signing key")
 		}
 	case Developer:
 		// Developer is intentionally explicit in its JSON; individual false

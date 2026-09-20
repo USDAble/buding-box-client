@@ -7,8 +7,11 @@ import (
 	"strings"
 )
 
-// Both build profiles share these addresses. Edit endpoints.json and rebuild
-// to switch deployment; build profiles still own permissions and trusted keys.
+// Developer and production builds share these addresses. Edit endpoints.json
+// and rebuild to switch deployment; build profiles still own permissions and
+// trusted keys. The sealed testing profile owns its address because it either
+// starts the fixed loopback stand-in or carries a separately approved test
+// deployment address.
 //
 //go:embed endpoints.json
 var embeddedEndpointsJSON string
@@ -23,14 +26,20 @@ func loadProfile(profileJSON, endpointsJSON string) (Profile, error) {
 	if err := json.Unmarshal([]byte(profileJSON), &fields); err != nil {
 		return Profile{}, fmt.Errorf("parse profile: %w", err)
 	}
+	var p Profile
+	if err := json.Unmarshal([]byte(profileJSON), &p); err != nil {
+		return Profile{}, fmt.Errorf("parse profile: %w", err)
+	}
+	if p.Name == Testing {
+		if err := p.Validate(); err != nil {
+			return Profile{}, fmt.Errorf("validate testing profile: %w", err)
+		}
+		return p, nil
+	}
 	for _, key := range []string{"apiHost", "gatewayHost"} {
 		if _, exists := fields[key]; exists {
 			return Profile{}, fmt.Errorf("profile must not define addresses; edit endpoints.json")
 		}
-	}
-	var p Profile
-	if err := json.Unmarshal([]byte(profileJSON), &p); err != nil {
-		return Profile{}, fmt.Errorf("parse profile: %w", err)
 	}
 	var addresses endpoints
 	if err := json.Unmarshal([]byte(endpointsJSON), &addresses); err != nil {

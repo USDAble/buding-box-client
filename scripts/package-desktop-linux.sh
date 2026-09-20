@@ -13,6 +13,21 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 MOD_DIR="$ROOT/cmd/octo-desktop"
 LINUX="$MOD_DIR/build/linux"
 APPDIR="$ROOT/Octo.AppDir"
+PACKAGE_PROFILE="${PACKAGE_PROFILE:-production}"
+case "$PACKAGE_PROFILE" in
+	production)
+		BUILD_TAGS='embedrg product_production'
+		ARTIFACT_SUFFIX=''
+		;;
+	test)
+		BUILD_TAGS='embedrg product_test'
+		ARTIFACT_SUFFIX='-test'
+		;;
+	*)
+		echo "unknown PACKAGE_PROFILE='$PACKAGE_PROFILE' (expected production or test)" >&2
+		exit 2
+		;;
+esac
 
 # Native build only: the Wails shell links GTK4/WebKitGTK 6.0 via CGO, so the
 # AppImage architecture is whatever host this runs on. Derive the AppImage arch
@@ -24,7 +39,7 @@ case "$(uname -m)" in
 	aarch64) APPARCH=aarch64 ;;
 	*) echo "unsupported host arch: $(uname -m) (expected x86_64 or aarch64)" >&2; exit 1 ;;
 esac
-OUT="$ROOT/Octo-$APPARCH.AppImage"
+OUT="$ROOT/Octo${ARTIFACT_SUFFIX}-$APPARCH.AppImage"
 # OCTO-FORK: 版本改走 internal/version（Makefile:34 明文禁止 `git describe`） — see the product baseline §5.6 V-103
 # Same source as the macOS packager and the Makefile: internal/version/version.go
 # (Makefile:34 explains why `git describe` is not used — this repo's tags are
@@ -41,9 +56,12 @@ VERSION="${VERSION#v}"
 COMMIT="$(git -C "$ROOT" rev-parse --short HEAD 2>/dev/null || echo unknown)"
 
 # OCTO-FORK: 便携交付物：打包脚本适配 — see the portable packaging design
-# Refuse to build a shipped artifact the fork guards reject (same preflight as
-# the macOS and portable packagers — see scripts/preflight.mjs).
-node "$ROOT/scripts/preflight.mjs"
+# Refuse to build an artifact the fork guards reject (same preflight as the
+# macOS and portable packagers — see scripts/preflight.mjs).
+node "$ROOT/scripts/preflight.mjs" "--profile=$PACKAGE_PROFILE"
+if [ "$PACKAGE_PROFILE" = test ]; then
+	make -C "$ROOT" test-profile-check
+fi
 
 # Bundle ripgrep so the desktop app's grep tool has an `rg` to shell out to
 # (the app can't rely on one being on the user's PATH). Mirrors `make build`:
@@ -57,9 +75,9 @@ echo "==> building octo-desktop binary"
 # build — without them internal/upgrade.Eligible sees an empty Commit and the
 # app reports "up to date" forever.
 LDFLAGS="-X github.com/open-octo/octo-agent/internal/version.Version=$VERSION -X github.com/open-octo/octo-agent/internal/version.Commit=$COMMIT"
-# Packaged artifacts are standard production binaries. Local `make desktop`
-# deliberately omits product_production and therefore remains a developer build.
-( cd "$MOD_DIR" && CGO_ENABLED=1 go build -tags 'embedrg product_production' -ldflags "$LDFLAGS" -o "$ROOT/octo-desktop" . )
+# Packaged artifacts always choose an explicit sealed profile. Local `make
+# desktop` deliberately omits either package tag and remains a developer build.
+( cd "$MOD_DIR" && CGO_ENABLED=1 go build -tags "$BUILD_TAGS" -ldflags "$LDFLAGS" -o "$ROOT/octo-desktop" . )
 
 echo "==> assembling AppDir"
 rm -rf "$APPDIR"

@@ -11,11 +11,29 @@ set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 MOD_DIR="$ROOT/cmd/octo-desktop"
+PACKAGE_PROFILE="${PACKAGE_PROFILE:-production}"
+case "$PACKAGE_PROFILE" in
+	production)
+		BUILD_TAGS='embedrg product_production'
+		APP_SUFFIX=''
+		;;
+	test)
+		BUILD_TAGS='embedrg product_test'
+		APP_SUFFIX='-test'
+		;;
+	*)
+		echo "unknown PACKAGE_PROFILE='$PACKAGE_PROFILE' (expected production or test)" >&2
+		exit 2
+		;;
+esac
 
-# Refuse to build a shipped artifact the fork guards reject. The build below
-# hardcodes product_production, but this also covers datapath/reuse drift, and
-# keeps every packaging path (make target, CI job, direct invocation) aligned.
-node "$ROOT/scripts/preflight.mjs"
+# Refuse to build an artifact the fork guards reject. Test packages select a
+# separately compiled Profile; production packages remain covered by the
+# release-profile guard's product_production assertion.
+node "$ROOT/scripts/preflight.mjs" "--profile=$PACKAGE_PROFILE"
+if [ "$PACKAGE_PROFILE" = test ]; then
+	make -C "$ROOT" test-profile-check
+fi
 
 # OCTO-FORK: 版本改走 internal/version（Makefile:34 明文禁止 `git describe`） — see the product baseline §5.6 V-103
 # The version comes from internal/version/version.go, the single source the
@@ -44,7 +62,7 @@ if ! printf '%s' "$PLIST_VERSION" | grep -qE '^[0-9]+(\.[0-9]+){1,2}$'; then
 	exit 1
 fi
 COMMIT="$(git -C "$ROOT" rev-parse --short HEAD 2>/dev/null || echo unknown)"
-APP="$ROOT/Octo.app"
+APP="$ROOT/Octo${APP_SUFFIX}.app"
 CONTENTS="$APP/Contents"
 
 # Build a universal (x86_64 + arm64) octo-desktop so Octo.app runs natively on
@@ -92,16 +110,14 @@ for arch in amd64 arm64; do
 	# every accepted linker knows it — ld64-530 (Xcode 14.3.1) answers
 	# "ld: unknown option: -no_warn_duplicate_libraries" and fails the link, so
 	# dropping it costs the harmless duplicate-library note and nothing else.
-	# The `product_production` tag below is likewise ours, not upstream's: it
-	# selects the immutable runtime profile, and release-profile-guard fails
-	# any command that ships an artifact without it — taking upstream's
-	# `-tags embedrg` here would package a developer-profile .app.
-	# See P2-启动与生命周期.md §9.
+	# BUILD_TAGS selects the immutable package Profile. The production value is
+	# guarded as product_production; the test value selects the equally sealed
+	# test profile rather than falling back to the developer one.
 	( cd "$MOD_DIR" && \
 		GOOS=darwin GOARCH="$arch" CGO_ENABLED=1 CC="clang -arch $cc_arch" \
 		CGO_CFLAGS="-mmacosx-version-min=$macos_ver" \
 		CGO_LDFLAGS="-mmacosx-version-min=$macos_ver" \
-		go build -tags 'embedrg product_production' -ldflags "$LDFLAGS" -o "$out" . )
+		go build -tags "$BUILD_TAGS" -ldflags "$LDFLAGS" -o "$out" . )
 	slices+=("$out")
 done
 

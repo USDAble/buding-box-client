@@ -137,9 +137,9 @@ test('reports a non-object trustedKeyIDs', () => {
   assert.match(problems[0], /trustedKeyIDs must be an object/)
 })
 
-test('the repository production trust store is not release-ready', async () => {
+test('the repository production profile is release-ready', async () => {
   const problems = await check(ROOT)
-  assert.ok(problems.some((p) => /trustedKeyIDs is empty/.test(p)))
+  assert.deepEqual(problems, [])
 })
 
 test('release validation reads shared addresses and rejects duplicate configuration', async (t) => {

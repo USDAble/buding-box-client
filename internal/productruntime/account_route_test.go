@@ -83,7 +83,7 @@ func setNickname(t *testing.T, m *mountedHarness, nickname string) (int, map[str
 }
 
 func TestAValidNicknameIsStoredAndReadBack(t *testing.T) {
-	m := newMountedHarness(t)
+	m := newAccountMountedHarness(t)
 
 	status, body := setNickname(t, m, "张三_99")
 	if status != 200 {
@@ -135,7 +135,7 @@ func TestTheNicknameBoundsAreTheRequirementsNotTwentyCodepoints(t *testing.T) {
 
 	for _, nickname := range accepted {
 		t.Run("accepted/"+nickname, func(t *testing.T) {
-			m := newMountedHarness(t)
+			m := newAccountMountedHarness(t)
 			if status, body := setNickname(t, m, nickname); status != 200 {
 				t.Fatalf("%q: status = %d, want 200 (body: %v)", nickname, status, body)
 			}
@@ -147,7 +147,7 @@ func TestTheNicknameBoundsAreTheRequirementsNotTwentyCodepoints(t *testing.T) {
 
 	for _, tc := range rejected {
 		t.Run(tc.name, func(t *testing.T) {
-			m := newMountedHarness(t)
+			m := newAccountMountedHarness(t)
 			before := nicknameIn(t, m.root)
 
 			status, body := setNickname(t, m, tc.nickname)
@@ -172,7 +172,7 @@ func TestTheNicknameBoundsAreTheRequirementsNotTwentyCodepoints(t *testing.T) {
 // the assertion is on the raw bytes: "refused" has to mean the file never
 // learned the word.
 func TestASensitiveNicknameIsRefusedAndLeavesNoTrace(t *testing.T) {
-	m := newMountedHarness(t)
+	m := newAccountMountedHarness(t)
 	writeUserDict(t, m.root, "测试词")
 	before := stateBytes(t, m.root)
 
@@ -201,7 +201,7 @@ func TestASensitiveNicknameIsRefusedAndLeavesNoTrace(t *testing.T) {
 // refused here — the switch governs input detection only (PR-6b2 wires that
 // side), never this.
 func TestTheInputSwitchDoesNotTurnTheNicknameCheckOff(t *testing.T) {
-	m := newMountedHarness(t)
+	m := newAccountMountedHarness(t)
 	writeUserDict(t, m.root, "测试词")
 
 	status, body := m.request(t, "PUT", "/api/product/prefs", map[string]any{"inputSensitiveCheck": false}, nil)
@@ -221,7 +221,7 @@ func TestTheInputSwitchDoesNotTurnTheNicknameCheckOff(t *testing.T) {
 // not have grown a normalisation step (a trim, a case fold) that silently
 // rewrites what the user typed.
 func TestAnInnocentNicknameIsStoredByteForByte(t *testing.T) {
-	m := newMountedHarness(t)
+	m := newAccountMountedHarness(t)
 	const nickname = "Zhang_San"
 
 	if status, body := setNickname(t, m, nickname); status != 200 {
@@ -230,13 +230,13 @@ func TestAnInnocentNicknameIsStoredByteForByte(t *testing.T) {
 	if got := nicknameIn(t, m.root); got != nickname {
 		t.Fatalf("on disk nickname = %q, want %q", got, nickname)
 	}
-	if strings.Contains(stateBytes(t, m.root), "***") {
+	if strings.Contains(nicknameIn(t, m.root), "***") {
 		t.Fatal("an accepted nickname must not be masked — D3 requires refusal, never a masked value")
 	}
 }
 
 func TestPreferencesAreStoredFieldByField(t *testing.T) {
-	m := newMountedHarness(t)
+	m := newAccountMountedHarness(t)
 
 	type prefs struct {
 		Locale              string `json:"locale"`
@@ -297,7 +297,7 @@ func TestAPreferenceRefusalNamesTheFieldBesideTheCode(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			m := newMountedHarness(t)
+			m := newAccountMountedHarness(t)
 			before := stateBytes(t, m.root)
 
 			status, raw := m.request(t, "PUT", "/api/product/prefs", tc.body, nil)
@@ -333,7 +333,7 @@ func TestAPreferenceRefusalNamesTheFieldBesideTheCode(t *testing.T) {
 // makes this a nail: a repair that unified them the wrong way (both fieldErrors)
 // would still return 400 for both, and only the equality below would notice.
 func TestBothPreferenceRoutesRefuseTheSameLocaleTheSameWay(t *testing.T) {
-	m := newMountedHarness(t)
+	m := newAccountMountedHarness(t)
 
 	shapes := map[string]map[string]any{}
 	for _, path := range []string{"/api/product/locale", "/api/product/prefs"} {
@@ -431,7 +431,7 @@ func TestAMissingEngineRefusesTheNicknameRatherThanStoringItUnchecked(t *testing
 // that is the one the user can fix from the message alone — and the order is
 // invisible unless a case is both, which is why this one exists.
 func TestAMalformedNicknameThatIsAlsoSensitiveIsReportedAsMalformed(t *testing.T) {
-	m := newMountedHarness(t)
+	m := newAccountMountedHarness(t)
 	writeUserDict(t, m.root, "测试词")
 
 	status, body := setNickname(t, m, "测试 词")
@@ -443,5 +443,25 @@ func TestAMalformedNicknameThatIsAlsoSensitiveIsReportedAsMalformed(t *testing.T
 	}
 	if got := nicknameIn(t, m.root); strings.Contains(got, "测试") {
 		t.Fatalf("nickname on disk = %q, want it untouched", got)
+	}
+}
+
+// OCTO-FORK: nickname editing now requires the real platform session.
+func newAccountMountedHarness(t *testing.T) *mountedHarness {
+	h := newHarness(t)
+	h.activate()
+	return mountHarness(t, h, "")
+}
+
+func TestNicknamePlatformFailureKeepsLocalAccount(t *testing.T) {
+	m := newAccountMountedHarness(t)
+	before := nicknameIn(t, m.root)
+	m.platformSrv.Close()
+	status, _ := setNickname(t, m, "UpdatedName")
+	if status == 200 {
+		t.Fatal("network failure reported success")
+	}
+	if nicknameIn(t, m.root) != before {
+		t.Fatal("failed platform edit changed local account")
 	}
 }

@@ -42,6 +42,8 @@ type CatalogVendor struct {
 // CatalogModel is one selectable model. ID is the stable technical key used in
 // gateway requests, sessions and ledgers; it is ASCII and never localised.
 type CatalogModel struct {
+	ReasoningOptions     []string        `json:"reasoningOptions,omitempty"`
+	AvailabilityReason   string          `json:"availabilityReason,omitempty"`
 	ID                   string          `json:"id"`
 	VendorID             string          `json:"vendorId"`
 	DisplayName          DisplayName     `json:"displayName"`
@@ -58,10 +60,11 @@ type CatalogModel struct {
 // Catalog is the vendor hierarchy plus its model rows. Version is the catalog's
 // own version, distinct from the policy version that covers it.
 type Catalog struct {
-	Version string          `json:"version"`
-	TTLSec  int             `json:"ttlSec"`
-	Vendors []CatalogVendor `json:"vendors"`
-	Models  []CatalogModel  `json:"models"`
+	DefaultModelID string          `json:"defaultModelId,omitempty"`
+	Version        string          `json:"version"`
+	TTLSec         int             `json:"ttlSec"`
+	Vendors        []CatalogVendor `json:"vendors"`
+	Models         []CatalogModel  `json:"models"`
 }
 
 const (

@@ -56,15 +56,13 @@ test('advisory: the fork-marker guard really runs, and says how much it examined
   assert.match(census, /0 missing/)
 })
 
-test('advisory: an unset control plane is warned about, not failed', async () => {
-  // Packaging a build whose production host is still `.invalid` is legitimate
-  // during B0/B1, so it must warn. The runtime stays safe: `.invalid` cannot
-  // resolve, so no request reaches anything.
+test('advisory: a configured control plane has no release warning', async () => {
+  // The placeholder behavior is covered by release-config-guard's synthetic
+  // asset tests. This integration assertion follows the shipped production
+  // configuration, whose addresses now live in endpoints.json.
   const { warnings } = await runAdvisoryChecks(ROOT, { resolve: () => null })
-  assert.ok(
-    warnings.some((w) => w.startsWith('release-config-guard: ') && /placeholder/.test(w)),
-    `expected a release-config-guard placeholder warning, got: ${JSON.stringify(warnings)}`,
-  )
+  assert.ok(!warnings.some((w) => w.startsWith('release-config-guard: ')),
+    `configured control plane produced a release-config warning: ${JSON.stringify(warnings)}`)
 })
 
 // ─── hard tier ──────────────────────────────────────────────────────────────

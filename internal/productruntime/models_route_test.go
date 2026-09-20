@@ -61,3 +61,32 @@ func TestModelsWithoutCatalogReturnsExplicitStateAndNoFallback(t *testing.T) {
 		t.Fatalf("models response = %+v, want absent and empty", body)
 	}
 }
+
+func TestReasoningRouteRejectsUndeclaredChoicesForUnknownModel(t *testing.T) {
+	m := newMountedHarness(t)
+	m.firstActivation(t)
+	status, raw := m.request(t, http.MethodPut, "/api/product/model-reasoning", map[string]any{"modelId": "buding-privacy-1", "effort": "max"}, nil)
+	if status != http.StatusBadRequest {
+		t.Fatalf("undeclared max accepted: %d %s", status, raw)
+	}
+	status, raw = m.request(t, http.MethodPut, "/api/product/model-reasoning", map[string]any{"modelId": "buding-privacy-1", "effort": "default"}, nil)
+	if status != http.StatusOK {
+		t.Fatalf("default refused: %d %s", status, raw)
+	}
+	status, raw = m.request(t, http.MethodGet, "/api/product/models", nil, nil)
+	var body struct {
+		Vendors []struct {
+			Models []struct {
+				ReasoningOptions []string `json:"reasoningOptions"`
+				ReasoningEffort  string   `json:"reasoningEffort"`
+			} `json:"models"`
+		} `json:"vendors"`
+	}
+	if err := json.Unmarshal(raw, &body); err != nil {
+		t.Fatal(err)
+	}
+	row := body.Vendors[0].Models[0]
+	if status != 200 || len(row.ReasoningOptions) != 1 || row.ReasoningOptions[0] != "default" || row.ReasoningEffort != "default" {
+		t.Fatalf("unknown model options %s", raw)
+	}
+}

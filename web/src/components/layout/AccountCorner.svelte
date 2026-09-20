@@ -1,6 +1,7 @@
 <script lang="ts">
   import { t } from '../../lib/i18n'
   import { productState } from '../../lib/product'
+  import { formatPoints } from '../../lib/points'
   import { accountPanelOpen } from '../../lib/stores'
   import { avatarInitial, avatarColor } from '../../lib/avatar'
 
@@ -19,7 +20,8 @@
   let { rail = false }: { rail?: boolean } = $props()
 
   const nickname = $derived($productState?.account?.nickname ?? '')
-  const points = $derived($productState?.credits?.balance ?? 0)
+  // OCTO-FORK: show actual points, preserving the difference between unknown and zero.
+  const points = $derived(formatPoints($productState?.credits))
   // $t (not tr): the label must re-render when the language switches, and the
   // corner has no other locale-reactive text to piggyback on.
   const pointsLabel = $derived($t('product.panel.points_value').replaceAll('{n}', String(points)))

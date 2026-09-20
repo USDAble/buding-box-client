@@ -124,17 +124,28 @@ export function checkContent(rel, text) {
   return problems
 }
 
+export const ENDPOINTS_ASSET = "internal/productprofile/endpoints.json"
+
 export async function check(root) {
-  let text
-  try {
-    text = await fs.readFile(path.join(root, PRODUCTION_ASSET), 'utf8')
-  } catch (error) {
-    if (error?.code === 'ENOENT') {
-      return [`${PRODUCTION_ASSET}: missing — no production profile asset to embed`]
+  const assets = {}
+  for (const rel of [PRODUCTION_ASSET, ENDPOINTS_ASSET]) {
+    try {
+      assets[rel] = JSON.parse(await fs.readFile(path.join(root, rel), 'utf8'))
+    } catch (error) {
+      if (error?.code === 'ENOENT') return [rel + ': missing — required embedded configuration']
+      if (error instanceof SyntaxError) return [rel + ': not valid JSON: ' + error.message]
+      throw error
     }
-    throw error
   }
-  return checkContent(PRODUCTION_ASSET, text)
+  const profile = assets[PRODUCTION_ASSET]
+  const endpoints = assets[ENDPOINTS_ASSET]
+  if (!profile || !endpoints || Array.isArray(profile) || Array.isArray(endpoints) || typeof profile !== 'object' || typeof endpoints !== 'object') return ['embedded configuration must be a JSON object']
+  if ('apiHost' in profile || 'gatewayHost' in profile) return [PRODUCTION_ASSET + ': addresses must only be defined in ' + ENDPOINTS_ASSET]
+  return checkContent(PRODUCTION_ASSET + ' + ' + ENDPOINTS_ASSET, JSON.stringify({
+    ...profile,
+    apiHost: typeof endpoints.apiHost === 'string' ? endpoints.apiHost.trim().replace(/\/+$/, '') : endpoints.apiHost,
+    gatewayHost: typeof endpoints.gatewayHost === 'string' ? endpoints.gatewayHost.trim().replace(/\/+$/, '') : endpoints.gatewayHost,
+  }))
 }
 
 export function repositoryRoot(scriptUrl) {

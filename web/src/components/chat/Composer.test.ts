@@ -12,7 +12,7 @@ import {
   toasts,
 } from '../../lib/stores'
 import { checkSensitive } from '../../lib/sensitive'
-import { getEndpoints, getProductModels, transformPersonalInfo } from '../../lib/api'
+import { getEndpoints, getProductModels, transformPersonalInfo, setModelReasoning } from '../../lib/api'
 import { parkDraft, takeDraft } from '../../lib/composerDrafts'
 import Composer from './Composer.svelte'
 
@@ -42,6 +42,7 @@ vi.mock('../../lib/api', () => ({
   getEndpoints: vi.fn(async () => ({ endpoints: [] })),
   setSessionProtection: vi.fn(),
   updateSessionModel: vi.fn(),
+  setModelReasoning: vi.fn(async (modelId: string,effort: string) => ({modelId,effort})),
   transformPersonalInfo: vi.fn(async (text: string) => ({ hit: false, masked: text, matches: [], ruleVersion: 'builtin-1' })),
 }))
 
@@ -120,8 +121,36 @@ beforeEach(() => {
   vi.mocked(transformPersonalInfo).mockImplementation(async (text: string) => ({ hit: false, masked: text, matches: [], ruleVersion: 'builtin-1' }))
   vi.mocked(getProductModels).mockResolvedValue({ state: 'absent', catalogVersion: '', vendors: [] })
   vi.mocked(getEndpoints).mockResolvedValue({ endpoints: [] })
+  vi.mocked(setModelReasoning).mockClear()
   target = document.createElement('div')
   document.body.appendChild(target)
+})
+
+describe('signed per-model reasoning choices', () => {
+  it('offers only declared levels, remembers each model and keeps visibility independent of off', async () => {
+    activeSessionId.set(null); allowEnvironmentModelSource.set(false); setBalance(1)
+    vi.mocked(getProductModels).mockResolvedValue({state:'ready',catalogVersion:'test',defaultModelId:'gateway::known',vendors:[{id:'gateway',displayName:'Gateway',models:[
+      {id:'known',displayName:'Known',compositeId:'gateway::known',confidential:false,reasoningOptions:['default','off','low','high','max'],reasoningEffort:'high'},
+      {id:'unknown',displayName:'Unknown',compositeId:'gateway::unknown',confidential:false},
+    ]}]})
+    render();await settle()
+    const open = (label: string) => { const chip = [...target.querySelectorAll<HTMLButtonElement>('button.meta-chip')].find(node => node.textContent?.trim() === label);expect(chip).toBeTruthy();chip!.click();flushSync() }
+    open('高')
+    const labels = [...target.querySelectorAll('button.menu-item .mi-name')].map(node => node.textContent)
+    expect(labels).toContain('模型默认');expect(labels).toContain('关闭推理');expect(labels).toContain('最高');expect(labels).not.toContain('中');expect(labels).not.toContain('极高')
+    ;([...target.querySelectorAll<HTMLButtonElement>('button.menu-item')].find(node => node.textContent?.trim() === '关闭推理'))!.click()
+    await settle()
+    expect(setModelReasoning).toHaveBeenCalledWith('known','off')
+    open('关闭推理')
+    expect((target.querySelector('button.toggle-item') as HTMLButtonElement).disabled).toBe(false)
+    pendingModel.set('gateway::unknown');flushSync()
+    // Close the current menu before reopening for the newly selected model.
+    open('模型默认');open('模型默认')
+    const unknownLabels = [...target.querySelectorAll('button.menu-item .mi-name')].map(node => node.textContent)
+    expect(unknownLabels).toContain('模型默认');expect(unknownLabels).not.toContain('最高');expect(unknownLabels).not.toContain('关闭推理')
+    pendingModel.set('gateway::known');flushSync()
+    expect([...target.querySelectorAll('button.meta-chip')].some(node=>node.textContent?.trim()==='关闭推理')).toBe(true)
+  })
 })
 
 afterEach(() => {

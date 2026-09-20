@@ -1,13 +1,18 @@
 <script lang="ts">
   import { onMount } from 'svelte'
   import { t, tr, pickLocalized, pickLocalizedList } from '../lib/i18n'
-  import { showToast, openAgentSession } from '../lib/stores'
+  // OCTO-FORK: present the authenticated expert directory and preserve visible cache status.
+  import { showToast, openAgentSession, summonAgent } from '../lib/stores'
   import { confirmDialog } from '../lib/confirm'
   import * as api from '../lib/api'
   import AgentDetailModal from '../components/overlays/AgentDetailModal.svelte'
 
   let agents: api.Agent[] = $state([])
   let loading = $state(true)
+  let loadError = $state('')
+  let cached = $state(false)
+  let refreshing = $state(false)
+  let usingAgent = $state('')
   let query = $state('')
   let activeCategory = $state('all')
   let selectedAgent: api.Agent | null = $state(null)
@@ -18,15 +23,35 @@
   // curated content, so new categories just need a matching i18n key.
   const CATEGORY_ORDER = ['content-creation', 'life', 'learning', 'productivity', 'career']
 
-  async function loadAgents() {
-    loading = true
+  async function loadAgents(refresh = false) {
+    if (refreshing) return
+    loading = agents.length === 0
+    loadError = ''
+    refreshing = true
     try {
-      agents = await api.listAgents()
+      const directory = await api.listAgentDirectory(refresh)
+      agents = directory.agents
+      cached = directory.cached
+      loading = false
+      if (directory.cached && !refresh) {
+        const fresh = await api.listAgentDirectory(true)
+        agents = fresh.agents
+        cached = fresh.cached
+      }
     } catch (err) {
-      showToast('Failed to load agents: ' + (err as Error).message, 'error')
+      loadError = (err as Error).message
     } finally {
       loading = false
+      refreshing = false
     }
+  }
+
+  async function useAgent(agent: api.Agent) {
+    if (usingAgent) return
+    usingAgent = agent.id
+    try { await summonAgent(agent.id, agentName(agent)) }
+    catch (err) { showToast((err as Error).message, 'error') }
+    finally { usingAgent = '' }
   }
 
   async function handleDelete(agent: api.Agent) {
@@ -74,6 +99,7 @@
     return agent.enabled === false
   }
   function agentCategory(agent: api.Agent): string {
+    if (agent.source === 'platform') return 'platform'
     return agent.category && CATEGORY_ORDER.includes(agent.category) ? agent.category : 'mine'
   }
 
@@ -105,7 +131,7 @@
     })
   })
 
-  onMount(loadAgents)
+  onMount(() => { void loadAgents() })
 </script>
 
 <div class="page">
@@ -127,12 +153,15 @@
       <div class="toolbar">
         <div class="search-box">
           <iconify-icon icon="ant-design:search-outlined" width="14" style="color:var(--text-tertiary)"></iconify-icon>
-          <input bind:value={query} placeholder={$t('agents.search_placeholder')} />
+          <input aria-label={$t('agents.search_placeholder')} bind:value={query} placeholder={$t('agents.search_placeholder')} />
         </div>
         <div class="chip-row">
           <button class="chip" class:active={activeCategory === 'all'} onclick={() => activeCategory = 'all'}>
             {$t('agents.category.all')}
           </button>
+          {#if agents.some(a => a.source === 'platform')}
+            <button class="chip" class:active={activeCategory === 'platform'} onclick={() => activeCategory = 'platform'}>{$t('agents.gallery_platform')}</button>
+          {/if}
           {#each categoriesPresent as cat}
             <button class="chip" class:active={activeCategory === cat} onclick={() => activeCategory = cat}>
               {$t(`agents.category.${cat}`)}
@@ -147,11 +176,19 @@
       </div>
     {/if}
 
+    {#if loadError || cached || refreshing}
+      <div class="directory-status" class:has-error={!!loadError} role={loadError ? 'alert' : 'status'}>
+        <span>{loadError ? $t('agents.gallery_refresh_failed') + ': ' + loadError : refreshing ? $t('agents.gallery_refreshing') : $t('agents.gallery_cached')}</span>
+        {#if loadError}<button class="btn-secondary" disabled={refreshing} onclick={() => loadAgents(true)}>{$t('agents.gallery_retry')}</button>{/if}
+      </div>
+    {/if}
     {#if loading}
       <div class="empty-state">
         <div class="spinner"></div>
         <span>{$t('common.loading')}</span>
       </div>
+    {:else if loadError && agents.length === 0}
+      <!-- The error banner owns this state; do not claim an empty directory. -->
     {:else if agents.length === 0}
       <div class="empty-state">
         <iconify-icon icon="ant-design:robot-outlined" width="32"></iconify-icon>
@@ -166,7 +203,7 @@
     {:else}
       <div class="agent-grid">
         {#each filtered as agent (agent.id)}
-          <div class="agent-card" class:is-hidden={isHidden(agent)} onclick={() => selectedAgent = agent}>
+          <article class="agent-card" class:is-hidden={isHidden(agent)}>
             <div class="card-top">
               {#if agent.icon}
                 <span class="agent-icon" style="background-color: {agentIconColor(agentName(agent))}11; color: {agentIconColor(agentName(agent))}">
@@ -186,7 +223,7 @@
                   <button class="act-btn" title={isHidden(agent) ? $t('agents.show') : $t('agents.hide')} onclick={(e) => { e.stopPropagation(); handleToggle(agent) }}>
                     <iconify-icon icon={isHidden(agent) ? 'ant-design:eye-outlined' : 'ant-design:eye-invisible-outlined'} width="13"></iconify-icon>
                   </button>
-                {:else}
+                {:else if agent.source !== 'platform'}
                   <button class="act-btn" title={$t('agents.edit_with_agent')} onclick={(e) => handleEditWithAgent(agent, e)}>
                     <iconify-icon icon="ant-design:message-outlined" width="13"></iconify-icon>
                   </button>
@@ -197,24 +234,20 @@
               </div>
             </div>
             <span class="agent-name">{agentName(agent)}</span>
+            <span class="source-label">{$t(agent.source === 'platform' ? 'agents.gallery_platform' : agent.source === 'default' ? 'agents.gallery_builtin' : 'agents.gallery_local')}{agent.source === 'platform' && agent.version ? ` · v${agent.version}` : ''}</span>
             <span class="agent-desc">{agentDesc(agent)}</span>
             <div class="card-bottom">
               {#if isHidden(agent)}
                 <span class="transport-badge hidden-badge">{$t('agents.hidden')}</span>
               {/if}
-              {#if agent.model}
-                <span class="transport-badge mono">{$t('agents.model')}: {agent.model}</span>
-              {/if}
-              {#if agent.tools && agent.tools.length > 0}
-                <span class="transport-badge">{agent.tools.length} {$t('agents.tools')}</span>
-              {:else if agent.source !== 'default'}
-                <span class="transport-badge muted">{$t('agents.all_tools')}</span>
+              {#if agent.source === 'platform' && agent.platform_skills?.length}
+                <span class="transport-badge">{agent.platform_skills.length} {$t('agents.skills')}</span>
               {/if}
               {#if agent.tool_skills && agent.tool_skills.length > 0}
                 <!-- An expert's skills are as much a part of what it can do as
                      its tools, and they are configured the same way — the card
                      said nothing about them before. -->
-                <span class="transport-badge" title={agent.tool_skills.join(', ')}>
+                <span class="transport-badge">
                   {agent.tool_skills.length} {$t('agents.skills')}
                 </span>
               {/if}
@@ -222,7 +255,11 @@
                 <span class="transport-badge">{agent.channel_bindings.length} {$t('agents.bound_chats')}</span>
               {/if}
             </div>
-          </div>
+            <div class="card-footer">
+              <button class="btn-secondary" onclick={() => selectedAgent = agent}>{$t('agents.gallery_detail')}</button>
+              <button class="btn-primary" disabled={!!usingAgent || isHidden(agent)} onclick={() => useAgent(agent)}>{usingAgent === agent.id ? $t('common.loading') : $t('agents.gallery_use')}<iconify-icon icon="ant-design:arrow-right-outlined" width="14"></iconify-icon></button>
+            </div>
+          </article>
         {/each}
       </div>
     {/if}
@@ -278,13 +315,13 @@ p  { margin: 4px 0 0; font-size: 13px; color: var(--text-secondary); max-width: 
 
 /* ── agent grid ──────────────────────────────────────────────────────────── */
 .agent-grid {
-  display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 16px;
+  display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 280px), 1fr)); gap: 16px;
 }
 
 .agent-card {
   background: var(--bg-container); border: 1px solid var(--border); border-radius: var(--radius-card); box-shadow: var(--card-shadow);
   padding: 16px; display: flex; flex-direction: column; gap: 8px;
-  cursor: pointer; transition: border-color 0.15s, transform 0.15s;
+  transition: border-color 0.15s, transform 0.15s;
 }
 .agent-card:hover { border-color: var(--blue-2); transform: translateY(-1px); }
 /* A hidden curated expert stays in the gallery — dimmed, with its actions
@@ -310,11 +347,11 @@ p  { margin: 4px 0 0; font-size: 13px; color: var(--text-secondary); max-width: 
 .act-btn:hover:not(:disabled)      { background: var(--hover-neutral); color: var(--text); }
 .act-btn.del:hover:not(:disabled)  { background: var(--error-bg); color: var(--error); }
 
-.agent-name { font-size: 14.5px; font-weight: 600; color: var(--text-heading); }
+.agent-name { font-size: 17px; line-height: 1.4; font-weight: 650; color: var(--text-heading); }
 
 .agent-desc {
   font-size: 12.5px; color: var(--text-secondary); line-height: 1.5;
-  display: -webkit-box; -webkit-line-clamp: 2; line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
+  display: -webkit-box; -webkit-line-clamp: 3; line-clamp: 3; min-height: 56px; -webkit-box-orient: vertical; overflow: hidden;
 }
 
 .card-bottom { display: flex; gap: 6px; flex-wrap: wrap; margin-top: auto; padding-top: 4px; }
@@ -322,7 +359,6 @@ p  { margin: 4px 0 0; font-size: 13px; color: var(--text-secondary); max-width: 
   height: 20px; padding: 0 7px; border: 1px solid var(--border-secondary); background: var(--bg-table-header);
   border-radius: 4px; display: flex; align-items: center; font-size: 11px; color: var(--text-tertiary);
 }
-.transport-badge.muted { opacity: 0.6; }
 .transport-badge.hidden-badge { border-color: var(--border); color: var(--text-secondary); }
 
 /* ── empty state ─────────────────────────────────────────────────────────── */
@@ -339,4 +375,23 @@ p  { margin: 4px 0 0; font-size: 13px; color: var(--text-secondary); max-width: 
 }
 
 @keyframes spin { to { transform: rotate(360deg); } }
+/* OCTO-FORK: readable cards, explicit actions and keyboard parity across viewport sizes. */
+.source-label { font-size: 11px; color: var(--text-tertiary); }
+.card-footer { display: flex; justify-content: space-between; gap: 12px; border-top: 1px solid var(--border-secondary); margin-top: 8px; padding-top: 14px; }
+.btn-secondary { padding: 7px 10px; border: 1px solid var(--border); background: var(--bg-container); border-radius: 8px; color: var(--text-secondary); font: inherit; font-size: 12px; cursor: pointer; }
+.btn-secondary:hover { color: var(--blue-6); border-color: var(--blue-2); }
+button:focus-visible { outline: 2px solid var(--blue-6); outline-offset: 3px; }
+.agent-card:focus-within .card-actions { opacity: 1; }
+.search-box:focus-within { border-color: var(--blue-6); }
+.search-box input { min-width: 0; }
+.directory-status { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 12px 16px; border: 1px solid var(--border); border-radius: 10px; font-size: 12px; color: var(--text-secondary); background: var(--bg-container); }
+.directory-status.has-error { border-color: var(--error); }
+.directory-status span { overflow-wrap: anywhere; }
+@media (max-width: 600px) {
+  .inner { padding: 18px 16px 28px; gap: 16px; }
+  .search-box { max-width: none; }
+  .card-actions { opacity: 1; }
+  .chip-row { gap: 6px; }
+}
+@media (prefers-reduced-motion: reduce) { .agent-card { transition: none; } }
 </style>

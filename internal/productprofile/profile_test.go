@@ -2,14 +2,29 @@ package productprofile
 
 import (
 	"encoding/base64"
-	"encoding/json"
 	"os"
 	"strings"
 	"testing"
 )
 
 func TestCurrentIsValidBuildSelectedProfile(t *testing.T) {
+	expected, err := loadProfile(embeddedProfileJSON, embeddedEndpointsJSON)
+	if err != nil {
+		if !strings.Contains(embeddedProfileJSON, "production") || !strings.Contains(err.Error(), "must use https") {
+			t.Fatal(err)
+		}
+		defer func() {
+			if recover() == nil {
+				t.Fatal("production must reject local HTTP endpoints")
+			}
+		}()
+		Current()
+		return
+	}
 	p := Current()
+	if p.APIHost != expected.APIHost || p.GatewayHost != expected.GatewayHost {
+		t.Fatal("Current did not use shared endpoints")
+	}
 	if err := p.Validate(); err != nil {
 		t.Fatalf("Current().Validate() = %v", err)
 	}
@@ -170,8 +185,7 @@ func TestTrustedKeyIDsMustBeEd25519PublicKeys(t *testing.T) {
 }
 
 func TestUnsetControlPlaneIsNotTreatedAsConfigured(t *testing.T) {
-	// The checked-in release asset carries `.invalid` placeholders until the
-	// deployment host is known. They must pass Validate (the shape is right)
+	// Explicit `.invalid` placeholders represent an unknown deployment host. They must pass Validate (the shape is right)
 	// but must never be reported as a usable control plane.
 	p := Profile{
 		SchemaVersion: 1, Name: Production,
@@ -201,7 +215,7 @@ func TestIsUnsetHost(t *testing.T) {
 	}
 }
 
-func TestShippedProductionAssetIsStructurallyValid(t *testing.T) {
+func TestShippedProductionPolicyWithSharedEndpoints(t *testing.T) {
 	// The embedded release asset is the one thing no unit test compiles, so
 	// assert on it directly. ControlPlaneConfigured is deliberately not
 	// asserted: filling in the real host is a release step, not a code change.
@@ -209,9 +223,9 @@ func TestShippedProductionAssetIsStructurallyValid(t *testing.T) {
 	if err != nil {
 		t.Fatalf("read production.json: %v", err)
 	}
-	var p Profile
-	if err := json.Unmarshal(raw, &p); err != nil {
-		t.Fatalf("parse production.json: %v", err)
+	p, err := loadProfile(string(raw), `{"apiHost":"https://api.example.com/api/v1","gatewayHost":"https://gateway.example.com"}`)
+	if err != nil {
+		t.Fatal(err)
 	}
 	if err := p.Validate(); err != nil {
 		t.Fatalf("production.json does not satisfy the profile schema: %v", err)
@@ -243,14 +257,52 @@ func TestShippedTestingAssetIsConfigured(t *testing.T) {
 	if err != nil {
 		t.Fatalf("read testing.json: %v", err)
 	}
-	var p Profile
-	if err := json.Unmarshal(raw, &p); err != nil {
-		t.Fatalf("parse testing.json: %v", err)
-	}
-	if err := p.Validate(); err != nil {
+	p, err := loadProfile(string(raw), embeddedEndpointsJSON)
+	if err != nil {
 		t.Fatalf("testing.json does not satisfy the profile schema: %v", err)
 	}
 	if p.Name != Testing {
 		t.Fatalf("testing.json names profile %q, want %q", p.Name, Testing)
+	}
+}
+
+func TestSharedEndpointsSwitchBothProfilesWithoutChangingPermissions(t *testing.T) {
+	for _, name := range []string{Developer, Production} {
+		raw, err := os.ReadFile("profiles/" + name + ".json")
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, addresses := range []string{
+			`{"apiHost":"https://test.example.com/api/v1/","gatewayHost":"https://test-gateway.example.com/"}`,
+			`{"apiHost":"https://api.example.com/api/v1","gatewayHost":"https://gateway.example.com"}`,
+		} {
+			p, err := loadProfile(string(raw), addresses)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if p.Name != name || p.RequiresControlPlane() != (name == Production) {
+				t.Fatal("endpoint selection changed build permissions")
+			}
+			if strings.HasSuffix(p.APIHost, "/") || strings.HasSuffix(p.GatewayHost, "/") {
+				t.Fatal("trailing slash not normalized")
+			}
+		}
+		_, err = loadProfile(string(raw), `{"apiHost":"http://127.0.0.1:8000/api/v1","gatewayHost":"http://127.0.0.1:8000"}`)
+		if (err != nil) != (name == Production) {
+			t.Fatalf("local HTTP with %s policy: %v", name, err)
+		}
+	}
+}
+
+func TestSharedEndpointsRejectInvalidOrDuplicateConfiguration(t *testing.T) {
+	for _, tc := range []struct{ profile, addresses string }{
+		{`{`, `{}`},
+		{`{"schemaVersion":1,"name":"developer"}`, `{`},
+		{`{"schemaVersion":1,"name":"developer","apiHost":""}`, `{}`},
+		{`{"schemaVersion":1,"name":"developer"}`, `{"apiHost":"https://user:secret@example.com/v1"}`},
+	} {
+		if _, err := loadProfile(tc.profile, tc.addresses); err == nil {
+			t.Fatalf("invalid configuration accepted: %+v", tc)
+		}
 	}
 }

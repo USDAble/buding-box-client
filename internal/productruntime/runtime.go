@@ -11,6 +11,7 @@
 package productruntime
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"log/slog"
@@ -39,9 +40,10 @@ const defaultCooldownSec = 60
 // implementation of each and both are already the single owner of their file
 // (开发规范 §3.8), so a port here would add indirection without buying a seam.
 type Deps struct {
-	State    *productstate.Store
-	Creds    *credentialstore.Store
-	Platform *productclient.Client
+	EnsureSession func(context.Context) error
+	State         *productstate.Store
+	Creds         *credentialstore.Store
+	Platform      *productclient.Client
 	// ControlPlane carries compile-time profile facts needed before the user
 	// types: whether this build names a real control plane, whether it trusts a
 	// signing key, and whether local environment models are an allowed source.
@@ -124,6 +126,7 @@ type Runtime struct {
 	lastCatalogOutcome catalogOutcome
 	dictionaryMu       sync.Mutex
 	dictionaryFailed   bool
+	capabilities       capabilityCache
 }
 
 // New builds a Runtime.
@@ -156,11 +159,20 @@ func (rt *Runtime) Handler() http.Handler {
 // This method is the single list of product routes — both adapters call it, so
 // a route cannot be added to one path and forgotten in the other.
 func (rt *Runtime) Mount(api func(pattern string, h http.HandlerFunc)) {
+	api("GET /api/product/experts", rt.handleExperts)
+	api("GET /api/product/skills", rt.handlePlatformSkills)
+	api("GET /api/product/experts/{id}", rt.handleExpertDetail)
+	api("GET /api/product/skills/{id}", rt.handleSkillDetail)
+	// OCTO-FORK: financial routes share the product gate and authenticated platform client.
+	rt.mountFinance(api)
 	api("GET /api/product/state", rt.handleState)
+	api("POST /api/product/initialize", rt.handleInitialize)
 	api("GET /api/product/control-plane", rt.handleControlPlane)
+	api("GET /api/product/agreements/{kind}", rt.handleAgreement)
 	api("GET /api/product/catalog", rt.handleCatalog)
 	api("GET /api/product/credits", rt.handleCredits)
 	api("GET /api/product/models", rt.handleModels)
+	api("PUT /api/product/model-reasoning", rt.handleModelReasoning)
 	api("GET /api/product/box", rt.handleBox)
 	api("POST /api/product/send-code", rt.handleSendCode)
 	api("POST /api/product/login", rt.handleLogin)
@@ -190,6 +202,7 @@ func (rt *Runtime) Mount(api func(pattern string, h http.HandlerFunc)) {
 }
 
 type modelsDTO struct {
+	DefaultModelID string           `json:"defaultModelId,omitempty"`
 	State          string           `json:"state"`
 	CatalogVersion string           `json:"catalogVersion"`
 	Vendors        []modelVendorDTO `json:"vendors"`
@@ -202,11 +215,15 @@ type modelVendorDTO struct {
 }
 
 type catalogModelDTO struct {
-	ID                   string `json:"id"`
-	DisplayName          string `json:"displayName"`
-	CompositeID          string `json:"compositeId"`
-	Confidential         bool   `json:"confidential"`
-	ConfidentialPriority *int   `json:"confidentialPriority,omitempty"`
+	ReasoningOptions     []string `json:"reasoningOptions"`
+	ReasoningEffort      string   `json:"reasoningEffort"`
+	Eligible             bool     `json:"eligible"`
+	AvailabilityReason   string   `json:"availabilityReason,omitempty"`
+	ID                   string   `json:"id"`
+	DisplayName          string   `json:"displayName"`
+	CompositeID          string   `json:"compositeId"`
+	Confidential         bool     `json:"confidential"`
+	ConfidentialPriority *int     `json:"confidentialPriority,omitempty"`
 }
 
 // handleModels projects only the last accepted signed catalog. It performs no
@@ -237,7 +254,7 @@ func (rt *Runtime) handleModels(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusOK, out)
 		return
 	}
-	vendors, err := projectCatalog(policy)
+	vendors, err := projectCatalogRows(policy, false)
 	if err != nil {
 		slog.Warn("product: cached catalog could not be projected", "err", err, "catalogVersion", entry.CatalogVersion)
 		out.State = catalogProjectionFailureState()
@@ -255,7 +272,14 @@ func (rt *Runtime) handleModels(w http.ResponseWriter, r *http.Request) {
 			Models:      make([]catalogModelDTO, 0, len(vendor.Models)),
 		}
 		for _, model := range vendor.Models {
+			if model.Eligible && model.ID == policy.Catalog.DefaultModelID {
+				out.DefaultModelID = model.CompositeID
+			}
 			row.Models = append(row.Models, catalogModelDTO{
+				Eligible:             model.Eligible,
+				ReasoningOptions:     model.ReasoningOptions,
+				ReasoningEffort:      rt.reasoningPreference(model.ID, model.ReasoningOptions),
+				AvailabilityReason:   model.AvailabilityReason,
 				ID:                   model.ID,
 				DisplayName:          localizeDisplayName(model.DisplayName, locale),
 				CompositeID:          model.CompositeID,
@@ -334,6 +358,11 @@ func (rt *Runtime) handleCatalog(w http.ResponseWriter, r *http.Request) {
 // asymmetry is in the contract, not an oversight - the frontend reads it as the
 // object itself.
 func (rt *Runtime) handleState(w http.ResponseWriter, r *http.Request) {
+	if rt.deps.State.State().LoggedIn && rt.deps.EnsureSession != nil {
+		if err := rt.deps.EnsureSession(r.Context()); err != nil {
+			slog.Warn("product: session restoration deferred or refused", "error", err)
+		}
+	}
 	writeJSON(w, http.StatusOK, rt.deps.State.PublicState())
 }
 
@@ -377,11 +406,12 @@ func (rt *Runtime) handleSendCode(w http.ResponseWriter, r *http.Request) {
 // activation code are required on the first and omitted afterwards (本地API契约 §2.3).
 func (rt *Runtime) handleLogin(w http.ResponseWriter, r *http.Request) {
 	var req struct {
-		Phone          string `json:"phone"`
-		Code           string `json:"code"`
-		Nickname       string `json:"nickname"`
-		ActivationCode string `json:"activationCode"`
-		BoxCode        string `json:"boxCode"`
+		Phone           string `json:"phone"`
+		Code            string `json:"code"`
+		Nickname        string `json:"nickname"`
+		ActivationCode  string `json:"activationCode"`
+		BoxCode         string `json:"boxCode"`
+		ClientRequestID string `json:"clientRequestId"`
 	}
 	if !decodeBody(w, r, &req) {
 		return
@@ -402,9 +432,10 @@ func (rt *Runtime) handleLogin(w http.ResponseWriter, r *http.Request) {
 		Nickname: req.Nickname,
 		// Both empty on a later login; the platform treats their absence as
 		// "already activated" and answers with the record it holds.
-		ActivationCode: strings.TrimSpace(req.ActivationCode),
-		BoxCode:        strings.TrimSpace(req.BoxCode),
-		InstallID:      rt.deps.State.InstallID(),
+		ActivationCode:  strings.TrimSpace(req.ActivationCode),
+		BoxCode:         strings.TrimSpace(req.BoxCode),
+		InstallID:       rt.deps.State.InstallID(),
+		ClientRequestID: req.ClientRequestID,
 	})
 	if err != nil {
 		rt.followActivationRefusal(req.ActivationCode, req.BoxCode, err)
@@ -442,59 +473,8 @@ func (rt *Runtime) handleLogin(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// The catalog is fetched after the session exists and before the response
-	// goes out, because the picker needs it immediately on the first render
-	// (需求基线 B1 规则 1: a catalog failure never blocks the login).
-	//
-	// One error is the exception, and it is not really a catalog failure: a
-	// refused session means the platform has already told us the token it just
-	// issued is not usable. That has to leave the user on the blocked page with
-	// no credential behind, exactly as any other refused call would (L-A6), so it
-	// goes through the same funnel instead of being logged as a catalog problem.
-	if outcome, err := rt.refreshCatalog(r.Context(), true); err != nil {
-		if IsSessionExpired(err) {
-			rt.failPlatform(w, err)
-			return
-		}
-		rt.logCatalogOutcome(outcome, err)
-	}
-
-	// The balance is read on the same terms and for the same reason as the
-	// catalog: after the session exists, before the response goes out, and a
-	// failure never blocks the login (需求基线 B1 rule 1). The one exception is a
-	// refused session, which is not a ledger problem at all - the platform has
-	// just told us the token it issued is unusable - so it goes through the same
-	// funnel rather than being logged as a refresh that did not happen.
-	//
-	// It calls the same function the credits endpoint calls rather than reading
-	// the balance out of this login answer, which also carries one. That field is
-	// deliberately left unread: two paths to one number is two chances for them
-	// to disagree (需求基线 E9 rule 2).
-	if _, err := rt.refreshCredits(r.Context()); err != nil {
-		if IsSessionExpired(err) {
-			rt.failPlatform(w, err)
-			return
-		}
-		slog.Warn("login: the balance was not refreshed", "error", err)
-	}
-
-	var dictionaryNotice *dictionaryNoticeDTO
-	if notice, err := rt.refreshServerDictionary(r.Context()); err != nil {
-		if IsSessionExpired(err) {
-			rt.failPlatform(w, err)
-			return
-		}
-		dictionaryNotice = notice
-		slog.Warn("login: the server dictionary was not refreshed", "error", err)
-	} else {
-		dictionaryNotice = notice
-	}
-
-	response := map[string]any{"state": rt.deps.State.PublicState()}
-	if dictionaryNotice != nil {
-		response["dictionaryNotice"] = dictionaryNotice
-	}
-	writeJSON(w, http.StatusOK, response)
+	// OCTO-FORK: independent workspace reads must not delay a successful login.
+	writeJSON(w, http.StatusOK, map[string]any{"state": rt.deps.State.PublicState()})
 }
 
 // handleLogout ends the session on this installation.

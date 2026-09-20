@@ -9,6 +9,7 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"strings"
 	"sync"
 	"time"
 )
@@ -133,9 +134,15 @@ func (c *Client) SendSMS(ctx context.Context, req SendSMSRequest) (*SendSMSData,
 // Storing them here is what makes the activation and later-login paths one call
 // from the caller's point of view.
 func (c *Client) Login(ctx context.Context, req LoginRequest) (*LoginData, error) {
+	if req.ClientVersion == "" {
+		req.ClientVersion = c.meta.Version
+	}
 	var out LoginData
 	if err := c.do(ctx, http.MethodPost, pathLogin, req, &out, "", req.ClientRequestID); err != nil {
 		return nil, err
+	}
+	if strings.TrimSpace(out.AccessToken) == "" || strings.TrimSpace(out.RefreshToken) == "" || out.AccessTokenExpiresInSec <= 0 || out.Account.ID == "" {
+		return nil, fmt.Errorf("productclient: incomplete login response")
 	}
 	c.creds.Set(Credentials{
 		AccessToken:  out.AccessToken,
@@ -151,6 +158,9 @@ func (c *Client) Refresh(ctx context.Context, refreshToken string) (*RefreshData
 	var out RefreshData
 	if err := c.do(ctx, http.MethodPost, pathRefresh, RefreshRequest{RefreshToken: refreshToken}, &out, "", ""); err != nil {
 		return nil, err
+	}
+	if out.AccessToken == "" || out.RefreshToken == "" || out.AccessTokenExpiresInSec <= 0 {
+		return nil, fmt.Errorf("productclient: incomplete refresh response")
 	}
 	return &out, nil
 }
@@ -325,10 +335,11 @@ func (c *Client) SensitiveDictionary(ctx context.Context, knownVersion string) (
 // say an unauthorised answer ends the session, and it must end it in memory and
 // on disk together rather than one layer at a time.
 func (c *Client) EnsureToken(ctx context.Context) error {
-	if c.creds.AccessToken() != "" {
+	current := c.creds.Get()
+	if current.AccessToken != "" && (current.ExpiresAt.IsZero() || current.ExpiresAt.After(c.now().Add(30*time.Second))) {
 		return nil
 	}
-	err := c.refreshSingleFlight(ctx, "")
+	err := c.refreshSingleFlight(ctx, current.AccessToken)
 	if err != nil && errors.Is(err, ErrSessionExpired) {
 		c.creds.Clear()
 	}
@@ -472,6 +483,11 @@ func (c *Client) do(ctx context.Context, method, path string, body, out any, bea
 	}
 	if out == nil {
 		return nil
+	}
+
+	// OCTO-FORK: financial client endpoints return top-level DTOs with the same auth lifecycle.
+	if direct, ok := out.(*directResponse); ok {
+		return json.Unmarshal(raw, direct.Target)
 	}
 
 	var env struct {

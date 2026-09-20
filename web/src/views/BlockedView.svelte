@@ -5,7 +5,7 @@
   import { productState, blockedPage, sendCode, login, setProductLocale, ProductError, failureTier, tierRetryable, refreshProductState, type DictionaryNotice } from '../lib/product'
   import { normalizePhone } from '../lib/phone'
   import { randomNickname, validateNickname } from '../lib/nickname'
-  import { brandName, brandTagline, brandTermsTitle, brandPrivacyTitle, brandText } from '../lib/brand'
+  import { brandName, brandTagline, brandTermsTitle, brandPrivacyTitle } from '../lib/brand'
   import { showToast } from '../lib/stores'
   import BrandMark from '../components/BrandMark.svelte'
   import LegalModal from '../components/overlays/LegalModal.svelte'
@@ -28,6 +28,8 @@
   let countdown = $state(0)
   let nicknameEdited = $state(false)
   let legalModal = $state<null | 'terms' | 'privacy'>(null)
+	// OCTO-FORK: reuse login IDs after transport failures; legal publications are informational.
+	let loginAttempt = { payload: '', id: '' }
   let timer: ReturnType<typeof setInterval> | null = null
 
   // Business codes already reported as unmapped. The render path calls
@@ -197,8 +199,11 @@
     formError = null
     phoneMasked = null
     submitting = true
+	const attemptPayload = JSON.stringify([normalizedPhone.value, code, nickname, activationForm, activationCode, boxCode])
+	if (loginAttempt.payload !== attemptPayload) loginAttempt = { payload: attemptPayload, id: crypto.randomUUID() }
     try {
       const result = await login({
+		clientRequestId: loginAttempt.id,
         phone: normalizedPhone.value,
         code,
         nickname,
@@ -213,6 +218,7 @@
       // the main UI and this view unmounts.
     } catch (e) {
       if (e instanceof ProductError) {
+		if (e.code === 'idempotency_conflict') loginAttempt = { payload: '', id: '' }
         if (Object.keys(e.fieldErrors).length > 0) fieldErrors = e.fieldErrors
         else {
           formError = e.code
@@ -264,6 +270,9 @@
 
   function businessErrorKey(): string {
     switch (formError) {
+	  case 'mobile_already_activated': return 'product.err_mobile_already_activated'
+	  case 'client_disabled': return 'product.err_client_disabled'
+	  case 'idempotency_conflict': return 'product.err_idempotency_conflict'
       case 'code_not_sent': return 'product.err_code_not_sent'
       case 'invalid_code': return 'product.err_invalid_code'
       // The activation family. Each code renders its own copy: the whole point
@@ -418,7 +427,7 @@
 
 <LegalModal
   title={legalModal === 'terms' ? brandTermsTitle($locale) : brandPrivacyTitle($locale)}
-  body={legalModal === 'terms' ? brandText('termsBody', $locale) : brandText('privacyBody', $locale)}
+  kind={legalModal === 'terms' ? 'box' : 'privacy'}
   open={legalModal !== null}
   onClose={() => (legalModal = null)}
 />

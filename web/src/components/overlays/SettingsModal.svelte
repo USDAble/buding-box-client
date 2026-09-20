@@ -1,10 +1,12 @@
 <script lang="ts">
-  import { onDestroy } from 'svelte'
+  import { onDestroy, untrack } from 'svelte'
   import Segment from '../ui/Segment.svelte'
   import ThemePackPicker from '../ui/ThemePackPicker.svelte'
   import Switch from '../ui/Switch.svelte'
   import EndpointsSection from '../settings/EndpointsSection.svelte'
   import SafetyPrivacySection from '../settings/SafetyPrivacySection.svelte'
+  // OCTO-FORK: wallet and recharge use published platform configuration.
+  import WalletSection from '../settings/WalletSection.svelte'
   import QrCode from '../ui/QrCode.svelte'
   import FileRecallView from '../../views/FileRecallView.svelte'
   import ProfileView from '../../views/ProfileView.svelte'
@@ -66,13 +68,13 @@
   let upgradeMode   = $state<'cli' | 'installer'>('cli')
   let loading       = $state(true)
 
-  let cat = $state<'general' | 'account' | 'safety' | 'box' | 'help' | 'endpoints' | 'agent' | 'mobile' | 'experimental' | 'data' | 'about'>('general')
+  let cat = $state<'general' | 'account' | 'wallet' | 'safety' | 'box' | 'help' | 'endpoints' | 'agent' | 'mobile' | 'experimental' | 'data' | 'about'>('general')
   let modalEl = $state<HTMLDivElement | null>(null)
   const accountNickname = $derived($productState?.account?.nickname ?? '')
   const accountPhone = $derived($productState?.account?.phoneMasked ?? '—')
-  const accountLicense = $derived($productState?.activation?.expiresAt ?? '')
+  const accountLicense = $derived($productState?.activation?.expiresAt || ($productState?.activated && $productState.activation?.activatedAt ? $t('product.panel.license_permanent') : ''))
   let nicknameDraft = $state('')
-  let nicknameErr = $state<'' | 'nickname_format' | 'nickname_sensitive'>('')
+  let nicknameErr = $state<'' | 'nickname_format' | 'nickname_sensitive' | 'save_failed'>('')
   let savingNickname = $state(false)
   let feedbackCategory = $state<'bug' | 'suggestion' | 'other'>('suggestion')
   let feedbackTitle = $state('')
@@ -86,6 +88,7 @@
   let feedbackReceipt = $state('')
   let feedbackError = $state('')
   let feedbackKey = $state('')
+  let feedbackPayload = ''
   let feedbackCooldownSec = $state(0)
   let feedbackCooldownTimer: ReturnType<typeof setInterval> | undefined
   let box = $state<BoxDTO | null>(null)
@@ -275,6 +278,7 @@
     { key: 'general',   icon: 'ant-design:sliders-outlined',       label: 'settings.general' },
     { key: 'account',   icon: 'ant-design:user-outlined',          label: 'settings.account' },
     { key: 'safety',    icon: 'ant-design:safety-outlined',        label: 'settings.safety' },
+    { key: 'wallet', icon: 'ant-design:wallet-outlined', label: 'wallet.title' },
     { key: 'box',       icon: 'lucide:box',                         label: 'settings.box' },
     { key: 'help',      icon: 'ant-design:question-circle-outlined', label: 'settings.help' },
     // OCTO-FORK: product profiles hide local model management from the
@@ -302,6 +306,8 @@
   // the modal last closed.
   $effect(() => {
     if ($settingsModalOpen) {
+      // OCTO-FORK: wallet balance refreshes must not re-run modal navigation initialization.
+      untrack(() => {
       // A deep link (command palette, in-app shortcut) picks the category and
       // 数据管理 sub-view; a plain open falls back to the default landing.
       const target = get(settingsTarget)
@@ -318,6 +324,7 @@
       nicknameDraft = $productState?.account?.nickname ?? ''
       nicknameErr = ''
       modalEl?.focus()
+      })
     }
   })
 
@@ -542,7 +549,7 @@
   async function sendFeedback() {
     // OCTO-FORK: feedback rate limits are a server-owned retry window, surfaced
     // here without discarding the idempotency key or the user's form contents.
-    if (feedbackCooldownSec > 0) return
+    if (feedbackSubmitting || feedbackCooldownSec > 0) return
     const title = feedbackTitle.trim()
     const content = feedbackContent.trim()
     feedbackError = ''
@@ -559,16 +566,17 @@
     }
     feedbackSubmitting = true
     try {
-      if (!feedbackKey) feedbackKey = crypto.randomUUID()
-      const receipt = await submitFeedback({
-        category: feedbackCategory,
+      const payload = { category: feedbackCategory,
         title,
         content,
         reproduction: feedbackReproduction.trim(),
         expected: feedbackExpected.trim(),
         impact: feedbackImpact,
         contact: feedbackContact.trim(),
-      }, feedbackKey)
+       }
+      const fingerprint = JSON.stringify(payload)
+      if (!feedbackKey || feedbackPayload !== fingerprint) { feedbackKey = crypto.randomUUID(); feedbackPayload = fingerprint }
+      const receipt = await submitFeedback(payload, feedbackKey)
       feedbackReceipt = receipt.feedbackId
       feedbackTitle = ''
       feedbackContent = ''
@@ -688,10 +696,10 @@
     <div class="modal-body">
       <div class="rail">
         {#each categories as c (c.key)}
-          <div class="scat" class:on={cat === c.key} onclick={() => { cat = c.key; resetDataView() }}>
+          <button type="button" class="scat" class:on={cat === c.key} aria-current={cat === c.key ? 'page' : undefined} onclick={() => { cat = c.key; resetDataView() }}>
             <iconify-icon icon={c.icon} width="15"></iconify-icon>
             <span>{$t(c.label)}</span>
-          </div>
+          </button>
         {/each}
       </div>
 
@@ -756,7 +764,7 @@
               <span class="setl">{$t('product.panel.nickname')}</span>
               <span class="setd">{$t('settings.account.nickname_desc')}</span>
               {#if nicknameErr}
-                <span class="account-error">{$t(nicknameErr === 'nickname_sensitive' ? 'product.err_nickname_sensitive' : 'product.err_nickname')}</span>
+                <span class="account-error">{$t(nicknameErr === 'nickname_sensitive' ? 'product.err_nickname_sensitive' : nicknameErr === 'save_failed' ? 'product.send_failed' : 'product.err_nickname')}</span>
               {/if}
             </div>
             <div class="account-edit">
@@ -786,6 +794,8 @@
             <button class="btns danger" onclick={signOut}>{$t('product.panel.logout')}</button>
           </div>
 
+        {:else if cat === 'wallet'}
+          <WalletSection />
         {:else if cat === 'safety'}
           <SafetyPrivacySection />
 
@@ -841,13 +851,16 @@
             {:else}
               <div class="feedback-form">
                 <div class="feedback-intro"><h3>{$t('settings.help.feedback_title')}</h3><p>{$t('settings.help.feedback_notice')}</p></div>
-                <div class="feedback-grid"><label><span>{$t('settings.help.feedback_category')}</span><select class="sinput" bind:value={feedbackCategory}><option value="bug">{$t('settings.help.feedback_bug')}</option><option value="suggestion">{$t('settings.help.feedback_suggestion')}</option><option value="other">{$t('settings.help.feedback_other')}</option></select></label><label><span>{$t('settings.help.feedback_impact')}</span><select class="sinput" bind:value={feedbackImpact}><option value="low">{$t('settings.help.feedback_impact_low')}</option><option value="normal">{$t('settings.help.feedback_impact_normal')}</option><option value="high">{$t('settings.help.feedback_impact_high')}</option></select></label></div>
-                <label><span>{$t('settings.help.feedback_title_label')}</span><input class="sinput" bind:value={feedbackTitle} maxlength="120" /></label>
-                <label><span>{$t('settings.help.feedback_content')}</span><textarea class="sinput feedback-content" bind:value={feedbackContent} maxlength="4000"></textarea></label>
-                <div class="feedback-grid"><label><span>{$t('settings.help.feedback_reproduction')}</span><textarea class="sinput feedback-short" bind:value={feedbackReproduction} maxlength="2000"></textarea></label><label><span>{$t('settings.help.feedback_expected')}</span><textarea class="sinput feedback-short" bind:value={feedbackExpected} maxlength="2000"></textarea></label></div>
-                <label><span>{$t('settings.help.feedback_contact')}</span><input class="sinput" bind:value={feedbackContact} maxlength="200" /></label>
-                {#if feedbackError}<p class="account-error">{feedbackError}</p>{/if}{#if feedbackReceipt}<p class="feedback-success">{$t('settings.help.feedback_sent').replace('{id}', feedbackReceipt)}</p>{/if}
-                <button class="btns" onclick={sendFeedback} disabled={feedbackSubmitting || feedbackCooldownSec > 0}>{feedbackSubmitting ? $t('common.saving') : feedbackCooldownSec > 0 ? $t('settings.help.feedback_retry').replace('{seconds}', String(feedbackCooldownSec)) : $t('settings.help.feedback_submit')}</button>
+                <label><span class="feedback-label">{$t('settings.help.feedback_title_label')}<small>{$t('settings.help.feedback_count').replace('{count}', String(Array.from(feedbackTitle).length)).replace('{limit}', '120')}</small></span><input class="sinput" bind:value={feedbackTitle} maxlength="120" placeholder={$t('settings.help.feedback_title_placeholder')} disabled={feedbackSubmitting} /></label>
+                <label><span class="feedback-label">{$t('settings.help.feedback_content')}<small>{$t('settings.help.feedback_count').replace('{count}', String(Array.from(feedbackContent).length)).replace('{limit}', '4000')}</small></span><textarea class="sinput feedback-content" bind:value={feedbackContent} maxlength="4000" placeholder={$t('settings.help.feedback_content_placeholder')} disabled={feedbackSubmitting}></textarea></label>
+                <div class="feedback-grid"><label><span>{$t('settings.help.feedback_category')}</span><select class="sinput" bind:value={feedbackCategory} disabled={feedbackSubmitting}><option value="bug">{$t('settings.help.feedback_bug')}</option><option value="suggestion">{$t('settings.help.feedback_suggestion')}</option><option value="other">{$t('settings.help.feedback_other')}</option></select></label><label><span>{$t('settings.help.feedback_impact')}</span><select class="sinput" bind:value={feedbackImpact} disabled={feedbackSubmitting}><option value="low">{$t('settings.help.feedback_impact_low')}</option><option value="normal">{$t('settings.help.feedback_impact_normal')}</option><option value="high">{$t('settings.help.feedback_impact_high')}</option></select></label></div>
+                <details class="feedback-optional"><summary>{$t('settings.help.feedback_optional')}</summary><div class="feedback-extra">
+                  <label><span>{$t('settings.help.feedback_reproduction')}</span><textarea class="sinput feedback-short" bind:value={feedbackReproduction} maxlength="2000" placeholder={$t('settings.help.feedback_reproduction_placeholder')} disabled={feedbackSubmitting}></textarea></label>
+                  <label><span>{$t('settings.help.feedback_expected')}</span><textarea class="sinput feedback-short" bind:value={feedbackExpected} maxlength="2000" placeholder={$t('settings.help.feedback_expected_placeholder')} disabled={feedbackSubmitting}></textarea></label>
+                  <label><span>{$t('settings.help.feedback_contact')}</span><input class="sinput" bind:value={feedbackContact} maxlength="200" placeholder={$t('settings.help.feedback_contact_placeholder')} disabled={feedbackSubmitting} /></label>
+                </div></details>
+                {#if feedbackError}<p class="feedback-error" role="alert">{feedbackError}</p>{/if}{#if feedbackReceipt}<p class="feedback-success" role="status">{$t('settings.help.feedback_sent').replace('{id}', feedbackReceipt)}</p>{/if}
+                <div class="feedback-actions"><span>{$t('settings.help.feedback_required')}</span><button class="feedback-submit" onclick={sendFeedback} disabled={feedbackSubmitting || feedbackCooldownSec > 0 || !feedbackTitle.trim() || !feedbackContent.trim()}>{feedbackSubmitting ? $t('settings.help.feedback_submitting') : feedbackCooldownSec > 0 ? $t('settings.help.feedback_retry').replace('{seconds}', String(feedbackCooldownSec)) : $t('settings.help.feedback_submit')}</button></div>
               </div>
             {/if}
           </section>
@@ -859,8 +872,10 @@
           <div class="setrow">
             <div class="seti">
               <span class="setl">{$t('settings.reasoning')}</span>
-              <span class="setd">{$t('settings.reasoning_desc')}</span>
+              <!-- OCTO-FORK: product gateway reasoning is selected per signed catalog model. -->
+              <span class="setd">{$t($productState ? 'settings.reasoning_per_model' : 'settings.reasoning_desc')}</span>
             </div>
+            {#if !$productState}
             <Segment
               options={['low', 'medium', 'high', 'xhigh', 'max']}
               labels={{
@@ -870,6 +885,7 @@
               value={reasoningEffort}
               onchange={(v) => saveReasoningEffort(v)}
             />
+            {/if}
           </div>
           <div class="setrow">
             <div class="seti">
@@ -1121,7 +1137,7 @@
   /* Fixed height (not max-height) so switching between categories with very
      different content lengths (关于 vs 端点) never resizes the modal itself
      — each pane scrolls internally instead. */
-  width: 100%; max-width: 760px; height: calc(78vh / var(--font-zoom));
+  width: 100%; max-width: 900px; height: calc(78vh / var(--font-zoom));
   background: var(--bg-container); border: 1px solid var(--border); border-radius: var(--radius-card);
   box-shadow: 0 24px 48px rgba(15,23,42,0.18);
   display: flex; flex-direction: column; overflow: hidden;
@@ -1149,7 +1165,9 @@
 .scat {
   display: flex; align-items: center; gap: 9px; padding: 7px 10px;
   border-radius: 7px; cursor: pointer; color: var(--text-tertiary);
+  border: none; background: transparent; text-align: left; font: inherit;
 }
+.scat:focus-visible { outline: 2px solid var(--blue-6); outline-offset: -2px; }
 .scat span { font-size: 13px; color: var(--text-secondary); }
 .scat:hover { background: var(--hover-neutral); }
 .scat.on { background: var(--active-blue-bg); }
@@ -1304,13 +1322,24 @@ select.sinput { cursor: pointer; }
   .help-guide-grid details { padding: 14px; border: 1px solid var(--border-secondary); border-radius: 10px; }
   .help-guide-grid summary { cursor: pointer; color: var(--text); font-size: 13px; font-weight: 600; }
   .help-guide-grid p { margin: 9px 0 0; color: var(--text-secondary); font-size: 12px; line-height: 1.55; }
-  .feedback-form { display: flex; flex-direction: column; gap: 12px; padding: 16px; border: 1px solid var(--border); border-radius: 12px; }
+  .feedback-form { display: flex; flex-direction: column; gap: 16px; padding: 4px 0; }
   .feedback-intro h3 { margin: 0; color: var(--text); font-size: 15px; }
   .feedback-intro p { margin: 5px 0 0; color: var(--text-secondary); font-size: 12px; line-height: 1.5; }
   .feedback-form label { display: flex; flex-direction: column; gap: 6px; color: var(--text-secondary); font-size: 12px; }
   .feedback-form .sinput { width: 100%; box-sizing: border-box; }
-  .feedback-content { height: 120px; padding: 9px 10px; resize: vertical; }
+  .feedback-content { min-height: 144px; padding: 10px 12px; resize: vertical; line-height:1.6; }
   .feedback-short { height: 76px; padding: 9px 10px; resize: vertical; }
-  .feedback-success { color: var(--success); margin: 0; font-size: 13px; }
+  .feedback-form .feedback-grid {max-width:360px;gap:12px;}
+  .feedback-label {display:flex;justify-content:space-between;align-items:center;gap:10px;}
+  .feedback-label small {font-size:11px;font-weight:400;color:var(--text-tertiary);}
+  .feedback-optional {border-top:1px solid var(--border);border-bottom:1px solid var(--border);padding:12px 0;}
+  .feedback-optional summary {cursor:pointer;color:var(--text-secondary);font-size:12px;}
+  .feedback-extra {display:flex;flex-direction:column;gap:12px;padding-top:14px;}
+  .feedback-actions {display:flex;align-items:center;justify-content:space-between;gap:12px;}
+  .feedback-actions>span {font-size:11px;color:var(--text-tertiary);}
+  .feedback-submit {flex-shrink:0;border:1px solid var(--blue-6);background:var(--blue-6);color:var(--on-accent);border-radius:7px;padding:9px 20px;font-size:12px;font-weight:500;cursor:pointer;}
+  .feedback-submit:hover:not(:disabled) {filter:brightness(1.08);}.feedback-submit:disabled {opacity:.5;cursor:default;}
+  .feedback-error,.feedback-success {margin:0;padding:10px 12px;border-radius:8px;font-size:12px;line-height:1.6;overflow-wrap:anywhere;background:var(--bg-layout);}
+  .feedback-error {color:var(--error);}.feedback-success {color:var(--success);}
   @media (max-width: 640px) { .box-info-grid, .capability-grid, .feedback-grid, .help-guide-grid { grid-template-columns: 1fr; } .center-hero { flex-direction: column; } }
 </style>

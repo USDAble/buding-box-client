@@ -431,13 +431,27 @@ func catalogExpiry(policy productclient.Policy, now time.Time) (time.Time, error
 // act on. It exists so the outcome enum has a consumer in this PR: without one,
 // the five values would be dead code that PR-4c might quietly replace.
 func (rt *Runtime) logCatalogOutcome(outcome catalogOutcome, err error) {
-	slog.Warn("product: catalog unavailable", "outcome", string(outcome), "err", err)
+	// OCTO-FORK: distinguish deployment failures without logging arbitrary response data or credentials.
+	reason := "unspecified"
+	var remote *productclient.Error
+	if errors.As(err, &remote) {
+		switch remote.Message {
+		case "模型目录签名尚未配置":
+			reason = "catalog_signing_not_configured"
+		case "模型目录暂不可用":
+			reason = "catalog_database_or_query_unavailable"
+		}
+	}
+	slog.Warn("product: catalog unavailable", "outcome", string(outcome), "err", err, "server_reason", reason)
 }
 
 // catalogModel is the verified row consumed by both the picker projection and
 // the turn guard. Keeping one row shape prevents the UI and routing decisions
 // from acquiring separate definitions of "selectable" or "confidential".
 type catalogModel struct {
+	ReasoningOptions     []string
+	Eligible             bool
+	AvailabilityReason   string
 	ID                   string
 	DisplayName          productclient.DisplayName
 	CompositeID          string
@@ -456,6 +470,7 @@ type catalogVendor struct {
 // boundary. Current is false when the signed cache is expired or a later
 // verification failed; Selectable and Confidential describe this exact model.
 type CatalogModelEligibility struct {
+	ReasoningOptions     []string
 	Selectable           bool
 	Confidential         bool
 	ConfidentialPriority *int
@@ -468,6 +483,11 @@ type CatalogModelEligibility struct {
 // Semantic validation happens before filtering so a broken reference rejects
 // the whole catalog instead of silently dropping one row.
 func projectCatalog(policy productclient.Policy) ([]catalogVendor, error) {
+	return projectCatalogRows(policy, true)
+}
+
+// Display retains unavailable rows with their signed reason; runtime offers do not.
+func projectCatalogRows(policy productclient.Policy, eligibleOnly bool) ([]catalogVendor, error) {
 	if err := productclient.ValidateCatalog(policy.Catalog); err != nil {
 		return nil, err
 	}
@@ -482,11 +502,14 @@ func projectCatalog(policy productclient.Policy) ([]catalogVendor, error) {
 		})
 	}
 	for sourceOrder, model := range policy.Catalog.Models {
-		if !model.Eligible {
+		if eligibleOnly && !model.Eligible {
 			continue
 		}
 		vendor := &vendors[index[model.VendorID]]
 		vendor.Models = append(vendor.Models, catalogModel{
+			ReasoningOptions:     reasoningOptions(model.ReasoningOptions),
+			Eligible:             model.Eligible,
+			AvailabilityReason:   model.AvailabilityReason,
 			ID:                   model.ID,
 			DisplayName:          model.DisplayName,
 			CompositeID:          productprofile.GatewayModelPrefix() + model.ID,
@@ -507,6 +530,7 @@ func catalogEligibility(policy productclient.Policy, id string) (CatalogModelEli
 			continue
 		}
 		return CatalogModelEligibility{
+			ReasoningOptions:     reasoningOptions(model.ReasoningOptions),
 			Selectable:           model.Eligible,
 			Confidential:         model.Eligible && model.Confidential,
 			ConfidentialPriority: model.ConfidentialPriority,

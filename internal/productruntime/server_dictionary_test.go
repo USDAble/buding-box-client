@@ -26,3 +26,13 @@ func TestApplyDictionaryDeltaRequiresTheAcceptedBase(t *testing.T) {
 		t.Fatal("mismatched base was accepted")
 	}
 }
+
+func TestApplyEmptyFullDictionaryPreservesExplicitEmptyList(t *testing.T) {
+	words, err := applyDictionaryUpdate(productclient.SensitiveDictionary{Mode: "full", Words: []string{}}, sensitive.ServerEntry{Version: "1", Words: []string{"old"}}, true)
+	if err != nil || words == nil || len(words) != 0 {
+		t.Fatalf("explicit empty update = %#v, %v", words, err)
+	}
+	if _, err := applyDictionaryUpdate(productclient.SensitiveDictionary{Mode: "full"}, sensitive.ServerEntry{}, false); err == nil {
+		t.Fatal("missing words must not masquerade as an empty supplemental dictionary")
+	}
+}

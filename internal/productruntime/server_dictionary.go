@@ -18,9 +18,9 @@ type dictionaryNoticeDTO struct {
 	Version         string `json:"version,omitempty"`
 }
 
-// refreshServerDictionary runs only after an explicit successful login. It
-// never writes at process startup, and every refusal leaves the accepted cache
-// byte-for-byte intact. The notice names both the fallback and recovery event.
+// refreshServerDictionary runs during authenticated workspace initialization.
+// Every refusal leaves the accepted cache byte-for-byte intact. The notice
+// names both the fallback and recovery event, including manual retries.
 func (rt *Runtime) refreshServerDictionary(ctx context.Context) (*dictionaryNoticeDTO, error) {
 	if rt.deps.ServerDictionary == nil || rt.deps.Platform == nil {
 		return nil, nil
@@ -81,7 +81,7 @@ func applyDictionaryUpdate(update productclient.SensitiveDictionary, current sen
 		if update.Words == nil {
 			return nil, fmt.Errorf("server dictionary: full update has no words")
 		}
-		return append([]string(nil), update.Words...), nil
+		return append([]string{}, update.Words...), nil
 	case "delta":
 		if !haveCurrent || update.BaseVersion == "" || update.BaseVersion != current.Version {
 			return nil, fmt.Errorf("server dictionary: delta base %q does not match cache", update.BaseVersion)

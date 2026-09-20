@@ -1,4 +1,8 @@
 <script lang="ts">
+  // OCTO-FORK: preserve the selected permission boundary when first-turn PATCH fails.
+  import { createPendingPermissionGate } from '../lib/pendingPermissionGate'
+  // OCTO-FORK: session creation uses the same resolved default displayed by the picker.
+  import { defaultSelectableModel } from '../lib/selectableModels'
   import { onMount, onDestroy } from 'svelte'
   import { get } from 'svelte/store'
   import { fade } from 'svelte/transition'
@@ -2243,9 +2247,18 @@ import QuestionModal from '../components/overlays/QuestionModal.svelte'
   // resolveProjectForDir from building the same project twice.
   let creating: Promise<{ id: string; created: boolean } | null> | null = null
 
+  const pendingPermissionGate = createPendingPermissionGate(async (id, mode) => {
+    await api.updateSessionPermissionMode(id, mode)
+    chatPermMode.update(m => ({ ...m, [id]: mode }))
+  })
+
   async function ensureActiveSession(): Promise<{ id: string; created: boolean } | null> {
     const existing = get(activeSessionId)
-    if (existing) return { id: existing, created: false }
+    if (existing) {
+      try { await pendingPermissionGate.ensure(existing) }
+      catch (e: any) { showToast(e.message ?? 'Failed to apply permission mode', 'error'); return null }
+      return { id: existing, created: false }
+    }
     if (creating) return creating
     creating = createSessionForFirstMessage().finally(() => { creating = null })
     return creating
@@ -2259,7 +2272,7 @@ import QuestionModal from '../components/overlays/QuestionModal.svelte'
       // applies to the session it was picked for. Same for the agent, which
       // the sidebar's "+" caret can pin per new session, falling back to the
       // globally active one.
-      const model = get(pendingModel)
+      const model = get(pendingModel) || get(defaultSelectableModel)
       const opts: api.CreateSessionOpts = {
         source: 'manual',
         agent_profile: get(pendingAgent) || get(activeAgent),
@@ -2343,7 +2356,9 @@ import QuestionModal from '../components/overlays/QuestionModal.svelte'
           await api.updateSessionPermissionMode(newSess.id, permPick)
           chatPermMode.update(m => ({ ...m, [newSess.id]: permPick }))
         } catch (e: any) {
+          pendingPermissionGate.require(newSess.id, permPick)
           showToast(e.message ?? 'Failed to apply permission mode', 'error')
+          return null
         }
       }
       // Reasoning effort 'off' already forced show_reasoning off locally

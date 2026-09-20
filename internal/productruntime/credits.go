@@ -41,6 +41,7 @@ func (rt *Runtime) refreshCredits(ctx context.Context) (productstate.Credits, er
 		return productstate.Credits{}, err
 	}
 	credits := productstate.Credits{
+		Known: true,
 		// Safe to dereference: CreditsLedger refuses an answer that has none, so
 		// the zero-versus-absent question is settled inside the client, where the
 		// wire shape lives, and not here.

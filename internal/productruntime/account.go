@@ -76,7 +76,17 @@ func (rt *Runtime) handleNickname(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := rt.deps.State.SetNickname(req.Nickname); err != nil {
+	// OCTO-FORK: the platform account owns nickname; never report a local-only edit as synchronized.
+	if rt.deps.Platform == nil {
+		writeCode(w, http.StatusServiceUnavailable, productclient.CodeInternalError, nil)
+		return
+	}
+	account, err := rt.deps.Platform.UpdateNickname(r.Context(), req.Nickname)
+	if err != nil {
+		rt.failPlatform(w, err)
+		return
+	}
+	if err := rt.deps.State.SetNickname(account.Nickname); err != nil {
 		writeCode(w, http.StatusInternalServerError, productclient.CodeInternalError, nil)
 		return
 	}

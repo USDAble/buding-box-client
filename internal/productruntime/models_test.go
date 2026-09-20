@@ -46,6 +46,34 @@ func TestProjectCatalogPreservesVendorHierarchyAndEligibility(t *testing.T) {
 	}
 }
 
+func TestUnavailableModelIsVisibleButCannotBeUsed(t *testing.T) {
+	policy := fixtureCatalogPolicy(t)
+	for i := range policy.Catalog.Models {
+		if policy.Catalog.Models[i].ID == "buding-cloud-fast" {
+			policy.Catalog.Models[i].Eligible = false
+			policy.Catalog.Models[i].AvailabilityReason = "pricing_not_configured"
+		}
+	}
+	display, err := projectCatalogRows(policy, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(display[1].Models) != 1 || display[1].Models[0].Eligible || display[1].Models[0].AvailabilityReason != "pricing_not_configured" {
+		t.Fatalf("missing unavailable model explanation: %+v", display[1])
+	}
+	runtime, err := projectCatalog(policy)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(runtime[1].Models) != 0 {
+		t.Fatal("display-only model leaked into runtime offers")
+	}
+	eligibility, found := catalogEligibility(policy, "buding-cloud-fast")
+	if !found || eligibility.Selectable {
+		t.Fatal("unavailable model was authorized")
+	}
+}
+
 func TestProjectCatalogCarriesRoutingAndConfidentialMetadata(t *testing.T) {
 	vendors, err := projectCatalog(fixtureCatalogPolicy(t))
 	if err != nil {

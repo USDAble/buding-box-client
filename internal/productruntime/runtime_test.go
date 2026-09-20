@@ -174,6 +174,11 @@ func (h *harness) activate() map[string]any {
 	if status != http.StatusOK {
 		h.t.Fatalf("login status = %d body = %v, want 200", status, body)
 	}
+	// OCTO-FORK: authentication and workspace initialization are separate user steps.
+	status, body = h.do(http.MethodPost, "/api/product/initialize", nil)
+	if status != http.StatusOK {
+		h.t.Fatalf("initialize status = %d body = %v", status, body)
+	}
 	state, ok := body["state"].(map[string]any)
 	if !ok {
 		h.t.Fatalf("login body has no state object: %v", body)

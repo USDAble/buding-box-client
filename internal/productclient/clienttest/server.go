@@ -645,6 +645,9 @@ func WithClock(now func() time.Time) Option {
 // Handler returns the platform-facing routes.
 func (s *Server) Handler() http.Handler {
 	mux := http.NewServeMux()
+	// OCTO-FORK: mirror the authenticated account update contract.
+	mux.HandleFunc("PUT /v1/client/account/nickname", s.handleAccountNickname)
+	mux.HandleFunc("GET /v1/client/account", s.handleAccountIdentity)
 	mux.HandleFunc("POST "+"/v1/auth/sms/send", s.handleSendSMS)
 	mux.HandleFunc("POST "+"/v1/auth/login", s.handleLogin)
 	mux.HandleFunc("POST "+"/v1/auth/refresh", s.handleRefresh)

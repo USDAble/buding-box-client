@@ -493,6 +493,11 @@ func (m *mountedHarness) firstActivation(t *testing.T) {
 	if status != http.StatusOK {
 		t.Fatalf("first activation = %d (%v), want 200", status, body)
 	}
+	// OCTO-FORK: authentication precedes optional workspace initialization.
+	if status, body := m.post(t, "/api/product/initialize", nil); status != http.StatusOK {
+		t.Fatalf("initialize = %d (%v)", status, body)
+	}
+
 }
 
 // laterLogin is the second login (需求基线 E2): the account is already
@@ -505,11 +510,15 @@ func (m *mountedHarness) laterLogin(t *testing.T, phone string) (int, map[string
 	if status, body := m.post(t, "/api/product/send-code", map[string]any{"phone": phone}); status != http.StatusOK {
 		t.Fatalf("send-code = %d (%v), want 200", status, body)
 	}
-	return m.post(t, "/api/product/login", map[string]any{
+	status, body := m.post(t, "/api/product/login", map[string]any{
 		"phone":    phone,
 		"code":     clienttest.FixtureSMSCode,
 		"nickname": "tester",
 	})
+	if status != http.StatusOK {
+		return status, body
+	}
+	return m.post(t, "/api/product/initialize", nil)
 }
 
 // cachedCatalog is the on-disk shape 需求基线 B2 规则 1 describes, parsed the way
@@ -671,8 +680,12 @@ func TestSessionExpiryIsReachableThroughCatalog(t *testing.T) {
 		"activationCode": clienttest.FixtureActivationCode,
 		"boxCode":        clienttest.FixtureBoxCode,
 	})
+	if status != http.StatusOK {
+		t.Fatalf("login = %d (%v), want 200 before initialization", status, body)
+	}
+	status, body = m.post(t, "/api/product/initialize", nil)
 	if status != http.StatusUnauthorized {
-		t.Fatalf("login = %d (%v), want 401: the session the platform issues is already refused", status, body)
+		t.Fatalf("initialize = %d (%v), want 401: the session the platform issues is already refused", status, body)
 	}
 	if got := codeOf(t, body); got != productclient.CodeUnauthorized {
 		t.Errorf("code = %q, want %q", got, productclient.CodeUnauthorized)

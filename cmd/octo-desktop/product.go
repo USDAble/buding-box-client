@@ -6,6 +6,7 @@ package main
 // the current implementation plan §PR-2b2a
 
 import (
+	"context"
 	"crypto/rand"
 	"encoding/hex"
 	"log/slog"
@@ -72,7 +73,7 @@ import (
 // The sixth return is the immutable personal-information engine. Returning the
 // instance keeps the preview route and authoritative send path on one versioned
 // rule set even when product routes cannot be mounted.
-func mountProductAPI() (mount func(api func(pattern string, h http.HandlerFunc)), gatewaySender func(app.ReasoningTuning) (agent.Sender, error), catalogOffers func(id string) (offers, known bool), catalogModel func(id string) (server.CatalogModelStatus, bool), preferredConfidentialModel func() (string, bool), engine *sensitive.Engine, sensitiveInputGate func(text string) (string, bool), personalInfo pii.Engine) {
+func mountProductAPI() (mount func(api func(pattern string, h http.HandlerFunc)), gatewaySender func(app.ReasoningTuning) (agent.Sender, error), catalogOffers func(id string) (offers, known bool), catalogModel func(id string) (server.CatalogModelStatus, bool), preferredConfidentialModel func() (string, bool), engine *sensitive.Engine, sensitiveInputGate func(text string) (string, bool), personalInfo pii.Engine, platformSkillLoader func(context.Context, string, uint32, string) (string, error)) {
 	personalInfo = pii.New()
 	if windowToken() == "" {
 		// Fail closed. Without a token the gate cannot distinguish this window
@@ -81,7 +82,7 @@ func mountProductAPI() (mount func(api func(pattern string, h http.HandlerFunc))
 		// which the frontend already renders as "blocked" — the user is told,
 		// and never silently authorized (开发规范 §3.9).
 		slog.Error("product: window token unavailable, product routes not mounted")
-		return nil, nil, nil, nil, nil, nil, nil, personalInfo
+		return nil, nil, nil, nil, nil, nil, nil, personalInfo, nil
 	}
 
 	state, err := productstate.Open(productstate.Options{
@@ -94,7 +95,7 @@ func mountProductAPI() (mount func(api func(pattern string, h http.HandlerFunc))
 	})
 	if err != nil {
 		slog.Error("product: state unavailable, product routes not mounted", "err", err)
-		return nil, nil, nil, nil, nil, nil, nil, personalInfo
+		return nil, nil, nil, nil, nil, nil, nil, personalInfo, nil
 	}
 	if state.Corrupt() {
 		// A damaged file degrades to "not logged in" and is left on disk for
@@ -105,7 +106,7 @@ func mountProductAPI() (mount func(api func(pattern string, h http.HandlerFunc))
 	creds, err := credentialstore.Open(credentialstore.Options{})
 	if err != nil {
 		slog.Error("product: credential store unavailable, product routes not mounted", "err", err)
-		return nil, nil, nil, nil, nil, nil, nil, personalInfo
+		return nil, nil, nil, nil, nil, nil, nil, personalInfo, nil
 	}
 
 	// The catalog cache (PR-4b). A failure here does NOT unmount the routes:
@@ -164,7 +165,10 @@ func mountProductAPI() (mount func(api func(pattern string, h http.HandlerFunc))
 		engine = sensitive.NewWithServer("", serverDict)
 	}
 
+	// OCTO-FORK: startup and gateway use the same renewal and portable credential persistence.
+	renew := productruntime.SessionRenewer{Platform: platform, Tokens: tokens, Creds: creds, State: state}
 	rt := productruntime.New(productruntime.Deps{
+		EnsureSession:    renew.Ensure,
 		State:            state,
 		Creds:            creds,
 		Platform:         platform,
@@ -207,8 +211,8 @@ func mountProductAPI() (mount func(api func(pattern string, h http.HandlerFunc))
 	// turn of every launch, because a restart has a refresh token and no access
 	// token; one built with the exchange but without the store hands the next
 	// launch a token the platform has already rotated away.
-	renew := productruntime.SessionRenewer{Platform: platform, Tokens: tokens, Creds: creds, State: state}
-	gateway := productruntime.GatewayEndpoint{Host: profile.GatewayHost, Tokens: tokens, Ensure: renew.Ensure}
+	// OCTO-FORK: resolve the selected model's preference at turn time.
+	gateway := productruntime.GatewayEndpoint{Host: profile.GatewayHost, Tokens: tokens, Ensure: renew.Ensure, ReasoningForModel: rt.ModelReasoning}
 
 	catalogModel = func(id string) (server.CatalogModelStatus, bool) {
 		status, known := rt.CatalogModel(id)
@@ -218,7 +222,7 @@ func mountProductAPI() (mount func(api func(pattern string, h http.HandlerFunc))
 			Current:      status.Current,
 		}, known
 	}
-	return rt.Mount, gateway.Sender, rt.CatalogOffers, catalogModel, rt.PreferredConfidentialModel, engine, rt.SensitiveInputGate, personalInfo
+	return rt.Mount, gateway.Sender, rt.CatalogOffers, catalogModel, rt.PreferredConfidentialModel, engine, rt.SensitiveInputGate, personalInfo, rt.LoadPlatformSkill
 }
 
 // catalogClockSkew tolerates drift between this machine's clock and the

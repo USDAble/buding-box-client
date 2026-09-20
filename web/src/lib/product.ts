@@ -47,7 +47,7 @@ export interface ProductStateDTO {
    *  monthUsed/monthKey pair that used to sit here had no source and would have
    *  read 0 forever (V-28). It is written by exactly one call:
    *  refreshCredits() below. */
-  credits: { balance: number };
+  credits: { balance: number; known?: boolean };
   plan: { name: string };
   prefs: {
     locale: string;
@@ -118,7 +118,7 @@ export function noteSessionLost(status: number): boolean {
  */
 async function productFetch(path: string, init?: RequestInit): Promise<Response> {
   const res = await fetch(path, init);
-  noteSessionLost(res.status);
+  if (!init?.signal?.aborted) noteSessionLost(res.status);
   return res;
 }
 
@@ -238,6 +238,7 @@ export type CatalogState = "ready" | "absent" | "stale" | "unverifiable";
 export const catalogState = writable<CatalogState>("ready");
 /** Whether pressing "retry" is worth offering, straight from the server. */
 export const catalogRetryable = writable<boolean>(false);
+export const catalogRevision = writable<number>(0);
 
 /**
  * refreshCatalogState reads the catalogue's availability.
@@ -255,6 +256,7 @@ export const catalogRetryable = writable<boolean>(false);
  * claims nothing new (开发规范 §3.9).
  */
 export async function refreshCatalogState(): Promise<void> {
+  const requestVersion = ++moduleVersions.catalog;
   if (!windowToken()) {
     // No shell, no product layer: nothing decides a turn here.
     catalogState.set("ready");
@@ -269,7 +271,8 @@ export async function refreshCatalogState(): Promise<void> {
     // previous answer, for the reason above.
     if (!res.ok) return;
     const d = (await res.json()) as { state?: string; retryable?: boolean };
-    if (isCatalogState(d.state)) catalogState.set(d.state);
+    if (requestVersion !== moduleVersions.catalog) return;
+    if (isCatalogState(d.state)) { catalogState.set(d.state); setWorkspaceModule("catalog", d.state === "ready" ? "ready" : "unavailable"); }
     catalogRetryable.set(d.retryable === true);
   } catch {
     // Unreadable is the same case as unreachable: keep what we had.
@@ -309,13 +312,7 @@ export async function refreshProductState(): Promise<void> {
     const d = (await res.json()) as ProductStateDTO;
     productState.set(d);
     productPhase.set(d.loggedIn ? "ready" : "blocked");
-    if (d.loggedIn) {
-      // Only once the workspace is reachable. On the login screen there is no
-      // session, so the read would go out, be refused, and teach us nothing — and
-      // the picker refreshes it again when it opens anyway (B3's "下一次开选择器
-      // 触发刷新"), which is what keeps a send from having to ask synchronously.
-      await refreshCatalogState();
-    }
+
   } catch {
     // A state read failure must not brick the shell: fall back to "blocked"
     // so the user can retry the login flow rather than staring at a spinner.
@@ -375,11 +372,15 @@ export async function logout(): Promise<LogoutResult> {
  * was showing, because an unread answer is not a statement about the user's
  * credits and 0 is the one number the UI must not invent.
  */
-export async function refreshCredits(): Promise<number> {
-  const res = await productFetch("/api/product/credits", { headers: windowTokenHeaders() });
+export async function refreshCredits(signal?: AbortSignal): Promise<number> {
+  const requestVersion = ++moduleVersions.credits;
+  const res = await productFetch("/api/product/credits", { headers: windowTokenHeaders(), signal });
   if (!res.ok) throw new Error(`${res.status} ${res.statusText}`);
   const body = (await res.json()) as { state: ProductStateDTO };
-  productState.set(body.state);
+  if (!signal?.aborted && get(productPhase) === "ready" && requestVersion === moduleVersions.credits) {
+    productState.update(current => current ? { ...current, credits: body.state.credits } : current);
+    setWorkspaceModule("credits", "ready");
+  }
   return body.state.credits.balance;
 }
 
@@ -439,9 +440,12 @@ export interface BoxDTO {
 // getBox reads the account's one server-authorised box. A failure is surfaced
 // to the view; it is never converted into a made-up offline box.
 export async function getBox(): Promise<BoxDTO> {
+  const requestVersion = ++moduleVersions.box;
   const res = await productFetch("/api/product/box", { headers: windowTokenHeaders() });
   if (!res.ok) throw new ProductError(res.status);
-  return await res.json() as BoxDTO;
+  const box = await res.json() as BoxDTO;
+  if (requestVersion === moduleVersions.box) setWorkspaceModule("box", "ready");
+  return box;
 }
 
 // ─── P4 login form ──────────────────────────────────────────────────────────
@@ -487,6 +491,7 @@ function windowTokenHeaders(): Record<string, string> {
  * Both are omitted on the second login.
  */
 export interface LoginInput {
+	clientRequestId?: string;
   phone: string;
   code: string;
   nickname: string;
@@ -562,6 +567,62 @@ export interface DictionaryNotice {
 export interface LoginResult {
   state: ProductStateDTO;
   dictionaryNotice?: DictionaryNotice;
+}
+
+export interface WorkspaceInitialization {
+  modules: Record<'catalog' | 'credits' | 'box' | 'dictionary', 'ready' | 'unavailable'>;
+  state: ProductStateDTO;
+  catalog: { state: CatalogState; retryable: boolean };
+  box?: BoxDTO;
+  dictionaryNotice?: DictionaryNotice;
+}
+
+// OCTO-FORK: initialization and individual module refreshes share one status owner.
+type WorkspaceModule = keyof WorkspaceInitialization['modules'];
+export const workspaceModules = writable<Partial<WorkspaceInitialization['modules']>>({});
+export const workspaceDictionaryFallback = writable(false);
+const moduleVersions: Record<WorkspaceModule, number> = { catalog: 0, credits: 0, box: 0, dictionary: 0 };
+let initializationSequence = 0;
+productPhase.subscribe(phase => {
+  if (phase === 'ready') return;
+  initializationSequence++;
+  workspaceModules.set({});
+  workspaceDictionaryFallback.set(false);
+  for (const name of Object.keys(moduleVersions) as WorkspaceModule[]) moduleVersions[name]++;
+});
+function setWorkspaceModule(name: WorkspaceModule, status: 'ready' | 'unavailable') {
+  moduleVersions[name]++;
+  workspaceModules.update(modules => ({ ...modules, [name]: status }));
+}
+
+/** Authentication is complete before these independently retryable reads start. */
+export async function initializeWorkspace(signal?: AbortSignal): Promise<WorkspaceInitialization> {
+  const sequence = ++initializationSequence;
+  const versions = { ...moduleVersions };
+  const res = await fetch('/api/product/initialize', {
+    method: 'POST', headers: jsonHeaders(), signal,
+  });
+  if (signal?.aborted || sequence !== initializationSequence || get(productPhase) !== 'ready') throw new Error('initialization cancelled');
+  noteSessionLost(res.status);
+  if (!res.ok) throw new ProductError(res.status);
+  const data = await res.json() as WorkspaceInitialization;
+  if (signal?.aborted || sequence !== initializationSequence || get(productPhase) !== 'ready') throw new Error('initialization cancelled');
+  if (!data.state || !data.modules || !isCatalogState(data.catalog?.state)) throw new Error('invalid initialization response');
+  if (!data.state.loggedIn) { productPhase.set('blocked'); return data; }
+  if (versions.credits === moduleVersions.credits) {
+    productState.update(current => current ? { ...current, credits: data.state.credits } : current);
+  }
+  if (versions.catalog === moduleVersions.catalog) {
+    catalogState.set(data.catalog.state);
+    catalogRetryable.set(data.catalog.retryable === true);
+    catalogRevision.update(revision => revision + 1);
+  }
+  if (data.catalog.state !== 'ready') data.modules.catalog = 'unavailable';
+  for (const name of Object.keys(moduleVersions) as WorkspaceModule[]) {
+    if (versions[name] === moduleVersions[name]) setWorkspaceModule(name, data.modules[name] === 'ready' ? 'ready' : 'unavailable');
+  }
+  workspaceDictionaryFallback.set(data.dictionaryNotice?.state === 'degraded');
+  return data;
 }
 
 export async function login(input: LoginInput): Promise<LoginResult> {

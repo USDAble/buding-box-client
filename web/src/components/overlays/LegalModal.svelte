@@ -1,28 +1,58 @@
 <script lang="ts">
   import { t } from '../../lib/i18n'
 
-  // In-app legal placeholder modal (需求 §5.3 / §6): the terms & privacy copy
-  // is rendered inline from branding/brand.json (copy.termsBody / privacyBody),
-  // never an external browser and never the network.
+  // OCTO-FORK: fetch the current platform publication on every open; never use placeholder text.
+  import { getAgreement, type Agreement } from '../../lib/api'
   interface Props {
     title: string
-    body: string
+    kind: 'box' | 'privacy'
     open: boolean
     onClose: () => void
   }
-  let { title, body, open, onClose }: Props = $props()
+  let { title, kind, open, onClose }: Props = $props()
+  let agreement = $state<Agreement | null>(null)
+  let loading = $state(false)
+  let failed = $state(false)
+  let attempt = $state(0)
+  $effect(() => {
+    const currentKind = kind
+    const retry = attempt
+    agreement = null
+    failed = false
+    loading = false
+    if (!open) return
+    const controller = new AbortController()
+    loading = true
+    getAgreement(currentKind, controller.signal).then(result => {
+      if (!controller.signal.aborted) agreement = result
+    }).catch(() => {
+      if (!controller.signal.aborted) failed = true
+    }).finally(() => {
+      if (!controller.signal.aborted) loading = false
+    })
+    return () => controller.abort()
+  })
 </script>
 
 {#if open}
-<div class="legal-backdrop" role="dialog" aria-modal="true" aria-label={title} onclick={onClose}>
+<div class="legal-backdrop" role="dialog" aria-modal="true" aria-label={agreement?.title ?? title} onclick={onClose}>
   <div class="legal-card" onclick={(e) => e.stopPropagation()}>
     <div class="legal-head">
-      <h2 class="legal-title">{title}</h2>
+      <h2 class="legal-title">{agreement?.title ?? title}</h2>
       <button class="legal-close" onclick={onClose} aria-label={$t('product.legal_close')}>
         <iconify-icon icon="ant-design:close-outlined" width="16"></iconify-icon>
       </button>
     </div>
-    <div class="legal-body">{body}</div>
+    <div class="legal-body" aria-busy={loading}>
+      {#if loading}
+        <p role="status">{$t('common.loading')}</p>
+      {:else if failed}
+        <p role="alert">{$t('product.legal_load_failed')}</p>
+        <button onclick={() => attempt++}>{$t('product.legal_retry')}</button>
+      {:else if agreement}
+        <div>{agreement.content}</div>
+      {/if}
+    </div>
   </div>
 </div>
 {/if}

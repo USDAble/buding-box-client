@@ -24,6 +24,10 @@ func loginAgain(t *testing.T, h *harness) map[string]any {
 	if status != http.StatusOK {
 		t.Fatalf("login = %d (%v)", status, body)
 	}
+	status, body = h.do(http.MethodPost, "/api/product/initialize", nil)
+	if status != http.StatusOK {
+		t.Fatalf("initialize = %d (%v)", status, body)
+	}
 	return body
 }
 
@@ -132,6 +136,10 @@ func TestDictionaryFailureWithoutCacheNamesBuiltinFallback(t *testing.T) {
 	})
 	if status != http.StatusOK {
 		t.Fatalf("login = %d (%v)", status, body)
+	}
+	status, body = h.do(http.MethodPost, "/api/product/initialize", nil)
+	if status != http.StatusOK {
+		t.Fatalf("initialize = %d (%v)", status, body)
 	}
 	notice := dictionaryNotice(t, body)
 	if notice["fallbackVersion"] != "" || notice["retryAt"] != "next_login" {

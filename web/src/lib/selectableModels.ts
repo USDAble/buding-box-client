@@ -4,6 +4,10 @@ import * as api from './api'
 import { writable } from 'svelte/store'
 
 export type SelectableModel = {
+  reasoningOptions?: string[]
+  reasoningEffort?: string
+  eligible?: boolean
+  availabilityReason?: string
   id: string
   vendorId: string
   vendorName: string
@@ -25,8 +29,11 @@ export type SelectableModelResult = {
 // Shared read-only snapshot used by the send gate. The adapter is the only
 // writer, so the picker and the gate judge the same catalog projection.
 export const selectableModels = writable<SelectableModel[]>([])
+export const defaultSelectableModel = writable<string>('')
+let modelRequestSequence = 0
 
 export async function loadSelectableModels(allowLocal: boolean): Promise<SelectableModelResult> {
+  const requestSequence = ++modelRequestSequence
   let catalog: api.ProductModelsResponse = { state: 'absent', catalogVersion: '', vendors: [] }
   try {
     catalog = await api.getProductModels()
@@ -38,6 +45,10 @@ export async function loadSelectableModels(allowLocal: boolean): Promise<Selecta
   for (const vendor of catalog.vendors ?? []) {
     for (const model of vendor.models ?? []) {
       models.push({
+        reasoningOptions: model.reasoningOptions?.length ? model.reasoningOptions : ['default'],
+        reasoningEffort: model.reasoningEffort ?? 'default',
+        eligible: model.eligible !== false,
+        availabilityReason: model.availabilityReason,
         id: model.compositeId,
         vendorId: vendor.id,
         vendorName: vendor.displayName || vendor.id,
@@ -52,10 +63,10 @@ export async function loadSelectableModels(allowLocal: boolean): Promise<Selecta
     }
   }
 
-  let defaultModelId = ''
+  let defaultModelId = models.find(model => model.id === catalog.defaultModelId && model.eligible !== false)?.id ?? ''
   if (allowLocal) {
     const endpoints = await api.getEndpoints()
-    defaultModelId = endpoints.default?.includes('::') ? endpoints.default : ''
+    if (!defaultModelId) defaultModelId = endpoints.default?.includes('::') ? endpoints.default : ''
     for (const endpoint of endpoints.endpoints ?? []) {
       const vendorName = endpoint.name || endpoint.provider || endpoint.id
       for (const model of endpoint.models ?? []) {
@@ -75,8 +86,12 @@ export async function loadSelectableModels(allowLocal: boolean): Promise<Selecta
   }
 
   const sorted = stableConfidentialSort(models)
-  if (!defaultModelId) defaultModelId = sorted[0]?.id ?? ''
-  selectableModels.set(sorted)
+  const available = sorted.filter(model => model.eligible !== false)
+  if (!available.some(model => model.id === defaultModelId)) defaultModelId = available[0]?.id ?? ''
+  if (requestSequence === modelRequestSequence) {
+    selectableModels.set(available)
+    defaultSelectableModel.set(defaultModelId)
+  }
   return { state: catalog.state, models: sorted, defaultModelId }
 }
 

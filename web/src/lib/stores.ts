@@ -3,6 +3,8 @@ import type { Snippet } from 'svelte'
 import type { Session, SessionGroup, Skill, Workflow, ScheduledTask, McpServer, Channel, Memory, Artifact, ArtifactView } from './types'
 import type { AskQuestion } from './askStepper'
 import * as api from './api'
+// OCTO-FORK: expert and skill task creation share the composer's signed model source.
+import { resolveActionModel } from './actionModel'
 
 // First-run gate. 'unknown' until /api/onboard/status resolves (render a splash,
 // never flash the main UI); 'key_setup' blocks on the setup panel; 'soul_setup'
@@ -537,7 +539,8 @@ export async function resolveProjectForDir(dir: string): Promise<string> {
 // auto-send once the WS subscription is confirmed (see pendingPrompt). The
 // relevant skill drives the rest of the flow in conversation — no forms.
 export async function openAgentSession(content: string, name?: string): Promise<void> {
-  const sess = await api.createSession({ source: 'manual', ...(name ? { name } : {}) })
+  const model = await resolveActionModel([get(pendingModel), get(sessions).find(s => s.id === get(activeSessionId))?.model_id ?? ''])
+  const sess = await api.createSession({ source: 'manual', model, ...(name ? { name } : {}) })
   agenticSessions.add(sess.id)
   prependSession(sess)
   pendingPrompt.set({ sessionId: sess.id, content })
@@ -552,7 +555,10 @@ export async function openAgentSession(content: string, name?: string): Promise<
 // conversation with the expert, not a single-purpose panel session, so it is
 // deliberately NOT added to agenticSessions.
 export async function summonAgent(agentId: string, agentName: string, examplePrompt?: string): Promise<void> {
-  const sess = await api.createSession({ source: 'manual', agent_profile: agentId, name: agentName })
+  // OCTO-FORK: create the selected expert session immediately. The gateway
+  // authorizes its pinned publication on every run; no directory refetch or fallback.
+  const model = await resolveActionModel([get(pendingModel), get(sessions).find(s => s.id === get(activeSessionId))?.model_id ?? ''])
+  const sess = await api.createSession({ source: 'manual', agent_profile: agentId, name: agentName, model })
   prependSession(sess)
   if (examplePrompt) pendingPrompt.set({ sessionId: sess.id, content: examplePrompt })
   activeSessionId.set(sess.id)

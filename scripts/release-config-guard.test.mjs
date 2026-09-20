@@ -6,9 +6,11 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
 import path from 'node:path'
+import fs from 'node:fs/promises'
+import os from 'node:os'
 import { fileURLToPath } from 'node:url'
 
-import { check, checkContent, PRODUCTION_ASSET } from './release-config-guard.mjs'
+import { check, checkContent, PRODUCTION_ASSET, ENDPOINTS_ASSET } from './release-config-guard.mjs'
 
 // The repository root, derived from this file's own location (scripts/…).
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
@@ -135,13 +137,22 @@ test('reports a non-object trustedKeyIDs', () => {
   assert.match(problems[0], /trustedKeyIDs must be an object/)
 })
 
-test('the repository asset is currently not release-ready', async () => {
-  // Pins today's state: the checked-in production profile still carries the
-  // `.invalid` placeholders. When the deployment host lands, this test should
-  // be deleted rather than relaxed — it exists so nobody assumes the release
-  // asset is finished.
+test('the repository production trust store is not release-ready', async () => {
   const problems = await check(ROOT)
-  assert.ok(problems.length > 0, 'expected the placeholder hosts to be reported')
-  assert.ok(problems.some((p) => /placeholder/.test(p)))
   assert.ok(problems.some((p) => /trustedKeyIDs is empty/.test(p)))
+})
+
+test('release validation reads shared addresses and rejects duplicate configuration', async (t) => {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), 'endpoints-guard-'))
+  t.after(() => fs.rm(root, { recursive: true, force: true }))
+  await fs.mkdir(path.dirname(path.join(root, PRODUCTION_ASSET)), { recursive: true })
+  const { apiHost, gatewayHost, ...policy } = ready
+  await fs.writeFile(path.join(root, PRODUCTION_ASSET), JSON.stringify(policy))
+  assert.ok((await check(root)).some(p => /missing/.test(p)))
+  await fs.writeFile(path.join(root, ENDPOINTS_ASSET), JSON.stringify({ apiHost, gatewayHost }))
+  assert.deepEqual(await check(root), [])
+  await fs.writeFile(path.join(root, ENDPOINTS_ASSET), JSON.stringify({ apiHost: 'http://127.0.0.1:8788/v1', gatewayHost: 'http://127.0.0.1:8788' }))
+  assert.equal((await check(root)).filter(p => /must use https/.test(p)).length, 2)
+  await fs.writeFile(path.join(root, PRODUCTION_ASSET), JSON.stringify(ready))
+  assert.ok((await check(root)).some(p => /addresses must only/.test(p)))
 })

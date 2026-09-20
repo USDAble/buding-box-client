@@ -33,9 +33,11 @@ const (
 // Key resolution and any user-facing help text stay with the caller (a CLI
 // prints setup hints; a server returns an error) — this layer only constructs.
 type SenderOptions struct {
-	Provider string // vendor ID, e.g. "kimi", "deepseek", "anthropic", "openai"
-	APIKey   string
-	BaseURL  string // optional endpoint override; empty uses the vendor default
+	// OCTO-FORK: the platform owns provider-specific reasoning translation.
+	GatewayReasoningPassthrough bool
+	Provider                    string // vendor ID, e.g. "kimi", "deepseek", "anthropic", "openai"
+	APIKey                      string
+	BaseURL                     string // optional endpoint override; empty uses the vendor default
 	// Protocol ("anthropic" | "openai") is required only for the Custom vendor,
 	// which has no registry-pinned wire format; named vendors ignore it.
 	Protocol string
@@ -83,6 +85,11 @@ type SenderOptions struct {
 // definition of the same thing (开发规范 §3.8). internal/productruntime assigns
 // it straight into SenderOptions, which is the whole conversion.
 type ReasoningTuning struct {
+	// OCTO-FORK: per-model product preferences must not bleed between models.
+	ClientModelID string
+	// OCTO-FORK: the middle tier reuses the durable local conversation across turns.
+	ClientSessionID string
+	ClientAgentID   string
 	// ReasoningEffort mirrors SenderOptions.ReasoningEffort: "" (off) or
 	// "low"|"medium"|"high"|"xhigh"|"max". Empty is meaningful and must stay
 	// empty — the provider omits the field on the wire in that case, and the UI's
@@ -123,6 +130,12 @@ func NewSender(opts SenderOptions) (agent.Sender, error) {
 	p, err := buildClient(opts.Provider, opts.APIKey, opts.BaseURL, opts.Protocol, opts.Headers, limiter)
 	if err != nil {
 		return nil, err
+	}
+	// OCTO-FORK: preserve explicit default/off and maximum effort to our gateway.
+	if opts.GatewayReasoningPassthrough {
+		if client, ok := p.(*openai.Client); ok {
+			client.Dialect = openai.DialectPlatformGateway
+		}
 	}
 	// Anthropic-protocol models on the legacy budget path (older Claude,
 	// Kimi-for-coding) enable thinking only from a positive ThinkingBudget and

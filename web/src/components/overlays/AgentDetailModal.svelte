@@ -1,9 +1,23 @@
 <script lang="ts">
+  // OCTO-FORK: fetch the selected platform publication only when its detail is opened.
+  import { onMount } from 'svelte'
   import { t, tr, pickLocalized, pickLocalizedList } from '../../lib/i18n'
-  import { summonAgent } from '../../lib/stores'
+  import { summonAgent, showToast } from '../../lib/stores'
   import * as api from '../../lib/api'
 
   let { agent, onClose }: { agent: api.Agent; onClose: () => void } = $props()
+  let detail = $state<api.Agent | null>(null)
+  let detailError = $state('')
+  let loadingDetail = $state(false)
+  let summoning = $state(false)
+  async function loadDetail() {
+    if (agent.source !== 'platform') return
+    loadingDetail = true; detailError = ''
+    try { detail = await api.getAgent(agent.id) }
+    catch (err) { detailError = (err as Error).message }
+    finally { loadingDetail = false }
+  }
+  onMount(loadDetail)
 
   let name = $derived(pickLocalized(agent.name, agent.name_en))
   let description = $derived(pickLocalized(agent.description, agent.description_en))
@@ -21,8 +35,11 @@
   }
 
   async function summon(prompt?: string) {
-    await summonAgent(agent.id, name, prompt)
-    onClose()
+    if (summoning) return
+    summoning = true
+    try { await summonAgent(agent.id, name, prompt); onClose() }
+    catch (err) { showToast((err as Error).message, 'error') }
+    finally { summoning = false }
   }
 
   function onKeydown(e: KeyboardEvent) {
@@ -48,13 +65,22 @@
       {/if}
       <div class="header-text">
         <span class="agent-name">{name}</span>
-        {#if agent.source === 'default'}
-          <span class="official-badge">{$t('agents.official_badge')}</span>
+        {#if agent.source === 'platform'}
+          <span class="official-badge">中台发布 · v{agent.version}</span>
         {/if}
       </div>
     </div>
 
     <div class="modal-body">
+      {#if loadingDetail}<p>正在加载专家详情…</p>{/if}
+      {#if detailError}<p role="alert">{detailError} <button onclick={loadDetail}>重试</button></p>{/if}
+      {#if (detail ?? agent).platform_skills?.length}
+        <section><h4>关联技能</h4>
+          {#each (detail ?? agent).platform_skills ?? [] as skill}
+            <details><summary>{skill.name} · v{skill.version}</summary><p>{skill.description}</p><pre style="white-space:pre-wrap">{skill.content}</pre></details>
+          {/each}
+        </section>
+      {/if}
       <section>
         <h4>{$t('agents.capability_intro')}</h4>
         <p class="desc-text">{description}</p>
@@ -87,8 +113,8 @@
     </div>
 
     <div class="modal-footer">
-      <button class="btn-summon" onclick={() => summon()}>
-        {$t('agents.summon').replace('{name}', name)}
+      <button class="btn-summon" disabled={summoning || !!detailError} onclick={() => summon()}>
+        {summoning ? $t('common.loading') : $t('agents.summon').replace('{name}', name)}
       </button>
     </div>
   </div>

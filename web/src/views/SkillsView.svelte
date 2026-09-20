@@ -1,9 +1,55 @@
 <script lang="ts">
+  // OCTO-FORK: platform publications load independently of locally editable skills.
+  import { onMount } from 'svelte'
   import { skills, showToast, openAgentSession, nativeShell } from '../lib/stores'
   import { get } from 'svelte/store'
   import { t, tr } from '../lib/i18n'
   import { confirmDialog } from '../lib/confirm'
   import * as api from '../lib/api'
+
+  let platformSkills: api.PlatformSkill[] = $state([])
+  let platformError = $state('')
+  let platformLoading = $state(true)
+  let refreshingPlatform = $state(false)
+  let cachedPlatform = $state(false)
+  let skillDetails: Record<string, api.PlatformSkill> = $state({})
+  let skillDetailErrors: Record<string, string> = $state({})
+  let usingPlatformSkill = $state('')
+  async function loadPlatformSkills() {
+    platformLoading = true
+    platformError = ''
+    try {
+      const cached = await api.listPlatformSkillDirectory()
+      platformSkills = cached.skills; cachedPlatform = cached.cached
+      platformLoading = false
+      if (cached.cached) {
+        refreshingPlatform = true
+        const fresh = await api.listPlatformSkillDirectory(true)
+        platformSkills = fresh.skills; cachedPlatform = false
+      }
+    }
+    catch (err) { platformError = (err as Error).message }
+    finally { platformLoading = false; refreshingPlatform = false }
+  }
+  onMount(loadPlatformSkills)
+  async function usePlatformSkill(skill: api.PlatformSkill) {
+    if (usingPlatformSkill) return
+    const key = `${skill.id}:${skill.version}`
+    usingPlatformSkill = key
+    try {
+      const detail = skillDetails[key] ?? await api.getPlatformSkill(skill.id, skill.version)
+      skillDetails[key] = detail
+      await openAgentSession(`请使用以下中台发布技能协助我，并先询问本次任务所需信息。\n技能：${detail.name}（v${detail.version}，${detail.id}）\n\n${detail.content}`, detail.name)
+    }
+    catch (err) { showToast((err as Error).message, 'error') }
+    finally { usingPlatformSkill = '' }
+  }
+  async function loadSkillDetail(skill: api.PlatformSkill) {
+    const key = `${skill.id}:${skill.version}`
+    if (skillDetails[key]) return
+    try { skillDetails[key] = await api.getPlatformSkill(skill.id, skill.version); delete skillDetailErrors[key] }
+    catch (err) { skillDetailErrors[key] = (err as Error).message }
+  }
   import StatusTag from '../components/ui/StatusTag.svelte'
   import Switch from '../components/ui/Switch.svelte'
 
@@ -178,6 +224,22 @@
 
 <div class="page">
   <div class="inner">
+    <section>
+      <h2>中台发布技能</h2>
+      {#if refreshingPlatform}<p>已显示缓存，正在更新…</p>{:else if cachedPlatform}<p>当前显示缓存版本</p>{/if}
+      {#if platformLoading}<p>正在加载中台技能…</p>
+      {:else if platformError}<p role="alert">技能加载失败：{platformError} <button onclick={loadPlatformSkills}>重新加载</button></p>
+      {:else if platformSkills.length === 0}<p>暂无已发布技能</p>{/if}
+      {#each platformSkills as skill (skill.id)}
+        <details style="padding:12px;border-bottom:1px solid var(--border-color)" ontoggle={(event) => { if (event.currentTarget.open) loadSkillDetail(skill) }}>
+          <summary>{skill.name} · v{skill.version}</summary>
+          <p>{skill.description}</p>
+          {#if skillDetailErrors[`${skill.id}:${skill.version}`]}<p role="alert">{skillDetailErrors[`${skill.id}:${skill.version}`]} <button onclick={() => loadSkillDetail(skill)}>重试</button></p>{/if}
+          <pre style="white-space:pre-wrap">{skillDetails[`${skill.id}:${skill.version}`]?.content ?? '正在加载详情…'}</pre>
+          <button class="btn-primary" disabled={!!usingPlatformSkill} onclick={() => usePlatformSkill(skill)}>{usingPlatformSkill === `${skill.id}:${skill.version}` ? '正在打开…' : '使用技能'}</button>
+        </details>
+      {/each}
+    </section>
     <div class="page-header">
       <div class="title-block">
         <h2>{$t('skills.title')}</h2>

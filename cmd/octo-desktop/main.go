@@ -651,7 +651,7 @@ func startHub(app *application.App, bridge *nativeBridge, settings desktopSettin
 	// internal/server must not hold either (it would have to import a fork
 	// package, which the dependency direction forbids). The sixth value is the
 	// immutable personal-information engine shared by preview and send paths.
-	mountProduct, gatewaySender, catalogOffers, catalogModel, preferredConfidentialModel, engine, sensitiveInputGate, personalInfo := mountProductAPI()
+	mountProduct, gatewaySender, catalogOffers, catalogModel, preferredConfidentialModel, engine, sensitiveInputGate, personalInfo, platformSkillLoader := mountProductAPI()
 	// OCTO-FORK: keep the portable-only manual lookup in the desktop assembly,
 	// registered through the existing product gate rather than changing upstream
 	// native routes. It can discover a release but cannot download or install it.
@@ -702,6 +702,8 @@ func startHub(app *application.App, bridge *nativeBridge, settings desktopSettin
 		// from one assembly so they share one credential holder — see
 		// mountProductAPI and the current implementation plan §PR-5a.
 		MountAPI: mountProductAndUpdate,
+		// OCTO-FORK: share the authenticated runtime for fixed-version platform skills.
+		PlatformSkillLoader: platformSkillLoader,
 		// OCTO-FORK: the product gate's window identity — see
 		// the current implementation plan §PR-2b2b. Generated here
 		// because this runs before the first window is shown, which is what lets

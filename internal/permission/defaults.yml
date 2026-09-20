@@ -211,6 +211,10 @@ ask_user_question:
 skill:
   - allow: { pattern: "" }
 
+# OCTO-FORK: reads authenticated pinned instructions; execution tools keep their gates.
+load_platform_skill:
+  - allow: { pattern: "" }
+
 # Process restart — always confirm. The implicit default would already be
 # ask, but the rule is explicit so nobody pattern-matches this block and
 # adds an allow: an unconfirmed restart_server call would bounce the whole

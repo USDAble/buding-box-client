@@ -42,5 +42,6 @@ export function stripComments(source: string): string {
 export function filesMentioning(needle: string, dir: string = SRC): string[] {
   return sourceFiles(dir)
     .filter((path) => stripComments(readFileSync(path, 'utf8')).includes(needle))
-    .map((path) => path.slice(dir.length + 1))
+    // OCTO-FORK: source ownership checks use the same path spelling on Windows and Unix.
+    .map((path) => path.slice(dir.length + 1).replaceAll('\\', '/'))
 }

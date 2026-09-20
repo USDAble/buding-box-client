@@ -136,9 +136,8 @@ const (
 // Paths this package speaks to. The full registry is 中台交付包 §4.1.
 //
 // These are relative to the version segment, not absolute: the version lives in
-// the host. A control-plane host is always versioned — production.json ships
-// `https://api.invalid/v1`, UnsetAPIHost matches it, and a profile test asserts
-// the /v1 suffix — so baseURL already ends in /v1 and repeating it here composes
+// the host. OCTO-FORK: endpoints.json supplies the shared versioned API base,
+// so baseURL already ends in /v1 and repeating it here composes
 // to /v1/v1/… and 404s. That is not hypothetical: it was the state until a manual
 // run, because the tests passed a bare origin the profile never produces.
 const (
@@ -191,9 +190,12 @@ type SendSMSData struct {
 
 // LoginRequest covers both first activation and every later login (§4.2.2).
 type LoginRequest struct {
-	Phone    string `json:"phone"`
-	Code     string `json:"code"`
-	Nickname string `json:"nickname,omitempty"`
+	ClientVersion  string `json:"clientVersion,omitempty"`
+	TermsVersion   string `json:"termsVersion,omitempty"`
+	PrivacyVersion string `json:"privacyVersion,omitempty"`
+	Phone          string `json:"phone"`
+	Code           string `json:"code"`
+	Nickname       string `json:"nickname,omitempty"`
 
 	// ActivationCode and BoxCode are required on first activation only, and are
 	// omitted on later logins. They are independent checks: the code must exist

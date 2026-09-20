@@ -5,6 +5,7 @@ import (
 	"fmt"
 
 	"github.com/open-octo/octo-agent/internal/agent"
+	"github.com/open-octo/octo-agent/internal/agentprofile"
 	"github.com/open-octo/octo-agent/internal/app"
 	"github.com/open-octo/octo-agent/internal/config"
 	"github.com/open-octo/octo-agent/internal/permission"
@@ -34,6 +35,18 @@ func (s *Server) prepareToolTurn(ctx context.Context, a *agent.Agent, sess *agen
 	sid, _ := ctx.Value(ctxKeySessionID{}).(string)
 	if sid == "" {
 		return ctx, nil, nil, func() {}, fmt.Errorf("prepareToolTurn: no session id in context — callers must stamp ctxKeySessionID")
+	}
+
+	// OCTO-FORK: bind platform skill access to the immutable session expert version.
+	if sess != nil {
+		if expertID, version, ok := agentprofile.PlatformReference(sess.EffectiveAgentID()); ok {
+			if s.cfg.PlatformSkillLoader == nil {
+				return ctx, nil, nil, func() {}, fmt.Errorf("prepareToolTurn: platform skill loader unavailable")
+			}
+			ctx = tools.WithPlatformSkillLoader(ctx, func(callCtx context.Context, skillID string) (string, error) {
+				return s.cfg.PlatformSkillLoader(callCtx, expertID, version, skillID)
+			})
+		}
 	}
 
 	// A session-scoped tracker (keyed by sid, cached across turns like the

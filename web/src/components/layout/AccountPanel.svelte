@@ -5,6 +5,7 @@
   import * as api from '../../lib/api'
   import { avatarInitial, avatarColor } from '../../lib/avatar'
   import { licenseView } from '../../lib/license'
+  import { formatPoints } from '../../lib/points'
   import { dismissIntent } from '../../lib/globalKeys'
 
   // OCTO-FORK: the account corner is a compact status and shortcut surface.
@@ -13,11 +14,11 @@
 
   const nickname = $derived($productState?.account?.nickname ?? '')
   const phone = $derived($productState?.account?.phoneMasked ?? '—')
-  const points = $derived($productState?.credits?.balance ?? 0)
+  const points = $derived(formatPoints($productState?.credits))
   const planLabel = $derived($productState?.plan?.name === 'trial' ? $t('product.plan_trial') : ($productState?.plan?.name || '—'))
   const license = $derived(licenseView($productState?.activation?.expiresAt))
   const licenseDetail = $derived.by(() => {
-    if (!license) return '—'
+    if (!license) return $productState?.activated && $productState.activation?.activatedAt && !$productState.activation.expiresAt ? $t('product.panel.license_permanent') : '—'
     if (license.state === 'active') {
       return license.daysLeft > 0
         ? $t('product.panel.license_active').replaceAll('{n}', String(license.daysLeft))
@@ -93,7 +94,7 @@
   }
 
   function upgrade() { showToast(tr('product.panel.upgrade_soon')) }
-  function recharge() { showToast(tr('product.panel.recharge_soon')) }
+  function recharge() { openSettings('wallet') }
   async function checkUpdates() {
     if (checkingUpdate) return
     checkingUpdate = true

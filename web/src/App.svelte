@@ -3,6 +3,8 @@
   import { view, sessions, sessionGroups, pinnedSessions, collapsedSessions, activeSessionId, onboardPhase, openAgentSession, chatShowReasoning, globalPermissionMode, globalReasoningEffort, nativeShell, mobileShell, panelContent, panelExpanded, cmdkOpen, settingsModalOpen, createNewSession, clearPendingSessionOpts, isDesktopShell, readLastRoute, writeLastRoute, showToast } from './lib/stores'
   import { productPhase, productState, adoptWindowToken, refreshProductState, refreshCredits } from './lib/product'
   import { wireProductEvents } from './lib/productEvents'
+  // OCTO-FORK: initialize authenticated workspace data without delaying login.
+  import WorkspaceInitialization from './components/WorkspaceInitialization.svelte'
   import MobileApp from './mobile/MobileApp.svelte'
   import { ws, wsState } from './lib/ws'
   import { notificationsEnabled } from './lib/notifications'
@@ -614,6 +616,7 @@
          column with nothing rendered beside it, i.e. a blank page. -->
     <main class="main" class:yielded={$panelExpanded && !!$panelContent} style="min-width:{$panelContent ? 0 : mainMinWidth}px">
       <Header />
+      <WorkspaceInitialization />
       {#if $view === 'chat'}
         <ChatView />
       {:else if $view === 'agents'}

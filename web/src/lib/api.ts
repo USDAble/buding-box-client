@@ -361,6 +361,10 @@ export async function updateSessionPermissionMode(id: string, mode: string): Pro
 // catalog. It is read-only and never contains developer-local endpoints.
 export type ProductModelsState = 'ready' | 'absent' | 'stale' | 'unverifiable'
 export interface ProductModelDTO {
+  reasoningOptions?: string[]
+  reasoningEffort?: string
+  eligible?: boolean
+  availabilityReason?: string
   id: string
   displayName: string
   compositeId: string
@@ -373,12 +377,16 @@ export interface ProductModelVendorDTO {
   models: ProductModelDTO[]
 }
 export interface ProductModelsResponse {
+	defaultModelId?: string
   state: ProductModelsState
   catalogVersion: string
   vendors: ProductModelVendorDTO[]
 }
 export async function getProductModels(): Promise<ProductModelsResponse> {
   return request<ProductModelsResponse>('/api/product/models')
+}
+export async function setModelReasoning(modelId: string,effort: string): Promise<{modelId: string;effort: string}> {
+  return request('/api/product/model-reasoning',{method:'PUT',...json({modelId,effort})})
 }
 
 export interface PersonalInfoRulesResponse {
@@ -627,17 +635,31 @@ export interface Agent {
   name_en?: string
   description_en?: string
   // Always present: 'default' (officially curated) or 'user'.
-  source?: 'default' | 'user'
+  source?: 'default' | 'user' | 'platform'
+  version?: number
+  allowed_model_ids?: string[]
+  required_capabilities?: string[]
+  platform_skills?: PlatformSkill[]
   // Visibility of a curated expert: false once the user hides it. User agents
   // are always enabled.
   enabled?: boolean
 }
 
 export async function listAgents(): Promise<Agent[]> {
-  return request<Agent[]>('/api/agents')
+  return (await listAgentDirectory()).agents
+}
+export async function listAgentDirectory(refresh = false): Promise<{agents: Agent[]; cached: boolean; updatedAt: string}> {
+  const [local, platform] = await Promise.all([request<Agent[]>('/api/agents'), request<{experts: PlatformExpert[]; cached: boolean; updatedAt: string}>(`/api/product/experts${refresh ? '?refresh=1' : ''}`)])
+  return {agents: [...platform.experts.map(platformAgent), ...local.filter(a => a.source === 'user')], cached: platform.cached, updatedAt: platform.updatedAt}
 }
 
 export async function getAgent(id: string): Promise<Agent> {
+  if (id.startsWith('platform:')) {
+    const parts = id.split(':')
+    const found = await request<PlatformExpert>(`/api/product/experts/${encodeURIComponent(parts[1])}?version=${parts[2]}`)
+    if (`platform:${found.id}:${found.version}` !== id) throw new Error('平台专家版本不匹配，请重新选择')
+    return platformAgent(found)
+  }
   return request<Agent>(`/api/agents/${id}`)
 }
 
@@ -677,6 +699,23 @@ interface SkillInfoRaw {
   description?: string
   source?: string
   enabled?: boolean
+}
+
+export interface PlatformSkill { id: string; code: string; name: string; description: string; version: number; content: string }
+interface PlatformExpert { id: string; name: string; description: string; category_code: string; icon_key: string; version: number; default_model_id?: string; required_capabilities: string[]; recommended_questions: string[]; skills: PlatformSkill[] }
+function platformAgent(e: PlatformExpert): Agent {
+  return { id: `platform:${e.id}:${e.version}`, name: e.name, description: e.description, source: 'platform', version: e.version, required_capabilities: e.required_capabilities ?? [], example_prompts: e.recommended_questions, platform_skills: e.skills ?? [], enabled: true }
+}
+export async function listPlatformSkills(): Promise<PlatformSkill[]> {
+  return (await listPlatformSkillDirectory()).skills
+}
+export async function listPlatformSkillDirectory(refresh = false): Promise<{skills: PlatformSkill[];cached: boolean;updatedAt: string}> {
+  return request(`/api/product/skills${refresh ? '?refresh=1' : ''}`)
+}
+export async function getPlatformSkill(id: string,version: number): Promise<PlatformSkill> {
+  const result = await request<PlatformSkill>(`/api/product/skills/${encodeURIComponent(id)}?version=${version}`)
+  if (result.id !== id || result.version !== version) throw new Error('平台技能版本不匹配')
+  return result
 }
 export async function listSkills(): Promise<Skill[]> {
   const d = await request<{ skills: SkillInfoRaw[] }>('/api/skills')
@@ -1572,4 +1611,16 @@ export async function setDefaultModel(_id: string): Promise<void> {
 }
 export async function setLiteModel(_id: string): Promise<{ ok: boolean; lite_model: string }> {
   throw new Error('setLiteModel is removed — use setEndpointLite (PR5 deleted /api/config/models)')
+}
+
+// OCTO-FORK: legal publications are fetched through the local runtime before login.
+export interface Agreement {
+  kind: 'box' | 'privacy'
+  version: string
+  title: string
+  content: string
+  published_at: string
+}
+export function getAgreement(kind: Agreement['kind'], signal?: AbortSignal): Promise<Agreement> {
+  return request<Agreement>('/api/product/agreements/' + kind, { cache: 'no-store', signal })
 }

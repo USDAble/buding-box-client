@@ -2,11 +2,14 @@ package productruntime
 
 import (
 	"context"
+	"crypto/rand"
 	"fmt"
+	"strconv"
 	"strings"
 	"time"
 
 	"github.com/open-octo/octo-agent/internal/agent"
+	"github.com/open-octo/octo-agent/internal/agentprofile"
 	"github.com/open-octo/octo-agent/internal/app"
 	"github.com/open-octo/octo-agent/internal/productclient"
 )
@@ -45,6 +48,8 @@ const gatewayEnsureBudget = 10 * time.Second
 // without any extra plumbing (V-32 established that the holder is the one place
 // a restored session lands).
 type GatewayEndpoint struct {
+	// ReasoningForModel resolves product preferences without vendor translation.
+	ReasoningForModel func(string) string
 	// Host is the gateway's base URL: scheme and authority, optionally with a
 	// /v1 segment.
 	//
@@ -115,13 +120,17 @@ type GatewayEndpoint struct {
 // handle would be a second reader (开发规范 §3.8). The caller resolves them per
 // turn for the same reason it calls this method per turn.
 func (g GatewayEndpoint) Sender(tuning app.ReasoningTuning) (agent.Sender, error) {
+	if g.ReasoningForModel != nil {
+		tuning.ReasoningEffort = g.ReasoningForModel(tuning.ClientModelID)
+	}
 	if strings.TrimSpace(g.Host) == "" {
 		return nil, fmt.Errorf("the built-in gateway has no address in this build; the turn was not started and nothing was sent")
 	}
 	if g.Tokens == nil {
 		return nil, fmt.Errorf("no credential holder is wired for the built-in gateway; the turn was not started and nothing was sent")
 	}
-	if g.Tokens.AccessToken() == "" && g.Ensure != nil {
+	// OCTO-FORK: a nonempty token can expire while the portable client is idle.
+	if g.Ensure != nil {
 		ctx, cancel := context.WithTimeout(context.Background(), gatewayEnsureBudget)
 		defer cancel()
 		if err := g.Ensure(ctx); err != nil {
@@ -159,12 +168,23 @@ func (g GatewayEndpoint) Sender(tuning app.ReasoningTuning) (agent.Sender, error
 	// Bailian, DeepSeek's native API, OpenRouter and Kimi each need. Setting it
 	// here would be guessing a contract fact, and if the real gateway disagrees
 	// this field is the one place that changes.
+	localSession := tuning.ClientSessionID
+	if localSession == "" {
+		localSession = rand.Text()
+	}
+	headers := map[string]string{"X-Buding-Local-Session": localSession, "X-Buding-Turn": rand.Text()}
+	if id, version, ok := agentprofile.PlatformReference(tuning.ClientAgentID); ok {
+		headers["X-Buding-Expert-ID"] = id
+		headers["X-Buding-Expert-Version"] = strconv.FormatUint(uint64(version), 10)
+	}
 	return app.NewSender(app.SenderOptions{
-		Provider:        app.ProviderCustom,
-		Protocol:        "openai",
-		APIKey:          token,
-		BaseURL:         g.Host,
-		ReasoningEffort: tuning.ReasoningEffort,
-		ShowReasoning:   tuning.ShowReasoning,
+		GatewayReasoningPassthrough: true,
+		Provider:                    app.ProviderCustom,
+		Protocol:                    "openai",
+		APIKey:                      token,
+		BaseURL:                     g.Host,
+		Headers:                     headers,
+		ReasoningEffort:             tuning.ReasoningEffort,
+		ShowReasoning:               tuning.ShowReasoning,
 	})
 }

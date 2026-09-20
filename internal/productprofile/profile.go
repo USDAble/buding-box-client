@@ -7,7 +7,6 @@ package productprofile
 import (
 	"crypto/ed25519"
 	"encoding/base64"
-	"encoding/json"
 	"fmt"
 	"net/url"
 	"strings"
@@ -22,8 +21,8 @@ const (
 // Placeholder control-plane hosts for a release that has not been given the
 // deployment host yet. They use the RFC 6761 reserved `.invalid` TLD, so DNS
 // can never resolve them: an unconfigured package fails loudly instead of
-// sending product traffic somewhere unintended. Replace both (and populate
-// TrustedKeyIDs) before shipping — the packaging preflight reports them.
+// sending product traffic somewhere unintended. Deployment addresses are set
+// in endpoints.json; these constants are sentinel values only.
 const (
 	// UnsetAPIHost carries /v1 because internal/productclient concatenates
 	// caller-supplied paths onto the host, so the prefix is theirs to supply.
@@ -121,10 +120,9 @@ var (
 // asset is a release-build error, so fail closed rather than guessing a mode.
 func Current() Profile {
 	currentOnce.Do(func() {
-		if err := json.Unmarshal([]byte(embeddedProfileJSON), &current); err != nil {
-			panic(fmt.Sprintf("product profile: parse embedded configuration: %v", err))
-		}
-		if err := current.Validate(); err != nil {
+		var err error
+		current, err = loadProfile(embeddedProfileJSON, embeddedEndpointsJSON)
+		if err != nil {
 			panic(fmt.Sprintf("product profile: invalid embedded configuration: %v", err))
 		}
 	})
@@ -135,8 +133,7 @@ func Current() Profile {
 func (p Profile) IsProduction() bool { return p.Name == Production }
 
 // ControlPlaneConfigured reports whether the profile names a real control
-// plane. A release ships with `.invalid` placeholders until the deployment
-// host is known, so this is false for an unconfigured build. Callers must
+// plane. Empty addresses and `.invalid` placeholders are unconfigured. Callers must
 // treat false as "refuse to serve", never as "fall back to a default host".
 func (p Profile) ControlPlaneConfigured() bool {
 	return !isUnsetHost(p.APIHost) && !isUnsetHost(p.GatewayHost)

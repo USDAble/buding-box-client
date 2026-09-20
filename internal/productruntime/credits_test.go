@@ -267,7 +267,7 @@ func TestALedgerFailureDoesNotBlockTheLogin(t *testing.T) {
 // for the life of the product, which is a screen claiming to know something it
 // does not. Asserting the exact key set (rather than the absence of two names)
 // is what stops a third field arriving the same way.
-func TestTheCreditsObjectCarriesOnlyTheBalance(t *testing.T) {
+func TestTheCreditsObjectCarriesBalanceAndKnownState(t *testing.T) {
 	h := newHarness(t)
 	h.activate()
 
@@ -277,13 +277,16 @@ func TestTheCreditsObjectCarriesOnlyTheBalance(t *testing.T) {
 	}
 
 	credits := creditsOf(t, body)
-	if len(credits) != 1 {
+	if len(credits) != 2 {
 		names := make([]string, 0, len(credits))
 		for name := range credits {
 			names = append(names, name)
 		}
-		t.Errorf("credits object has %d fields (%v), want exactly [balance]",
+		t.Errorf("credits object has %d fields (%v), want exactly [balance, known]",
 			len(credits), strings.Join(names, ", "))
+	}
+	if known, ok := credits["known"].(bool); !ok || !known {
+		t.Errorf("successful wallet must have known=true: %v", credits)
 	}
 	if _, ok := credits["balance"]; !ok {
 		t.Errorf("credits object has no balance field: %v", credits)

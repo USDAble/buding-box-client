@@ -78,6 +78,7 @@ type Account struct {
 // writer (E9 rule 2: the server deducts, the client re-reads).
 type Credits struct {
 	Balance int64 `json:"balance"`
+	Known   bool  `json:"known"`
 }
 
 // Plan is the subscription name reported by the platform.
@@ -87,8 +88,9 @@ type Plan struct {
 
 // Prefs are the user's local choices.
 type Prefs struct {
-	Locale              string `json:"locale"`
-	InputSensitiveCheck bool   `json:"inputSensitiveCheck"`
+	ModelReasoning      map[string]string `json:"modelReasoning,omitempty"`
+	Locale              string            `json:"locale"`
+	InputSensitiveCheck bool              `json:"inputSensitiveCheck"`
 }
 
 // State is the on-disk shape, one field per row of the E6.1 table.
@@ -328,6 +330,7 @@ func (s *Store) SetNickname(nickname string) error {
 // that is the point rather than an accident (需求基线 E9 rule 2): the balance has
 // one source and one write path, so nothing else has business calling this.
 func (s *Store) SetCredits(credits Credits) error {
+	credits.Known = true
 	return s.mutate(func(st *State) { st.Credits = credits })
 }
 
@@ -422,6 +425,7 @@ func localeOrDefault(locale string) string {
 // publicOf projects the stored state for the UI. The one normalisation is the
 // invariant that a logged-in installation is always activated (本地API契约 §1.3).
 func publicOf(st State) PublicState {
+	st = clone(st)
 	return PublicState{
 		SchemaVersion:      st.SchemaVersion,
 		LoggedIn:           st.LoggedIn,
@@ -439,6 +443,12 @@ func publicOf(st State) PublicState {
 // through the returned value.
 func clone(st State) State {
 	out := st
+	if st.Prefs.ModelReasoning != nil {
+		out.Prefs.ModelReasoning = make(map[string]string, len(st.Prefs.ModelReasoning))
+		for key, value := range st.Prefs.ModelReasoning {
+			out.Prefs.ModelReasoning[key] = value
+		}
+	}
 	if st.Activation != nil {
 		a := *st.Activation
 		out.Activation = &a

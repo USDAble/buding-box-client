@@ -15,9 +15,22 @@ Profile 提供控制面地址、签名公钥和开发能力开关。桌面组装
 - 不将私钥、提供方 key、用户 bearer/refresh token 或用户偏好放入 Profile。
 - 不用 Profile 承载既有 channels、tools、MCP 或后台任务的启动、入口隐藏或授权策略；这些能力仍由各自模块拥有。
 
+## 统一修改接口地址
+
+本地、测试、生产环境都只修改 [endpoints.json](../internal/productprofile/endpoints.json)，无需分别维护环境配置文件：
+
+```json
+{
+  "apiHost": "http://127.0.0.1:8000/api/v1",
+  "gatewayHost": "http://127.0.0.1:8000"
+}
+```
+
+`apiHost` 包含目标服务的 API 前缀；`gatewayHost` 为模型网关基址。修改后重新编译并重启客户端，Vite 热更新不会加载 Go 嵌入的地址。两个构建共用此文件，原有 Profile JSON 只保存权限和验签配置，不能再填写地址。签名公钥仍须与目标服务匹配。
+
 ## 构建选择与不可变性
 
-`internal/productprofile.Current()` 由 build tag 决定嵌入哪一个 JSON，首次读取后经 `sync.Once` 缓存；同一进程内不会因主机状态改变：
+`internal/productprofile.Current()` 由 build tag 选择权限 JSON，再合并统一的 `endpoints.json`，首次读取后经 `sync.Once` 缓存；同一进程内不会因主机状态改变：
 
 | 构建条件 | 嵌入文件 | `name` | 用途 |
 | --- | --- | --- | --- |
@@ -51,7 +64,7 @@ Profile JSON 解析或校验失败会在首次读取时 panic，构建不能靠�
 
 `trustedKeyIDs` 的每个 key ID 非空，值必须是 base64 解码后的 32 字节 Ed25519 公钥。空表在结构上合法，却不意味着“接受未验证响应”：它表示没有任何签名目录可被信任。
 
-生产配置暂用 `https://api.invalid/v1` 与 `https://gateway.invalid` 占位。这些地址通过 URL 形状校验，但 `ControlPlaneConfigured()` 将空、解析失败或 `.invalid` 域名都判为未配置；不会发生网络 fallback。空可信键表则使 `HasTrustedKeys()` 为 false。
+统一地址文件当前保留本地 HTTP 地址。生产构建要求先将其改为 HTTPS，否则首次读取配置时拒绝启动。 `ControlPlaneConfigured()` 将空、解析失败或 `.invalid` 域名都判为未配置；不会发生网络 fallback。空可信键表则使 `HasTrustedKeys()` 为 false。
 
 ```text
 Profile
@@ -62,7 +75,7 @@ Profile
 
 ## 两种 Profile 的实际差异
 
-开发 Profile 同时承担日常开发和本地测试/Sandbox：当前默认连接 `http://127.0.0.1:8788` 的 `productstub`，控制面地址带 `/v1`，网关地址为裸 host，并信任其开发签名键。当前不新增第三个 Profile；需要接入受控 Sandbox 时，仍由 developer Profile 编译进对应地址和公钥，而不是在运行时接收任意 host。它允许 `OCTO_DESKTOP_DEV_URL` 将真实桌面窗口指向 Vite；见 `开发与联调.md`。
+开发 Profile 同时承担日常开发和本地测试/Sandbox：当前统一地址连接本地中台 `http://127.0.0.1:8000`，控制面地址带 `/api/v1`；如需使用 `productstub`，在统一入口改回 `8788` 和 `/v1`，网关地址为裸 host，并信任其开发签名键。当前不新增第三个 Profile；需要接入受控 Sandbox 时，修改统一的 `endpoints.json` 并确保 developer Profile 的公钥匹配，而不是在运行时接收任意 host。它允许 `OCTO_DESKTOP_DEV_URL` 将真实桌面窗口指向 Vite；见 `开发与联调.md`。
 
 developer Profile 允许本地模型来源，因此它验证的是本地客户端、控制面契约和开发模型闭环，不等同于生产 Profile 的“只允许可信目录和 gateway”限制。发布前仍必须用 production Profile 的自动检查和嵌入式桌面验收验证产品边界。
 
@@ -89,7 +102,7 @@ developer Profile 允许本地模型来源，因此它验证的是本地客户�
 修改 Profile 等于改变发布物的信任边界，应按发布变更处理：
 
 1. 先确认实际 API/gateway 地址、签名 key ID、公钥、受众和轮换兼容性；不把占位符或私钥写入仓库。
-2. 同时更新嵌入 JSON、Profile 校验/测试、`中台接口契约.md` 中受影响的请求与签名说明，以及本文件。
+2. 地址只更新 `endpoints.json`，权限和公钥更新对应 Profile；规则变更时同步更新测试、`中台接口契约.md` 中受影响的请求与签名说明，以及本文件。
 3. 用生产 build tag 运行 Profile 与桌面壳相关测试，并运行 `make release-profile-check release-config-check`；真实中台联调另行进行，不能放进自动化测试。
 4. 若变更会使旧版本不再信任新目录或会改变数据根/模型来源行为，先给出兼容、迁移、回滚和用户可见失败方案，等待确认后再实施。
 

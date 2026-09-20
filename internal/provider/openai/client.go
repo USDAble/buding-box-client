@@ -39,6 +39,9 @@ const DefaultMaxTokens = 32768
 // any other value leaves the request shaped as generic OpenAI.
 const DialectDeepSeek = "deepseek"
 
+// OCTO-FORK: our gateway adapts vendor dialects; this hop must not clamp effort.
+const DialectPlatformGateway = "platform-gateway"
+
 // DialectOpenAI selects OpenAI's effort value set ("max" → "xhigh", since
 // gpt-5.x reasoning_effort tops out at "xhigh", not "max"). Assign it to
 // Client.Dialect for the "openai" vendor.
@@ -154,6 +157,10 @@ type Client struct {
 //     both "xhigh" and "max" clamp to "high"; "thinking" is never sent.
 func (c *Client) applyReasoning(body *apiRequest, effort string) {
 	switch c.Dialect {
+	case DialectPlatformGateway:
+		// OCTO-FORK: keep default and off distinct on the internal protocol.
+		body.ReasoningEffort = effort
+		return
 	case DialectDeepSeek:
 		// fall through to the toggle logic below.
 	case DialectOpenAI:

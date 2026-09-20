@@ -58,6 +58,9 @@ func getDefaultToolsFor(model string) []agent.ToolDefinition {
 
 // Config holds server-level settings.
 type Config struct {
+	// OCTO-FORK: platform skills are resolved against the session publication.
+	PlatformSkillLoader func(context.Context, string, uint32, string) (string, error)
+
 	// Bind address (e.g. ":8088", "127.0.0.1:8088").
 	Addr string
 
@@ -2041,7 +2044,15 @@ func (s *Server) senderForSession(sess *agent.Session) (agent.Sender, string) {
 		// cache, cfg.EffectiveShowReasoning(nil) for the flag. internal/server stays
 		// the one place that reads config on behalf of a sender (开发规范 §3.8), and
 		// the fork package that implements the factory is not given a config handle.
-		gw, err := s.cfg.GatewaySender(reasoningTuning())
+		// OCTO-FORK: preserve the local task identity in middle-tier sessions and billing.
+		tuning := reasoningTuning()
+		// OCTO-FORK: resolve reasoning against the model actually used this turn.
+		tuning.ClientModelID = bare
+		if sess != nil {
+			tuning.ClientSessionID = sess.ID
+			tuning.ClientAgentID = sess.EffectiveAgentID()
+		}
+		gw, err := s.cfg.GatewaySender(tuning)
 		if err != nil {
 			return failingSender{err: err}, bare
 		}
@@ -3159,6 +3170,12 @@ func (s *Server) agentStoreIfReady() (*agentprofile.Store, bool) {
 // present (respects a test-injected store) and only falls back to lazy init
 // if nothing has been set yet.
 func (s *Server) profileForAgent(agentID string) *agentprofile.Profile {
+	// OCTO-FORK: platform instructions are composed once by the pinned server version.
+	if _, _, ok := agentprofile.PlatformReference(agentID); ok {
+		profile := agentprofile.DefaultProfile()
+		profile.ID, profile.Name = agentID, "平台专家"
+		return profile
+	}
 	store, ok := s.agentStoreIfReady()
 	if !ok {
 		_ = s.agentRouter()
@@ -3177,6 +3194,10 @@ func (s *Server) profileForAgent(agentID string) *agentprofile.Profile {
 // can reject a bad agent_id at input time instead of silently falling back
 // to default at run time. An empty agentID is always valid (means default).
 func (s *Server) validateAgentID(agentID string) error {
+	// OCTO-FORK: publication and model authorization are enforced by the gateway.
+	if _, _, ok := agentprofile.PlatformReference(agentID); ok {
+		return nil
+	}
 	if agentID == "" {
 		return nil
 	}

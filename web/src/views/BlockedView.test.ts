@@ -136,6 +136,9 @@ describe('BlockedView first activation', () => {
     const body = JSON.parse(String(fetchMock.mock.calls[0][1]?.body))
     expect(body.boxCode).toBe('BOX-DEMO-0001')
     expect(body.activationCode).toBe('BUDING-DEMO-0001')
+    expect(body.termsVersion).toBeUndefined()
+    expect(body.privacyVersion).toBeUndefined()
+    expect(body.clientRequestId).toEqual(expect.any(String))
   })
 
   it('refuses to submit without the box code', () => {
@@ -175,7 +178,7 @@ describe('BlockedView first activation', () => {
       type('code', '123456')
       type('activationCode', 'BUDING-DEMO-0001')
       type('boxCode', 'BOX-DEMO-0001')
-      submit()
+        submit()
       await vi.waitFor(() => expect(target.textContent).toContain(copy))
 
       // The three codes must not collapse into one shared message: the user
@@ -356,7 +359,7 @@ describe('BlockedView server-dictionary notice (L-D5)', () => {
   }
 
   /** Fills the activation form — the shape a fresh data/ starts on. */
-  function signIn() {
+  async function signIn() {
     type('phone', '13800001234')
     type('code', '123456')
     type('activationCode', 'BUDING-DEMO-0001')
@@ -397,7 +400,7 @@ describe('BlockedView server-dictionary notice (L-D5)', () => {
       retryAt: 'next_login',
     })))
     render()
-    signIn()
+    await signIn()
 
     await vi.waitFor(() => expect(toastsNow()).toHaveLength(1))
     const msg = toastsNow()[0].msg
@@ -421,7 +424,7 @@ describe('BlockedView server-dictionary notice (L-D5)', () => {
       retryAt: 'next_login',
     })))
     render()
-    signIn()
+    await signIn()
 
     await vi.waitFor(() => expect(toastsNow()).toHaveLength(1))
     const msg = toastsNow()[0].msg
@@ -439,7 +442,7 @@ describe('BlockedView server-dictionary notice (L-D5)', () => {
       version: '2026-09-15.2',
     })))
     render()
-    signIn()
+    await signIn()
 
     await vi.waitFor(() => expect(toastsNow()).toHaveLength(1))
     const msg = toastsNow()[0].msg
@@ -453,7 +456,7 @@ describe('BlockedView server-dictionary notice (L-D5)', () => {
     // them, and the whole channel is idle when there is nothing to report.
     vi.stubGlobal('fetch', vi.fn(async () => loginReply()))
     render()
-    signIn()
+    await signIn()
 
     await settleLogin()
     expect(toastsNow()).toHaveLength(0)
@@ -468,7 +471,7 @@ describe('BlockedView control-plane failure tiers (L-B3)', () => {
     vi.stubGlobal('fetch', vi.fn(async () => ({ ok: false, status, json: async () => ({ code }) })))
   }
 
-  function fillAndSubmit() {
+  async function fillAndSubmit() {
     type('phone', '13800001234')
     type('code', '123456')
     type('activationCode', 'BUDING-DEMO-0001')
@@ -479,7 +482,7 @@ describe('BlockedView control-plane failure tiers (L-B3)', () => {
   it('tells the user the network is unreachable and offers a retry', async () => {
     failLoginWith(503, 'network_unavailable')
     renderWith('login')
-    fillAndSubmit()
+    await fillAndSubmit()
 
     await vi.waitFor(() => expect(target.textContent).toContain('网络连不上'))
     // A retry affordance is the tier's whole point: this failure can heal.
@@ -489,7 +492,7 @@ describe('BlockedView control-plane failure tiers (L-B3)', () => {
   it('does not blame the phone number for a transport failure', async () => {
     failLoginWith(503, 'network_unavailable')
     renderWith('login')
-    fillAndSubmit()
+    await fillAndSubmit()
 
     await vi.waitFor(() => expect(target.textContent).toContain('网络连不上'))
     // The old bug filed this under the phone field, whose error switch has no
@@ -502,7 +505,7 @@ describe('BlockedView control-plane failure tiers (L-B3)', () => {
   it('distinguishes an upstream fault from the user’s own network', async () => {
     failLoginWith(503, 'upstream_unavailable')
     renderWith('login')
-    fillAndSubmit()
+    await fillAndSubmit()
 
     await vi.waitFor(() => expect(target.textContent).toContain('服务暂时不可用'))
     expect(target.textContent).not.toContain('网络连不上')
@@ -514,7 +517,7 @@ describe('BlockedView control-plane failure tiers (L-B3)', () => {
     const fetchMock = vi.fn(async () => ({ ok: false, status: 403, json: async () => ({ code: 'account_restricted' }) }))
     vi.stubGlobal('fetch', fetchMock)
     renderWith('login')
-    fillAndSubmit()
+    await fillAndSubmit()
 
     await vi.waitFor(() => expect(target.textContent).toContain('账号已被限制'))
     // Not retryable, and NOT a lost session either: P4-拦截页 §3.1 keeps the
@@ -533,7 +536,7 @@ describe('BlockedView control-plane failure tiers (L-B3)', () => {
     // name a channel that does not exist, and the button must do something real.
     failLoginWith(403, 'account_restricted')
     renderWith('login')
-    fillAndSubmit()
+    await fillAndSubmit()
 
     await vi.waitFor(() => expect(target.textContent).toContain('账号已被限制'))
     expect(target.textContent).not.toContain('联系客服')
@@ -554,7 +557,7 @@ describe('BlockedView control-plane failure tiers (L-B3)', () => {
     // would describe a state the user is no longer in.
     failLoginWith(401, 'unauthorized')
     renderWith('login')
-    fillAndSubmit()
+    await fillAndSubmit()
 
     await vi.waitFor(() => expect(get(productPhase)).toBe('blocked'))
     expect(target.querySelector('[data-testid="tier-retry"]')).toBeNull()

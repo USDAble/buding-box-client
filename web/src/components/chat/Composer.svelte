@@ -21,7 +21,8 @@
   import { getMcpServer } from '../../lib/api'
   import ComposerNotices, { type Notice } from './ComposerNotices.svelte'
   import SensitiveToggle from './SensitiveToggle.svelte'
-  import { allowEnvironmentModelSource, catalogState, productState, refreshCatalogState } from '../../lib/product'
+  import { allowEnvironmentModelSource, catalogState, catalogRevision, productState, refreshCatalogState } from '../../lib/product'
+  import { confirmPendingPermissionChoice } from '../../lib/pendingPermissionGate'
   import { checkSensitive } from '../../lib/sensitive'
   import { loadSelectableModels, type SelectableModel } from '../../lib/selectableModels'
 
@@ -666,18 +667,10 @@
   let protectionLocked = $derived(
     sid ? (currentSession?.protection_policy?.locked ?? ((currentSession as any)?.turn_count ?? 0) > 0) : false,
   )
-  // "" (off) is a legitimate resolved value, not "no data yet" — only fall
-  // back to a default (?? only skips null/undefined, not "") when neither
-  // source has reported anything at all. On the landing page (no sid) that
-  // default is whatever the user already picked there (pendingReasoningEffort,
-  // consumed by ChatView.ensureActiveSession at session creation — mirrors
-  // pendingModel), or else the configured global default; a loaded session
-  // always has real data by the time it's active, so the global default is
-  // the fallback there too.
+  // OCTO-FORK: effort belongs to the selected signed model, not a global level.
   let reasoning = $derived.by(() => {
-    const v = $chatReasoningEffort[sid] ?? currentSession?.reasoning_effort
-    if (v !== undefined) return v || 'off'
-    return (sid ? '' : $pendingReasoningEffort) || $globalReasoningEffort || 'off'
+    const value = activeModel?.reasoningEffort ?? 'default'
+    return reasoningLevels.includes(value) ? value : 'default'
   })
   // The project (a session group carrying a working dir) this session belongs
   // to, if any. A project's directory governs every session in it, so the dir
@@ -859,12 +852,18 @@
   let dirSaving = $state(false)
   let pickerOpen = $state(false)
   let pickerMode = $state<'folder' | 'file'>('folder')
-  const reasoningLevels = ['off', 'low', 'medium', 'high', 'xhigh', 'max']
+  let reasoningLevels = $derived(activeModel?.reasoningOptions?.length ? activeModel.reasoningOptions : ['default'])
+  let savingReasoning = $state(false)
+  function reasoningLabel(level: string) { return $t(`chat.reasoning_level_${level}`) }
   const showReasoningIcon = $derived(showReasoning ? 'ant-design:eye-outlined' : 'ant-design:eye-invisible-outlined')
 
   // Load at mount and whenever the menu opens so Settings changes are visible
   // without a full page refresh. The sequence guard drops stale responses.
   let modelsFetchSeq = 0
+  // OCTO-FORK: initialization retries must update the default without reopening the picker.
+  $effect(() => {
+    if ($catalogRevision > 0) void refreshModels()
+  })
   async function refreshModels() {
     const seq = ++modelsFetchSeq
     try {
@@ -901,6 +900,7 @@
   })
 
   async function pickModel(model: SelectableModel) {
+    if (model.eligible === false) return
     modelMenu = false
     if (confidentialSession && !model.confidential) {
       showToast($t('privacy.private_model_required'), 'error')
@@ -929,7 +929,7 @@
     if (!sid) {
       if (confidential) {
         await refreshModels()
-        const preferred = models.find(model => model.confidential)
+        const preferred = models.find(model => model.confidential && model.eligible !== false)
         if (!preferred) {
           showToast($t('privacy.no_private_model'), 'error')
           return
@@ -965,32 +965,18 @@
 
   async function pickReasoning(level: string) {
     reasonMenu = false
-    // No active session yet (landing page): just park the pick, exactly like
-    // pickModel does with pendingModel. Nothing is sent to the server until
-    // ChatView.ensureActiveSession actually creates a session — this menu is
-    // freely reversible up to that point, so it must not write global state
-    // (or broadcast to every other session) on every click.
-    if (!sid) {
-      pendingReasoningEffort.set(level)
-      return
-    }
+    if (!activeModel || savingReasoning || !reasoningLevels.includes(level)) return
+    const model = activeModel
+    savingReasoning = true
     try {
-      await api.updateSessionReasoningEffort(sid, level)
-      chatReasoningEffort.update(r => ({ ...r, [sid]: level }))
-      globalReasoningEffort.set(level)
-      // Off has no trace to show — the server forces show_reasoning off too
-      // (see handleUpdateSessionReasoningEffort); mirror it locally so the
-      // toggle doesn't flash "on" until the session_update broadcast lands.
-      if (level === 'off') {
-        chatShowReasoning.update(r => ({ ...r, [sid]: false }))
-      }
+      const result = await api.setModelReasoning(model.modelId,level)
+      models = models.map(row => row.id === model.id ? {...row,reasoningEffort:result.effort} : row)
     } catch (e: any) {
       showToast(e.message ?? 'Failed to set reasoning', 'error')
-    }
+    } finally { savingReasoning = false }
   }
 
   async function toggleShowReasoning() {
-    if (reasoning === 'off') return
     const next = !showReasoning
     if (!sid) {
       // Landing page: park the flip, exactly like pickReasoning does with
@@ -1013,9 +999,11 @@
   const PERM_LABEL_KEY: Record<string, string> = {
     interactive: 'chat.ask_mode', auto: 'chat.auto_mode', strict: 'chat.strict_mode',
   }
+  // OCTO-FORK: serialize explicit choices and apply completion to the captured session.
+  let permissionSaving = $state(false)
   async function pickPermMode(next: string) {
     permMenu = false
-    if (next === permMode) return
+    if (permissionSaving || next === permMode) return
     if (!sid) {
       // Landing page: park the pick, exactly like pickReasoning does with
       // pendingReasoningEffort — consumed once ChatView.ensureActiveSession
@@ -1023,11 +1011,16 @@
       pendingPermissionMode.set(next)
       return
     }
+    const id = sid
+    permissionSaving = true
     try {
-      await api.updateSessionPermissionMode(sid, next)
-      chatPermMode.update(m => ({ ...m, [sid]: next }))
+      await api.updateSessionPermissionMode(id, next)
+      confirmPendingPermissionChoice(id)
+      chatPermMode.update(m => ({ ...m, [id]: next }))
     } catch (e: any) {
       showToast(e.message ?? 'Failed to switch permission mode', 'error')
+    } finally {
+      permissionSaving = false
     }
   }
 
@@ -1670,8 +1663,8 @@
                     <button
                       class="menu-item"
                       class:active={activeModelId ? model.id === activeModelId : model.modelId === modelName}
-                      disabled={confidentialSession && !model.confidential}
-                      title={confidentialSession && !model.confidential ? $t('privacy.private_model_required') : undefined}
+                      disabled={model.eligible === false || (confidentialSession && !model.confidential)}
+                      title={model.eligible === false ? $t(model.availabilityReason === 'pricing_not_configured' ? 'model.pricing_not_configured' : 'model.unavailable') : confidentialSession && !model.confidential ? $t('privacy.private_model_required') : undefined}
                       onclick={() => pickModel(model)}
                     >
                       {#if model.confidential}
@@ -1681,6 +1674,9 @@
                         </span>
                       {/if}
                       <span class="mi-name mono">{model.displayName}</span>
+                      {#if model.eligible === false}
+                        <span>{$t(model.availabilityReason === 'pricing_not_configured' ? 'model.pricing_not_configured' : 'model.unavailable')}</span>
+                      {/if}
                     </button>
                   {/each}
                 {/each}
@@ -1696,25 +1692,24 @@
         </div>
         <div class="picker">
           <button class="meta-chip" onclick={(e) => { e.stopPropagation(); const open = reasonMenu; closeMenus(); reasonMenu = !open }}>
-            <span>{cap(reasoning)}</span>
+            <span>{reasoningLabel(reasoning)}</span>
             <iconify-icon icon={showReasoningIcon} width="12" class="reasoning-eye"></iconify-icon>
             <iconify-icon icon="lucide:chevron-down" width="12"></iconify-icon>
           </button>
           {#if reasonMenu}
             <div class="menu" onclick={(e) => e.stopPropagation()}>
               {#each reasoningLevels as lvl}
-                <button class="menu-item" class:active={lvl === reasoning} onclick={() => pickReasoning(lvl)}>
-                  <span class="mi-name">{cap(lvl)}</span>
+                <button class="menu-item" disabled={savingReasoning} class:active={lvl === reasoning} onclick={() => pickReasoning(lvl)}>
+                  <span class="mi-name">{reasoningLabel(lvl)}</span>
                 </button>
               {/each}
               <div class="menu-divider"></div>
               <button
                 class="menu-item toggle-item"
-                disabled={reasoning === 'off'}
                 onclick={() => toggleShowReasoning()}
               >
                 <span class="mi-name">{$t('chat.show_reasoning')}</span>
-                <span class="toggle" class:on={showReasoning && reasoning !== 'off'}>
+                <span class="toggle" class:on={showReasoning}>
                   <span class="toggle-knob"></span>
                 </span>
               </button>

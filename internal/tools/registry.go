@@ -41,6 +41,8 @@ var allTools = []tool{
 	WebFetchTool{},
 	WebSearchTool{},
 	SkillTool{},
+	// OCTO-FORK: authenticated platform skills are bound to the current turn.
+	PlatformSkillTool{},
 	AgentTool{},
 	AgentSendTool{},
 	AgentStatusTool{},
@@ -869,6 +871,10 @@ func defaultToolsFor(ctx context.Context, model string) []agent.ToolDefinition {
 			continue
 		}
 		if _, isSkill := t.(SkillTool); isSkill && !skillsOn {
+			continue
+		}
+		// OCTO-FORK: no loader means no usable platform skill capability.
+		if _, platform := t.(PlatformSkillTool); platform && platformSkillLoader(ctx) == nil {
 			continue
 		}
 		if at, isAgent := t.(AgentTool); isAgent {

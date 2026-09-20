@@ -4,5 +4,7 @@
   "allowDevWebview": false,
   "allowEnvironmentModelSource": false,
   "allowDataRootOverride": false,
-  "trustedKeyIDs": {}
+  "trustedKeyIDs": {
+    "platform-dev-catalog-20260920": "pJnZJbTeeNhbGJPjhtjqZYaJSWXxL6NVQX65orfrPsg="
+  }
 }

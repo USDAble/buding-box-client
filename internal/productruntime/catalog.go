@@ -431,7 +431,18 @@ func catalogExpiry(policy productclient.Policy, now time.Time) (time.Time, error
 // act on. It exists so the outcome enum has a consumer in this PR: without one,
 // the five values would be dead code that PR-4c might quietly replace.
 func (rt *Runtime) logCatalogOutcome(outcome catalogOutcome, err error) {
-	slog.Warn("product: catalog unavailable", "outcome", string(outcome), "err", err)
+	// OCTO-FORK: distinguish deployment failures without logging arbitrary response data or credentials.
+	reason := "unspecified"
+	var remote *productclient.Error
+	if errors.As(err, &remote) {
+		switch remote.Message {
+		case "模型目录签名尚未配置":
+			reason = "catalog_signing_not_configured"
+		case "模型目录暂不可用":
+			reason = "catalog_database_or_query_unavailable"
+		}
+	}
+	slog.Warn("product: catalog unavailable", "outcome", string(outcome), "err", err, "server_reason", reason)
 }
 
 // catalogModel is the verified row consumed by both the picker projection and

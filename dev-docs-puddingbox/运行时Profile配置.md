@@ -22,9 +22,10 @@ Profile 提供控制面地址、签名公钥和开发能力开关。桌面组装
 | 构建条件 | 嵌入文件 | `name` | 用途 |
 | --- | --- | --- | --- |
 | 默认（无 `product_production`） | `profiles/developer.json` | `developer` | 本地开发、桌面热重载和本地测试/Sandbox（含 `productstub`）联调。 |
+| `-tags product_test` | `profiles/testing.json` | `testing` | 可交给测试人员的测试包；同样关闭开发入口和环境模型来源。 |
 | `-tags product_production` | `profiles/production.json` | `production` | 生产桌面包。 |
 
-默认构建是开发 Profile，因此“能编译、能运行”不代表“可发布”。`make release-profile-check` 专门防止打包时遗漏 `product_production`；生产交付还应运行 `make release-config-check`，检查嵌入的生产内容。
+默认构建是开发 Profile，因此“能编译、能运行”不代表“可发布”。生产打包命令选择 `product_production`，测试打包命令选择 `product_test`；两者都不能意外退回 developer Profile。`make release-profile-check` 继续保护生产命令，`make test-profile-check` 验证测试 Profile 与替身签名锚。
 
 Profile JSON 解析或校验失败会在首次读取时 panic，构建不能靠猜测继续运行。它是发布配置错误，不是可由最终用户修复的运行时降级。
 
@@ -62,7 +63,11 @@ Profile
 
 ## 两种 Profile 的实际差异
 
-开发 Profile 同时承担日常开发和本地测试/Sandbox：当前默认连接 `http://127.0.0.1:8788` 的 `productstub`，控制面地址带 `/v1`，网关地址为裸 host，并信任其开发签名键。当前不新增第三个 Profile；需要接入受控 Sandbox 时，仍由 developer Profile 编译进对应地址和公钥，而不是在运行时接收任意 host。它允许 `OCTO_DESKTOP_DEV_URL` 将真实桌面窗口指向 Vite；见 `开发与联调.md`。
+开发 Profile 用于日常开发和手工 Sandbox 联调：当前默认连接 `http://127.0.0.1:8788` 的 `productstub`，控制面地址带 `/v1`，网关地址为裸 host，并信任其开发签名键。它允许 `OCTO_DESKTOP_DEV_URL` 将真实桌面窗口指向 Vite；见 `开发与联调.md`。
+
+测试 Profile 是可分发的封闭变体，不允许开发 WebView、环境模型来源或数据根覆盖。其默认文件开启 `startLocalStandin`，且只接受固定的 `127.0.0.1:8788` 地址；测试版桌面进程在本地先启动与 `productstub` 同一份 `clienttest` 契约替身，再打开窗口。因此测试人员在中台尚未就绪时无需额外启动服务，也不会连接构建机。
+
+当测试中台可用时，发布负责人将 `testing.json` 的 `startLocalStandin` 改为 `false`，填入测试中台的两个 HTTPS 地址和其签名公钥，再用同一测试打包命令重建。地址和公钥仍只在编译期读取，测试人员不能通过环境变量、配置文件或界面改连任意服务。
 
 developer Profile 允许本地模型来源，因此它验证的是本地客户端、控制面契约和开发模型闭环，不等同于生产 Profile 的“只允许可信目录和 gateway”限制。发布前仍必须用 production Profile 的自动检查和嵌入式桌面验收验证产品边界。
 

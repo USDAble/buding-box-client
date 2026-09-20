@@ -97,7 +97,7 @@ export async function runHardChecks(root) {
 }
 
 // ADVISORY: returns { warnings, notes }. Never fails the build.
-export async function runAdvisoryChecks(root, { resolve = resolvePinnedUpstream } = {}) {
+export async function runAdvisoryChecks(root, { resolve = resolvePinnedUpstream, profile = 'production' } = {}) {
   const warnings = []
   const notes = []
 
@@ -105,8 +105,10 @@ export async function runAdvisoryChecks(root, { resolve = resolvePinnedUpstream 
   // may still carry `.invalid` placeholders, which resolve on no DNS. Packaging
   // such a build is legitimate during B0/B1, so this warns rather than fails;
   // the runtime is safe because `.invalid` cannot reach anything.
-  const releaseConfig = await checkReleaseConfig(root)
-  for (const p of releaseConfig) warnings.push(`release-config-guard: ${p}`)
+  if (profile === 'production') {
+    const releaseConfig = await checkReleaseConfig(root)
+    for (const p of releaseConfig) warnings.push(`release-config-guard: ${p}`)
+  }
 
   if (!resolve(root)) {
     const hint =
@@ -145,11 +147,11 @@ export function repositoryRoot(scriptUrl) {
 //
 // `hardChecks` is injectable so the failure path can be tested without
 // synthesising a whole fake repository on disk; production callers omit it.
-export async function runPreflight(root, { log = console, hardChecks = runHardChecks } = {}) {
+export async function runPreflight(root, { log = console, hardChecks = runHardChecks, profile = 'production' } = {}) {
   log.log('==> 出包前置检查 (fork guards)')
 
   const hard = await hardChecks(root)
-  const { warnings, notes } = await runAdvisoryChecks(root)
+  const { warnings, notes } = await runAdvisoryChecks(root, { profile })
 
   for (const note of notes) log.log(`    ${note}`)
 
@@ -168,7 +170,14 @@ export async function runPreflight(root, { log = console, hardChecks = runHardCh
 }
 
 async function main() {
-  const { failureCount } = await runPreflight(repositoryRoot(import.meta.url))
+  const profileArg = process.argv.find((arg) => arg.startsWith('--profile='))
+  const profile = profileArg?.slice('--profile='.length) || 'production'
+  if (profile !== 'production' && profile !== 'test') {
+    console.error(`unknown package profile ${JSON.stringify(profile)}; expected production or test`)
+    process.exitCode = 2
+    return
+  }
+  const { failureCount } = await runPreflight(repositoryRoot(import.meta.url), { profile })
   if (failureCount > 0) process.exitCode = 1
 }
 

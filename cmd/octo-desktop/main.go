@@ -241,6 +241,15 @@ func main() {
 	// path so both backends resolve the same set of environment variables.
 	serveenv.Load()
 
+	// OCTO-FORK: test packages own the local control-plane fixture so external
+	// testers can complete the product flow before the testing platform exists.
+	// The local stand-in belongs exclusively to the test profile. Starting it
+	// before the desktop hub is assembled means the first login or bootstrap
+	// request cannot race the fixture's listener.
+	if err := startProfileControlPlane(); err != nil {
+		log.Fatalf("octo-desktop: %v", err)
+	}
+
 	// Pick the language for native dialogs/tray from the system UI language.
 
 	// Pick the language for native dialogs/tray from the system UI language.

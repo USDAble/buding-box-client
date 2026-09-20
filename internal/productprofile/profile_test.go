@@ -29,6 +29,54 @@ func TestDeveloperProfileMayBeRestrictive(t *testing.T) {
 	}
 }
 
+func TestTestingProfileUsesTheProductionTrustBoundary(t *testing.T) {
+	key := map[string]string{"test-2026-a": ed25519Key(32)}
+	for _, p := range []Profile{
+		{
+			SchemaVersion: 1, Name: Testing,
+			StartLocalStandin: true,
+			APIHost:           "http://127.0.0.1:8788/v1", GatewayHost: "http://127.0.0.1:8788",
+			TrustedKeyIDs: key,
+		},
+		{
+			SchemaVersion: 1, Name: Testing,
+			APIHost: "https://test-api.example.com/v1", GatewayHost: "https://test-gateway.example.com",
+			TrustedKeyIDs: key,
+		},
+	} {
+		if err := p.Validate(); err != nil {
+			t.Fatalf("valid testing profile rejected: %v", err)
+		}
+	}
+}
+
+func TestTestingProfileRejectsUnsafeOrIncompleteModes(t *testing.T) {
+	key := map[string]string{"test-2026-a": ed25519Key(32)}
+	for _, p := range []Profile{
+		{
+			SchemaVersion: 1, Name: Testing, AllowDevWebview: true,
+			APIHost: "https://test-api.example.com/v1", GatewayHost: "https://test-gateway.example.com", TrustedKeyIDs: key,
+		},
+		{
+			SchemaVersion: 1, Name: Testing,
+			StartLocalStandin: true,
+			APIHost:           "http://127.0.0.1:9999/v1", GatewayHost: "http://127.0.0.1:9999", TrustedKeyIDs: key,
+		},
+		{
+			SchemaVersion: 1, Name: Testing,
+			APIHost: "http://test-api.example.com/v1", GatewayHost: "https://test-gateway.example.com", TrustedKeyIDs: key,
+		},
+		{
+			SchemaVersion: 1, Name: Testing,
+			APIHost: "https://test-api.example.com/v1", GatewayHost: "https://test-gateway.example.com",
+		},
+	} {
+		if err := p.Validate(); err == nil {
+			t.Fatalf("unsafe testing profile was accepted: %+v", p)
+		}
+	}
+}
+
 // ed25519Key returns a base64 key of the given raw length, so a test can build
 // both a well-formed trust entry and a wrong-length one.
 func ed25519Key(n int) string {
@@ -187,5 +235,22 @@ func TestShippedProductionAssetIsStructurallyValid(t *testing.T) {
 	}
 	if strings.Contains(p.GatewayHost, "/v1/v1") {
 		t.Errorf("gatewayHost contains /v1/v1, which no client produces: got %q", p.GatewayHost)
+	}
+}
+
+func TestShippedTestingAssetIsConfigured(t *testing.T) {
+	raw, err := os.ReadFile("profiles/testing.json")
+	if err != nil {
+		t.Fatalf("read testing.json: %v", err)
+	}
+	var p Profile
+	if err := json.Unmarshal(raw, &p); err != nil {
+		t.Fatalf("parse testing.json: %v", err)
+	}
+	if err := p.Validate(); err != nil {
+		t.Fatalf("testing.json does not satisfy the profile schema: %v", err)
+	}
+	if p.Name != Testing {
+		t.Fatalf("testing.json names profile %q, want %q", p.Name, Testing)
 	}
 }

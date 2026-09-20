@@ -1,4 +1,7 @@
-//go:build !product_production
+//go:build !product_production && !product_test
+
+// OCTO-FORK: only a testing profile that starts the local stand-in needs its
+// fixture key; remote testing profiles carry the testing platform's key.
 
 package clienttest
 
@@ -23,7 +26,7 @@ func TestFixtureKeyIsTheDeveloperTrustAnchor(t *testing.T) {
 	profile := productprofile.Current()
 	got := profile.TrustedKeyIDs[FixtureSigningKeyID]
 	if got != FixtureSigningPublicKey() {
-		t.Fatalf("developer profile trusts %q for %q, but the stand-in signs with %q",
+		t.Fatalf("local-fixture profile trusts %q for %q, but the stand-in signs with %q",
 			got, FixtureSigningKeyID, FixtureSigningPublicKey())
 	}
 }

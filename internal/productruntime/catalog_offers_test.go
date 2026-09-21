@@ -3,8 +3,10 @@
 package productruntime
 
 import (
+	"context"
 	"encoding/json"
 	"testing"
+	"time"
 
 	"github.com/open-octo/octo-agent/internal/catalogstore"
 	"github.com/open-octo/octo-agent/internal/productclient"
@@ -135,5 +137,26 @@ func TestTheGuardReadsEligibilityFromTheCatalogRow(t *testing.T) {
 	selectable, known := catalogEligibility(policy, "selectable")
 	if !known || !selectable.Selectable {
 		t.Fatalf("selectable = %+v known=%v", selectable, known)
+	}
+}
+
+func TestPrepareCatalogModelFetchesBeforeFirstTurn(t *testing.T) {
+	f := newCatalogFixture(t)
+	f.signIn()
+	status, known := f.rt.PrepareCatalogModel(context.Background(), fixturePresentModel)
+	if !known || !status.Current || !status.Selectable {
+		t.Fatalf("first turn did not obtain catalog: %+v, known=%v", status, known)
+	}
+	entry, err := f.store.Load()
+	if err != nil {
+		t.Fatal(err)
+	}
+	entry.ExpiresAt = time.Now().Add(-time.Minute)
+	if err := f.store.Put(entry); err != nil {
+		t.Fatal(err)
+	}
+	status, known = f.rt.PrepareCatalogModel(context.Background(), fixturePresentModel)
+	if !known || !status.Current || !status.Selectable {
+		t.Fatalf("expired catalog not refreshed: %+v, known=%v", status, known)
 	}
 }

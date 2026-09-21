@@ -137,6 +137,17 @@ describe('no code the client can name reaches the server sentence (V-91)', () =>
     expect(turnErrorKey('model_withdrawn')).toBe('session.model_withdrawn')
   })
 
+  it('keeps temporary catalog and eligibility refusals distinct from withdrawal', () => {
+    expect(turnErrorKey('catalog_unavailable')).toBe('turn_error.catalog_unavailable')
+    expect(turnErrorKey('model_unavailable')).toBe('session.model_unavailable')
+    for (const code of ['catalog_unavailable', 'model_unavailable']) {
+      const key = turnErrorKey(code)!
+      expect(en[key]).toBeTruthy()
+      expect(zh[key]).toBeTruthy()
+      expect(zh[key]).not.toContain('已下架')
+    }
+  })
+
   it('leaves the 401 pair to the behaviour it needs, not to a sentence', () => {
     // Pinned as ABSENT, not as an oversight (V-92): this path has no refresh-and-replay
     // and no clear-the-credential step, so copy would tell the user to retry a turn that

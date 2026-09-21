@@ -9,9 +9,9 @@ import { chatModel, sessions } from './stores'
 export function canStartTurn(sid?: string | null): boolean {
   const catalogModels = get(selectableModels).filter(model => model.source === 'catalog')
   if (get(allowEnvironmentModelSource) === false) {
-    if (get(catalogState) !== 'ready' || catalogModels.length === 0) return false
+    if (get(catalogState) !== 'ready' || !catalogModels.some(model => model.eligible !== false)) return false
   }
-  return !sessionCatalogModelWithdrawn(sid)
+  return !sessionCatalogModelWithdrawn(sid) && !sessionCatalogModelUnavailable(sid)
 }
 
 export function catalogNoticeKey(sid?: string | null): string {
@@ -22,7 +22,16 @@ export function catalogNoticeKey(sid?: string | null): string {
     if (state === 'unverifiable') return 'catalog.unverifiable'
   }
   if (sessionCatalogModelWithdrawn(sid)) return 'session.model_withdrawn'
+  if (sessionCatalogModelUnavailable(sid)) return 'session.model_unavailable'
   return 'catalog.no_models'
+}
+
+// OCTO-FORK: pricing/route eligibility is not publication status and must not be presented as withdrawal.
+function sessionCatalogModelUnavailable(sid?: string | null): boolean {
+  if (!sid) return false
+  const bound = get(chatModel)[sid] || get(sessions).find(session => session.id === sid)?.model_id || ''
+  return get(selectableModels).some(model => model.source === 'catalog' &&
+    (model.id === bound || model.modelId === bound) && model.eligible === false)
 }
 
 export function sessionCatalogModelWithdrawn(sid?: string | null): boolean {

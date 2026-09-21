@@ -15,6 +15,21 @@ import "fmt"
 // TS. Keeping it in one place at least makes the Go half greppable.
 const codeModelWithdrawn = "model_withdrawn"
 
+// OCTO-FORK: cache freshness and eligibility do not establish model withdrawal.
+func catalogTurnRefusal(model string, lookup func(string) (CatalogModelStatus, bool)) error {
+	status, known := lookup(model)
+	if !known || !status.Current {
+		return codedRefusal{code: "catalog_unavailable", msg: "model catalog is unavailable or expired; refresh before sending"}
+	}
+	if !status.Selectable {
+		if status.AvailabilityReason != "" {
+			return codedRefusal{code: "model_unavailable", msg: "model is listed but currently unavailable"}
+		}
+		return errModelNotListed(model)
+	}
+	return nil
+}
+
 // codedRefusal is a turn refusal that also names a control-plane code.
 //
 // The sentence stays because it is what logs and no-UI builds show, and because the

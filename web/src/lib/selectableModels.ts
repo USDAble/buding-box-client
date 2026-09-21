@@ -89,7 +89,8 @@ export async function loadSelectableModels(allowLocal: boolean): Promise<Selecta
   const available = sorted.filter(model => model.eligible !== false)
   if (!available.some(model => model.id === defaultModelId)) defaultModelId = available[0]?.id ?? ''
   if (requestSequence === modelRequestSequence) {
-    selectableModels.set(available)
+    // OCTO-FORK: preserve listed-but-ineligible models so the send gate can distinguish them from withdrawals.
+    selectableModels.set(sorted)
     defaultSelectableModel.set(defaultModelId)
   }
   return { state: catalog.state, models: sorted, defaultModelId }

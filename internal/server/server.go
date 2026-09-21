@@ -308,9 +308,10 @@ type Config struct {
 // needs at routing boundaries. The product runtime owns how these fields are
 // derived from the signed catalog; the server only enforces the result.
 type CatalogModelStatus struct {
-	Selectable   bool
-	Confidential bool
-	Current      bool
+	AvailabilityReason string
+	Selectable         bool
+	Confidential       bool
+	Current            bool
 }
 
 // Server is the HTTP server skeleton. It owns the mux, the agent factory,
@@ -2025,8 +2026,8 @@ func (s *Server) senderForSession(sess *agent.Session) (agent.Sender, string) {
 		// build with no gateway is a fault the catalog cannot explain. known=false
 		// falls through — see the field. Nothing is sent on this path (L-C7).
 		if s.cfg.CatalogModel != nil {
-			if status, known := s.cfg.CatalogModel(bare); known && (!status.Current || !status.Selectable) {
-				return failingSender{err: errModelNotListed(bare)}, bare
+			if err := catalogTurnRefusal(bare, s.cfg.CatalogModel); err != nil {
+				return failingSender{err: err}, bare
 			}
 		} else if s.cfg.CatalogOffers != nil {
 			if offers, known := s.cfg.CatalogOffers(bare); known && !offers {

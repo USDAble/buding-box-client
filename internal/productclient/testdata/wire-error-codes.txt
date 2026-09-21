@@ -83,6 +83,8 @@ local bootstrap_stale
 local usage_pending
 local network_unavailable
 local model_withdrawn
+local catalog_unavailable
+local model_unavailable
 local input_sensitive
 
 # Envelope field names. Fixed: these six, and no second naming scheme

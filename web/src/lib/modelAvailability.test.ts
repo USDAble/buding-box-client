@@ -66,6 +66,14 @@ describe('product model availability', () => {
     chatModel.set({ s1: 'local::model' })
     expect(sessionCatalogModelWithdrawn('s1')).toBe(false)
   })
+
+  it('does not permit a new turn when all listed models are ineligible', () => {
+    selectableModels.set([{ ...catalogModel('current'), eligible: false }])
+    expect(canStartTurn()).toBe(false)
+    chatModel.set({ s1: PREFIX + 'current' })
+    expect(sessionCatalogModelWithdrawn('s1')).toBe(false)
+    expect(catalogNoticeKey('s1')).toBe('session.model_unavailable')
+  })
 })
 
 describe('developer model availability', () => {

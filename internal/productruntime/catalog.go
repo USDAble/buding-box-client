@@ -470,6 +470,7 @@ type catalogVendor struct {
 // boundary. Current is false when the signed cache is expired or a later
 // verification failed; Selectable and Confidential describe this exact model.
 type CatalogModelEligibility struct {
+	AvailabilityReason   string
 	ReasoningOptions     []string
 	Selectable           bool
 	Confidential         bool
@@ -530,6 +531,7 @@ func catalogEligibility(policy productclient.Policy, id string) (CatalogModelEli
 			continue
 		}
 		return CatalogModelEligibility{
+			AvailabilityReason:   catalogIneligibleReason(model.Eligible, model.AvailabilityReason),
 			ReasoningOptions:     reasoningOptions(model.ReasoningOptions),
 			Selectable:           model.Eligible,
 			Confidential:         model.Eligible && model.Confidential,
@@ -539,6 +541,16 @@ func catalogEligibility(policy productclient.Policy, id string) (CatalogModelEli
 		}, true
 	}
 	return CatalogModelEligibility{CatalogVersion: policy.Catalog.Version}, true
+}
+
+func catalogIneligibleReason(eligible bool, reason string) string {
+	if eligible {
+		return ""
+	}
+	if reason != "" {
+		return reason
+	}
+	return "model_unavailable"
 }
 
 // CatalogModel resolves one bare gateway model against the currently usable
@@ -572,6 +584,15 @@ func (rt *Runtime) CatalogModel(id string) (CatalogModelEligibility, bool) {
 		answer.Confidential = false
 	}
 	return answer, known
+}
+
+// PrepareCatalogModel renews an expired directory before the desktop turn guard
+// judges its selected model. Fresh directories incur no network request.
+func (rt *Runtime) PrepareCatalogModel(ctx context.Context, id string) (CatalogModelEligibility, bool) {
+	if _, err := rt.refreshCatalogOnDemand(ctx); err != nil {
+		return CatalogModelEligibility{}, false
+	}
+	return rt.CatalogModel(id)
 }
 
 // CatalogOffers remains the ordinary-session adapter while internal/server is

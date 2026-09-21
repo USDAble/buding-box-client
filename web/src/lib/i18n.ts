@@ -64,6 +64,8 @@ export const en: Record<string, string> = {
   "wallet.status.paid": "Paid",
   "wallet.status.closed": "Closed",
   "wallet.event.recharge": "Recharge",
+  "wallet.event.activation_grant": "Activation gift",
+  "wallet.event.manual_grant": "Manual credit",
   "wallet.event.reserve": "Reserve",
   "wallet.event.release": "Release",
   "wallet.event.consume": "Consumption",
@@ -1367,6 +1369,9 @@ export const en: Record<string, string> = {
   // from catalog.stale (the list itself needs a refresh) — all three end in "you
   // cannot send", and only this one is about the model THIS session chose.
   "session.model_withdrawn": "The model this conversation uses is no longer available. Pick another one to continue.",
+  // OCTO-FORK: explain temporary catalog/eligibility failures without claiming model withdrawal.
+  "session.model_unavailable": "This model is currently unavailable. Refresh the model list or contact your administrator to check pricing and routes.",
+  "turn_error.catalog_unavailable": "The model catalog is unavailable or expired. Refresh it and try again.",
   // PR-5d3 / G3 (需求基线 C8): turn_error now carries the platform's error `code`,
   // and the UI copy is keyed on it. The server sentence stays as the fallback for
   // codes with no key here — so a missing entry shows English, not a blank notice.
@@ -1456,6 +1461,8 @@ export const zh: Record<string, string> = {
   "wallet.status.paid": "已支付",
   "wallet.status.closed": "已关闭",
   "wallet.event.recharge": "充值",
+  "wallet.event.activation_grant": "激活赠送",
+  "wallet.event.manual_grant": "人工补充",
   "wallet.event.reserve": "冻结",
   "wallet.event.release": "释放",
   "wallet.event.consume": "消费",
@@ -2734,6 +2741,9 @@ export const zh: Record<string, string> = {
   "catalog.unverifiable": "模型列表未通过校验，已停止使用；平台更新后会自动恢复。",
   // PR-5e / L-C7：目录本身是好的，但**本会话**绑定的模型已不在其中。
   "session.model_withdrawn": "该模型已下架，请重新选择。",
+  // OCTO-FORK: explain temporary catalog/eligibility failures without claiming model withdrawal.
+  "session.model_unavailable": "该模型暂不可用，请刷新模型列表或联系管理员检查价格和通道配置。",
+  "turn_error.catalog_unavailable": "模型目录暂不可用或已过期，请刷新后重试。",
   "turn_error.confidential_model_unavailable": "此会话的私密模型已不再符合条件，请重新选择私密模型后继续。",
   "turn_error.insufficient_credits": "余额不足，请充值后重试。",
   // 网关这一侧的 429。与拦截页那一档不同：turn_error 上没有 retryAfterSec，

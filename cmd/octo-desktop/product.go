@@ -215,11 +215,15 @@ func mountProductAPI() (mount func(api func(pattern string, h http.HandlerFunc))
 	gateway := productruntime.GatewayEndpoint{Host: profile.GatewayHost, Tokens: tokens, Ensure: renew.Ensure, ReasoningForModel: rt.ModelReasoning}
 
 	catalogModel = func(id string) (server.CatalogModelStatus, bool) {
-		status, known := rt.CatalogModel(id)
+		// OCTO-FORK: renew the short-lived signed catalog before judging a turn.
+		ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+		defer cancel()
+		status, known := rt.PrepareCatalogModel(ctx, id)
 		return server.CatalogModelStatus{
-			Selectable:   status.Selectable,
-			Confidential: status.Confidential,
-			Current:      status.Current,
+			AvailabilityReason: status.AvailabilityReason,
+			Selectable:         status.Selectable,
+			Confidential:       status.Confidential,
+			Current:            status.Current,
 		}, known
 	}
 	return rt.Mount, gateway.Sender, rt.CatalogOffers, catalogModel, rt.PreferredConfidentialModel, engine, rt.SensitiveInputGate, personalInfo, rt.LoadPlatformSkill

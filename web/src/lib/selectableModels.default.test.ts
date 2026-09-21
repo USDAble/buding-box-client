@@ -1,6 +1,9 @@
 import { expect, it, vi } from 'vitest'
 import { get } from 'svelte/store'
 import { defaultSelectableModel, loadSelectableModels, selectableModels } from './selectableModels'
+import { canStartTurn, catalogNoticeKey, sessionCatalogModelWithdrawn } from './modelAvailability'
+import { allowEnvironmentModelSource, catalogState } from './product'
+import { chatModel } from './stores'
 
 const { getProductModels } = vi.hoisted(() => ({ getProductModels: vi.fn() }))
 vi.mock('./api', () => ({ getProductModels }))
@@ -32,6 +35,23 @@ it('displays all configured models but excludes unpriced models from sending and
   const shown = await loadSelectableModels(false)
   expect(shown.models).toHaveLength(3)
   expect(shown.models[1].availabilityReason).toBe('pricing_not_configured')
-  expect(get(selectableModels).map(model => model.id)).toEqual(['gateway::flash'])
+  expect(get(selectableModels).filter(model => model.eligible !== false).map(model => model.id)).toEqual(['gateway::flash'])
   expect(get(defaultSelectableModel)).toBe('gateway::flash')
+})
+
+it('does not call a listed but unpriced bound model withdrawn', async () => {
+  getProductModels.mockResolvedValue({ state: 'ready', catalogVersion: '3', vendors: [
+    { id: 'vendor', models: [
+      { id: 'flash', compositeId: 'gateway::flash', eligible: true },
+      { id: 'pro', compositeId: 'gateway::pro', eligible: false, availabilityReason: 'pricing_not_configured' },
+    ] },
+  ] })
+  allowEnvironmentModelSource.set(false)
+  catalogState.set('ready')
+  chatModel.set({ bound: 'gateway::pro' })
+  await loadSelectableModels(false)
+  expect(sessionCatalogModelWithdrawn('bound')).toBe(false)
+  expect(canStartTurn('bound')).toBe(false)
+  expect(catalogNoticeKey('bound')).toBe('session.model_unavailable')
+  expect(get(chatModel).bound).toBe('gateway::pro')
 })

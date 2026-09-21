@@ -54,6 +54,9 @@ export const TURN_ERROR_KEYS: Record<string, string> = {
 	confidential_model_unavailable: 'turn_error.confidential_model_unavailable',
   insufficient_credits: 'turn_error.insufficient_credits',
   model_withdrawn: 'session.model_withdrawn',
+  // OCTO-FORK: expired catalog and ineligible models are distinct from withdrawal.
+  catalog_unavailable: 'turn_error.catalog_unavailable',
+  model_unavailable: 'session.model_unavailable',
   model_not_found: 'session.model_withdrawn',
   rate_limited: 'turn_error.rate_limited',
   maintenance: 'turn_error.maintenance',

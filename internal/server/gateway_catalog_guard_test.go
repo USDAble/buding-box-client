@@ -206,3 +206,22 @@ func TestTheCatalogRefusalIsItsOwnMessage(t *testing.T) {
 		t.Errorf("refusal %q must tell the user what to do about it", errModelNotListed("m"))
 	}
 }
+
+// OCTO-FORK: an expired catalog cannot establish that a model was withdrawn.
+func TestExpiredCatalogDoesNotReportModelWithdrawn(t *testing.T) {
+	srv, built := gatewayServerWithCatalog(t, nil)
+	srv.cfg.CatalogModel = func(string) (CatalogModelStatus, bool) {
+		return CatalogModelStatus{Current: false, Selectable: false}, true
+	}
+	sender, model := srv.senderForSession(catalogBoundSession("buding-cloud-pro"))
+	_, err := sender.SendMessages(context.Background(), model, "", nil, 0)
+	if err == nil {
+		t.Fatal("expired catalog must not start a turn")
+	}
+	if got := agent.ErrorCodeOf(err); got != "catalog_unavailable" {
+		t.Fatalf("expired catalog code=%q, want catalog_unavailable; error=%v", got, err)
+	}
+	if *built != 0 {
+		t.Fatal("expired catalog must not build an upstream sender")
+	}
+}

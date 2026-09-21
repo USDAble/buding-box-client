@@ -30,6 +30,10 @@
 
   const fontZoomMap: Record<string, string> = { Small: '0.9', Medium: '1', Large: '1.1' }
   const modeToThemeLabel: Record<string, string> = { light: 'Light', dark: 'Dark', system: 'System' }
+  // OCTO-FORK: keep the theme-pack implementation available, but hide its
+  // settings entry while the product controls the palette — see the settings
+  // surface decision.
+  const showThemePackPicker = false
 
   // This modal is mounted unconditionally at app root, so the applying
   // $effects at the bottom run at boot, not on open. Seeding fontSize/theme
@@ -91,6 +95,8 @@
   let feedbackPayload = ''
   let feedbackCooldownSec = $state(0)
   let feedbackCooldownTimer: ReturnType<typeof setInterval> | undefined
+  let feedbackScrolling = $state(false)
+  let feedbackScrollTimer: ReturnType<typeof setTimeout> | undefined
   let box = $state<BoxDTO | null>(null)
   let boxLoading = $state(false)
   let boxError = $state(false)
@@ -615,8 +621,18 @@
     feedbackCooldownTimer = setInterval(tick, 250)
   }
 
+  function handleFeedbackScroll() {
+    feedbackScrolling = true
+    if (feedbackScrollTimer) clearTimeout(feedbackScrollTimer)
+    feedbackScrollTimer = setTimeout(() => {
+      feedbackScrolling = false
+      feedbackScrollTimer = undefined
+    }, 700)
+  }
+
   onDestroy(() => {
     if (feedbackCooldownTimer) clearInterval(feedbackCooldownTimer)
+    if (feedbackScrollTimer) clearTimeout(feedbackScrollTimer)
   })
 
   async function loadBox() {
@@ -725,15 +741,17 @@
             </div>
             <Segment options={['Small', 'Medium', 'Large']} labels={{ Small: $t('settings.fs_small'), Medium: $t('settings.fs_medium'), Large: $t('settings.fs_large') }} bind:value={fontSize} />
           </div>
-          <!-- Theme before Appearance: the pack is the bigger choice, and
-               appearance reads as a modifier of it rather than the reverse. -->
-          <div class="setrow">
-            <div class="seti">
-              <span class="setl">{$t('settings.pack')}</span>
-              <span class="setd">{$t('settings.pack_desc')}</span>
+          {#if showThemePackPicker}
+            <!-- Theme before Appearance: the pack is the bigger choice, and
+                 appearance reads as a modifier of it rather than the reverse. -->
+            <div class="setrow">
+              <div class="seti">
+                <span class="setl">{$t('settings.pack')}</span>
+                <span class="setd">{$t('settings.pack_desc')}</span>
+              </div>
+              <ThemePackPicker />
             </div>
-            <ThemePackPicker />
-          </div>
+          {/if}
           <div class="setrow">
             <div class="seti">
               <span class="setl">{$t('settings.theme')}</span>
@@ -837,7 +855,7 @@
           </section>
 
         {:else if cat === 'help'}
-          <section class="help-center" aria-label={$t('settings.help')}>
+          <section class:feedback-center={helpTab === 'feedback'} class="help-center" aria-label={$t('settings.help')}>
             <div class="center-hero"><div><h2>{$t('settings.help.title')}</h2><p>{$t('settings.help.subtitle')}</p></div>{#if brandLink('external', 'helpCenter')}<button class="btns secondary" onclick={openHelpCenter}>{$t('settings.help.full')}</button>{/if}</div>
             <div class="center-tabs" role="tablist"><button class:active={helpTab === 'guides'} onclick={() => helpTab = 'guides'} role="tab">{$t('settings.help.guides')}</button><button class:active={helpTab === 'feedback'} onclick={() => helpTab = 'feedback'} role="tab">{$t('settings.help.feedback_title')}</button></div>
             {#if helpTab === 'guides'}
@@ -849,17 +867,23 @@
                 <details><summary>{$t('settings.help.unavailable_q')}</summary><p>{$t('settings.help.unavailable_a')}</p></details>
               </div>
             {:else}
-              <div class="feedback-form">
-                <div class="feedback-intro"><h3>{$t('settings.help.feedback_title')}</h3><p>{$t('settings.help.feedback_notice')}</p></div>
-                <label><span class="feedback-label">{$t('settings.help.feedback_title_label')}<small>{$t('settings.help.feedback_count').replace('{count}', String(Array.from(feedbackTitle).length)).replace('{limit}', '120')}</small></span><input class="sinput" bind:value={feedbackTitle} maxlength="120" placeholder={$t('settings.help.feedback_title_placeholder')} disabled={feedbackSubmitting} /></label>
-                <label><span class="feedback-label">{$t('settings.help.feedback_content')}<small>{$t('settings.help.feedback_count').replace('{count}', String(Array.from(feedbackContent).length)).replace('{limit}', '4000')}</small></span><textarea class="sinput feedback-content" bind:value={feedbackContent} maxlength="4000" placeholder={$t('settings.help.feedback_content_placeholder')} disabled={feedbackSubmitting}></textarea></label>
-                <div class="feedback-grid"><label><span>{$t('settings.help.feedback_category')}</span><select class="sinput" bind:value={feedbackCategory} disabled={feedbackSubmitting}><option value="bug">{$t('settings.help.feedback_bug')}</option><option value="suggestion">{$t('settings.help.feedback_suggestion')}</option><option value="other">{$t('settings.help.feedback_other')}</option></select></label><label><span>{$t('settings.help.feedback_impact')}</span><select class="sinput" bind:value={feedbackImpact} disabled={feedbackSubmitting}><option value="low">{$t('settings.help.feedback_impact_low')}</option><option value="normal">{$t('settings.help.feedback_impact_normal')}</option><option value="high">{$t('settings.help.feedback_impact_high')}</option></select></label></div>
-                <details class="feedback-optional"><summary>{$t('settings.help.feedback_optional')}</summary><div class="feedback-extra">
-                  <label><span>{$t('settings.help.feedback_reproduction')}</span><textarea class="sinput feedback-short" bind:value={feedbackReproduction} maxlength="2000" placeholder={$t('settings.help.feedback_reproduction_placeholder')} disabled={feedbackSubmitting}></textarea></label>
-                  <label><span>{$t('settings.help.feedback_expected')}</span><textarea class="sinput feedback-short" bind:value={feedbackExpected} maxlength="2000" placeholder={$t('settings.help.feedback_expected_placeholder')} disabled={feedbackSubmitting}></textarea></label>
-                  <label><span>{$t('settings.help.feedback_contact')}</span><input class="sinput" bind:value={feedbackContact} maxlength="200" placeholder={$t('settings.help.feedback_contact_placeholder')} disabled={feedbackSubmitting} /></label>
-                </div></details>
-                {#if feedbackError}<p class="feedback-error" role="alert">{feedbackError}</p>{/if}{#if feedbackReceipt}<p class="feedback-success" role="status">{$t('settings.help.feedback_sent').replace('{id}', feedbackReceipt)}</p>{/if}
+              <!-- OCTO-FORK: keep the feedback action bar fixed while the form
+                   fields scroll inside the available settings-pane height. -->
+              <div class="feedback-layout">
+                <div class:scrolling={feedbackScrolling} class="feedback-scroll" onscroll={handleFeedbackScroll}>
+                  <div class="feedback-form">
+                    <div class="feedback-intro"><h3>{$t('settings.help.feedback_title')}</h3><p>{$t('settings.help.feedback_notice')}</p></div>
+                    <label><span class="feedback-label">{$t('settings.help.feedback_title_label')}<small>{$t('settings.help.feedback_count').replace('{count}', String(Array.from(feedbackTitle).length)).replace('{limit}', '120')}</small></span><input class="sinput" bind:value={feedbackTitle} maxlength="120" placeholder={$t('settings.help.feedback_title_placeholder')} disabled={feedbackSubmitting} /></label>
+                    <label><span class="feedback-label">{$t('settings.help.feedback_content')}<small>{$t('settings.help.feedback_count').replace('{count}', String(Array.from(feedbackContent).length)).replace('{limit}', '4000')}</small></span><textarea class="sinput feedback-content" bind:value={feedbackContent} maxlength="4000" placeholder={$t('settings.help.feedback_content_placeholder')} disabled={feedbackSubmitting}></textarea></label>
+                    <div class="feedback-grid"><label><span>{$t('settings.help.feedback_category')}</span><select class="sinput" bind:value={feedbackCategory} disabled={feedbackSubmitting}><option value="bug">{$t('settings.help.feedback_bug')}</option><option value="suggestion">{$t('settings.help.feedback_suggestion')}</option><option value="other">{$t('settings.help.feedback_other')}</option></select></label><label><span>{$t('settings.help.feedback_impact')}</span><select class="sinput" bind:value={feedbackImpact} disabled={feedbackSubmitting}><option value="low">{$t('settings.help.feedback_impact_low')}</option><option value="normal">{$t('settings.help.feedback_impact_normal')}</option><option value="high">{$t('settings.help.feedback_impact_high')}</option></select></label></div>
+                    <details class="feedback-optional"><summary>{$t('settings.help.feedback_optional')}</summary><div class="feedback-extra">
+                      <label><span>{$t('settings.help.feedback_reproduction')}</span><textarea class="sinput feedback-short" bind:value={feedbackReproduction} maxlength="2000" placeholder={$t('settings.help.feedback_reproduction_placeholder')} disabled={feedbackSubmitting}></textarea></label>
+                      <label><span>{$t('settings.help.feedback_expected')}</span><textarea class="sinput feedback-short" bind:value={feedbackExpected} maxlength="2000" placeholder={$t('settings.help.feedback_expected_placeholder')} disabled={feedbackSubmitting}></textarea></label>
+                      <label><span>{$t('settings.help.feedback_contact')}</span><input class="sinput" bind:value={feedbackContact} maxlength="200" placeholder={$t('settings.help.feedback_contact_placeholder')} disabled={feedbackSubmitting} /></label>
+                    </div></details>
+                    {#if feedbackError}<p class="feedback-error" role="alert">{feedbackError}</p>{/if}{#if feedbackReceipt}<p class="feedback-success" role="status">{$t('settings.help.feedback_sent').replace('{id}', feedbackReceipt)}</p>{/if}
+                  </div>
+                </div>
                 <div class="feedback-actions"><span>{$t('settings.help.feedback_required')}</span><button class="feedback-submit" onclick={sendFeedback} disabled={feedbackSubmitting || feedbackCooldownSec > 0 || !feedbackTitle.trim() || !feedbackContent.trim()}>{feedbackSubmitting ? $t('settings.help.feedback_submitting') : feedbackCooldownSec > 0 ? $t('settings.help.feedback_retry').replace('{seconds}', String(feedbackCooldownSec)) : $t('settings.help.feedback_submit')}</button></div>
               </div>
             {/if}
@@ -935,15 +959,11 @@
           <div class="setrow">
             <div class="seti">
               <span class="setl">{$t('settings.workspace_dir')}</span>
-              <span class="setd">{$t('settings.workspace_dir_desc')}</span>
+              <!-- OCTO-FORK: the default workspace is product-controlled; show
+                   the resolved local path in the copy and keep the override
+                   input out of the settings surface. -->
+              <span class="setd">{$t('settings.workspace_dir_desc').replace('{path}', workspaceDirDefault)}</span>
             </div>
-            <input
-              class="sinput mono"
-              type="text"
-              placeholder={workspaceDirDefault}
-              value={workspaceDir}
-              onchange={(e) => saveWorkspaceDir(e.currentTarget.value)}
-            />
           </div>
 
         {:else if cat === 'experimental'}
@@ -1322,7 +1342,17 @@ select.sinput { cursor: pointer; }
   .help-guide-grid details { padding: 14px; border: 1px solid var(--border-secondary); border-radius: 10px; }
   .help-guide-grid summary { cursor: pointer; color: var(--text); font-size: 13px; font-weight: 600; }
   .help-guide-grid p { margin: 9px 0 0; color: var(--text-secondary); font-size: 12px; line-height: 1.55; }
-  .feedback-form { display: flex; flex-direction: column; gap: 16px; padding: 4px 0; }
+  .feedback-center { display: flex; flex-direction: column; min-height: 0; flex: 1 1 auto; }
+  .feedback-layout { display: flex; flex-direction: column; min-height: 0; flex: 1 1 auto; }
+  .feedback-scroll {
+    min-height: 0; overflow-y: auto; flex: 1 1 auto; padding: 4px 0 16px;
+    scrollbar-width: none;
+  }
+  .feedback-scroll::-webkit-scrollbar { width: 0; }
+  .feedback-scroll.scrolling { scrollbar-width: thin; scrollbar-color: var(--text-quaternary) transparent; }
+  .feedback-scroll.scrolling::-webkit-scrollbar { width: 6px; }
+  .feedback-scroll.scrolling::-webkit-scrollbar-thumb { background: var(--text-quaternary); border-radius: 999px; }
+  .feedback-form { display: flex; flex-direction: column; gap: 16px; }
   .feedback-intro h3 { margin: 0; color: var(--text); font-size: 15px; }
   .feedback-intro p { margin: 5px 0 0; color: var(--text-secondary); font-size: 12px; line-height: 1.5; }
   .feedback-form label { display: flex; flex-direction: column; gap: 6px; color: var(--text-secondary); font-size: 12px; }
@@ -1335,7 +1365,7 @@ select.sinput { cursor: pointer; }
   .feedback-optional {border-top:1px solid var(--border);border-bottom:1px solid var(--border);padding:12px 0;}
   .feedback-optional summary {cursor:pointer;color:var(--text-secondary);font-size:12px;}
   .feedback-extra {display:flex;flex-direction:column;gap:12px;padding-top:14px;}
-  .feedback-actions {display:flex;align-items:center;justify-content:space-between;gap:12px;}
+  .feedback-actions {display:flex;align-items:center;justify-content:space-between;gap:12px;flex:0 0 auto;padding:12px 0 4px;border-top:1px solid var(--border);background:var(--bg-container);}
   .feedback-actions>span {font-size:11px;color:var(--text-tertiary);}
   .feedback-submit {flex-shrink:0;border:1px solid var(--blue-6);background:var(--blue-6);color:var(--on-accent);border-radius:7px;padding:9px 20px;font-size:12px;font-weight:500;cursor:pointer;}
   .feedback-submit:hover:not(:disabled) {filter:brightness(1.08);}.feedback-submit:disabled {opacity:.5;cursor:default;}

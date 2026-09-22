@@ -17,7 +17,7 @@
   import { getMode, setMode, type ThemeMode } from '../../lib/theme'
   import { notificationsEnabled, setNotificationsEnabled } from '../../lib/notifications'
   import { openUrl } from '../../lib/externalLinks'
-  import { brandLink } from '../../lib/brand'
+  import { brandLink, brandText } from '../../lib/brand'
   import { confirmDialog } from '../../lib/confirm'
   import { ago, clockTick } from '../../lib/relTime'
   import * as api from '../../lib/api'
@@ -36,6 +36,16 @@
   const showCoauthorSetting = false
   // OCTO-FORK: keep the first-run wizard and rerun handler, but hide its About entry.
   const showFirstRunEntry = false
+  // OCTO-FORK: help content and its optional website destination are product
+  // branding, so every surface reads the same centrally generated values.
+  const helpCenterUrl = brandLink('external', 'helpCenter')
+  const helpTopics = [
+    { icon: 'lucide:bot', question: 'helpModelsQuestion', answer: 'helpModelsAnswer' },
+    { icon: 'lucide:scan-face', question: 'helpPersonalQuestion', answer: 'helpPersonalAnswer' },
+    { icon: 'lucide:shield-check', question: 'helpPrivateQuestion', answer: 'helpPrivateAnswer' },
+    { icon: 'lucide:wifi-off', question: 'helpUnavailableQuestion', answer: 'helpUnavailableAnswer' },
+    { icon: 'lucide:box', question: 'helpBoxQuestion', answer: 'helpBoxAnswer' },
+  ]
 
   // This modal is mounted unconditionally at app root, so the applying
   // $effects at the bottom run at boot, not on open. Seeding fontSize/theme
@@ -100,6 +110,7 @@
   let feedbackCooldownTimer: ReturnType<typeof setInterval> | undefined
   let feedbackScrolling = $state(false)
   let feedbackScrollTimer: ReturnType<typeof setTimeout> | undefined
+  let openHelpTopic = $state<number | null>(0)
   let box = $state<BoxDTO | null>(null)
   let boxLoading = $state(false)
   let boxError = $state(false)
@@ -283,13 +294,15 @@
     { value: 'zh', label: '简体中文' },
   ]
 
-  const categories: { key: typeof cat, icon: string, label: string }[] = $derived([
+  const categories: { key: typeof cat, icon: string, label: string, brandLabel?: string }[] = $derived([
     { key: 'general',   icon: 'ant-design:sliders-outlined',       label: 'settings.general' },
     { key: 'account',   icon: 'ant-design:user-outlined',          label: 'settings.account' },
     { key: 'safety',    icon: 'ant-design:safety-outlined',        label: 'settings.safety' },
     { key: 'wallet', icon: 'ant-design:wallet-outlined', label: 'wallet.title' },
     { key: 'box',       icon: 'lucide:box',                         label: 'settings.box' },
-    { key: 'help',      icon: 'ant-design:question-circle-outlined', label: 'settings.help' },
+    // OCTO-FORK: keep the full branded title in the left rail without
+    // duplicating the copy in the i18n table.
+    { key: 'help',      icon: 'ant-design:question-circle-outlined', label: 'settings.help', brandLabel: 'helpTitle' },
     // OCTO-FORK: product profiles hide local model management from the
     // server-projected capability; null keeps plain octo serve behavior.
     ...($allowEnvironmentModelSource === false ? [] : [{ key: 'endpoints' as const, icon: 'ant-design:api-outlined', label: 'settings.endpoints.title' }]),
@@ -654,8 +667,7 @@
   }
 
   function openHelpCenter() {
-    const url = brandLink('external', 'helpCenter')
-    if (url) openUrl(url)
+    if (helpCenterUrl) openUrl(helpCenterUrl)
   }
 
   function formatBoxTime(value: string | undefined): string {
@@ -719,7 +731,7 @@
         {#each categories as c (c.key)}
           <button type="button" class="scat" class:on={cat === c.key} aria-current={cat === c.key ? 'page' : undefined} onclick={() => { cat = c.key; resetDataView() }}>
             <iconify-icon icon={c.icon} width="15"></iconify-icon>
-            <span>{$t(c.label)}</span>
+            <span>{c.brandLabel ? brandText(c.brandLabel, language) : $t(c.label)}</span>
           </button>
         {/each}
       </div>
@@ -867,26 +879,55 @@
           </section>
 
         {:else if cat === 'help'}
-          <section class:feedback-center={helpTab === 'feedback'} class="help-center" aria-label={$t('settings.help')}>
-            <div class="center-hero"><div><h2>{$t('settings.help.title')}</h2><p>{$t('settings.help.subtitle')}</p></div>{#if brandLink('external', 'helpCenter')}<button class="btns secondary" onclick={openHelpCenter}>{$t('settings.help.full')}</button>{/if}</div>
-            <div class="center-tabs" role="tablist"><button class:active={helpTab === 'guides'} onclick={() => helpTab = 'guides'} role="tab">{$t('settings.help.guides')}</button><button class:active={helpTab === 'feedback'} onclick={() => helpTab = 'feedback'} role="tab">{$t('settings.help.feedback_title')}</button></div>
+          <section class:feedback-center={helpTab === 'feedback'} class="help-center" aria-label={brandText('helpTitle', language)}>
+            <!-- OCTO-FORK: present product-owned support copy and keep the
+                 future website destination visible even before it is configured. -->
+            <div class="center-hero help-hero">
+              <div class="help-hero-icon" aria-hidden="true"><iconify-icon icon="lucide:life-buoy" width="22"></iconify-icon></div>
+              <div><h2>{brandText('helpTitle', language)}</h2><p>{brandText('helpSubtitle', language)}</p></div>
+            </div>
+            <div class="center-tabs" role="tablist" aria-label={brandText('helpTitle', language)}>
+              <button id="help-guides-tab" class:active={helpTab === 'guides'} onclick={() => helpTab = 'guides'} role="tab" aria-selected={helpTab === 'guides'} aria-controls="help-guides-panel">
+                <iconify-icon icon="lucide:book-open" width="15"></iconify-icon>{$t('settings.help.guides')}
+              </button>
+              <button id="help-feedback-tab" class:active={helpTab === 'feedback'} onclick={() => helpTab = 'feedback'} role="tab" aria-selected={helpTab === 'feedback'} aria-controls="help-feedback-panel">
+                <iconify-icon icon="lucide:message-square-text" width="15"></iconify-icon>{$t('settings.help.feedback_title')}
+              </button>
+            </div>
             {#if helpTab === 'guides'}
-              <div class="help-guide-grid">
-                <details open><summary>{$t('settings.help.models_q')}</summary><p>{$t('settings.help.models_a')}</p></details>
-                <details><summary>{$t('settings.help.personal_q')}</summary><p>{$t('settings.help.personal_a')}</p></details>
-                <details><summary>{$t('settings.help.private_q')}</summary><p>{$t('settings.help.private_a')}</p></details>
-                <details><summary>{$t('settings.help.box_q')}</summary><p>{$t('settings.help.box_a')}</p></details>
-                <details><summary>{$t('settings.help.unavailable_q')}</summary><p>{$t('settings.help.unavailable_a')}</p></details>
+              <div id="help-guides-panel" class="help-guides" role="tabpanel" aria-labelledby="help-guides-tab">
+                <div class="help-portal-card">
+                  <div class="help-portal-icon" aria-hidden="true"><iconify-icon icon="lucide:globe-2" width="22"></iconify-icon></div>
+                  <div class="help-portal-copy">
+                    <h3>{brandText('helpCenterTitle', language)}</h3>
+                    <p>{brandText('helpCenterDescription', language)}</p>
+                    {#if !helpCenterUrl}<span class="help-portal-status"><i></i>{$t('settings.help.website_soon')}</span>{/if}
+                  </div>
+                  <button class="btns secondary help-portal-action" onclick={openHelpCenter} disabled={!helpCenterUrl} title={!helpCenterUrl ? $t('settings.help.website_soon') : undefined}>
+                    {$t('settings.help.full')}<iconify-icon icon="lucide:external-link" width="14"></iconify-icon>
+                  </button>
+                </div>
+                <div class="help-section-heading"><div><iconify-icon icon="lucide:circle-help" width="17"></iconify-icon><h3>{$t('settings.help.faq_title')}</h3></div></div>
+                <div class="help-guide-grid">
+                  {#each helpTopics as topic, index (topic.question)}
+                    <div class:open={openHelpTopic === index} class="help-faq-item">
+                      <button type="button" class="help-faq-trigger" aria-expanded={openHelpTopic === index} aria-controls={`help-faq-answer-${index}`} onclick={() => { openHelpTopic = openHelpTopic === index ? null : index }}>
+                        <iconify-icon icon={topic.icon} width="16"></iconify-icon><span>{brandText(topic.question, language)}</span><iconify-icon class="faq-chevron" icon="lucide:chevron-down" width="15"></iconify-icon>
+                      </button>
+                      {#if openHelpTopic === index}<div id={`help-faq-answer-${index}`} class="help-faq-answer"><p>{brandText(topic.answer, language)}</p></div>{/if}
+                    </div>
+                  {/each}
+                </div>
               </div>
             {:else}
               <!-- OCTO-FORK: keep the feedback action bar fixed while the form
                    fields scroll inside the available settings-pane height. -->
-              <div class="feedback-layout">
+              <div id="help-feedback-panel" class="feedback-layout" role="tabpanel" aria-labelledby="help-feedback-tab">
                 <div class:scrolling={feedbackScrolling} class="feedback-scroll" onscroll={handleFeedbackScroll}>
                   <div class="feedback-form">
-                    <div class="feedback-intro"><h3>{$t('settings.help.feedback_title')}</h3><p>{$t('settings.help.feedback_notice')}</p></div>
-                    <label><span class="feedback-label">{$t('settings.help.feedback_title_label')}<small>{$t('settings.help.feedback_count').replace('{count}', String(Array.from(feedbackTitle).length)).replace('{limit}', '120')}</small></span><input class="sinput" bind:value={feedbackTitle} maxlength="120" placeholder={$t('settings.help.feedback_title_placeholder')} disabled={feedbackSubmitting} /></label>
-                    <label><span class="feedback-label">{$t('settings.help.feedback_content')}<small>{$t('settings.help.feedback_count').replace('{count}', String(Array.from(feedbackContent).length)).replace('{limit}', '4000')}</small></span><textarea class="sinput feedback-content" bind:value={feedbackContent} maxlength="4000" placeholder={$t('settings.help.feedback_content_placeholder')} disabled={feedbackSubmitting}></textarea></label>
+                    <div class="feedback-intro"><div class="feedback-intro-icon" aria-hidden="true"><iconify-icon icon="lucide:shield-check" width="18"></iconify-icon></div><div><h3>{$t('settings.help.feedback_title')}</h3><p>{brandText('helpFeedbackNotice', language)}</p></div></div>
+                    <label><span class="feedback-label"><span>{$t('settings.help.feedback_title_label')}<em aria-hidden="true">*</em></span><small>{$t('settings.help.feedback_count').replace('{count}', String(Array.from(feedbackTitle).length)).replace('{limit}', '120')}</small></span><input class="sinput" bind:value={feedbackTitle} maxlength="120" placeholder={$t('settings.help.feedback_title_placeholder')} disabled={feedbackSubmitting} required /></label>
+                    <label><span class="feedback-label"><span>{$t('settings.help.feedback_content')}<em aria-hidden="true">*</em></span><small>{$t('settings.help.feedback_count').replace('{count}', String(Array.from(feedbackContent).length)).replace('{limit}', '4000')}</small></span><textarea class="sinput feedback-content" bind:value={feedbackContent} maxlength="4000" placeholder={$t('settings.help.feedback_content_placeholder')} disabled={feedbackSubmitting} required></textarea></label>
                     <div class="feedback-grid"><label><span>{$t('settings.help.feedback_category')}</span><select class="sinput" bind:value={feedbackCategory} disabled={feedbackSubmitting}><option value="bug">{$t('settings.help.feedback_bug')}</option><option value="suggestion">{$t('settings.help.feedback_suggestion')}</option><option value="other">{$t('settings.help.feedback_other')}</option></select></label><label><span>{$t('settings.help.feedback_impact')}</span><select class="sinput" bind:value={feedbackImpact} disabled={feedbackSubmitting}><option value="low">{$t('settings.help.feedback_impact_low')}</option><option value="normal">{$t('settings.help.feedback_impact_normal')}</option><option value="high">{$t('settings.help.feedback_impact_high')}</option></select></label></div>
                     <details class="feedback-optional"><summary>{$t('settings.help.feedback_optional')}</summary><div class="feedback-extra">
                       <label><span>{$t('settings.help.feedback_reproduction')}</span><textarea class="sinput feedback-short" bind:value={feedbackReproduction} maxlength="2000" placeholder={$t('settings.help.feedback_reproduction_placeholder')} disabled={feedbackSubmitting}></textarea></label>
@@ -1346,12 +1387,43 @@ select.sinput { cursor: pointer; }
   .capability-card strong { font-size: 12px; }
   .capability-card span { color: var(--text-tertiary); font-size: 11px; }
   .box-notice { margin: 14px 0 0; color: var(--text-tertiary); font-size: 12px; line-height: 1.5; }
-  .center-tabs { display: flex; gap: 4px; padding: 4px; margin-bottom: 16px; background: var(--bg-layout); border-radius: 9px; width: fit-content; }
-  .center-tabs button { border: none; background: transparent; color: var(--text-secondary); border-radius: 6px; padding: 6px 12px; font: 13px inherit; cursor: pointer; }
+  .help-center { min-height: 0; }
+  .help-hero { display: block; }
+  .help-hero-icon, .help-portal-icon, .feedback-intro-icon {
+    display: grid; place-items: center; flex: 0 0 auto; color: var(--blue-6);
+    background: var(--active-blue-bg); border: 1px solid color-mix(in srgb, var(--blue-6) 20%, transparent);
+  }
+  .help-hero-icon { width: 42px; height: 42px; margin-bottom: 10px; border-radius: 12px; }
+  .center-tabs { display: flex; gap: 4px; padding: 4px; margin-bottom: 18px; background: var(--bg-layout); border-radius: 10px; width: fit-content; }
+  .center-tabs button { display: inline-flex; align-items: center; gap: 7px; border: none; background: transparent; color: var(--text-secondary); border-radius: 7px; padding: 7px 13px; font: 13px inherit; cursor: pointer; }
   .center-tabs button.active { background: var(--bg-container); color: var(--text); box-shadow: 0 1px 2px rgba(0,0,0,.08); }
-  .help-guide-grid details { padding: 14px; border: 1px solid var(--border-secondary); border-radius: 10px; }
-  .help-guide-grid summary { cursor: pointer; color: var(--text); font-size: 13px; font-weight: 600; }
-  .help-guide-grid p { margin: 9px 0 0; color: var(--text-secondary); font-size: 12px; line-height: 1.55; }
+  .center-tabs button:focus-visible, .help-faq-trigger:focus-visible { outline: 2px solid var(--blue-6); outline-offset: 2px; }
+  .help-guides { min-height: 0; padding-bottom: 4px; }
+  .help-portal-card {
+    display: flex; align-items: center; gap: 14px; padding: 16px; margin-bottom: 22px;
+    border: 1px solid color-mix(in srgb, var(--blue-6) 22%, var(--border)); border-radius: 12px;
+    background: linear-gradient(135deg, var(--active-blue-bg), var(--bg-container) 70%);
+  }
+  .help-portal-icon { width: 42px; height: 42px; border-radius: 11px; background: var(--bg-container); }
+  .help-portal-copy { flex: 1; min-width: 0; }
+  .help-portal-copy h3 { margin: 0; color: var(--text); font-size: 14px; }
+  .help-portal-copy p { margin: 5px 0 0; color: var(--text-secondary); font-size: 12px; line-height: 1.5; }
+  .help-portal-status { display: inline-flex; align-items: center; gap: 6px; margin-top: 8px; color: var(--text-tertiary); font-size: 11px; }
+  .help-portal-status i { width: 6px; height: 6px; border-radius: 50%; background: var(--warning, #d89614); }
+  .help-portal-action { flex: 0 0 auto; }
+  .help-section-heading { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; }
+  .help-section-heading > div { display: flex; align-items: center; gap: 7px; color: var(--text-tertiary); }
+  .help-section-heading h3 { margin: 0; color: var(--text); font-size: 14px; }
+  .help-guide-grid { grid-template-columns: 1fr; }
+  .help-faq-item { border: 1px solid var(--border-secondary); border-radius: 10px; background: var(--bg-container); transition: border-color .15s ease, background .15s ease; }
+  .help-faq-item:hover { border-color: var(--border); background: var(--hover-neutral); }
+  .help-faq-item.open { border-color: color-mix(in srgb, var(--blue-6) 25%, var(--border)); background: var(--active-blue-bg); }
+  .help-faq-trigger { display: flex; align-items: center; gap: 9px; width: 100%; padding: 13px 14px; border: 0; background: transparent; cursor: pointer; color: var(--text); font: 600 13px inherit; text-align: left; }
+  .help-faq-trigger > iconify-icon:first-child { color: var(--blue-6); flex: 0 0 auto; }
+  .help-faq-trigger span { flex: 1; }
+  .faq-chevron { color: var(--text-tertiary); transition: transform .16s ease; }
+  .help-faq-item.open .faq-chevron { transform: rotate(180deg); }
+  .help-faq-answer p { margin: 0; padding: 0 14px 14px 39px; color: var(--text-secondary); font-size: 12px; line-height: 1.65; }
   .feedback-center { display: flex; flex-direction: column; min-height: 0; flex: 1 1 auto; }
   .feedback-layout { display: flex; flex-direction: column; min-height: 0; flex: 1 1 auto; }
   .feedback-scroll {
@@ -1363,14 +1435,17 @@ select.sinput { cursor: pointer; }
   .feedback-scroll.scrolling::-webkit-scrollbar { width: 6px; }
   .feedback-scroll.scrolling::-webkit-scrollbar-thumb { background: var(--text-quaternary); border-radius: 999px; }
   .feedback-form { display: flex; flex-direction: column; gap: 16px; }
-  .feedback-intro h3 { margin: 0; color: var(--text); font-size: 15px; }
-  .feedback-intro p { margin: 5px 0 0; color: var(--text-secondary); font-size: 12px; line-height: 1.5; }
+  .feedback-intro { display: flex; align-items: flex-start; gap: 11px; padding: 13px 14px; border: 1px solid var(--border-secondary); border-radius: 10px; background: var(--bg-layout); }
+  .feedback-intro-icon { width: 32px; height: 32px; border-radius: 9px; }
+  .feedback-intro h3 { margin: 0; color: var(--text); font-size: 14px; }
+  .feedback-intro p { margin: 4px 0 0; color: var(--text-secondary); font-size: 12px; line-height: 1.5; }
   .feedback-form label { display: flex; flex-direction: column; gap: 6px; color: var(--text-secondary); font-size: 12px; }
   .feedback-form .sinput { width: 100%; box-sizing: border-box; }
   .feedback-content { min-height: 144px; padding: 10px 12px; resize: vertical; line-height:1.6; }
   .feedback-short { height: 76px; padding: 9px 10px; resize: vertical; }
   .feedback-form .feedback-grid {max-width:360px;gap:12px;}
   .feedback-label {display:flex;justify-content:space-between;align-items:center;gap:10px;}
+  .feedback-label em { margin-left: 3px; color: var(--error); font-style: normal; }
   .feedback-label small {font-size:11px;font-weight:400;color:var(--text-tertiary);}
   .feedback-optional {border-top:1px solid var(--border);border-bottom:1px solid var(--border);padding:12px 0;}
   .feedback-optional summary {cursor:pointer;color:var(--text-secondary);font-size:12px;}
@@ -1381,5 +1456,11 @@ select.sinput { cursor: pointer; }
   .feedback-submit:hover:not(:disabled) {filter:brightness(1.08);}.feedback-submit:disabled {opacity:.5;cursor:default;}
   .feedback-error,.feedback-success {margin:0;padding:10px 12px;border-radius:8px;font-size:12px;line-height:1.6;overflow-wrap:anywhere;background:var(--bg-layout);}
   .feedback-error {color:var(--error);}.feedback-success {color:var(--success);}
-  @media (max-width: 640px) { .box-info-grid, .capability-grid, .feedback-grid, .help-guide-grid { grid-template-columns: 1fr; } .center-hero { flex-direction: column; } }
+  @media (max-width: 640px) {
+    .box-info-grid, .capability-grid, .feedback-grid, .help-guide-grid { grid-template-columns: 1fr; }
+    .center-hero { flex-direction: column; }
+    .help-hero { align-items: flex-start; }
+    .help-portal-card { align-items: flex-start; flex-wrap: wrap; }
+    .help-portal-action { margin-left: 56px; }
+  }
 </style>

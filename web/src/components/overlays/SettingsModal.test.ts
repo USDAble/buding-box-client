@@ -154,3 +154,24 @@ it('shows a compact feedback form with optional details and sends the visible fi
   await vi.waitFor(() => expect(target.querySelector('[role="status"]')?.textContent).toContain('receipt-visible'))
   expect(sent).toMatchObject({ title: '反馈标题', content: '具体反馈内容', reproduction: '', expected: '', contact: '' })
 })
+
+it('keeps the official help center slot visible but disabled until its brand URL is configured', async () => {
+  openSettingsAt('help'); open()
+  await vi.waitFor(() => expect(target.querySelector('.help-portal-card')).not.toBeNull())
+  expect(target.querySelector('.rail .scat[aria-current="page"]')?.textContent).toContain('帮助与反馈')
+  expect(target.querySelector('.help-portal-card')?.textContent).toContain('官网帮助中心')
+  expect(target.querySelector<HTMLButtonElement>('.help-portal-action')?.disabled).toBe(true)
+  expect(target.querySelector('.help-portal-status')?.textContent).toContain('待配置')
+})
+
+it('opens only one FAQ item at a time', async () => {
+  openSettingsAt('help'); open()
+  await vi.waitFor(() => expect(target.querySelectorAll('.help-faq-item')).toHaveLength(5))
+  const items = [...target.querySelectorAll<HTMLElement>('.help-faq-item')]
+  expect(items[0].classList.contains('open')).toBe(true)
+  items[1].querySelector<HTMLButtonElement>('.help-faq-trigger')?.click()
+  flushSync()
+  expect(items[0].classList.contains('open')).toBe(false)
+  expect(items[1].classList.contains('open')).toBe(true)
+  expect(target.querySelectorAll('.help-faq-item.open')).toHaveLength(1)
+})

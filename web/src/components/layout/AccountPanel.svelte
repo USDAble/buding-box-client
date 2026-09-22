@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { t, tr } from '../../lib/i18n'
+  import { t, tr, locale } from '../../lib/i18n'
   import { productState, refreshCredits } from '../../lib/product'
   import { accountPanelOpen, openSettingsAt, showToast } from '../../lib/stores'
   import * as api from '../../lib/api'
@@ -7,6 +7,7 @@
   import { licenseView } from '../../lib/license'
   import { formatPoints } from '../../lib/points'
   import { dismissIntent } from '../../lib/globalKeys'
+  import { brandText } from '../../lib/brand'
 
   // OCTO-FORK: the account corner is a compact status and shortcut surface.
   // Editing, long lists, and destructive actions belong to full Settings.
@@ -170,7 +171,7 @@
     </button>
     <button class="action-row" onclick={() => openSettings('help')}>
       <iconify-icon icon="ant-design:question-circle-outlined" width="15"></iconify-icon>
-      <span>{$t('product.panel.help')}</span>
+      <span>{brandText('helpTitle', $locale)}</span>
       <iconify-icon class="chevron" icon="lucide:chevron-right" width="14"></iconify-icon>
     </button>
     <button class="action-row" onclick={checkUpdates} disabled={checkingUpdate}>

@@ -68,6 +68,14 @@ test('rule C covers links and visual, not just identifiers', () => {
   assert.ok(errors.some((error) => error.includes('visual.logo.mark')))
 })
 
+test('the planned help center link may stay empty until the website is ready', () => {
+  assert.equal(fixture.links.external.helpCenter, '')
+  assert.deepEqual(validateBrand(fixture), [])
+
+  const errors = validateBrand(withBrand((brand) => { brand.links.external.website = '' }))
+  assert.ok(errors.some((error) => error.includes('links.external.website') && error.includes('值为空')))
+})
+
 test('rule B rejects a localized Windows display value', () => {
   const errors = validateBrand(
     withBrand((brand) => {

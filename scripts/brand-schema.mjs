@@ -4,6 +4,7 @@
 //   A 本地化文案   product / about / copy   → locale map, zh-CN + en-US both present
 //   B 固定显示值   display                  → single string, never a locale map
 //   C 标识符与路径 identifiers / links / visual → single ASCII string, no spaces, never localized
+//     Optional integration links may be an explicit empty string until configured.
 //
 // Rule C is the one that matters most in practice: it makes "translate a path"
 // and "give an identifier a zh-CN variant" unrepresentable rather than merely
@@ -54,6 +55,10 @@ const REQUIRED_PATHS = [
   'links.external.license',
   'visual.logo.mark',
 ]
+
+// OCTO-FORK: keep planned external destinations explicit in brand.json while
+// preventing an unconfigured URL from becoming a clickable placeholder.
+const OPTIONAL_EMPTY_PATHS = new Set(['links.external.helpCenter'])
 
 function isPlainObject(value) {
   return typeof value === 'object' && value !== null && !Array.isArray(value)
@@ -145,6 +150,7 @@ function validateIdentifierTree(value, segments, errors) {
     return
   }
   if (value === '') {
+    if (OPTIONAL_EMPTY_PATHS.has(at)) return
     errors.push(`${at}: 值为空`)
     return
   }

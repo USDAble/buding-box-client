@@ -122,6 +122,9 @@ describe('class C identifiers and paths', () => {
 
     for (const [group, values] of Object.entries(groups)) {
       for (const [key, value] of Object.entries(values)) {
+        // The help center is intentionally an empty, optional integration slot
+        // until the official website URL is approved.
+        if (group === 'links.external' && key === 'helpCenter' && value === '') continue
         expect(value, `${group}.${key}`).toMatch(/^[\x21-\x7E]+$/)
       }
     }
@@ -141,6 +144,7 @@ describe('class C identifiers and paths', () => {
 
   it('exposes usable links, assets and colours', () => {
     expect(brandLink('external', 'license')).toMatch(/^https:\/\//)
+    expect(brandLink('external', 'helpCenter')).toBe('')
     expect(brandLink('external', 'license')).not.toMatch(/[<>]/)
     expect(brandLink('inApp', 'terms')).toMatch(/^\//)
     expect(brandLink('nope', 'license')).toBe('')
@@ -157,6 +161,8 @@ describe('shared copy', () => {
   it('resolves both locales', () => {
     expect(brandText('termsBody', 'zh-CN')).not.toBe('')
     expect(brandText('termsBody', 'en-US')).not.toBe('')
+    expect(brandText('helpTitle', 'zh-CN')).toBe('帮助与反馈')
+    expect(brandText('helpTitle', 'en-US')).toBe('Help & feedback')
   })
 
   it('returns empty for an unknown key', () => {

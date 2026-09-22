@@ -144,6 +144,8 @@
   const topNav = [
     { icon: 'ant-design:clock-circle-outlined', label: 'nav.tasks', v: 'tasks' },
     { icon: 'ant-design:appstore-outlined', label: 'nav.light_apps', v: 'lightapps' },
+    // OCTO-FORK: promote Skills to the slot previously occupied by More.
+    { icon: 'ant-design:thunderbolt-outlined', label: 'nav.skills', v: 'skills' },
   ]
   function goToMore(v: string) {
     view.set(v as any)
@@ -698,7 +700,8 @@
           <span style="font-size:13px;color:{navActive(item.v) ? 'var(--blue-6)' : 'var(--text-secondary)'};font-weight:{navActive(item.v) ? '600' : '400'};">{$t(item.label)}</span>
         </div>
         {/each}
-        <div class="more-wrap" bind:this={morePopoverEl}>
+        <!-- OCTO-FORK: keep the More flyout for future restoration, but hide it from this layout. -->
+        <div class="more-wrap hidden-more" bind:this={morePopoverEl}>
           <div class="nav-row" class:solid={moreActive()} onclick={(e) => toggleMorePopover(e.currentTarget as HTMLElement, 'full')}>
             <iconify-icon icon="ant-design:menu-outlined" width="14" style="color:{moreActive() ? 'var(--blue-6)' : 'var(--text-tertiary)'}"></iconify-icon>
             <span style="font-size:13px;color:{moreActive() ? 'var(--blue-6)' : 'var(--text-secondary)'};font-weight:{moreActive() ? '600' : '400'};">{$t('nav.manage')}</span>
@@ -1136,7 +1139,8 @@
         <iconify-icon icon={item.icon} width="16"></iconify-icon>
       </button>
       {/each}
-      <div class="more-wrap" bind:this={morePopoverEl}>
+      <!-- OCTO-FORK: keep the More flyout for future restoration, but hide it from this layout. -->
+      <div class="more-wrap hidden-more" bind:this={morePopoverEl}>
         <button class="rail-btn" class:active={moreActive()} title={$t('nav.manage')} onclick={(e) => toggleMorePopover(e.currentTarget as HTMLElement, 'rail')}>
           <iconify-icon icon="ant-design:menu-outlined" width="16"></iconify-icon>
         </button>
@@ -1235,6 +1239,7 @@
 }
 .ap-item:hover { background: var(--hover-neutral); }
 .more-wrap { position: relative; }
+.hidden-more { display: none; }
 /* Portaled to <body> (see the portal action) and positioned via the anchor's
    captured rect (morePos) — fixed, not absolute, since it must escape the
    sidebar's own overflow:hidden ancestors rather than being clipped by them. */

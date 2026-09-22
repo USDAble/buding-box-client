@@ -3,7 +3,7 @@
   import { get } from 'svelte/store'
   import { t, locale, setLocale } from '../lib/i18n'
   import { productState, blockedPage, sendCode, login, setProductLocale, ProductError, failureTier, tierRetryable, refreshProductState, type DictionaryNotice } from '../lib/product'
-  import { normalizePhone } from '../lib/phone'
+  import { normalizePhoneWithCallingCode, splitPhoneForLocalAPI } from '../lib/phone'
   import { randomNickname, validateNickname } from '../lib/nickname'
   import { brandName, brandTagline, brandTermsTitle, brandPrivacyTitle } from '../lib/brand'
   import { showToast } from '../lib/stores'
@@ -11,11 +11,36 @@
   import LegalModal from '../components/overlays/LegalModal.svelte'
 
   // The product gate's login page (P4). Two shapes share this one form: first
-  // activation (with an activation-code field) and second login (nickname
-  // prefilled). All validation is two-round per 需求 §5.3.3 — every format error
+  // activation (with an activation-code field) and second login. All validation
+  // is two-round per 需求 §5.3.3 — every format error
   // shows at once, then the business checks short-circuit server-side.
 
+  // OCTO-FORK: the country picker covers common destinations; phone.ts keeps
+  // the canonical E.164 conversion shared by sending and submitting.
+  const callingCodes = [
+    { region: 'CN', code: '+86' }, { region: 'HK', code: '+852' },
+    { region: 'MO', code: '+853' }, { region: 'TW', code: '+886' },
+    { region: 'US', code: '+1' }, { region: 'CA', code: '+1' },
+    { region: 'GB', code: '+44' }, { region: 'JP', code: '+81' },
+    { region: 'KR', code: '+82' }, { region: 'SG', code: '+65' },
+    { region: 'AU', code: '+61' }, { region: 'NZ', code: '+64' },
+    { region: 'DE', code: '+49' }, { region: 'FR', code: '+33' },
+    { region: 'IT', code: '+39' }, { region: 'ES', code: '+34' },
+    { region: 'IN', code: '+91' }, { region: 'MY', code: '+60' },
+    { region: 'TH', code: '+66' }, { region: 'VN', code: '+84' },
+    { region: 'ID', code: '+62' }, { region: 'PH', code: '+63' },
+    { region: 'AE', code: '+971' }, { region: 'BR', code: '+55' },
+    { region: 'MX', code: '+52' }, { region: 'RU', code: '+7' },
+  ] as const
+
   let phone = $state('')
+  let selectedRegion = $state('CN')
+  const selectedCallingCode = $derived(callingCodes.find(({ region }) => region === selectedRegion)?.code ?? '+86')
+  const normalizedPhone = $derived(normalizePhoneWithCallingCode(phone, selectedCallingCode))
+  const localPhone = $derived(splitPhoneForLocalAPI(normalizedPhone.value, callingCodes.map(({ code }) => code)))
+  // OCTO-FORK: short region names keep the native selector readable without
+  // taking space from the phone number field.
+  const regionNames = $derived(new Intl.DisplayNames([$locale], { type: 'region', style: 'short' }))
   let code = $state('')
   let nickname = $state('')
   let activationCode = $state('')
@@ -26,6 +51,7 @@
   let sending = $state(false)
   let submitting = $state(false)
   let countdown = $state(0)
+  let sentCodePhone = $state('')
   let nicknameEdited = $state(false)
   let legalModal = $state<null | 'terms' | 'privacy'>(null)
 	// OCTO-FORK: reuse login IDs after transport failures; legal publications are informational.
@@ -83,19 +109,18 @@
     // already filled prefs.locale with the system language when unset.
     const loc = $productState?.prefs?.locale
     if (loc === 'zh' || loc === 'en') setLocale(loc)
-    // Second login prefills the last nickname; first activation seeds a fresh
-    // random default in the current UI language (需求 §5.3.3 / §5.3.4).
-    nickname = $productState?.account?.nickname || randomNickname($locale === 'zh' ? 'zh' : 'en')
+    // OCTO-FORK: a retained account nickname belongs to the old login, not
+    // to a new activation. Seed once per wall; form switching keeps this value.
+    nickname = randomNickname($locale === 'zh' ? 'zh' : 'en')
     return () => { if (timer) clearInterval(timer) }
   })
 
   function pickLang(l: 'zh' | 'en') {
     setLocale(l)
     setProductLocale(l).catch(() => {})
-    // Regenerate the default nickname only when there is no bound account and
-    // the user hasn't edited it — a language switch must not wipe a typed name
-    // (需求 §5.3.3) nor replace a prefilled last nickname (§5.3.4).
-    if (!nicknameEdited && !$productState?.account?.nickname) nickname = randomNickname(l)
+    // OCTO-FORK: only a language change may refresh the unedited default;
+    // switching between login and activation never does.
+    if (!nicknameEdited) nickname = randomNickname(l)
   }
 
   function startCountdown(secs: number) {
@@ -108,7 +133,7 @@
   }
 
   async function onSendCode() {
-    const normalized = normalizePhone(phone)
+    const normalized = normalizedPhone
     if (!normalized.ok) {
       fieldErrors = { ...fieldErrors, phone: 'invalid_phone' }
       return
@@ -116,11 +141,15 @@
     fieldErrors = { ...fieldErrors, phone: '' }
     sending = true
     try {
-      const secs = await sendCode(normalized.value)
+      const secs = await sendCode(localPhone.phone, localPhone.region_code)
+      sentCodePhone = normalized.value
+      code = ''
+      fieldErrors = { ...fieldErrors, code: '' }
       startCountdown(secs)
       showToast($t('product.code_sent'))
     } catch (e) {
       if (e instanceof ProductError && e.retryAfterSec != null) {
+        sentCodePhone = normalized.value
         startCountdown(e.retryAfterSec)
       } else if (e instanceof ProductError && failureTier(e.code)) {
         // A control-plane tier is not a phone problem. Filing it under the field
@@ -186,10 +215,9 @@
   async function doSubmit() {
     // Round one — format. Every failure is collected and shown at once.
     const errs: Record<string, string> = {}
-    const normalizedPhone = normalizePhone(phone)
     if (!normalizedPhone.ok) errs.phone = 'invalid_phone'
     if (!/^\d{6}$/.test(code)) errs.code = 'invalid_code'
-    if (validateNickname(nickname) !== 'ok') errs.nickname = 'nickname_format'
+    if (activationForm && validateNickname(nickname) !== 'ok') errs.nickname = 'nickname_format'
     if (activationForm && !activationCode.trim()) errs.activationCode = 'invalid_activation'
     // Box code: non-empty only. Its length/charset are the server's call
     // (需求基线 E1 rule 4) — the client must not pre-judge validity.
@@ -199,14 +227,15 @@
     formError = null
     phoneMasked = null
     submitting = true
-	const attemptPayload = JSON.stringify([normalizedPhone.value, code, nickname, activationForm, activationCode, boxCode])
+	const attemptPayload = JSON.stringify([normalizedPhone.value, code, activationForm ? nickname : '', activationForm, activationCode, boxCode])
 	if (loginAttempt.payload !== attemptPayload) loginAttempt = { payload: attemptPayload, id: crypto.randomUUID() }
     try {
       const result = await login({
 		clientRequestId: loginAttempt.id,
-        phone: normalizedPhone.value,
+        phone: localPhone.phone,
+        region_code: localPhone.region_code,
         code,
-        nickname,
+        nickname: activationForm ? nickname : undefined,
         activationCode: activationForm ? activationCode.trim() : undefined,
         boxCode: activationForm ? boxCode.trim() : undefined,
       })
@@ -354,7 +383,15 @@
     <form class="form" onsubmit={onSubmit} novalidate>
       <div class="field">
         <label for="phone">{$t('product.phone_label')}</label>
-        <input id="phone" type="tel" inputmode="tel" bind:value={phone} placeholder={$t('product.phone_placeholder')} autocomplete="tel" />
+        <!-- OCTO-FORK: both sign-in and activation use the same calling-code selector. -->
+        <div class="phone-row">
+          <select id="callingCode" aria-label={$t('product.country_code_label')} bind:value={selectedRegion}>
+            {#each callingCodes as { region, code }}
+              <option value={region}>{region === 'AE' ? $t('product.region_ae_short') : regionNames.of(region)}（{code}）</option>
+            {/each}
+          </select>
+          <input id="phone" type="tel" inputmode="tel" bind:value={phone} placeholder={$t('product.phone_placeholder')} autocomplete="tel-national" />
+        </div>
         {#if fieldErrors.phone}<p class="field-err">{$t(fieldErrorKey('phone'))}</p>{/if}
       </div>
 
@@ -362,8 +399,8 @@
         <label for="code">{$t('product.code_label')}</label>
         <div class="code-row">
           <input id="code" type="text" inputmode="numeric" maxlength="6" bind:value={code} placeholder={$t('product.code_placeholder')} autocomplete="one-time-code" />
-          <button type="button" class="send-btn" onclick={onSendCode} disabled={sending || countdown > 0}>
-            {countdown > 0
+          <button type="button" class="send-btn" onclick={onSendCode} disabled={sending || (countdown > 0 && sentCodePhone === normalizedPhone.value)}>
+            {countdown > 0 && sentCodePhone === normalizedPhone.value
               ? $t('product.resend_in').replaceAll('{s}', String(countdown))
               : $t('product.send_code')}
           </button>
@@ -387,11 +424,14 @@
         </div>
       {/if}
 
-      <div class="field">
-        <label for="nickname">{$t('product.nickname_label')}</label>
-        <input id="nickname" type="text" bind:value={nickname} oninput={() => (nicknameEdited = true)} placeholder={$t('product.nickname_placeholder')} />
-        {#if fieldErrors.nickname}<p class="field-err">{$t(fieldErrorKey('nickname'))}</p>{/if}
-      </div>
+      <!-- OCTO-FORK: an existing account's nickname is not edited during SMS sign-in. -->
+      {#if activationForm}
+        <div class="field">
+          <label for="nickname">{$t('product.nickname_label')}</label>
+          <input id="nickname" type="text" bind:value={nickname} oninput={() => (nicknameEdited = true)} placeholder={$t('product.nickname_placeholder')} />
+          {#if fieldErrors.nickname}<p class="field-err">{$t(fieldErrorKey('nickname'))}</p>{/if}
+        </div>
+      {/if}
 
       <button type="submit" class="submit-btn" disabled={submitting}>
         {submitting
@@ -488,13 +528,25 @@
 .form { display: flex; flex-direction: column; gap: 16px; }
 .field { display: flex; flex-direction: column; gap: 6px; }
 .field label { font-size: 13px; font-weight: 500; color: var(--text); }
-.field input {
+.field input, .field select {
   height: 38px; padding: 0 12px;
   border: 1px solid var(--border); border-radius: 8px;
   font-size: 14px; font-family: inherit; color: var(--text);
   background: var(--bg-container); outline: none;
 }
-.field input:focus { border-color: var(--blue-6); box-shadow: 0 0 0 2px var(--active-blue-bg); }
+/* OCTO-FORK: keep the country selector and phone input usable in narrow windows. */
+.phone-row { display: flex; gap: 8px; }
+.phone-row select {
+  width: 180px; flex: none; min-width: 0;
+  padding-right: 8px; font-size: 13px; cursor: pointer;
+}
+.phone-row input { flex: 1; min-width: 0; }
+@media (max-width: 460px) {
+  .phone-row { flex-direction: column; }
+  .phone-row select { width: 100%; }
+  .phone-row input { flex: none; width: 100%; }
+}
+.field input:focus, .field select:focus { border-color: var(--blue-6); box-shadow: 0 0 0 2px var(--active-blue-bg); }
 .field input::placeholder { color: var(--text-quaternary); }
 .field-err { margin: 0; font-size: 12px; color: var(--error); }
 .field-hint { margin: 0; font-size: 12px; color: var(--text-tertiary); }

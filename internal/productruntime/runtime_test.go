@@ -478,11 +478,14 @@ func TestSecondLoginOmitsCredentialsAndStillReportsBoxCode(t *testing.T) {
 		t.Fatalf("logout status = %d body = %v, want 200", status, body)
 	}
 
-	if status, _ := h.sendCode("13800001234"); status != http.StatusOK {
+	// OCTO-FORK: the short login uses the same split local phone contract as activation.
+	if status, _ := h.do(http.MethodPost, "/api/product/send-code", map[string]any{
+		"phone": "13800001234", "region_code": "86",
+	}); status != http.StatusOK {
 		t.Fatalf("send-code status = %d, want 200", status)
 	}
 	status, body = h.login(map[string]any{
-		"phone": "13800001234", "code": clienttest.FixtureSMSCode, "nickname": "tester",
+		"phone": "13800001234", "region_code": "86", "code": clienttest.FixtureSMSCode, "nickname": "tester",
 	})
 	if status != http.StatusOK {
 		t.Fatalf("second login status = %d body = %v, want 200", status, body)

@@ -100,15 +100,15 @@
 
 `GET /api/product/state` 直接返回 `ProductStateDTO`。读取失败时前端进入可恢复的产品门状态，不应无限加载。
 
-`POST /api/product/send-code` 接收 E.164 形式的 `{"phone":"+<国家码><号码>"}`，成功返回 `{"cooldownSec":60}`。为兼容既有中国用户，11 位大陆手机号或无 `+` 的 `86` 前缀在本地归一为 `+86` 后再发送；界面支持空格、短横线、括号与全角数字输入。手机号格式错误使用业务级 `invalid_phone`，不是 `fieldErrors.phone`；冷却期返回 `retryAfterSec`。验证码响应可以预留人机校验字段，但当前接口不把它当作必填流程。
+`POST /api/product/send-code` 接收拆分的 `{"region_code":"86","phone":"13800001234"}`：`region_code` 是不带 `+` 的 1–3 位区号，`phone` 是本地号码，不能再包含 `+`；成功返回 `{"cooldownSec":60}`。登录和激活界面提供常用国家或地区的区号选择，并在发送验证码和提交时使用同一号码。粘贴完整的 `+` 国际号码仍可使用：已列出的区号拆分提交；列表外区号或旧客户端可继续以 `{"phone":"+<国家码><号码>"}` 提交。为兼容既有中国用户，旧请求中的 11 位大陆手机号或无 `+` 的 `86` 前缀仍在本地归一为 `+86`。本地服务把拆分字段合成 E.164 后才调用中台，中台接口不新增字段。界面支持空格、短横线、括号与全角数字输入。手机号格式错误使用业务级 `invalid_phone`，不是 `fieldErrors.phone`；冷却期返回 `retryAfterSec`。验证码响应可以预留人机校验字段，但当前接口不把它当作必填流程。
 
 ### 登录与激活
 
-`POST /api/product/login` 接收 `phone`、`code`、`nickname`，并可选地接收一对 `activationCode` 与 `boxCode`。两个凭证要么同时提供、要么同时省略；本地只校验这个形状，是否已有授权由中台决定。
+`POST /api/product/login` 与验证码接口使用相同的 `phone`、`region_code` 拆分规则，另接收 `code`；首次激活同时提交 `nickname`、`activationCode` 与 `boxCode`，短信短登录省略这三个字段并保留既有昵称。两个激活凭证要么同时提供、要么同时省略；本地只校验这个形状，是否已有授权由中台决定。旧客户端的 E.164 或大陆简写号码仍可不带 `region_code` 提交；向中台登录时仍只发送完整 E.164 号码。
 
 成功返回 `{"state": ProductStateDTO, "dictionaryNotice"?: ...}`。词库同步降级不阻断成功登录，前端只把运行时给出的降级或恢复状态映射为文案。
 
-字段级错误是 `invalid_phone`、`invalid_code`、`nickname_format`、`nickname_sensitive`、`invalid_activation` 与 `invalid_box_code`。业务级错误包括 `code_not_sent`、验证码过期或错误的 `invalid_code`、`activation_invalid`、`activation_code_used`、`box_code_unknown`、`box_code_mismatch`、`activation_required` 与 `phone_mismatch`。
+字段级错误是 `invalid_phone`、格式不符的 `invalid_code`、`nickname_format`、`nickname_sensitive`、`invalid_activation` 与 `invalid_box_code`。业务级错误包括 `code_not_sent`、验证码过期或错误的 `invalid_code`、`activation_invalid`、`activation_code_used`、`box_code_unknown`、`box_code_mismatch`、`activation_required` 与 `phone_mismatch`。验证码错误由中台的机器码映射成本地化提示，不回显中台原文。
 
 `invalid_activation` 表示输入格式，`activation_invalid` 表示中台验证失败，不能合并。一次未带激活凭证的登录被中台以激活类错误拒绝时，本地状态应反映该账号未激活；前端可以刷新状态，但不应在用户阅读错误时自动替换表单。登录和激活表单始终允许由用户主动互相切换。
 

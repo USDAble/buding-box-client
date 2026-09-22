@@ -369,12 +369,15 @@ func (rt *Runtime) handleState(w http.ResponseWriter, r *http.Request) {
 // handleSendCode asks the platform to text a login code.
 func (rt *Runtime) handleSendCode(w http.ResponseWriter, r *http.Request) {
 	var req struct {
-		Phone string `json:"phone"`
+		Phone      string `json:"phone"`
+		RegionCode string `json:"region_code"`
 	}
 	if !decodeBody(w, r, &req) {
 		return
 	}
-	phone, ok := productphone.Normalize(req.Phone)
+	// OCTO-FORK: the local API carries the calling code separately; the
+	// platform continues to receive its existing canonical E.164 phone.
+	phone, ok := productphone.NormalizeParts(req.Phone, req.RegionCode)
 	if !ok {
 		// Business-level, NOT field-level. The frontend reads body.code and files
 		// it under the phone input itself; moving this into fieldErrors would
@@ -407,6 +410,7 @@ func (rt *Runtime) handleSendCode(w http.ResponseWriter, r *http.Request) {
 func (rt *Runtime) handleLogin(w http.ResponseWriter, r *http.Request) {
 	var req struct {
 		Phone           string `json:"phone"`
+		RegionCode      string `json:"region_code"`
 		Code            string `json:"code"`
 		Nickname        string `json:"nickname"`
 		ActivationCode  string `json:"activationCode"`
@@ -417,7 +421,8 @@ func (rt *Runtime) handleLogin(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	phone, ok := productphone.Normalize(req.Phone)
+	// OCTO-FORK: login and first activation share this local phone boundary.
+	phone, ok := productphone.NormalizeParts(req.Phone, req.RegionCode)
 	if !rt.validateLogin(w, ok, req.Code, req.Nickname, req.ActivationCode, req.BoxCode) {
 		return
 	}
@@ -425,11 +430,17 @@ func (rt *Runtime) handleLogin(w http.ResponseWriter, r *http.Request) {
 		writeControlPlaneUnconfigured(w)
 		return
 	}
+	// OCTO-FORK: a legacy client may still send nickname on short login;
+	// it must not overwrite the account name held by the platform.
+	nickname := req.Nickname
+	if req.ActivationCode == "" && req.BoxCode == "" {
+		nickname = ""
+	}
 
 	data, err := rt.deps.Platform.Login(r.Context(), productclient.LoginRequest{
 		Phone:    phone,
 		Code:     req.Code,
-		Nickname: req.Nickname,
+		Nickname: nickname,
 		// Both empty on a later login; the platform treats their absence as
 		// "already activated" and answers with the record it holds.
 		ActivationCode:  strings.TrimSpace(req.ActivationCode),
@@ -578,10 +589,6 @@ func (rt *Runtime) validateLogin(w http.ResponseWriter, phoneOK bool, code, nick
 	if !validCode(code) {
 		fields["code"] = productclient.CodeInvalidCode
 	}
-	if !validNickname(nickname) {
-		fields["nickname"] = "nickname_format"
-	}
-
 	// The activation credentials are an optional PAIR: offer both, or neither.
 	//
 	// Which of the two the user is making is no longer the client's call. The old
@@ -595,6 +602,11 @@ func (rt *Runtime) validateLogin(w http.ResponseWriter, phoneOK bool, code, nick
 	// of the two is missing without a round trip.
 	offeredActivation := activationCode != "" || boxCode != ""
 	if offeredActivation {
+		// OCTO-FORK: SMS-only login preserves the existing account nickname;
+		// a new activation still requires a valid nickname.
+		if !validNickname(nickname) {
+			fields["nickname"] = "nickname_format"
+		}
 		if strings.TrimSpace(activationCode) == "" {
 			fields["activationCode"] = "invalid_activation"
 		}

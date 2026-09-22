@@ -34,6 +34,18 @@ func Normalize(raw string) (string, bool) {
 	return v, true
 }
 
+// NormalizeParts accepts the split local API shape and retains legacy callers.
+// OCTO-FORK: only this boundary recombines the parts for the E.164 platform API.
+func NormalizeParts(phone, regionCode string) (string, bool) {
+	if regionCode == "" {
+		return Normalize(phone)
+	}
+	if len(regionCode) > 3 || regionCode[0] < '1' || regionCode[0] > '9' || !allDigits(regionCode) || strings.ContainsAny(phone, "+＋") {
+		return "", false
+	}
+	return Normalize("+" + regionCode + phone)
+}
+
 func allDigits(v string) bool {
 	for _, r := range v {
 		if r < '0' || r > '9' {

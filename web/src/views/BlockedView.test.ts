@@ -76,6 +76,14 @@ function type(id: string, value: string) {
   flushSync()
 }
 
+function selectRegion(region: string) {
+  const el = target.querySelector<HTMLSelectElement>('#callingCode')
+  if (!el) throw new Error('no calling-code selector')
+  el.value = region
+  el.dispatchEvent(new Event('change', { bubbles: true }))
+  flushSync()
+}
+
 function submit() {
   const form = target.querySelector('form')
   if (!form) throw new Error('no form')
@@ -113,6 +121,38 @@ describe('BlockedView first activation', () => {
 
     expect(target.querySelector('#activationCode')).toBeNull()
     expect(target.querySelector('#boxCode')).toBeNull()
+    expect(target.querySelector('#nickname')).toBeNull()
+  })
+
+  it('shows common country calling codes and sends split phone fields', async () => {
+    const fetchMock = vi.fn(async (_input: RequestInfo | URL, _init?: RequestInit) => ({
+      ok: true,
+      status: 200,
+      json: async () => ({ cooldownSec: 60 }),
+    }))
+    vi.stubGlobal('fetch', fetchMock)
+    render()
+
+    expect(target.querySelector('#callingCode')?.textContent).toContain('中国（+86）')
+    expect(target.querySelector('#callingCode')?.textContent).toContain('美国（+1）')
+    expect(target.querySelector('#callingCode')?.textContent).toContain('香港（+852）')
+    expect(target.querySelector('#callingCode')?.textContent).toContain('阿联酋（+971）')
+    locale.set('en')
+    flushSync()
+    expect(target.querySelector('#callingCode')?.textContent).toContain('Hong Kong（+852）')
+    expect(target.querySelector('#callingCode')?.textContent).toContain('UAE（+971）')
+    locale.set('zh')
+    flushSync()
+    selectRegion('US')
+    type('phone', '415 555 0123')
+    target.querySelector<HTMLButtonElement>('.send-btn')?.click()
+
+    await vi.waitFor(() => expect(fetchMock).toHaveBeenCalled())
+    const body = JSON.parse(String(fetchMock.mock.calls[0][1]?.body))
+    expect(body).toMatchObject({ phone: '4155550123', region_code: '1' })
+    await vi.waitFor(() => expect(target.querySelector<HTMLButtonElement>('.send-btn')?.textContent).toContain('后重发'))
+    selectRegion('JP')
+    expect(target.querySelector<HTMLButtonElement>('.send-btn')?.disabled).toBe(false)
   })
 
   it('submits the trimmed box code alongside the activation code', async () => {
@@ -134,8 +174,10 @@ describe('BlockedView first activation', () => {
     await vi.waitFor(() => expect(fetchMock).toHaveBeenCalled())
 
     const body = JSON.parse(String(fetchMock.mock.calls[0][1]?.body))
+    expect(body).toMatchObject({ phone: '13800001234', region_code: '86' })
     expect(body.boxCode).toBe('BOX-DEMO-0001')
     expect(body.activationCode).toBe('BUDING-DEMO-0001')
+    expect(body.nickname).toEqual(expect.any(String))
     expect(body.termsVersion).toBeUndefined()
     expect(body.privacyVersion).toBeUndefined()
     expect(body.clientRequestId).toEqual(expect.any(String))
@@ -235,6 +277,32 @@ describe('BlockedView first activation', () => {
     expect(input_('boxCode')).toBeTruthy()
   })
 
+  it('uses one fresh default after logout and keeps it across form switches', async () => {
+    const random = vi.spyOn(Math, 'random').mockReturnValueOnce(0.1234).mockReturnValue(0.5678)
+    try {
+      productState.set({
+        ...firstActivationState(), activated: true,
+        account: { phoneMasked: '138****1234', nickname: '旧账号昵称', lastLoginAt: '2026-09-22T00:00:00Z' },
+      } as never)
+      render()
+
+      expect(input_('nickname')).toBeNull()
+      await switchTo()
+      expect(input('nickname').value).toBe('用户1234')
+      await switchTo()
+      await switchTo()
+      expect(input('nickname').value).toBe('用户1234')
+      expect(random).toHaveBeenCalledTimes(1)
+
+      type('nickname', '新用户名')
+      await switchTo()
+      await switchTo()
+      expect(input('nickname').value).toBe('新用户名')
+    } finally {
+      random.mockRestore()
+    }
+  })
+
   // The other direction. A fresh data/ belongs to an installation the platform has
   // never seen - but the phone may well hold an account already activated
   // elsewhere, and signing in there is the recovery path for a lost data/
@@ -253,9 +321,10 @@ describe('BlockedView first activation', () => {
     await switchTo()
 
     expect(input_('activationCode')).toBeNull()
-    type('phone', '13800001234')
+    expect(input_('nickname')).toBeNull()
+    selectRegion('US')
+    type('phone', '415 555 0123')
     type('code', '123456')
-    type('nickname', 'tester')
     submit()
     await vi.waitFor(() => expect(fetchMock).toHaveBeenCalled())
 
@@ -263,6 +332,30 @@ describe('BlockedView first activation', () => {
     const body = JSON.parse(String(call?.[1]?.body ?? '{}')) as Record<string, unknown>
     expect(body.activationCode).toBeUndefined()
     expect(body.boxCode).toBeUndefined()
+    expect(body.nickname).toBeUndefined()
+    expect(body).toMatchObject({ phone: '4155550123', region_code: '1' })
+  })
+
+  it('distinguishes a malformed code from a platform-rejected six-digit code', async () => {
+    productState.set({ ...firstActivationState(), activated: true } as never)
+    const fetchMock = vi.fn(async () => ({
+      ok: false,
+      status: 400,
+      json: async () => ({ code: 'invalid_code' }),
+    }))
+    vi.stubGlobal('fetch', fetchMock)
+    render()
+
+    type('phone', '13800001234')
+    type('code', '123')
+    submit()
+    expect(target.textContent).toContain('请输入 6 位验证码')
+    expect(fetchMock).not.toHaveBeenCalled()
+
+    type('code', '000000')
+    submit()
+    await vi.waitFor(() => expect(target.textContent).toContain('验证码不正确或已过期'))
+    expect(target.textContent).not.toContain('请输入 6 位验证码')
   })
 
   // An unmapped code used to render an empty banner: the user saw no error at all

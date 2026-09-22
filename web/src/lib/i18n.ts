@@ -1200,7 +1200,10 @@ export const en: Record<string, string> = {
   // the product baseline. Kept in one block at the tail of
   // each dictionary so upstream merges collide at the tail rather than mid-file.
   "product.phone_label": "Phone number",
-  "product.phone_placeholder": "Enter phone number with country code",
+  // OCTO-FORK: the country picker supplies the calling code on both forms.
+  "product.country_code_label": "Country or region code",
+  "product.region_ae_short": "UAE",
+  "product.phone_placeholder": "Phone number",
   "product.code_label": "Verification code",
   "product.code_placeholder": "6-digit code",
   "product.send_code": "Send code",
@@ -2576,7 +2579,10 @@ export const zh: Record<string, string> = {
   // the product baseline。集中在每份字典末尾，让上游合并
   // 冲突只发生在尾部。
   "product.phone_label": "手机号",
-  "product.phone_placeholder": "请输入手机号（支持国际区号，如 +86）",
+  // OCTO-FORK: the country picker supplies the calling code on both forms.
+  "product.country_code_label": "国家或地区区号",
+  "product.region_ae_short": "阿联酋",
+  "product.phone_placeholder": "请输入手机号",
   "product.code_label": "验证码",
   "product.code_placeholder": "6 位验证码",
   "product.send_code": "发送验证码",

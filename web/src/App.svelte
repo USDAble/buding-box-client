@@ -93,11 +93,14 @@
   // when it's true, treat key_setup as already-done and boot the main UI
   // directly. OCTO-FORK: P9 模式与模型选择器 — see
   // the model-selection and confidential-session boundary §3.1.
-  let effectiveOnboardPhase = $derived(
-    ($productState?.suppressOnboarding === true && $onboardPhase === 'key_setup')
-      ? ''
-      : $onboardPhase,
-  )
+  // OCTO-FORK: keep the first-run component available for its existing code and
+  // future reuse, but never block startup on the Welcome page; model setup is
+  // available from the main UI instead.
+  type OnboardPhase = 'unknown' | 'key_setup' | 'soul_setup' | ''
+  function effectivePhase(phase: OnboardPhase): OnboardPhase {
+    return phase === 'key_setup' ? '' : phase
+  }
+  let effectiveOnboardPhase = $derived(effectivePhase($onboardPhase))
 
   // ── URL routing ─────────────────────────────────────────────────────────────
   // Reflect the current view (and active chat session) in the hash so a refresh

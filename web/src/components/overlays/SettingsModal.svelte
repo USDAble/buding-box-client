@@ -21,7 +21,7 @@
   import { confirmDialog } from '../../lib/confirm'
   import { ago, clockTick } from '../../lib/relTime'
   import * as api from '../../lib/api'
-  import { allowEnvironmentModelSource, productState, updateNickname, ProductError, logout, submitFeedback, getBox, type BoxDTO } from '../../lib/product'
+  import { allowEnvironmentModelSource, productState, updateNickname, ProductError, logout, submitFeedback, getBox, setProductLocale, type BoxDTO } from '../../lib/product'
   // OCTO-FORK: account and safety controls are product-owned settings, kept
   // out of the compact account popup so it stays single-level.
   import { validateNickname } from '../../lib/nickname'
@@ -529,6 +529,10 @@
   async function saveLanguage(v: string) {
     try {
       await api.updateLanguage(v)
+      // OCTO-FORK: login/register reads the product preference, while the
+      // console reads local config; persist both so logout cannot restore an
+      // older language on the next login.
+      await setProductLocale(v === 'zh' ? 'zh' : 'en')
     } catch (e: any) {
       showToast(e.message ?? 'Failed to update language', 'error')
     }

@@ -105,6 +105,25 @@ async function switchTo() {
 }
 
 describe('BlockedView first activation', () => {
+  it('persists the language chosen on the login wall for Settings', async () => {
+    const fetchMock = vi.fn(async () => ({
+      ok: true,
+      status: 200,
+      json: async () => ({}),
+    }))
+    vi.stubGlobal('fetch', fetchMock)
+    render()
+
+    const english = [...target.querySelectorAll<HTMLButtonElement>('.lang-switch button')]
+      .find(button => button.textContent?.trim() === 'EN')
+    english?.click()
+    flushSync()
+
+    await vi.waitFor(() => expect(fetchMock.mock.calls.some(([url]) => url === '/api/config/language')).toBe(true))
+    const call = fetchMock.mock.calls.find(([url]) => url === '/api/config/language')
+    expect(JSON.parse(String(call?.[1]?.body))).toEqual({ language: 'en' })
+  })
+
   it('orders the five fields as the requirement pins them', () => {
     render()
 

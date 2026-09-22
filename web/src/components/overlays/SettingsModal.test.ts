@@ -50,6 +50,21 @@ it('hides the co-author toggle without removing other agent defaults', async () 
   expect(target.textContent).not.toContain('提交署名')
 })
 
+it('persists the console language for the next login wall', async () => {
+  settingsModalOpen.set(true); open()
+  await vi.waitFor(() => expect(activePage()).toBe('常规'))
+  const select = target.querySelector<HTMLSelectElement>('.setrow select')!
+  select.value = 'en'
+  select.dispatchEvent(new Event('change', { bubbles: true }))
+  flushSync()
+
+  await vi.waitFor(() => {
+    const paths = vi.mocked(globalThis.fetch).mock.calls.map(([input]) => String(input))
+    expect(paths.some(path => path.endsWith('/api/config/language'))).toBe(true)
+    expect(paths.some(path => path.endsWith('/api/product/locale'))).toBe(true)
+  })
+})
+
 it('keeps About information while hiding first-run and removing the license entry', async () => {
   openSettingsAt('about'); open()
   await vi.waitFor(() => expect(activePage()).toBe('关于'))

@@ -7,6 +7,7 @@
   import { randomNickname, validateNickname } from '../lib/nickname'
   import { brandName, brandTagline, brandTermsTitle, brandPrivacyTitle } from '../lib/brand'
   import { showToast } from '../lib/stores'
+  import * as api from '../lib/api'
   import BrandMark from '../components/BrandMark.svelte'
   import LegalModal from '../components/overlays/LegalModal.svelte'
 
@@ -118,6 +119,9 @@
   function pickLang(l: 'zh' | 'en') {
     setLocale(l)
     setProductLocale(l).catch(() => {})
+    // OCTO-FORK: keep the local config in sync with the product preference so
+    // Settings does not overwrite the login-page choice on its first open.
+    api.updateLanguage(l).catch(() => {})
     // OCTO-FORK: only a language change may refresh the unedited default;
     // switching between login and activation never does.
     if (!nicknameEdited) nickname = randomNickname(l)

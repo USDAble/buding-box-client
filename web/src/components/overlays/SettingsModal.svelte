@@ -26,14 +26,16 @@
   // out of the compact account popup so it stays single-level.
   import { validateNickname } from '../../lib/nickname'
 
-  const LICENSE_URL = 'https://github.com/open-octo/octo-agent/blob/main/LICENSE.txt'
-
   const fontZoomMap: Record<string, string> = { Small: '0.9', Medium: '1', Large: '1.1' }
   const modeToThemeLabel: Record<string, string> = { light: 'Light', dark: 'Dark', system: 'System' }
   // OCTO-FORK: keep the theme-pack implementation available, but hide its
   // settings entry while the product controls the palette — see the settings
   // surface decision.
   const showThemePackPicker = false
+  // OCTO-FORK: keep the co-author preference and API, but do not offer its toggle in product settings.
+  const showCoauthorSetting = false
+  // OCTO-FORK: keep the first-run wizard and rerun handler, but hide its About entry.
+  const showFirstRunEntry = false
 
   // This modal is mounted unconditionally at app root, so the applying
   // $effects at the bottom run at boot, not on open. Seeding fontSize/theme
@@ -79,6 +81,7 @@
   const accountLicense = $derived($productState?.activation?.expiresAt || ($productState?.activated && $productState.activation?.activatedAt ? $t('product.panel.license_permanent') : ''))
   let nicknameDraft = $state('')
   let nicknameErr = $state<'' | 'nickname_format' | 'nickname_sensitive' | 'save_failed'>('')
+  let editingNickname = $state(false)
   let savingNickname = $state(false)
   let feedbackCategory = $state<'bug' | 'suggestion' | 'other'>('suggestion')
   let feedbackTitle = $state('')
@@ -329,6 +332,7 @@
       fontSize = storedFontSize()
       nicknameDraft = $productState?.account?.nickname ?? ''
       nicknameErr = ''
+      editingNickname = false
       modalEl?.focus()
       })
     }
@@ -528,11 +532,12 @@
     try {
       await updateNickname(name)
       nicknameDraft = name
+      editingNickname = false
       showToast($t('product.panel.nickname_saved'))
     } catch (e) {
       nicknameErr = e instanceof ProductError && e.code === 'nickname_sensitive'
         ? 'nickname_sensitive'
-        : 'nickname_format'
+        : e instanceof ProductError && e.code === 'nickname_format' ? 'nickname_format' : 'save_failed'
     } finally {
       savingNickname = false
     }
@@ -785,11 +790,18 @@
                 <span class="account-error">{$t(nicknameErr === 'nickname_sensitive' ? 'product.err_nickname_sensitive' : nicknameErr === 'save_failed' ? 'product.send_failed' : 'product.err_nickname')}</span>
               {/if}
             </div>
+            <!-- OCTO-FORK: account details stay read-only until the user explicitly enters edit mode. -->
             <div class="account-edit">
-              <input class="sinput" bind:value={nicknameDraft} maxlength="16" spellcheck="false" />
-              <button class="btns" onclick={saveNickname} disabled={savingNickname || nicknameDraft.trim() === accountNickname}>
-                {savingNickname ? $t('common.saving') : $t('common.save')}
-              </button>
+              {#if editingNickname}
+                <input class="sinput" aria-label={$t('product.panel.nickname')} bind:value={nicknameDraft} maxlength="16" spellcheck="false" disabled={savingNickname} />
+                <button class="btns" onclick={() => { nicknameDraft = accountNickname; nicknameErr = ''; editingNickname = false }} disabled={savingNickname}>{$t('common.cancel')}</button>
+                <button class="btns" onclick={saveNickname} disabled={savingNickname || nicknameDraft.trim() === accountNickname}>
+                  {savingNickname ? $t('common.saving') : $t('common.save')}
+                </button>
+              {:else}
+                <span class="setver">{accountNickname || '—'}</span>
+                <button class="btns" onclick={() => { nicknameDraft = accountNickname; nicknameErr = ''; editingNickname = true }}>{$t('common.edit')}</button>
+              {/if}
             </div>
           </div>
           <div class="setrow">
@@ -932,13 +944,15 @@
             </div>
             <Switch checked={showReasoningVal} onchange={(v) => saveShowReasoning(v)} />
           </div>
-          <div class="setrow">
-            <div class="seti">
-              <span class="setl">{$t('settings.coauthor')}</span>
-              <span class="setd">{$t('settings.coauthor_desc')}</span>
+          {#if showCoauthorSetting}
+            <div class="setrow">
+              <div class="seti">
+                <span class="setl">{$t('settings.coauthor')}</span>
+                <span class="setd">{$t('settings.coauthor_desc')}</span>
+              </div>
+              <Switch checked={coauthorVal} onchange={(v) => saveCoauthor(v)} />
             </div>
-            <Switch checked={coauthorVal} onchange={(v) => saveCoauthor(v)} />
-          </div>
+          {/if}
           <!-- OCTO-FORK: 便携交付物不做更新 —— 上游 f7ba0793 这一行是"自动检查更新"的
                实时开关（PATCH /api/config/update_check），而 server 的 UpdateCheck 在本壳
                恒为 false（cmd/octo-desktop/main.go），且这层偏好自身的默认值是开
@@ -1123,20 +1137,16 @@
                 <span class="setd">{$t('product.panel.soon')}</span>
               </div>
             </div>
-            <div class="setrow">
-              <div class="seti">
-                <span class="setl">{$t('settings.about.firstrun')}</span>
-                <span class="setd">{$t('settings.about.firstrun_desc')}</span>
+            {#if showFirstRunEntry}
+              <div class="setrow">
+                <div class="seti">
+                  <span class="setl">{$t('settings.about.firstrun')}</span>
+                  <span class="setd">{$t('settings.about.firstrun_desc')}</span>
+                </div>
+                <button class="btns" onclick={rerunFirstRun}>{$t('settings.about.firstrun_btn')}</button>
               </div>
-              <button class="btns" onclick={rerunFirstRun}>{$t('settings.about.firstrun_btn')}</button>
-            </div>
-            <div class="setrow">
-              <div class="seti">
-                <span class="setl">{$t('settings.about.license')}</span>
-                <span class="setd">{$t('settings.about.license_desc')}</span>
-              </div>
-              <button class="link-btn" onclick={() => openUrl(LICENSE_URL)}>{$t('settings.about.license_view')}</button>
-            </div>
+            {/if}
+            <!-- OCTO-FORK: the product About panel omits the upstream source-license link. -->
           </div>
           <div class="about-footer">
             {$t('settings.about.footer').replace('{tagline}', $t('nav.workbench')).replace('{year}', String(new Date().getFullYear()))}

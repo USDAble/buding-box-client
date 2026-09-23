@@ -1,4 +1,4 @@
 {
-  "apiHost": "http://127.0.0.1:8000/api/v1",
-  "gatewayHost": "http://127.0.0.1:8000"
+  "apiHost": "https://api.pudding-ai.com/api/v1",
+  "gatewayHost": "https://api.pudding-ai.com"
 }

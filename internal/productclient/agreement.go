@@ -18,13 +18,14 @@ type Agreement struct {
 	PublishedAt string `json:"published_at"`
 }
 
-// Agreement reads the public numeric-code envelope without sending credentials
-// or refreshing a session. Each call fetches the latest publication.
+// Agreement reads the public agreement without sending credentials or refreshing
+// a session. Each call fetches the latest publication.
 func (c *Client) Agreement(ctx context.Context, kind string) (*Agreement, error) {
 	if kind != "box" && kind != "privacy" {
 		return nil, fmt.Errorf("invalid agreement kind")
 	}
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, strings.TrimRight(c.baseURL, "/")+"/agreements/"+kind, nil)
+	// OCTO-FORK: the portable client has one agreement contract, code="OK".
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, strings.TrimRight(c.baseURL, "/")+"/client/agreements/"+kind, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -43,14 +44,14 @@ func (c *Client) Agreement(ctx context.Context, kind string) (*Agreement, error)
 		return nil, decodeError(resp.StatusCode, raw)
 	}
 	var envelope struct {
-		Code int       `json:"code"`
+		Code string    `json:"code"`
 		Data Agreement `json:"data"`
 	}
 	if err := json.Unmarshal(raw, &envelope); err != nil {
 		return nil, fmt.Errorf("decode agreement: %w", err)
 	}
 	a := envelope.Data
-	if envelope.Code != 200 || a.Kind != kind || strings.TrimSpace(a.Version) == "" || strings.TrimSpace(a.Title) == "" || strings.TrimSpace(a.Content) == "" {
+	if envelope.Code != "OK" || a.Kind != kind || strings.TrimSpace(a.Version) == "" || strings.TrimSpace(a.Title) == "" || strings.TrimSpace(a.Content) == "" {
 		return nil, fmt.Errorf("invalid agreement response")
 	}
 	return &a, nil

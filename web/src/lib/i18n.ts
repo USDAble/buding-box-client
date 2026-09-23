@@ -2,6 +2,59 @@ import { writable, derived, get } from "svelte/store";
 import { brandName, brandShortName } from "./brand";
 
 export const en: Record<string, string> = {
+  // OCTO-FORK: client platform error codes are translated locally; the server's Chinese message is diagnostic data.
+  "platform.error.generic": "The request could not be completed. Please try again.",
+  "platform.error.CLIENT_TOKEN_REQUIRED": "Please sign in again to continue.",
+  "platform.error.CLIENT_TOKEN_INVALID": "Your session is invalid or has expired. Please sign in again.",
+  "platform.error.CLIENT_TOKEN_STALE": "Your session has expired. Please sign in with a verification code again.",
+  "platform.error.CLIENT_DISABLED": "This account or device has been disabled.",
+  "platform.error.CLIENT_AUTH_UNAVAILABLE": "Authentication is temporarily unavailable. Please try again later.",
+  "platform.error.INTERNAL_ERROR": "The service is temporarily unavailable. Please try again later.",
+  "platform.error.INVALID_REQUEST": "Please check your request and try again.",
+  "platform.error.INVALID_CLIENT_CREDENTIALS": "Client credentials are invalid.",
+  "platform.error.invalid_request": "Please check your request and try again.",
+  "platform.error.invalid_phone": "Enter a valid phone number.",
+  "platform.error.code_not_sent": "Request a verification code first.",
+  "platform.error.invalid_code": "The verification code is incorrect or no longer valid.",
+  "platform.error.code_expired": "The verification code has expired. Request a new one.",
+  "platform.error.activation_code_used": "This activation code has already been used.",
+  "platform.error.activation_invalid": "The activation code is invalid.",
+  "platform.error.box_code_unknown": "The box code is invalid or the box has not been activated.",
+  "platform.error.phone_mismatch": "This phone number is bound to another client.",
+  "platform.error.activation_required": "This phone number has not been activated yet.",
+  "platform.error.mobile_already_activated": "This phone number is already activated. Please use SMS sign-in.",
+  "platform.error.unauthorized": "Your session has expired. Please sign in again.",
+  "platform.error.idempotency_conflict": "This request has already been processed or its details changed. Please submit again.",
+  "platform.error.client_disabled": "Access has been disabled. Please contact your administrator.",
+  "platform.error.rate_limited": "Too many requests. Please try again later.",
+  "platform.error.RATE_LIMITED": "Too many authentication attempts. Please try again later.",
+  "platform.error.internal_error": "The service is temporarily unavailable. Please try again later.",
+  "platform.error.upstream_unavailable": "The upstream service is temporarily unavailable. Please try again later.",
+  "platform.error.unavailable": "The model catalog is temporarily unavailable.",
+  "platform.error.nickname_format": "Use 2–16 letters, Chinese characters, digits or underscores for your nickname.",
+  "platform.error.INSUFFICIENT_POINTS": "Your point balance is too low. Please recharge and try again.",
+  "platform.error.BILLING_UNAVAILABLE": "The points service is temporarily unavailable. Please try again later.",
+  "platform.error.RUN_NOT_ACTIVE": "This task has already ended.",
+  "platform.error.CONTEXT_LIMIT_EXCEEDED": "This task exceeds the selected model's context limit.",
+  "platform.error.BOX_MODEL_TEXT_ONLY": "The local box model currently supports text messages only.",
+  "platform.error.SESSION_NOT_FOUND": "The task session was not found.",
+  "platform.error.SESSION_BUSY": "The task is running. Please wait before changing models.",
+  "platform.error.MODEL_INPUT_UNSUPPORTED": "This model does not support image input. Switch models or send text.",
+  "platform.error.REASONING_UNSUPPORTED": "This model does not support that reasoning level. Select Default or refresh the model catalog.",
+  "platform.error.EXPERT_UNAVAILABLE": "This expert or the selected model is currently unavailable.",
+  "platform.error.MODEL_UNAVAILABLE": "The model service is temporarily unavailable.",
+  "platform.error.BOX_MODEL_UNAVAILABLE": "The box is offline or its local model is unavailable.",
+  "platform.error.MODEL_PRICE_MISSING": "A valid price has not been configured for this model.",
+  "platform.error.RUN_ALREADY_EXISTS": "This request was already submitted. The model will not be called again.",
+  "platform.error.RECHARGE_UNAVAILABLE": "Recharge is temporarily unavailable.",
+  "platform.error.RECHARGE_OPTION_CHANGED": "The recharge option changed. Refresh and select it again.",
+  "platform.error.IDEMPOTENCY_CONFLICT": "This request key was already used for a different recharge request.",
+  "platform.error.RECHARGE_ORDER_NOT_FOUND": "The recharge order was not found.",
+  "platform.error.PAYMENT_MERCHANT_CONFIG_MISMATCH": "The original payment merchant configuration must be restored. Check the original order later.",
+  "platform.error.PAYMENT_UNAVAILABLE": "The payment channel is not configured or is temporarily unavailable.",
+  "platform.error.WALLET_PROTECTED": "The wallet is under review. New recharges are paused.",
+  "platform.error.OWNER_INTERNAL_ERROR": "The account service is temporarily unavailable.",
+  "platform.error.OWNER_SCHEMA_OUTDATED": "The account service needs an update. Please contact an administrator.",
  "wallet.new_order":"Start a new order",
  "wallet.error.ACCOUNT_CHANGED":"The account changed. Reopen the wallet before continuing.",
  "wallet.error.RECHARGE_UNAVAILABLE":"Recharge service is temporarily unavailable. Retry the original order.",
@@ -1405,6 +1458,59 @@ export const en: Record<string, string> = {
 };
 
 export const zh: Record<string, string> = {
+  // OCTO-FORK: 与 en 的服务端 code 集合一致；页面只依赖 code，不展示服务端原始中文 message。
+  "platform.error.generic": "请求未完成，请稍后重试。",
+  "platform.error.CLIENT_TOKEN_REQUIRED": "请重新登录后继续。",
+  "platform.error.CLIENT_TOKEN_INVALID": "登录凭证无效或已过期，请重新登录。",
+  "platform.error.CLIENT_TOKEN_STALE": "登录会话已失效，请使用验证码重新登录。",
+  "platform.error.CLIENT_DISABLED": "当前账号或设备已停用。",
+  "platform.error.CLIENT_AUTH_UNAVAILABLE": "认证服务暂不可用，请稍后重试。",
+  "platform.error.INTERNAL_ERROR": "服务暂不可用，请稍后重试。",
+  "platform.error.INVALID_REQUEST": "请求参数不正确，请检查后重试。",
+  "platform.error.INVALID_CLIENT_CREDENTIALS": "客户端凭证无效。",
+  "platform.error.invalid_request": "请求参数不正确，请检查后重试。",
+  "platform.error.invalid_phone": "手机号格式不正确。",
+  "platform.error.code_not_sent": "请先获取短信验证码。",
+  "platform.error.invalid_code": "短信验证码错误或已失效，请重新获取。",
+  "platform.error.code_expired": "短信验证码已过期，请重新获取。",
+  "platform.error.activation_code_used": "该激活码已被使用。",
+  "platform.error.activation_invalid": "激活码无效。",
+  "platform.error.box_code_unknown": "盒子编号无效或尚未激活。",
+  "platform.error.phone_mismatch": "该手机号已绑定其他客户端。",
+  "platform.error.activation_required": "该手机号尚未完成首次激活。",
+  "platform.error.mobile_already_activated": "该手机号已激活，请使用短信登录。",
+  "platform.error.unauthorized": "登录会话已失效，请重新登录。",
+  "platform.error.idempotency_conflict": "请求已处理或参数已变化，请重新提交。",
+  "platform.error.client_disabled": "授权已停用，请联系管理员。",
+  "platform.error.rate_limited": "请求过于频繁，请稍后重试。",
+  "platform.error.RATE_LIMITED": "认证失败次数过多，请稍后重试。",
+  "platform.error.internal_error": "服务暂不可用，请稍后重试。",
+  "platform.error.upstream_unavailable": "上游服务暂不可用，请稍后重试。",
+  "platform.error.unavailable": "模型目录暂不可用。",
+  "platform.error.nickname_format": "昵称须为 2 至 16 个字母、汉字、数字或下划线。",
+  "platform.error.INSUFFICIENT_POINTS": "可用积分不足，请充值后重试。",
+  "platform.error.BILLING_UNAVAILABLE": "积分服务暂不可用，请稍后重试。",
+  "platform.error.RUN_NOT_ACTIVE": "任务已结束。",
+  "platform.error.CONTEXT_LIMIT_EXCEEDED": "当前任务内容超过所选模型的上下文上限。",
+  "platform.error.BOX_MODEL_TEXT_ONLY": "盒子本地模型当前只支持纯文本消息。",
+  "platform.error.SESSION_NOT_FOUND": "任务会话不存在。",
+  "platform.error.SESSION_BUSY": "任务正在运行，暂时不能切换模型。",
+  "platform.error.MODEL_INPUT_UNSUPPORTED": "当前模型不支持图片输入，请切换模型或提供文字内容。",
+  "platform.error.REASONING_UNSUPPORTED": "当前模型不支持此推理等级，请选择默认或刷新模型目录。",
+  "platform.error.EXPERT_UNAVAILABLE": "专家或所选模型当前不可用。",
+  "platform.error.MODEL_UNAVAILABLE": "模型服务暂不可用。",
+  "platform.error.BOX_MODEL_UNAVAILABLE": "所属盒子离线或本地模型暂不可用。",
+  "platform.error.MODEL_PRICE_MISSING": "当前模型尚未配置有效价格。",
+  "platform.error.RUN_ALREADY_EXISTS": "该请求已提交，不会重复调用模型。",
+  "platform.error.RECHARGE_UNAVAILABLE": "充值服务暂不可用。",
+  "platform.error.RECHARGE_OPTION_CHANGED": "充值档位已更新，请刷新后选择。",
+  "platform.error.IDEMPOTENCY_CONFLICT": "该请求标识已用于其他充值请求。",
+  "platform.error.RECHARGE_ORDER_NOT_FOUND": "充值订单不存在。",
+  "platform.error.PAYMENT_MERCHANT_CONFIG_MISMATCH": "原支付商户配置待恢复，请稍后查询原订单。",
+  "platform.error.PAYMENT_UNAVAILABLE": "支付通道尚未配置完成或暂不可用。",
+  "platform.error.WALLET_PROTECTED": "钱包正在核查，暂不能新建充值。",
+  "platform.error.OWNER_INTERNAL_ERROR": "账号服务暂不可用。",
+  "platform.error.OWNER_SCHEMA_OUTDATED": "账号服务需要升级，请联系管理员。",
  "wallet.new_order":"重新创建订单",
  "wallet.error.ACCOUNT_CHANGED":"登录账号已变化，请重新打开钱包后操作。",
  "wallet.error.RECHARGE_UNAVAILABLE":"充值服务暂不可用，请稍后重试原订单。",
@@ -2817,6 +2923,17 @@ export const t = derived(locale, ($l) => {
 // Non-reactive lookup for <script> / .ts one-shots (toasts, etc.).
 export function tr(key: string): string {
   return get(t)(key);
+}
+
+// OCTO-FORK: platform codes are case-sensitive contract values. Unknown codes
+// must never cause an English UI to show the server's Chinese fallback message.
+export function platformErrorKey(code: string | null | undefined): string {
+  const key = code ? `platform.error.${code}` : '';
+  return key && Object.hasOwn(en, key) && Object.hasOwn(zh, key) ? key : 'platform.error.generic';
+}
+
+export function platformErrorText(code: string | null | undefined): string {
+  return tr(platformErrorKey(code));
 }
 
 export function setLocale(l: string): void {

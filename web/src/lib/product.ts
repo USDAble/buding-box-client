@@ -462,6 +462,7 @@ export class ProductError extends Error {
     public code: string | null = null,
     public retryAfterSec: number | null = null,
     public phoneMasked: string | null = null,
+    public serverMessage: string | null = null,
   ) {
     super(`product api ${status}`);
     this.name = "ProductError";
@@ -516,7 +517,7 @@ export async function sendCode(phone: string): Promise<number> {
   const body = (await res.json().catch(() => ({}))) as Record<string, unknown>;
   if (!res.ok) {
     if (res.status === 429) {
-      throw new ProductError(res.status, {}, null, body.retryAfterSec as number | null);
+      throw new ProductError(res.status, {}, typeof body.code === 'string' ? body.code : 'rate_limited', body.retryAfterSec as number | null, null, typeof body.message === 'string' ? body.message : null);
     }
     const code = (body.code as string) ?? "invalid_phone";
     // A control-plane tier is not a phone problem. Filing a 503 under the phone
@@ -534,9 +535,9 @@ export async function sendCode(phone: string): Promise<number> {
     // the field-error switch is the same closed list, and anything outside it
     // has to reach a surface that renders a sentence.
     if (failureTier(code) || !(code in PHONE_FIELD_CODES)) {
-      throw new ProductError(res.status, {}, code);
+      throw new ProductError(res.status, {}, code, null, null, typeof body.message === 'string' ? body.message : null);
     }
-    throw new ProductError(res.status, { phone: code });
+    throw new ProductError(res.status, { phone: code }, null, null, null, typeof body.message === 'string' ? body.message : null);
   }
   return body.cooldownSec as number;
 }
@@ -641,6 +642,7 @@ export async function login(input: LoginInput): Promise<LoginResult> {
       (body.code as string) ?? null,
       null,
       (body.phoneMasked as string) ?? null,
+      typeof body.message === 'string' ? body.message : null,
     );
   }
   const state = body.state as ProductStateDTO;

@@ -1,6 +1,6 @@
 <script lang="ts">
   import { onMount, onDestroy } from 'svelte'
-  import { t, tr } from '../../lib/i18n'
+  import { t, tr, platformErrorKey } from '../../lib/i18n'
   import { refreshCredits } from '../../lib/product'
   import { openUrl } from '../../lib/externalLinks'
   import QrCode from '../ui/QrCode.svelte'
@@ -46,7 +46,9 @@
     const code = e instanceof finance.FinanceError ? e.code : 'network_unavailable'
     const key = `wallet.error.${code.toUpperCase()}`
     const translated = tr(key)
-    return translated === key ? tr('wallet.error.generic') : translated
+    if (translated !== key) return translated
+    const platformKey = platformErrorKey(code)
+    return platformKey === 'platform.error.generic' ? tr('wallet.error.generic') : tr(platformKey)
   }
   function stopPolling() { if (timer) clearTimeout(timer); timer = undefined }
   async function loadWallet() {

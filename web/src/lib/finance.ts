@@ -9,13 +9,14 @@ export interface Ledger {id:number;event_type:string;points:string;available_cha
 export interface Usage {run_id:string;model_name:string;run_status:string;billing_status:string;prompt_tokens:number;completion_tokens:number;net_points:string|null;reserved_points:string;created_at:string}
 export interface UsagePage extends Page<Usage> {summary?:{run_count:number;prompt_tokens:number;completion_tokens:number;net_points:string;pending_count:number}}
 export interface Price {id:string;logical_model_id:string;model_name:string;input_points_per_million:string;output_points_per_million:string;cache_read_points_per_million:string;effective_at?:string}
-export class FinanceError extends Error {constructor(public code:string,public status=0){super(code)}}
+// OCTO-FORK: preserve the untranslated platform message for diagnostics only.
+export class FinanceError extends Error {constructor(public code:string,public status=0,public serverMessage:string|null=null){super(code)}}
 async function request<T>(path:string,method='GET',body?:unknown,signal?:AbortSignal,scope?:string):Promise<T>{
  const res=await fetch('/api/product/'+path,{method,headers:{'Content-Type':'application/json','X-Octo-Window-Token':windowToken() ?? '',...(scope?{'X-Finance-Scope':scope}:{})},body:body===undefined?undefined:JSON.stringify(body),signal,cache:'no-store'})
  if(signal?.aborted)throw new FinanceError('cancelled')
  noteSessionLost(res.status)
  const data=await res.json().catch(()=>null)
- if(!res.ok)throw new FinanceError(data?.code || 'internal_error',res.status)
+ if(!res.ok)throw new FinanceError(typeof data?.code==='string'?data.code:'internal_error',res.status,typeof data?.message==='string'?data.message:null)
  if(data===undefined)throw new FinanceError('invalid_response')
  return data as T
 }

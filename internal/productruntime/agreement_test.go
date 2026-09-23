@@ -12,7 +12,11 @@ import (
 
 func TestAgreementAvailableBeforeLogin(t *testing.T) {
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		fmt.Fprint(w, `{"code":200,"data":{"kind":"box","version":"v1","title":"Terms","content":"text"}}`)
+		// OCTO-FORK: the client agreement route has the unified string success code.
+		if r.URL.Path != "/client/agreements/box" {
+			t.Errorf("unexpected platform path: %s", r.URL.Path)
+		}
+		fmt.Fprint(w, `{"code":"OK","data":{"kind":"box","version":"v1","title":"Terms","content":"text"}}`)
 	}))
 	defer ts.Close()
 	rt := productruntime.New(productruntime.Deps{Platform: productclient.New(ts.URL, productclient.ClientMeta{}, nil)})

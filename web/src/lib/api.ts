@@ -1,5 +1,6 @@
 import type { Session, SessionGroup, Skill, Workflow, ScheduledTask, McpServer, McpServerDetail, Channel, Memory, RecallFile, TagStatus, GitDiffResponse, GitDiffSummaryResponse, GitDiffFile, ProtectionPolicy } from './types'
 import { windowToken, WINDOW_TOKEN_HEADER, productPhase, noteSessionLost } from './product'
+import { platformErrorText } from './i18n'
 
 // TaskResponse matches the Go server task struct.
 export interface TaskResponse {
@@ -32,6 +33,7 @@ export interface TaskResponse {
 export async function readErrorMessage(res: Response, fallback: string): Promise<string> {
   try {
     const body = await res.json()
+    if (typeof body?.code === 'string' && body.code) return platformErrorText(body.code)
     if (typeof body?.error === 'string' && body.error) return body.error
     if (typeof body?.message === 'string' && body.message) return body.message
   } catch {
@@ -52,6 +54,7 @@ export class RequestError extends Error {
     public code: string | null = null,
     public field: string | null = null,
     public word: string | null = null,
+    public serverMessage: string | null = null,
   ) {
     super(message)
     this.name = 'RequestError'
@@ -72,13 +75,15 @@ export async function request<T>(path: string, init?: RequestInit): Promise<T> {
     let code: string | null = null
     let field: string | null = null
     let word: string | null = null
+    let serverMessage: string | null = null
     try {
       const body = await res.json()
       if (res.status === 403 && body?.error === 'product_gate') {
         productPhase.set('blocked')
       }
-      if (typeof body?.error === 'string' && body.error) message = body.error
-      else if (typeof body?.message === 'string' && body.message) message = body.message
+      if (typeof body?.error === 'string' && body.error) serverMessage = body.error
+      else if (typeof body?.message === 'string' && body.message) serverMessage = body.message
+      if (serverMessage) message = serverMessage
       // OCTO-FORK: V-76 — carry the machine-code envelope so a product call can
       // map a code (invalid_word) to copy; product.ts reads code/field its own
       // way over productFetch, this is the request()-side equivalent.
@@ -93,7 +98,9 @@ export async function request<T>(path: string, init?: RequestInit): Promise<T> {
     // reporting an error the user cannot act on (需求基线 E12, P4-拦截页 §4).
     // Same rule as the product calls; noteSessionLost owns it (V-21).
     noteSessionLost(res.status)
-    throw new RequestError(message, code, field, word)
+    // OCTO-FORK: the translated code is user-facing; keep raw server copy for diagnostics.
+    if (code) message = platformErrorText(code)
+    throw new RequestError(message, code, field, word, serverMessage)
   }
   return res.json() as Promise<T>
 }

@@ -1,7 +1,7 @@
 <script lang="ts">
   import { onMount } from 'svelte'
   import { get } from 'svelte/store'
-  import { t, locale, setLocale } from '../lib/i18n'
+  import { t, locale, setLocale, platformErrorKey } from '../lib/i18n'
   import { productState, blockedPage, sendCode, login, setProductLocale, ProductError, failureTier, tierRetryable, refreshProductState, type DictionaryNotice } from '../lib/product'
   import { normalizePhoneParts } from '../lib/phone'
   import { dialCodeOptions } from '../lib/dialCodes'
@@ -140,7 +140,8 @@
       } else if (e instanceof ProductError && e.fieldErrors.phone) {
         fieldErrors = { ...fieldErrors, phone: e.fieldErrors.phone }
       } else {
-        showToast($t('product.send_failed'), 'error')
+        // OCTO-FORK: render a known platform code in the selected language.
+        showToast($t(e instanceof ProductError && e.code ? platformErrorKey(e.code) : 'product.send_failed'), 'error')
       }
     } finally {
       sending = false
@@ -263,7 +264,7 @@
       case 'nickname_sensitive': return 'product.err_nickname_sensitive'
       case 'invalid_activation': return 'product.err_activation'
       case 'invalid_box_code': return 'product.err_box_code'
-      default: return ''
+      default: return platformErrorKey(fieldErrors[field])
     }
   }
 
@@ -301,6 +302,8 @@
       default: break
     }
     if (!formError) return ''
+    const platformKey = platformErrorKey(formError)
+    if (platformKey !== 'platform.error.generic') return platformKey
     // An unmapped code is a contract violation (本地API契约 §3), and falling
     // silently to the generic copy is exactly what that section forbids - but the
     // old empty-string default was worse than either: it rendered nothing. Say it

@@ -15,7 +15,8 @@ New-Item -ItemType Directory -Path $previewRoot -Force | Out-Null
 $priorCGO = $env:CGO_ENABLED
 Push-Location (Join-Path $clientRoot 'cmd\octo-desktop')
 try {
-    $env:CGO_ENABLED = '0'
+    # WebView2's Windows loader requires the CGO-enabled desktop build.
+    $env:CGO_ENABLED = '1'
     & go build '-ldflags=-H windowsgui' -o $nextExe .
     if ($LASTEXITCODE -ne 0) { throw 'Desktop build failed; current client was not stopped.' }
 } finally {

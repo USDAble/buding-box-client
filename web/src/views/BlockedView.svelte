@@ -3,7 +3,9 @@
   import { get } from 'svelte/store'
   import { t, locale, setLocale } from '../lib/i18n'
   import { productState, blockedPage, sendCode, login, setProductLocale, ProductError, failureTier, tierRetryable, refreshProductState, type DictionaryNotice } from '../lib/product'
-  import { normalizePhone } from '../lib/phone'
+  import { normalizePhoneParts } from '../lib/phone'
+  import { dialCodeOptions } from '../lib/dialCodes'
+  import { getCountryCallingCode, type CountryCode } from 'libphonenumber-js/min'
   import { randomNickname, validateNickname } from '../lib/nickname'
   import { brandName, brandTagline, brandTermsTitle, brandPrivacyTitle } from '../lib/brand'
   import { showToast } from '../lib/stores'
@@ -16,6 +18,13 @@
   // shows at once, then the business checks short-circuit server-side.
 
   let phone = $state('')
+  // OCTO-FORK: keep area code separate in the UI; all requests still use E.164.
+  let selectedCountry = $state<CountryCode>('CN')
+  let dialOpen = $state(false)
+  let dialSearch = $state('')
+  let dialPickerElement = $state<HTMLElement>()
+  const selectedDialCode = $derived(`+${getCountryCallingCode(selectedCountry)}`)
+  const availableDialCodes = $derived(dialCodeOptions($locale, dialSearch))
   let code = $state('')
   let nickname = $state('')
   let activationCode = $state('')
@@ -108,7 +117,7 @@
   }
 
   async function onSendCode() {
-    const normalized = normalizePhone(phone)
+    const normalized = normalizePhoneParts(selectedDialCode, phone)
     if (!normalized.ok) {
       fieldErrors = { ...fieldErrors, phone: 'invalid_phone' }
       return
@@ -186,7 +195,7 @@
   async function doSubmit() {
     // Round one — format. Every failure is collected and shown at once.
     const errs: Record<string, string> = {}
-    const normalizedPhone = normalizePhone(phone)
+    const normalizedPhone = normalizePhoneParts(selectedDialCode, phone)
     if (!normalizedPhone.ok) errs.phone = 'invalid_phone'
     if (!/^\d{6}$/.test(code)) errs.code = 'invalid_code'
     if (validateNickname(nickname) !== 'ok') errs.nickname = 'nickname_format'
@@ -304,6 +313,10 @@
   }
 </script>
 
+<svelte:window onkeydown={(event) => { if (event.key === 'Escape') dialOpen = false }} onpointerdown={(event) => {
+  if (dialOpen && dialPickerElement && !dialPickerElement.contains(event.target as Node)) dialOpen = false
+}} />
+
 <div class="blocked">
   <div class="lang-switch">
     <button class:on={$locale === 'zh'} onclick={() => pickLang('zh')}>中文</button>
@@ -354,7 +367,28 @@
     <form class="form" onsubmit={onSubmit} novalidate>
       <div class="field">
         <label for="phone">{$t('product.phone_label')}</label>
-        <input id="phone" type="tel" inputmode="tel" bind:value={phone} placeholder={$t('product.phone_placeholder')} autocomplete="tel" />
+        <div class="phone-row">
+          <div class="dial-picker" bind:this={dialPickerElement}>
+            <button type="button" class="dial-trigger" aria-label={$t('product.dial_code_label')} aria-expanded={dialOpen} onclick={() => { dialOpen = !dialOpen; dialSearch = '' }}>
+              {selectedDialCode}<span class="dial-chevron" aria-hidden="true"></span>
+            </button>
+            {#if dialOpen}
+              <div class="dial-menu">
+                <input class="dial-search" type="search" bind:value={dialSearch} placeholder={$t('product.dial_code_search')} aria-label={$t('product.dial_code_search')} />
+                <div class="dial-list">
+                  {#each availableDialCodes as option (option.region)}
+                    <button type="button" class:selected={option.region === selectedCountry} onclick={() => { selectedCountry = option.region; dialOpen = false; fieldErrors.phone = '' }}>
+                      <span>{option.name}</span><span class="dial-list-code">{option.code}{#if option.region === selectedCountry}<span class="dial-check">✓</span>{/if}</span>
+                    </button>
+                  {/each}
+                  {#if availableDialCodes.length === 0}<p>{$t('product.dial_code_empty')}</p>{/if}
+                </div>
+              </div>
+            {/if}
+          </div>
+          <input id="phone" type="tel" inputmode="tel" bind:value={phone} placeholder={$t('product.phone_placeholder')} autocomplete="tel-national" />
+        </div>
+        <p class="field-hint">{$t('product.phone_local_hint')}</p>
         {#if fieldErrors.phone}<p class="field-err">{$t(fieldErrorKey('phone'))}</p>{/if}
       </div>
 
@@ -495,6 +529,22 @@
   background: var(--bg-container); outline: none;
 }
 .field input:focus { border-color: var(--blue-6); box-shadow: 0 0 0 2px var(--active-blue-bg); }
+.phone-row { display: flex; gap: 8px; align-items: stretch; }
+.dial-picker { position: relative; flex: 0 0 82px; }
+.dial-trigger { width: 82px; height: 38px; display: flex; align-items: center; justify-content: space-between; padding: 0 10px; border: 1px solid var(--border); border-radius: 8px; background: var(--bg-container); color: var(--text); font: inherit; cursor: pointer; }
+.dial-trigger:hover { border-color: var(--blue-6); }
+.dial-chevron { flex: 0 0 6px; width: 6px; height: 6px; margin: -3px 2px 0 0; border-right: 1.5px solid var(--text-tertiary); border-bottom: 1.5px solid var(--text-tertiary); transform: rotate(45deg); }
+.dial-menu { position: absolute; z-index: 20; top: 44px; left: 0; width: min(260px, 78vw); padding: 8px; border: 1px solid var(--border); border-radius: 10px; background: var(--bg-container); box-shadow: 0 12px 28px rgb(0 0 0 / 14%); }
+.dial-search { width: 100%; height: 34px; padding: 0 10px; border: 1px solid var(--border); border-radius: 7px; background: var(--bg-container); color: var(--text); font: inherit; outline: none; }
+.dial-search:focus { border-color: var(--blue-6); box-shadow: 0 0 0 2px var(--active-blue-bg); }
+.dial-list { max-height: 176px; overflow-y: auto; margin-top: 5px; }
+.dial-list button { display: flex; justify-content: space-between; gap: 12px; width: 100%; padding: 7px 8px; border: 0; border-radius: 6px; background: transparent; color: var(--text); font: inherit; text-align: left; cursor: pointer; }
+.dial-list button:hover, .dial-list button.selected { background: var(--active-blue-bg); color: var(--blue-6); }
+.dial-list-code { display: flex; gap: 8px; white-space: nowrap; color: var(--text-tertiary); }
+.dial-list button.selected .dial-list-code { color: var(--blue-6); }
+.dial-check { font-weight: 700; }
+.dial-list p { margin: 8px; color: var(--text-tertiary); font-size: 12px; }
+.phone-row input { min-width: 0; flex: 1; }
 .field input::placeholder { color: var(--text-quaternary); }
 .field-err { margin: 0; font-size: 12px; color: var(--error); }
 .field-hint { margin: 0; font-size: 12px; color: var(--text-tertiary); }

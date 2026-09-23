@@ -1213,7 +1213,13 @@ export const en: Record<string, string> = {
   // the product baseline. Kept in one block at the tail of
   // each dictionary so upstream merges collide at the tail rather than mid-file.
   "product.phone_label": "Phone number",
-  "product.phone_placeholder": "Enter phone number with country code",
+  "product.phone_placeholder": "Phone number",
+  // OCTO-FORK: the activation form now submits E.164 from two localized inputs.
+  "product.dial_code_label": "Country or region code",
+  "product.dial_code_search": "Search country or code",
+  "product.dial_code_empty": "No matching region",
+  "product.dial_code_other": "Other code",
+  "product.phone_local_hint": "Enter the local number only. International SMS requires the destination to be enabled.",
   "product.code_label": "Verification code",
   "product.code_placeholder": "6-digit code",
   "product.send_code": "Send code",
@@ -2602,7 +2608,13 @@ export const zh: Record<string, string> = {
   // the product baseline。集中在每份字典末尾，让上游合并
   // 冲突只发生在尾部。
   "product.phone_label": "手机号",
-  "product.phone_placeholder": "请输入手机号（支持国际区号，如 +86）",
+  "product.phone_placeholder": "请输入手机号",
+  // OCTO-FORK: the activation form now submits E.164 from two localized inputs.
+  "product.dial_code_label": "国家或地区区号",
+  "product.dial_code_search": "搜索国家、地区或区号",
+  "product.dial_code_empty": "没有找到匹配的地区",
+  "product.dial_code_other": "其他区号",
+  "product.phone_local_hint": "只填区号后的号码；国际短信需先开通对应地区。",
   "product.code_label": "验证码",
   "product.code_placeholder": "6 位验证码",
   "product.send_code": "发送验证码",

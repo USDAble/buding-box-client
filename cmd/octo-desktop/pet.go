@@ -2,9 +2,12 @@ package main
 
 import (
 	_ "embed"
+	"html"
 	"strconv"
+	"strings"
 	"time"
 
+	"github.com/open-octo/octo-agent/internal/brand"
 	"github.com/open-octo/octo-agent/internal/server"
 	"github.com/wailsapp/wails/v3/pkg/application"
 )
@@ -18,12 +21,19 @@ const (
 	petStateBusy  = server.ActivityBusy
 )
 
-// petHTML is self-contained (inline CSS/SVG/JS) and is handed to the webview
+// petHTMLTemplate is self-contained (inline CSS/SVG/JS) and is handed to the webview
 // as a literal page rather than served: the pet must not depend on the hub
 // being up, and it has nothing to do with the web UI's vite bundle.
 //
 //go:embed pet.html
-var petHTML string
+var petHTMLTemplate string
+
+// petDocumentHTML keeps the embedded page's title and accessibility label on
+// the same configured product identity as the native window around it.
+func petDocumentHTML() string {
+	name := html.EscapeString(brand.Load().Name(brand.DefaultLocale))
+	return strings.ReplaceAll(petHTMLTemplate, "{{PRODUCT_NAME}}", name)
+}
 
 const (
 	// petSize is the pet window's edge in points. The SVG fits its own viewBox
@@ -174,7 +184,8 @@ func (b *nativeBridge) togglePet() {
 // working in still active.
 func (b *nativeBridge) showPet() {
 	opts := application.WebviewWindowOptions{
-		Title:            "Octo",
+		// OCTO-FORK: pet window metadata follows the configured product name.
+		Title:            brand.Load().Name(brand.DefaultLocale),
 		Width:            petSize,
 		Height:           petSize,
 		Frameless:        true,
@@ -182,7 +193,7 @@ func (b *nativeBridge) showPet() {
 		DisableResize:    true,
 		BackgroundType:   application.BackgroundTypeTransparent,
 		BackgroundColour: application.RGBA{},
-		HTML:             petHTML,
+		HTML:             petDocumentHTML(),
 		Mac: application.MacWindow{
 			// Backdrop is what actually makes the window transparent on macOS:
 			// the cross-platform BackgroundType above is never read by the

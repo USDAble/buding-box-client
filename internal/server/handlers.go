@@ -221,8 +221,8 @@ func entryForSession(cfg config.Config, sess *agent.Session) config.ModelEntry {
 // default here is the fallback for sessions with none.
 func (srv *Server) sessionStatusFields(sess *agent.Session) (workingDir, permissionMode, reasoningEffort string, showReasoning *bool, contextUsage int) {
 	workingDir = srv.cwd
-	if sess != nil && sess.PermissionMode != "" {
-		permissionMode = sess.PermissionMode
+	if sess != nil && sess.PermissionModeValue() != "" {
+		permissionMode = sess.PermissionModeValue()
 	} else {
 		permissionMode = string(resolvePermissionMode())
 	}
@@ -1653,6 +1653,19 @@ func (s *Server) handleUpdateSessionPermissionMode(w http.ResponseWriter, r *htt
 		writeError(w, http.StatusInternalServerError, fmt.Sprintf("save session: %v", err))
 		return
 	}
+
+	// OCTO-FORK: update the live session and gate as well as the persisted copy;
+	// otherwise a running turn keeps the old mode and may save it back at turn end.
+	s.sessionAgentsMu.Lock()
+	if live := s.liveSessions[id]; live != nil {
+		live.SetPermissionModeValue(mode)
+	}
+	if liveAgent := s.sessionAgents[id]; liveAgent != nil && liveAgent.Gate != nil {
+		if setter, ok := liveAgent.Gate.(interface{ SetMode(permission.Mode) }); ok {
+			setter.SetMode(permission.Mode(mode))
+		}
+	}
+	s.sessionAgentsMu.Unlock()
 
 	// Push the new mode so this session's composer pill refreshes without
 	// waiting for the next turn's session_update. Only this session — it's

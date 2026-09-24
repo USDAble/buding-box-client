@@ -9,6 +9,7 @@
   import { randomNickname, validateNickname } from '../lib/nickname'
   import { brandName, brandTagline, brandTermsTitle, brandPrivacyTitle } from '../lib/brand'
   import { showToast } from '../lib/stores'
+  import * as api from '../lib/api'
   import BrandMark from '../components/BrandMark.svelte'
   import LegalModal from '../components/overlays/LegalModal.svelte'
 
@@ -18,13 +19,18 @@
   // shows at once, then the business checks short-circuit server-side.
 
   let phone = $state('')
-  // OCTO-FORK: keep area code separate in the UI; all requests still use E.164.
+  // OCTO-FORK: keep area code separate in the UI; local auth receives split fields.
   let selectedCountry = $state<CountryCode>('CN')
   let dialOpen = $state(false)
   let dialSearch = $state('')
   let dialPickerElement = $state<HTMLElement>()
   const selectedDialCode = $derived(`+${getCountryCallingCode(selectedCountry)}`)
   const availableDialCodes = $derived(dialCodeOptions($locale, dialSearch))
+  const normalizedPhone = $derived(normalizePhoneParts(selectedDialCode, phone))
+  const localPhone = $derived({
+    phone: normalizedPhone.value.slice(selectedDialCode.length),
+    region_code: selectedDialCode.slice(1),
+  })
   let code = $state('')
   let nickname = $state('')
   let activationCode = $state('')
@@ -35,6 +41,7 @@
   let sending = $state(false)
   let submitting = $state(false)
   let countdown = $state(0)
+  let sentCodePhone = $state('')
   let nicknameEdited = $state(false)
   let legalModal = $state<null | 'terms' | 'privacy'>(null)
 	// OCTO-FORK: reuse login IDs after transport failures; legal publications are informational.
@@ -92,19 +99,19 @@
     // already filled prefs.locale with the system language when unset.
     const loc = $productState?.prefs?.locale
     if (loc === 'zh' || loc === 'en') setLocale(loc)
-    // Second login prefills the last nickname; first activation seeds a fresh
-    // random default in the current UI language (需求 §5.3.3 / §5.3.4).
-    nickname = $productState?.account?.nickname || randomNickname($locale === 'zh' ? 'zh' : 'en')
+    // OCTO-FORK: a retained account nickname belongs to the old login, not
+    // to a new activation. Seed once per wall; form switching keeps this value.
+    nickname = randomNickname($locale === 'zh' ? 'zh' : 'en')
     return () => { if (timer) clearInterval(timer) }
   })
 
   function pickLang(l: 'zh' | 'en') {
     setLocale(l)
     setProductLocale(l).catch(() => {})
-    // Regenerate the default nickname only when there is no bound account and
-    // the user hasn't edited it — a language switch must not wipe a typed name
-    // (需求 §5.3.3) nor replace a prefilled last nickname (§5.3.4).
-    if (!nicknameEdited && !$productState?.account?.nickname) nickname = randomNickname(l)
+    // OCTO-FORK: persist the login-page language for the Settings page.
+    api.updateLanguage(l).catch(() => {})
+    // OCTO-FORK: only an unedited value follows an explicit language switch.
+    if (!nicknameEdited) nickname = randomNickname(l)
   }
 
   function startCountdown(secs: number) {
@@ -117,7 +124,7 @@
   }
 
   async function onSendCode() {
-    const normalized = normalizePhoneParts(selectedDialCode, phone)
+    const normalized = normalizedPhone
     if (!normalized.ok) {
       fieldErrors = { ...fieldErrors, phone: 'invalid_phone' }
       return
@@ -125,11 +132,15 @@
     fieldErrors = { ...fieldErrors, phone: '' }
     sending = true
     try {
-      const secs = await sendCode(normalized.value)
+      const secs = await sendCode(localPhone.phone, localPhone.region_code)
+      sentCodePhone = normalized.value
+      code = ''
+      fieldErrors = { ...fieldErrors, code: '' }
       startCountdown(secs)
       showToast($t('product.code_sent'))
     } catch (e) {
       if (e instanceof ProductError && e.retryAfterSec != null) {
+        sentCodePhone = normalized.value
         startCountdown(e.retryAfterSec)
       } else if (e instanceof ProductError && failureTier(e.code)) {
         // A control-plane tier is not a phone problem. Filing it under the field
@@ -196,10 +207,9 @@
   async function doSubmit() {
     // Round one — format. Every failure is collected and shown at once.
     const errs: Record<string, string> = {}
-    const normalizedPhone = normalizePhoneParts(selectedDialCode, phone)
     if (!normalizedPhone.ok) errs.phone = 'invalid_phone'
     if (!/^\d{6}$/.test(code)) errs.code = 'invalid_code'
-    if (validateNickname(nickname) !== 'ok') errs.nickname = 'nickname_format'
+    if (activationForm && validateNickname(nickname) !== 'ok') errs.nickname = 'nickname_format'
     if (activationForm && !activationCode.trim()) errs.activationCode = 'invalid_activation'
     // Box code: non-empty only. Its length/charset are the server's call
     // (需求基线 E1 rule 4) — the client must not pre-judge validity.
@@ -209,14 +219,15 @@
     formError = null
     phoneMasked = null
     submitting = true
-	const attemptPayload = JSON.stringify([normalizedPhone.value, code, nickname, activationForm, activationCode, boxCode])
+	const attemptPayload = JSON.stringify([normalizedPhone.value, code, activationForm ? nickname : '', activationForm, activationCode, boxCode])
 	if (loginAttempt.payload !== attemptPayload) loginAttempt = { payload: attemptPayload, id: crypto.randomUUID() }
     try {
       const result = await login({
 		clientRequestId: loginAttempt.id,
-        phone: normalizedPhone.value,
+        phone: localPhone.phone,
+        region_code: localPhone.region_code,
         code,
-        nickname,
+        nickname: activationForm ? nickname : undefined,
         activationCode: activationForm ? activationCode.trim() : undefined,
         boxCode: activationForm ? boxCode.trim() : undefined,
       })
@@ -399,8 +410,8 @@
         <label for="code">{$t('product.code_label')}</label>
         <div class="code-row">
           <input id="code" type="text" inputmode="numeric" maxlength="6" bind:value={code} placeholder={$t('product.code_placeholder')} autocomplete="one-time-code" />
-          <button type="button" class="send-btn" onclick={onSendCode} disabled={sending || countdown > 0}>
-            {countdown > 0
+          <button type="button" class="send-btn" onclick={onSendCode} disabled={sending || (countdown > 0 && sentCodePhone === normalizedPhone.value)}>
+            {countdown > 0 && sentCodePhone === normalizedPhone.value
               ? $t('product.resend_in').replaceAll('{s}', String(countdown))
               : $t('product.send_code')}
           </button>
@@ -424,11 +435,14 @@
         </div>
       {/if}
 
-      <div class="field">
-        <label for="nickname">{$t('product.nickname_label')}</label>
-        <input id="nickname" type="text" bind:value={nickname} oninput={() => (nicknameEdited = true)} placeholder={$t('product.nickname_placeholder')} />
-        {#if fieldErrors.nickname}<p class="field-err">{$t(fieldErrorKey('nickname'))}</p>{/if}
-      </div>
+      <!-- OCTO-FORK: an existing account's nickname is not edited during SMS sign-in. -->
+      {#if activationForm}
+        <div class="field">
+          <label for="nickname">{$t('product.nickname_label')}</label>
+          <input id="nickname" type="text" bind:value={nickname} oninput={() => (nicknameEdited = true)} placeholder={$t('product.nickname_placeholder')} />
+          {#if fieldErrors.nickname}<p class="field-err">{$t(fieldErrorKey('nickname'))}</p>{/if}
+        </div>
+      {/if}
 
       <button type="submit" class="submit-btn" disabled={submitting}>
         {submitting

@@ -36,6 +36,12 @@ func TestARefusedSignInWithdrawsTheLocalActivationClaim(t *testing.T) {
 	if status, _ := h.sendCode("13800002222"); status != http.StatusOK {
 		t.Fatalf("send-code status = %d, want 200", status)
 	}
+	formatStatus, formatBody := h.login(map[string]any{
+		"phone": "13800002222", "code": "123",
+	})
+	if formatStatus != http.StatusBadRequest || fieldErrorsOf(t, formatBody)["code"] != productclient.CodeInvalidCode {
+		t.Fatalf("malformed SMS code = %d %v, want a field-level invalid_code", formatStatus, formatBody)
+	}
 	status, body := h.login(map[string]any{
 		"phone": "13800002222", "code": clienttest.FixtureSMSCode, "nickname": "second",
 	})
@@ -218,13 +224,15 @@ func TestAWrongSMSCodeNeverWithdrawsTheClaim(t *testing.T) {
 		t.Fatalf("send-code status = %d, want 200", status)
 	}
 	status, body := h.login(map[string]any{
-		"phone": "13800002222", "code": "000000", "nickname": "second",
+		"phone": "13800002222", "code": "000000",
 	})
 	if status == http.StatusOK {
 		t.Fatalf("login with a wrong SMS code = 200 %v", body)
 	}
-	if got := fieldErrorsOf(t, body)["code"]; got != productclient.CodeInvalidCode {
-		t.Fatalf("field error for code = %v, want %q", got, productclient.CodeInvalidCode)
+	// OCTO-FORK: six well-formed digits rejected by the platform are not a
+	// format error; the UI must show the incorrect-or-expired message.
+	if got := body["code"]; got != productclient.CodeInvalidCode {
+		t.Fatalf("business code = %v, want %q", got, productclient.CodeInvalidCode)
 	}
 	if got := h.readStateFile()["activated"]; got != true {
 		t.Errorf("state file activated = %v after a wrong SMS code, want true", got)

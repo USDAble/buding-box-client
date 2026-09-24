@@ -1,6 +1,22 @@
 package main
 
-import "testing"
+import (
+	"strings"
+	"testing"
+
+	"github.com/open-octo/octo-agent/internal/brand"
+)
+
+// OCTO-FORK: the embedded pet page must not expose its upstream template name.
+func TestPetDocumentUsesConfiguredBrand(t *testing.T) {
+	doc := petDocumentHTML()
+	if strings.Contains(doc, "{{PRODUCT_NAME}}") {
+		t.Fatal("petDocumentHTML left the product-name placeholder unresolved")
+	}
+	if name := brand.Load().Name(brand.DefaultLocale); !strings.Contains(doc, name) {
+		t.Fatalf("petDocumentHTML does not contain configured name %q", name)
+	}
+}
 
 // The corners are the whole reason shape-aware pass-through exists: a 200pt
 // square dropped on the desktop overlaps things the user meant to click, and

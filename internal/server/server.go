@@ -4235,8 +4235,9 @@ func (s *Server) runChannelTurns(ctx context.Context, sess *channel.Session, ad 
 	// BeginRun so it can't race the previous turn's gate. An engine failure
 	// aborts the turn — running ungated is never an acceptable fallback.
 	mode := resolvePermissionMode()
-	if st := sess.Store; st != nil && st.PermissionMode != "" {
-		mode = permission.Mode(st.PermissionMode)
+	// OCTO-FORK: channel turns share the same synchronized live-session mode path.
+	if st := sess.Store; st != nil && st.PermissionModeValue() != "" {
+		mode = permission.Mode(st.PermissionModeValue())
 	}
 	engine, err := permission.New(permissionConfigPath(), cwd, mode, s.memoryWriteRoots()...)
 	if err != nil {

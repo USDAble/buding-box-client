@@ -664,13 +664,15 @@ func (s *Session) metaRecord() sessionRecord {
 	// hold mu (only rewriteAll calls this, and never under the lock).
 	s.mu.Lock()
 	var goal *Goal
+	// OCTO-FORK: read the live mode under the session lock while a Web turn may update it.
+	permissionMode := s.PermissionMode
 	if s.Goal != nil {
 		g := *s.Goal
 		goal = &g
 	}
 	s.mu.Unlock()
 	policy := s.ProtectionPolicy
-	return sessionRecord{Type: "meta", ID: s.ID, CreatedAt: s.CreatedAt, Model: s.Model, System: s.System, ComposedSystem: s.ComposedSystem, ComposedLeanSystem: s.ComposedLeanSystem, ComposedForModel: s.ComposedForModel, ComposedForCWD: s.ComposedForCWD, ComposedForSourceDirs: s.ComposedForSourceDirs, Title: s.Title, Source: s.Source, ModelConfig: s.ModelConfig, AgentID: s.AgentID, WorkingDir: s.WorkingDir, PermissionMode: s.PermissionMode, ProtectionPolicy: &policy, LastContextTokens: s.LastContextTokens, ContentUpdatedAt: s.ContentUpdatedAt, BoundEntry: s.BoundEntry, BoundAt: s.BoundAt, HookStarted: s.HookStarted, BranchedFrom: s.BranchedFrom, Goal: goal}
+	return sessionRecord{Type: "meta", ID: s.ID, CreatedAt: s.CreatedAt, Model: s.Model, System: s.System, ComposedSystem: s.ComposedSystem, ComposedLeanSystem: s.ComposedLeanSystem, ComposedForModel: s.ComposedForModel, ComposedForCWD: s.ComposedForCWD, ComposedForSourceDirs: s.ComposedForSourceDirs, Title: s.Title, Source: s.Source, ModelConfig: s.ModelConfig, AgentID: s.AgentID, WorkingDir: s.WorkingDir, PermissionMode: permissionMode, ProtectionPolicy: &policy, LastContextTokens: s.LastContextTokens, ContentUpdatedAt: s.ContentUpdatedAt, BoundEntry: s.BoundEntry, BoundAt: s.BoundAt, HookStarted: s.HookStarted, BranchedFrom: s.BranchedFrom, Goal: goal}
 }
 
 // MarkHookStarted records that SessionStart has fired for this session, so a
@@ -1124,10 +1126,10 @@ func (s *Session) SetAgentID(id string) error {
 // in memory for a not-yet-saved session until its first Save folds it into
 // the meta header. Setting the mode already in place is a no-op.
 func (s *Session) SetPermissionMode(mode string) error {
-	if mode == s.PermissionMode {
+	if mode == s.PermissionModeValue() {
 		return nil
 	}
-	s.PermissionMode = mode
+	s.SetPermissionModeValue(mode)
 	if s.persisted == 0 {
 		// See SetWorkingDir: a meta-only transcript must be rewritten now, since
 		// the load-modify-discard handler won't get a "next Save"; a session with
@@ -1156,6 +1158,25 @@ func (s *Session) SetPermissionMode(mode string) error {
 		return fmt.Errorf("session: append permission_mode: %w", err)
 	}
 	return nil
+}
+
+// PermissionModeValue reads the session mode safely while a live web turn may
+// be persisting the same Session concurrently.
+func (s *Session) PermissionModeValue() string {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.PermissionMode
+}
+
+// SetPermissionModeValue updates a live session without writing a second
+// transcript copy. The server persists the request on its loaded copy; the
+// live value is needed so the running turn's next save cannot restore the old
+// mode during a rewrite.
+// OCTO-FORK: a permission-mode change must reach the in-flight web session.
+func (s *Session) SetPermissionModeValue(mode string) {
+	s.mu.Lock()
+	s.PermissionMode = mode
+	s.mu.Unlock()
 }
 
 // SetComposedSystem freezes the fully-composed system prompt (base + env +

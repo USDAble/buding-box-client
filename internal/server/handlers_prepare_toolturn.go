@@ -117,8 +117,9 @@ func (s *Server) prepareToolTurn(ctx context.Context, a *agent.Agent, sess *agen
 	// prepareToolTurn call, cron-scheduled sessions included (task.Directory
 	// only ever seeds sess.WorkingDir once, at session creation).
 	mode := resolvePermissionMode()
-	if sess != nil && sess.PermissionMode != "" {
-		mode = permission.Mode(sess.PermissionMode)
+	// OCTO-FORK: read a live session's mode through its synchronized accessor.
+	if sess != nil && sess.PermissionModeValue() != "" {
+		mode = permission.Mode(sess.PermissionModeValue())
 	}
 	if sess != nil && sess.Source == "cron" && mode == permission.ModeInteractive {
 		// interactive was never functional for a cron tick — nobody is present

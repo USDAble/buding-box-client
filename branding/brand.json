@@ -38,6 +38,10 @@
     }
   },
   "copy": {
+    "sessionDefaultTitle": {
+      "zh-CN": "Puddingbox agent",
+      "en-US": "Puddingbox agent"
+    },
     "termsBody": {
       "zh-CN": "本页为开发占位，非正式协议。",
       "en-US": "Placeholder for development. Not a legal agreement."
@@ -45,6 +49,66 @@
     "privacyBody": {
       "zh-CN": "本页为开发占位，非正式协议。",
       "en-US": "Placeholder for development. Not a legal agreement."
+    },
+    "helpTitle": {
+      "zh-CN": "帮助与反馈",
+      "en-US": "Help & feedback"
+    },
+    "helpSubtitle": {
+      "zh-CN": "查找常见问题的答案，或把你的使用体验告诉我们。",
+      "en-US": "Find quick answers or tell us about your experience."
+    },
+    "helpCenterTitle": {
+      "zh-CN": "官网帮助中心",
+      "en-US": "Official help center"
+    },
+    "helpCenterDescription": {
+      "zh-CN": "前往官网查看完整的产品指南、使用教程和问题排查说明。",
+      "en-US": "Visit the website for complete guides, tutorials, and troubleshooting."
+    },
+    "helpFeedbackNotice": {
+      "zh-CN": "只会发送你主动填写的内容，不会附带聊天记录或诊断信息。",
+      "en-US": "Only what you enter is sent. Chats and diagnostics are never attached."
+    },
+    "helpModelsQuestion": {
+      "zh-CN": "如何选择或切换模型？",
+      "en-US": "How do I choose or change a model?"
+    },
+    "helpModelsAnswer": {
+      "zh-CN": "在发送消息前，使用聊天输入区的模型选择器。私密会话只能使用已标记为私密的模型。",
+      "en-US": "Use the model picker in the chat composer before sending a message. A private session can only use a model marked private."
+    },
+    "helpPersonalQuestion": {
+      "zh-CN": "个人信息保护会做什么？",
+      "en-US": "What does personal-information protection do?"
+    },
+    "helpPersonalAnswer": {
+      "zh-CN": "在新会话中开启后，支持识别的个人信息会在消息发送前被替换，聊天界面会提示已受到保护。",
+      "en-US": "When enabled for a new chat, supported personal information is replaced before the message is sent and the chat shows that it was protected."
+    },
+    "helpPrivateQuestion": {
+      "zh-CN": "什么是私密会话？",
+      "en-US": "What is a private session?"
+    },
+    "helpPrivateAnswer": {
+      "zh-CN": "私密会话必须使用私密模型。没有可用的合格模型时，需要先选择一个才能发送消息。",
+      "en-US": "A private session requires a private model. If no eligible model is available, select one before sending a message."
+    },
+    "helpUnavailableQuestion": {
+      "zh-CN": "模型或网络不可用时怎么办？",
+      "en-US": "What should I do when a model or the network is unavailable?"
+    },
+    "helpUnavailableAnswer": {
+      "zh-CN": "请检查网络后重试，或选择另一个可用模型。未发送的消息会保留在输入区。",
+      "en-US": "Check your connection, then retry or choose another available model. Your unsent message remains in the composer."
+    },
+    "helpBoxQuestion": {
+      "zh-CN": "我的盒子可以做什么？",
+      "en-US": "What can my box do?"
+    },
+    "helpBoxAnswer": {
+      "zh-CN": "已绑定的盒子可以提供私有模型。其他私有能力只有在服务端授权后才会显示在这里。",
+      "en-US": "A bound box can make private models available. Other private capabilities appear only after the service authorises them."
     }
   },
   "display": {
@@ -93,7 +157,8 @@
     },
     "external": {
       "license": "https://github.com/open-octo/octo-agent/blob/main/LICENSE.txt",
-      "website": "https://octo-agent.dev/"
+      "website": "https://octo-agent.dev/",
+      "helpCenter": ""
     }
   },
   "visual": {

@@ -33,6 +33,96 @@ afterEach(async () => {
 })
 function activePage() { return target.querySelector('.rail [aria-current="page"]')?.textContent?.trim() }
 function open() { app = mount(SettingsModal, { target }); flushSync() }
+function nicknameEditor() { return target.querySelector<HTMLInputElement>('.account-edit input') }
+function nicknameButton(label: string) {
+  return [...target.querySelectorAll<HTMLButtonElement>('.account-edit button')].find(button => button.textContent?.trim() === label)!
+}
+function editNickname(value: string) {
+  nicknameButton('编辑').click(); flushSync()
+  const input = nicknameEditor()!
+  input.value = value; input.dispatchEvent(new Event('input', { bubbles: true })); flushSync()
+}
+
+it('hides the co-author toggle without removing other agent defaults', async () => {
+  openSettingsAt('agent'); open()
+  await vi.waitFor(() => expect(activePage()).toBe('助手默认值'))
+  expect(target.textContent).toContain('显示推理过程')
+  expect(target.textContent).not.toContain('提交署名')
+})
+
+it('persists the console language for the next login wall', async () => {
+  settingsModalOpen.set(true); open()
+  await vi.waitFor(() => expect(activePage()).toBe('常规'))
+  const select = target.querySelector<HTMLSelectElement>('.setrow select')!
+  select.value = 'en'
+  select.dispatchEvent(new Event('change', { bubbles: true }))
+  flushSync()
+
+  await vi.waitFor(() => {
+    const paths = vi.mocked(globalThis.fetch).mock.calls.map(([input]) => String(input))
+    expect(paths.some(path => path.endsWith('/api/config/language'))).toBe(true)
+    expect(paths.some(path => path.endsWith('/api/product/locale'))).toBe(true)
+  })
+})
+
+it('keeps About information while hiding first-run and removing the license entry', async () => {
+  openSettingsAt('about'); open()
+  await vi.waitFor(() => expect(activePage()).toBe('关于'))
+  expect(target.textContent).toContain('版本')
+  expect(target.textContent).not.toContain('首次引导')
+  expect(target.textContent).not.toContain('开源许可')
+  expect([...target.querySelectorAll('button')].some(button => button.textContent?.includes('重新运行'))).toBe(false)
+})
+
+it('shows the nickname as read-only until Edit and cancels without submitting', async () => {
+  openSettingsAt('account'); open()
+  await vi.waitFor(() => expect(activePage()).toBe('账号'))
+  expect(target.querySelector('.account-edit')?.textContent).toContain('测试用户')
+  expect(nicknameEditor()).toBeNull()
+  editNickname('新昵称')
+  expect(nicknameEditor()?.value).toBe('新昵称')
+  nicknameButton('取消').click(); flushSync()
+  expect(nicknameEditor()).toBeNull()
+  expect(target.querySelector('.account-edit')?.textContent).toContain('测试用户')
+  expect(vi.mocked(globalThis.fetch).mock.calls.some(([input]) => String(input).endsWith('/api/product/nickname'))).toBe(false)
+})
+
+it('submits a nickname only on Save and returns to read-only after success', async () => {
+  const original = globalThis.fetch
+  let sent: { method?: string; body?: unknown } | undefined
+  vi.stubGlobal('fetch', vi.fn(async (input: unknown, init?: RequestInit) => {
+    if (String(input).endsWith('/api/product/nickname')) {
+      sent = { method: init?.method, body: JSON.parse(String(init?.body)) }
+      return json({ state: { ...accountState, account: { nickname: '新昵称' } } })
+    }
+    return original(input as RequestInfo, init)
+  }))
+  openSettingsAt('account'); open()
+  await vi.waitFor(() => expect(activePage()).toBe('账号'))
+  editNickname('新昵称')
+  expect(sent).toBeUndefined()
+  nicknameButton('保存').click()
+  await vi.waitFor(() => expect(nicknameEditor()).toBeNull())
+  expect(sent).toEqual({ method: 'PUT', body: { nickname: '新昵称' } })
+  expect(target.querySelector('.account-edit')?.textContent).toContain('新昵称')
+})
+
+it('keeps the nickname draft editable when Save fails', async () => {
+  const original = globalThis.fetch
+  vi.stubGlobal('fetch', vi.fn(async (input: unknown, init?: RequestInit) => {
+    if (String(input).endsWith('/api/product/nickname')) {
+      return new Response(JSON.stringify({ code: 'internal_error' }), { status: 500, headers: { 'Content-Type': 'application/json' } })
+    }
+    return original(input as RequestInfo, init)
+  }))
+  openSettingsAt('account'); open()
+  await vi.waitFor(() => expect(activePage()).toBe('账号'))
+  editNickname('新昵称')
+  nicknameButton('保存').click()
+  await vi.waitFor(() => expect(target.querySelector('.account-error')).not.toBeNull())
+  expect(nicknameEditor()?.value).toBe('新昵称')
+  expect(nicknameButton('保存').disabled).toBe(false)
+})
 
 it('keeps the wallet selected after its balance fetch and subsequent account refresh', async () => {
   settingsModalOpen.set(true); open()
@@ -78,4 +168,25 @@ it('shows a compact feedback form with optional details and sends the visible fi
   expect(submit.disabled).toBe(false); submit.click()
   await vi.waitFor(() => expect(target.querySelector('[role="status"]')?.textContent).toContain('receipt-visible'))
   expect(sent).toMatchObject({ title: '反馈标题', content: '具体反馈内容', reproduction: '', expected: '', contact: '' })
+})
+
+it('keeps the official help center slot visible but disabled until its brand URL is configured', async () => {
+  openSettingsAt('help'); open()
+  await vi.waitFor(() => expect(target.querySelector('.help-portal-card')).not.toBeNull())
+  expect(target.querySelector('.rail .scat[aria-current="page"]')?.textContent).toContain('帮助与反馈')
+  expect(target.querySelector('.help-portal-card')?.textContent).toContain('官网帮助中心')
+  expect(target.querySelector<HTMLButtonElement>('.help-portal-action')?.disabled).toBe(true)
+  expect(target.querySelector('.help-portal-status')?.textContent).toContain('待配置')
+})
+
+it('opens only one FAQ item at a time', async () => {
+  openSettingsAt('help'); open()
+  await vi.waitFor(() => expect(target.querySelectorAll('.help-faq-item')).toHaveLength(5))
+  const items = [...target.querySelectorAll<HTMLElement>('.help-faq-item')]
+  expect(items[0].classList.contains('open')).toBe(true)
+  items[1].querySelector<HTMLButtonElement>('.help-faq-trigger')?.click()
+  flushSync()
+  expect(items[0].classList.contains('open')).toBe(false)
+  expect(items[1].classList.contains('open')).toBe(true)
+  expect(target.querySelectorAll('.help-faq-item.open')).toHaveLength(1)
 })

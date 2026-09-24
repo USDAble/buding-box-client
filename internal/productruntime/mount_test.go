@@ -296,13 +296,14 @@ func TestFirstActivationEndToEnd(t *testing.T) {
 	m := newMountedHarness(t)
 
 	if status, raw := m.request(t, http.MethodPost, "/api/product/send-code", map[string]any{
-		"phone": "13800001234",
+		"phone": "13800001234", "region_code": "86",
 	}, nil); status != http.StatusOK {
 		t.Fatalf("send-code = %d, want 200 (body: %.200s)", status, raw)
 	}
 
 	status, raw := m.request(t, http.MethodPost, "/api/product/login", map[string]any{
 		"phone":          "13800001234",
+		"region_code":    "86",
 		"code":           clienttest.FixtureSMSCode,
 		"activationCode": clienttest.FixtureActivationCode,
 		"boxCode":        clienttest.FixtureBoxCode,
@@ -500,20 +501,16 @@ func (m *mountedHarness) firstActivation(t *testing.T) {
 
 }
 
-// laterLogin is the second login (需求基线 E2): the account is already
-// activated, so no activation credential is sent - but phone, code AND nickname
-// still are. Nickname is not optional on any login: the second-login form
-// prefills the last one and 本地API契约 §2.3 lists it as a request field, so
-// omitting it is a field-level error, not a mode switch.
+// OCTO-FORK: later SMS login omits nickname and preserves the account name;
+// only first activation asks the user for one.
 func (m *mountedHarness) laterLogin(t *testing.T, phone string) (int, map[string]any) {
 	t.Helper()
 	if status, body := m.post(t, "/api/product/send-code", map[string]any{"phone": phone}); status != http.StatusOK {
 		t.Fatalf("send-code = %d (%v), want 200", status, body)
 	}
 	status, body := m.post(t, "/api/product/login", map[string]any{
-		"phone":    phone,
-		"code":     clienttest.FixtureSMSCode,
-		"nickname": "tester",
+		"phone": phone,
+		"code":  clienttest.FixtureSMSCode,
 	})
 	if status != http.StatusOK {
 		return status, body
@@ -730,6 +727,10 @@ func TestSecondLoginEndToEnd(t *testing.T) {
 	activation, _ := state["activation"].(map[string]any)
 	if activation == nil || activation["boxCode"] != clienttest.FixtureBoxCode {
 		t.Errorf("activation = %v, want the platform's box code %q", activation, clienttest.FixtureBoxCode)
+	}
+	account, _ := state["account"].(map[string]any)
+	if account == nil || account["nickname"] != "tester" {
+		t.Errorf("account = %v, want the nickname from first activation", account)
 	}
 }
 

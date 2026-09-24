@@ -109,9 +109,10 @@ func writePlatformError(w http.ResponseWriter, err error) {
 // 本地API契约 §3 is the owner of this classification; this table is its
 // implementation, so the two change together.
 var fieldLevelCodes = map[string]string{
-	productclient.CodeInvalidCode: "code",
-	"nickname_format":             "nickname",
-	"nickname_sensitive":          "nickname",
+	// OCTO-FORK: a platform-rejected SMS code is a business result, not a
+	// malformed six-digit input; let the form show the wrong-or-expired copy.
+	"nickname_format":    "nickname",
+	"nickname_sensitive": "nickname",
 }
 
 // codeInvalidValue is the ONE code that names a field and is deliberately absent

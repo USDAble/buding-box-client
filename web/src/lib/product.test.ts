@@ -263,6 +263,15 @@ describe("sendCode", () => {
     );
   });
 
+  it("sends split phone fields to the local API", async () => {
+    const fetchMock = fetchReturning(200, { cooldownSec: 60 });
+    vi.stubGlobal("fetch", fetchMock);
+
+    await sendCode("4155550123", "1");
+
+    expect(JSON.parse(String(fetchMock.mock.calls[0][1]?.body))).toEqual({ phone: "4155550123", region_code: "1" });
+  });
+
   it("throws retryAfterSec on a too-soon resend", async () => {
     vi.stubGlobal("fetch", fetchReturning(429, { retryAfterSec: 42 }));
 
@@ -326,6 +335,7 @@ describe("login", () => {
 
     await login({
       phone: "13800001234",
+      region_code: "86",
       code: "123456",
       nickname: "用户1234",
       activationCode: "BUDING-DEMO-0001",
@@ -334,6 +344,8 @@ describe("login", () => {
 
     const body = JSON.parse(String(fetchMock.mock.calls[0][1]?.body));
     expect(body).toMatchObject({
+      phone: "13800001234",
+      region_code: "86",
       activationCode: "BUDING-DEMO-0001",
       boxCode: "BOX-DEMO-0001",
     });

@@ -1719,6 +1719,80 @@ func TestHandleUpdateSessionPermissionMode(t *testing.T) {
 	}
 }
 
+// OCTO-FORK: changing the mode while a Web turn is running must update both
+// the live gate and the Session object that the turn saves at completion.
+func TestHandleUpdateSessionPermissionMode_UpdatesLiveTurn(t *testing.T) {
+	tmp := t.TempDir()
+	t.Setenv("HOME", tmp)
+	t.Setenv("OCTO_DATA_ROOT", tmp)
+	t.Setenv("USERPROFILE", tmp)
+
+	sess := agent.NewSession("stub-model", "")
+	if err := sess.Save(); err != nil {
+		t.Fatalf("save: %v", err)
+	}
+	live, err := agent.LoadSession(sess.ID)
+	if err != nil {
+		t.Fatalf("load live session: %v", err)
+	}
+	if err := live.SetPermissionMode("interactive"); err != nil {
+		t.Fatalf("set initial mode: %v", err)
+	}
+
+	srv := mustServer(t, Config{Addr: "127.0.0.1:0", Tools: true})
+	a := agent.New(&stubSender{}, "stub-model")
+	a.CWD = tmp
+	ctx, _, _, cleanup, err := srv.prepareToolTurn(prepareToolTurnCtx(t, sess.ID), a, live)
+	if err != nil {
+		t.Fatalf("prepareToolTurn: %v", err)
+	}
+	defer cleanup()
+	srv.sessionAgentsMu.Lock()
+	if srv.liveSessions == nil {
+		srv.liveSessions = make(map[string]*agent.Session)
+	}
+	if srv.sessionAgents == nil {
+		srv.sessionAgents = make(map[string]*agent.Agent)
+	}
+	srv.liveSessions[sess.ID] = live
+	srv.sessionAgents[sess.ID] = a
+	srv.sessionAgentsMu.Unlock()
+	defer func() {
+		srv.sessionAgentsMu.Lock()
+		delete(srv.liveSessions, sess.ID)
+		delete(srv.sessionAgents, sess.ID)
+		srv.sessionAgentsMu.Unlock()
+	}()
+
+	payload, _ := json.Marshal(updateSessionPermissionModeRequest{PermissionMode: "strict"})
+	req := httptest.NewRequest(http.MethodPatch, "/api/sessions/"+sess.ID+"/permission_mode", bytes.NewReader(payload))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	serveLoopback(srv.mux, w, req)
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200; body=%s", w.Code, w.Body.String())
+	}
+	if got := live.PermissionModeValue(); got != "strict" {
+		t.Fatalf("live PermissionMode = %q, want strict", got)
+	}
+	if allowed, _ := a.Gate.Check(ctx, "terminal", map[string]any{"command": "sudo apt update"}); allowed {
+		t.Fatal("live gate still allowed an ask-class command after switching to strict")
+	}
+
+	// A turn-end rewrite must retain the new mode rather than restoring the
+	// value that was present when the turn started.
+	if err := live.Save(); err != nil {
+		t.Fatalf("save live session: %v", err)
+	}
+	got, err := agent.LoadSession(sess.ID)
+	if err != nil {
+		t.Fatalf("reload session: %v", err)
+	}
+	if got.PermissionMode != "strict" {
+		t.Fatalf("persisted PermissionMode = %q, want strict", got.PermissionMode)
+	}
+}
+
 // A working directory is a project's property, not a session's. The endpoint
 // stays registered so a direct API caller or an older client is told what to do
 // instead of getting a 404 — the three tests that used to live here covered the

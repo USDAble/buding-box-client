@@ -489,13 +489,16 @@ function windowTokenHeaders(): Record<string, string> {
  * box does this licence belong to" while activationCode answers "was this
  * licence paid for" — the server validates them independently, one box code
  * may pair with several activation codes, and an activation code is one-shot.
- * Both are omitted on the second login.
+ * Both and nickname are omitted on the second login.
  */
 export interface LoginInput {
 	clientRequestId?: string;
   phone: string;
+  // OCTO-FORK: local auth splits the calling code; omitted for legacy E.164 callers.
+  region_code?: string;
   code: string;
-  nickname: string;
+  // OCTO-FORK: nickname belongs to first activation, not SMS-only sign-in.
+  nickname?: string;
   activationCode?: string;
   boxCode?: string;
 }
@@ -508,11 +511,13 @@ export interface LoginInput {
  * Every other refusal carries a business code and no field (V-94): a platform
  * fault is not something the user can fix in the phone box.
  */
-export async function sendCode(phone: string): Promise<number> {
+// OCTO-FORK: only the local API receives region_code; the runtime keeps the
+// existing control-plane request unchanged.
+export async function sendCode(phone: string, regionCode?: string): Promise<number> {
   const res = await productFetch("/api/product/send-code", {
     method: "POST",
     headers: jsonHeaders(),
-    body: JSON.stringify({ phone }),
+    body: JSON.stringify({ phone, region_code: regionCode }),
   });
   const body = (await res.json().catch(() => ({}))) as Record<string, unknown>;
   if (!res.ok) {

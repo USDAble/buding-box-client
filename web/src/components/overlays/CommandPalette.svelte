@@ -1,6 +1,7 @@
 <script lang="ts">
   import { cmdkOpen, view, sessions, activeSessionId, skills, openAgentSession, createNewSession, togglePanel, panelForView, lightappOpen, settingsModalOpen, openSettingsAt, isDesktopShell } from '../../lib/stores'
-  import { t } from '../../lib/i18n'
+  import { t, locale } from '../../lib/i18n'
+  import { sessionDisplayTitle } from '../../lib/sessionTitle'
 
   let query = $state('')
   let inputEl = $state<HTMLInputElement | null>(null)
@@ -20,7 +21,8 @@
   }
 
   function sessionName(s: any): string {
-    return s.name || s.title || s.id
+    // OCTO-FORK: command search uses the same product-safe title as the session list.
+    return sessionDisplayTitle(s, $locale, s.id)
   }
 
   function openSession(id: string) {

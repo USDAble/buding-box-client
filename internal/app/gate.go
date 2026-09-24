@@ -40,6 +40,13 @@ type permissionGate struct {
 	audit  *audit.Logger
 }
 
+// SetMode updates the engine used by an already-running agent. The server uses
+// this when the Web UI changes permission mode during an active conversation.
+// OCTO-FORK: live Web sessions must apply a mode change without rebuilding the sender.
+func (g *permissionGate) SetMode(mode permission.Mode) {
+	g.engine.SetMode(mode)
+}
+
 // Check implements agent.PermissionGate.
 func (g *permissionGate) Check(ctx context.Context, name string, input map[string]any) (bool, string) {
 	// A Tool Search mcp_call wraps the real MCP tool — evaluate policy (and

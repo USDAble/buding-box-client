@@ -12,6 +12,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/open-octo/octo-agent/internal/brand"
 	"github.com/open-octo/octo-agent/internal/server"
 	"github.com/open-octo/octo-agent/internal/upgrade"
 	"github.com/open-octo/octo-agent/internal/version"
@@ -570,7 +571,8 @@ func (b *nativeBridge) showWindowAt(hash string) {
 			startState = application.WindowStateMaximised
 		}
 		w := b.app.Window.NewWithOptions(application.WebviewWindowOptions{
-			Title:      "Octo",
+			// OCTO-FORK: native window chrome follows the configured product name.
+			Title:      brand.Load().Name(brand.DefaultLocale),
 			Width:      width,
 			Height:     height,
 			MinWidth:   minWindowWidth,

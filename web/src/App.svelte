@@ -9,6 +9,7 @@
   import { ws, wsState } from './lib/ws'
   import { notificationsEnabled } from './lib/notifications'
   import { locale, t, tr, setLocale } from './lib/i18n'
+  import { sessionDisplayTitle } from './lib/sessionTitle'
   import { checkAuth } from './lib/auth'
   import { get } from 'svelte/store'
   import * as api from './lib/api'
@@ -506,7 +507,8 @@
     if (now - (lastNotifiedAt[cooldownKey] ?? 0) < NOTIFY_COOLDOWN_MS) return
     lastNotifiedAt[cooldownKey] = now
     const sess = get(sessions).find(s => s.id === sid)
-    const title = sess?.name || sess?.title || sid
+    // OCTO-FORK: notifications use the same configured title as visible session rows.
+    const title = sessionDisplayTitle(sess, get(locale), sid)
     const bodyKey = kind === 'question_pending' ? 'header.notif_question_body'
       : kind === 'confirm_pending' ? 'header.notif_confirm_body'
       : 'header.notif_turn_complete_body'

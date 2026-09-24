@@ -15,6 +15,7 @@
   // hardcoded "Octo" survived the copy sweep because the guard scans the i18n
   // dictionary, not .svelte literals. See 品牌升级方案.md §2.5.
   import { brandShortName } from '../../lib/brand'
+  import { sessionDisplayTitle } from '../../lib/sessionTitle'
   import { confirmDialog } from '../../lib/confirm'
   import { visibleNav } from '../../lib/features'
   import { splitSections, swapWithinSection, parseSectionFold, type SectionFold } from '../../lib/sidebarSections'
@@ -144,6 +145,8 @@
   const topNav = [
     { icon: 'ant-design:clock-circle-outlined', label: 'nav.tasks', v: 'tasks' },
     { icon: 'ant-design:appstore-outlined', label: 'nav.light_apps', v: 'lightapps' },
+    // OCTO-FORK: promote Skills to the slot previously occupied by More.
+    { icon: 'ant-design:thunderbolt-outlined', label: 'nav.skills', v: 'skills' },
   ]
   function goToMore(v: string) {
     view.set(v as any)
@@ -533,7 +536,10 @@
   async function commitRename() {
     if (!$editId) return
     const draft = $editDraft.trim()
-    if (draft) {
+    const current = $sessions.find(s => s.id === $editId)
+    // OCTO-FORK: saving an untouched configured placeholder is a no-op; it
+    // must not turn the compatibility sentinel into a permanent custom title.
+    if (draft && draft !== sessionDisplayTitle(current, $locale, current?.id ?? '')) {
       try {
         await api.updateSession($editId, { name: draft })
         sessions.update(ss => ss.map(s => s.id === $editId ? { ...s, name: draft, title: draft } : s))
@@ -592,7 +598,8 @@
   // Names are clamped: one runaway session title should not stretch the
   // tooltip across the screen.
   function badgeTitle(label: string, items: any[]): string {
-    const names = items.map((s: any) => String(s.name || s.title || s.id).slice(0, 60)).join('\n')
+    // OCTO-FORK: persisted upstream placeholders render through product copy.
+    const names = items.map((s: any) => sessionDisplayTitle(s, $locale, s.id).slice(0, 60)).join('\n')
     return label.replace('{names}', names)
   }
 
@@ -698,7 +705,8 @@
           <span style="font-size:13px;color:{navActive(item.v) ? 'var(--blue-6)' : 'var(--text-secondary)'};font-weight:{navActive(item.v) ? '600' : '400'};">{$t(item.label)}</span>
         </div>
         {/each}
-        <div class="more-wrap" bind:this={morePopoverEl}>
+        <!-- OCTO-FORK: keep the More flyout for future restoration, but hide it from this layout. -->
+        <div class="more-wrap hidden-more" bind:this={morePopoverEl}>
           <div class="nav-row" class:solid={moreActive()} onclick={(e) => toggleMorePopover(e.currentTarget as HTMLElement, 'full')}>
             <iconify-icon icon="ant-design:menu-outlined" width="14" style="color:{moreActive() ? 'var(--blue-6)' : 'var(--text-tertiary)'}"></iconify-icon>
             <span style="font-size:13px;color:{moreActive() ? 'var(--blue-6)' : 'var(--text-secondary)'};font-weight:{moreActive() ? '600' : '400'};">{$t('nav.manage')}</span>
@@ -971,7 +979,7 @@
             <iconify-icon icon="ant-design:close-outlined" width="13"></iconify-icon>
           </span>
           {:else}
-          <span class="session-title">{(s as any).name || (s as any).title || s.id}</span>
+          <span class="session-title">{sessionDisplayTitle(s, $locale, s.id)}</span>
           <!-- Metadata gives way to the row's actions on hover (CSS, not state:
                the actions are the same width every time, so swapping them in
                must not reflow the title). -->
@@ -1065,7 +1073,7 @@
                 <span>{$t('sidebar.move_to_project')}</span>
               </div>
               {/if}
-              <div class="row-menu-item" onclick={(e) => { e.stopPropagation(); menuFor.set(null); editId.set(s.id); editDraft.set((s as any).name || (s as any).title || s.id) }}>
+              <div class="row-menu-item" onclick={(e) => { e.stopPropagation(); menuFor.set(null); editId.set(s.id); editDraft.set(sessionDisplayTitle(s, $locale, s.id)) }}>
                 <iconify-icon icon="ant-design:edit-outlined" width="13"></iconify-icon>
                 <span>{$t('sidebar.rename')}</span>
               </div>
@@ -1136,7 +1144,8 @@
         <iconify-icon icon={item.icon} width="16"></iconify-icon>
       </button>
       {/each}
-      <div class="more-wrap" bind:this={morePopoverEl}>
+      <!-- OCTO-FORK: keep the More flyout for future restoration, but hide it from this layout. -->
+      <div class="more-wrap hidden-more" bind:this={morePopoverEl}>
         <button class="rail-btn" class:active={moreActive()} title={$t('nav.manage')} onclick={(e) => toggleMorePopover(e.currentTarget as HTMLElement, 'rail')}>
           <iconify-icon icon="ant-design:menu-outlined" width="16"></iconify-icon>
         </button>
@@ -1235,6 +1244,7 @@
 }
 .ap-item:hover { background: var(--hover-neutral); }
 .more-wrap { position: relative; }
+.hidden-more { display: none; }
 /* Portaled to <body> (see the portal action) and positioned via the anchor's
    captured rect (morePos) — fixed, not absolute, since it must escape the
    sidebar's own overflow:hidden ancestors rather than being clipped by them. */

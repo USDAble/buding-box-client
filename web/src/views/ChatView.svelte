@@ -86,6 +86,7 @@
   // hardcoded "Octo" survived the copy sweep because the guard scans the i18n
   // dictionary, not .svelte literals. See 品牌升级方案.md §2.5.
   import { brandName, brandShortName } from '../lib/brand'
+  import { sessionDisplayTitle } from '../lib/sessionTitle'
   import { insertPendingSend, takeConfirmedSend } from '../lib/pendingSendOrder'
   import { applySensitiveRejection } from '../lib/sensitive'
   import { inlineSlashCommand } from '../lib/inlineSlash'
@@ -2112,7 +2113,7 @@ import QuestionModal from '../components/overlays/QuestionModal.svelte'
   <main class="export-shell">
     <header class="export-header">
       <h1 class="export-title">${escapeHtml(title)}</h1>
-      <div class="export-meta">${escapeHtml(exportTime)} · Exported from octo</div>
+      <div class="export-meta">${escapeHtml(exportTime)} · Exported from ${escapeHtml(brandName(locale))}</div>
     </header>
     <section class="conversation">
       ${buildExportConversation(events)}
@@ -2198,7 +2199,8 @@ import QuestionModal from '../components/overlays/QuestionModal.svelte'
         await exportAsPDF()
         return
       }
-      const title = currentSession?.title ?? currentSession?.name ?? 'session'
+      // OCTO-FORK: stored upstream placeholders remain compatible but render as product copy.
+      const title = sessionDisplayTitle(currentSession, $locale, 'session')
       // Every transcript-backed format fetches the same server events and
       // narrows them once here, so the checkbox selection and the "include
       // tool calls" toggle mean the same thing in all four.
@@ -2626,13 +2628,13 @@ import QuestionModal from '../components/overlays/QuestionModal.svelte'
   <div class="chat-header">
     <div class="title-row">
       <span class="session-title">
-        {#if !id}{$t('nav.new_session')}{:else}{currentSession?.title ?? currentSession?.name ?? 'Chat'}{/if}
+        {#if !id}{$t('nav.new_session')}{:else}{sessionDisplayTitle(currentSession, $locale, 'Chat')}{/if}
       </span>
       {#if currentSession?.branched_from}
         {@const src = $sessions.find(s => s.id === currentSession!.branched_from)}
-        <span class="branched-label" title={src?.title ?? src?.name ?? currentSession.branched_from}>
+        <span class="branched-label" title={sessionDisplayTitle(src, $locale, currentSession.branched_from)}>
           <iconify-icon icon="lucide:git-branch" width="12"></iconify-icon>
-          {$t('chat.branched_from')} {src?.title ?? src?.name ?? currentSession.branched_from}
+          {$t('chat.branched_from')} {sessionDisplayTitle(src, $locale, currentSession.branched_from)}
         </span>
       {/if}
       {#if streaming}

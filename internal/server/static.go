@@ -159,18 +159,19 @@ func staticContentType(name string, data []byte) string {
 // indexHTMLFallback is a minimal placeholder served when the embedded static/
 // directory is absent. It lets the server start and respond to / even before
 // the Web UI assets are built.
+// OCTO-FORK: keep this generic so a missing web build cannot expose the upstream brand.
 const indexHTMLFallback = `<!DOCTYPE html>
 <html>
 <head>
 <meta charset="utf-8">
-<title>Octo Agent</title>
+<title>Web UI unavailable</title>
 <style>
 body{font-family:system-ui,-apple-system,sans-serif;max-width:800px;margin:40px auto;padding:0 20px;line-height:1.6}
 h1{color:#333}code{background:#f4f4f4;padding:2px 6px;border-radius:3px}
 </style>
 </head>
 <body>
-<h1>🐙 Octo Agent Server</h1>
+<h1>Web UI unavailable</h1>
 <p>The Web UI assets are not embedded in this binary. Run <code>make web-build</code> and recompile to enable it.</p>
 <p>API endpoints available:</p>
 <ul>

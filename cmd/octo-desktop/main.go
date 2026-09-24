@@ -994,7 +994,8 @@ func trayStatusLines(bridge *nativeBridge) []string {
 // main thread to show the dialog. Those two routes still quit unconfirmed.
 func buildAppMenu(app *application.App, bridge *nativeBridge) *application.Menu {
 	menu := app.NewMenu()
-	appMenu := menu.AddSubmenu("Octo")
+	// OCTO-FORK: the native application menu follows the configured product name.
+	appMenu := menu.AddSubmenu(brand.Load().Name(brand.DefaultLocale))
 	appMenu.AddRole(application.About)
 	appMenu.AddSeparator()
 	appMenu.AddRole(application.ServicesMenu)

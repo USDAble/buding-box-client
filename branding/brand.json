@@ -38,6 +38,10 @@
     }
   },
   "copy": {
+    "sessionDefaultTitle": {
+      "zh-CN": "Puddingbox agent",
+      "en-US": "Puddingbox agent"
+    },
     "termsBody": {
       "zh-CN": "本页为开发占位，非正式协议。",
       "en-US": "Placeholder for development. Not a legal agreement."

@@ -13,11 +13,12 @@
   import { get } from 'svelte/store'
   import { showToast, nativeShell, settingsModalOpen, settingsTarget, onboardPhase, sessions, sessionGroups, collapsedSessions, activeSessionId, view, clearPendingSessionOpts } from '../../lib/stores'
   import type { Session, SessionGroup } from '../../lib/types'
-  import { setLocale, t, tr } from '../../lib/i18n'
+  import { locale, setLocale, t, tr } from '../../lib/i18n'
   import { getMode, setMode, type ThemeMode } from '../../lib/theme'
   import { notificationsEnabled, setNotificationsEnabled } from '../../lib/notifications'
   import { openUrl } from '../../lib/externalLinks'
   import { brandLink, brandText } from '../../lib/brand'
+  import { sessionDisplayTitle } from '../../lib/sessionTitle'
   import { confirmDialog } from '../../lib/confirm'
   import { ago, clockTick } from '../../lib/relTime'
   import * as api from '../../lib/api'
@@ -187,7 +188,8 @@
   )
 
   function nameOf(s: Session): string {
-    return (s as any).name || (s as any).title || s.id
+    // OCTO-FORK: archived sessions must not revive the upstream placeholder.
+    return sessionDisplayTitle(s, $locale, s.id)
   }
 
   function toggleArchiveSel(id: string) {

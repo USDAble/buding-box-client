@@ -15,6 +15,7 @@
   // hardcoded "Octo" survived the copy sweep because the guard scans the i18n
   // dictionary, not .svelte literals. See 品牌升级方案.md §2.5.
   import { brandShortName } from '../../lib/brand'
+  import { sessionDisplayTitle } from '../../lib/sessionTitle'
   import { confirmDialog } from '../../lib/confirm'
   import { visibleNav } from '../../lib/features'
   import { splitSections, swapWithinSection, parseSectionFold, type SectionFold } from '../../lib/sidebarSections'
@@ -535,7 +536,10 @@
   async function commitRename() {
     if (!$editId) return
     const draft = $editDraft.trim()
-    if (draft) {
+    const current = $sessions.find(s => s.id === $editId)
+    // OCTO-FORK: saving an untouched configured placeholder is a no-op; it
+    // must not turn the compatibility sentinel into a permanent custom title.
+    if (draft && draft !== sessionDisplayTitle(current, $locale, current?.id ?? '')) {
       try {
         await api.updateSession($editId, { name: draft })
         sessions.update(ss => ss.map(s => s.id === $editId ? { ...s, name: draft, title: draft } : s))
@@ -594,7 +598,8 @@
   // Names are clamped: one runaway session title should not stretch the
   // tooltip across the screen.
   function badgeTitle(label: string, items: any[]): string {
-    const names = items.map((s: any) => String(s.name || s.title || s.id).slice(0, 60)).join('\n')
+    // OCTO-FORK: persisted upstream placeholders render through product copy.
+    const names = items.map((s: any) => sessionDisplayTitle(s, $locale, s.id).slice(0, 60)).join('\n')
     return label.replace('{names}', names)
   }
 
@@ -974,7 +979,7 @@
             <iconify-icon icon="ant-design:close-outlined" width="13"></iconify-icon>
           </span>
           {:else}
-          <span class="session-title">{(s as any).name || (s as any).title || s.id}</span>
+          <span class="session-title">{sessionDisplayTitle(s, $locale, s.id)}</span>
           <!-- Metadata gives way to the row's actions on hover (CSS, not state:
                the actions are the same width every time, so swapping them in
                must not reflow the title). -->
@@ -1068,7 +1073,7 @@
                 <span>{$t('sidebar.move_to_project')}</span>
               </div>
               {/if}
-              <div class="row-menu-item" onclick={(e) => { e.stopPropagation(); menuFor.set(null); editId.set(s.id); editDraft.set((s as any).name || (s as any).title || s.id) }}>
+              <div class="row-menu-item" onclick={(e) => { e.stopPropagation(); menuFor.set(null); editId.set(s.id); editDraft.set(sessionDisplayTitle(s, $locale, s.id)) }}>
                 <iconify-icon icon="ant-design:edit-outlined" width="13"></iconify-icon>
                 <span>{$t('sidebar.rename')}</span>
               </div>

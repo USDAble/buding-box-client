@@ -35,6 +35,9 @@
   const showThemePackPicker = false
   // OCTO-FORK: keep the co-author preference and API, but do not offer its toggle in product settings.
   const showCoauthorSetting = false
+  // OCTO-FORK: keep the update preference and handler for compatibility, but
+  // remove the update row from the assistant-defaults settings surface.
+  const showAgentUpdateSetting = false
   // OCTO-FORK: keep the first-run wizard and rerun handler, but hide its About entry.
   const showFirstRunEntry = false
   // OCTO-FORK: help content and its optional website destination are product
@@ -1011,12 +1014,14 @@
                宁可到不了，也不删）；钉子见 web/src/lib/updateEntry.test.ts 的
                LIVE_UPDATE_MARKERS。
                — see the desktop startup and lifecycle boundary §5（V-86） -->
-          <div class="setrow">
-            <div class="seti">
-              <span class="setl">{$t('settings.update')}</span>
-              <span class="setd">{$t('product.panel.soon')}</span>
+          {#if showAgentUpdateSetting}
+            <div class="setrow">
+              <div class="seti">
+                <span class="setl">{$t('settings.update')}</span>
+                <span class="setd">{$t('product.panel.soon')}</span>
+              </div>
             </div>
-          </div>
+          {/if}
           <div class="setrow">
             <div class="seti">
               <span class="setl">{$t('settings.workspace_dir')}</span>

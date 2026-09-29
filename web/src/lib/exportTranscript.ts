@@ -12,7 +12,7 @@ import { renderMarkdown, escapeHtml } from './markdown'
 // document.documentElement.lang — the store is the language the user chose.
 // See 品牌升级方案.md §2.5 (A-class names).
 import { get } from 'svelte/store'
-import { locale } from './i18n'
+import { locale, tr } from './i18n'
 import { brandShortName } from './brand'
 
 export function isToolEvent(ev: any): boolean {
@@ -64,23 +64,24 @@ export function buildExportConversation(events: any[]): string {
     .map((ev) => {
       const type = ev.type ?? ''
       if (type === 'history_user_message') {
-        return `<article class="msg user"><div class="msg-head"><span class="msg-label">You</span></div><div class="msg-body">${escapeHtml(ev.content ?? '').replace(/\n/g, '<br>')}</div></article>`
+        // OCTO-FORK: exported labels follow the selected language just like the live transcript.
+        return `<article class="msg user"><div class="msg-head"><span class="msg-label">${escapeHtml(tr('chat.you'))}</span></div><div class="msg-body">${escapeHtml(ev.content ?? '').replace(/\n/g, '<br>')}</div></article>`
       }
       if (type === 'assistant_message') {
         const thinking = ev.thinking
-          ? `<div class="msg-thinking-wrap"><div class="msg-thinking-label">Thoughts</div><div class="msg-thinking">${renderMarkdown(ev.thinking, true)}</div></div>`
+          ? `<div class="msg-thinking-wrap"><div class="msg-thinking-label">${escapeHtml(tr('chat.thoughts'))}</div><div class="msg-thinking">${renderMarkdown(ev.thinking, true)}</div></div>`
           : ''
           return `<article class="msg assistant"><div class="msg-head"><span class="msg-label">${brandShortName(get(locale))}</span></div><div class="msg-body">${renderMarkdown(ev.content ?? '', true)}</div>${thinking}</article>`
       }
       if (type === 'tool_call') {
-        const name = escapeHtml(String(ev.tool_name ?? ev.name ?? 'unknown'))
-        return `<article class="msg tool"><div class="msg-head"><span class="msg-label">Tool call</span><span class="tool-name">${name}</span></div></article>`
+        const name = escapeHtml(String(ev.tool_name ?? ev.name ?? tr('chat.export_unknown_tool')))
+        return `<article class="msg tool"><div class="msg-head"><span class="msg-label">${escapeHtml(tr('chat.export_tool_call'))}</span><span class="tool-name">${name}</span></div></article>`
       }
       if (type === 'tool_result') {
         const body = typeof ev.result === 'string'
           ? escapeHtml(ev.result.slice(0, TOOL_RESULT_CHARS))
-          : '(non-text result)'
-        return `<article class="msg tool"><div class="msg-head"><span class="msg-label">Tool result</span></div><pre class="tool-result">${body}</pre></article>`
+          : escapeHtml(tr('chat.export_non_text_result'))
+        return `<article class="msg tool"><div class="msg-head"><span class="msg-label">${escapeHtml(tr('chat.export_tool_result'))}</span></div><pre class="tool-result">${body}</pre></article>`
       }
       return ''
     })

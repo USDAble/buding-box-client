@@ -69,6 +69,20 @@ describe('buildExportConversation', () => {
     expect(html).toContain('a.txt')
   })
 
+  // OCTO-FORK: exported client-authored labels must follow the current locale.
+  it('translates export labels after changing language', () => {
+    setLocale('zh')
+    try {
+      const html = buildExportConversation(transcript)
+      expect(html).toContain('工具调用')
+      expect(html).toContain('工具结果')
+      expect(html).toContain('你')
+      expect(html).not.toContain('Tool call')
+    } finally {
+      setLocale('en')
+    }
+  })
+
   it('renders none of them when the toggle dropped them', () => {
     const html = buildExportConversation(applyToolToggle(transcript, false).events)
     expect(html).not.toContain('Tool call')

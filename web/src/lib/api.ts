@@ -1,6 +1,6 @@
 import type { Session, SessionGroup, Skill, Workflow, ScheduledTask, McpServer, McpServerDetail, Channel, Memory, RecallFile, TagStatus, GitDiffResponse, GitDiffSummaryResponse, GitDiffFile, ProtectionPolicy } from './types'
 import { windowToken, WINDOW_TOKEN_HEADER, productPhase, noteSessionLost } from './product'
-import { platformErrorText } from './i18n'
+import { platformErrorText, tr } from './i18n'
 
 // TaskResponse matches the Go server task struct.
 export interface TaskResponse {
@@ -664,7 +664,8 @@ export async function getAgent(id: string): Promise<Agent> {
   if (id.startsWith('platform:')) {
     const parts = id.split(':')
     const found = await request<PlatformExpert>(`/api/product/experts/${encodeURIComponent(parts[1])}?version=${parts[2]}`)
-    if (`platform:${found.id}:${found.version}` !== id) throw new Error('平台专家版本不匹配，请重新选择')
+    // OCTO-FORK: version mismatch is a client-generated error, not server copy.
+    if (`platform:${found.id}:${found.version}` !== id) throw new Error(tr('agents.version_mismatch'))
     return platformAgent(found)
   }
   return request<Agent>(`/api/agents/${id}`)
@@ -721,7 +722,8 @@ export async function listPlatformSkillDirectory(refresh = false): Promise<{skil
 }
 export async function getPlatformSkill(id: string,version: number): Promise<PlatformSkill> {
   const result = await request<PlatformSkill>(`/api/product/skills/${encodeURIComponent(id)}?version=${version}`)
-  if (result.id !== id || result.version !== version) throw new Error('平台技能版本不匹配')
+  // OCTO-FORK: localize the client-side integrity check without altering server errors.
+  if (result.id !== id || result.version !== version) throw new Error(tr('skills.version_mismatch'))
   return result
 }
 export async function listSkills(): Promise<Skill[]> {
@@ -730,11 +732,12 @@ export async function listSkills(): Promise<Skill[]> {
     // Server source is "default" (built-in/system) | "expert" (bundled for
     // built-in experts, hidden from the global manifest) | "user".
     const src = s.source ?? 'user'
+    // OCTO-FORK: source badges use product i18n; views also read $t so live locale changes repaint.
     const tag: { tagStatus: TagStatus; tagLabel: string } = src === 'default'
-      ? { tagStatus: 'default', tagLabel: 'System' }
+      ? { tagStatus: 'default', tagLabel: tr('source.system') }
       : src === 'expert'
-        ? { tagStatus: 'default', tagLabel: 'Expert' }
-        : { tagStatus: 'success', tagLabel: 'User' }
+        ? { tagStatus: 'default', tagLabel: tr('source.expert') }
+        : { tagStatus: 'success', tagLabel: tr('source.user') }
     return {
       name: s.name,
       desc: s.description ?? '',
@@ -774,9 +777,10 @@ export async function listWorkflowsView(): Promise<Workflow[]> {
   const named = await listWorkflows()
   return named.map((w): Workflow => {
     const src = w.source || 'user'
+    // OCTO-FORK: source badges share the language table with skills.
     const tag: { tagStatus: TagStatus; tagLabel: string } = src === 'default'
-      ? { tagStatus: 'default', tagLabel: 'System' }
-      : { tagStatus: 'success', tagLabel: 'User' }
+      ? { tagStatus: 'default', tagLabel: tr('source.system') }
+      : { tagStatus: 'success', tagLabel: tr('source.user') }
     return {
       name: w.name,
       desc: w.description ?? '',
@@ -835,7 +839,8 @@ export async function uploadFile(file: File): Promise<string> {
   const d = await res.json().catch(() => ({} as any))
   if (!res.ok) throw new Error(d.error ?? `${res.status} ${res.statusText}`)
   const url = d.files?.[0]?.url
-  if (!url) throw new Error(d.files?.[0]?.error ?? 'upload failed')
+  // OCTO-FORK: the client-authored upload fallback follows the selected language.
+  if (!url) throw new Error(d.files?.[0]?.error ?? tr('upload.failed'))
   return url
 }
 

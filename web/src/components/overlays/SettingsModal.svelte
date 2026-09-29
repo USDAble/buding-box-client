@@ -396,7 +396,7 @@
       if (cfg.language) language = cfg.language
       setLocale(cfg.language === 'zh' || cfg.language === 'zh-TW' ? 'zh' : 'en')
     } catch (e: any) {
-      showToast(`Failed to load config: ${e.message}`, 'error')
+      showToast(tr('settings.config_load_failed').replace('{error}', e.message), 'error')
     } finally {
       loading = false
     }
@@ -458,7 +458,7 @@
       await navigator.clipboard.writeText(tunnelPairing.pair_url)
       showToast($t('settings.mobile.copied'), 'success')
     } catch {
-      showToast('Copy failed', 'error')
+      showToast(tr('settings.mobile.copy_failed'), 'error')
     }
   }
 
@@ -519,7 +519,8 @@
       await api.setAutostart(v)
       autostart = v
     } catch (e: any) {
-      showToast(e.message ?? 'Failed to change autostart', 'error')
+      // OCTO-FORK: settings' client-side failure fallbacks follow the selected language.
+      showToast(e.message ?? tr('settings.autostart_failed'), 'error')
       autostart = !v
     }
   }
@@ -533,7 +534,7 @@
       await api.updateReasoningEffort(v)
       reasoningEffort = v
     } catch (e: any) {
-      showToast(e.message ?? 'Failed to update reasoning effort', 'error')
+      showToast(e.message ?? tr('settings.reasoning_failed'), 'error')
     }
   }
 
@@ -542,7 +543,7 @@
       await api.updatePermissionMode(v)
       permissionMode = v
     } catch (e: any) {
-      showToast(e.message ?? 'Failed to update permission mode', 'error')
+      showToast(e.message ?? tr('settings.permission_failed'), 'error')
     }
   }
 
@@ -551,7 +552,7 @@
       await api.updateShowReasoning(v)
       showReasoningVal = v
     } catch (e: any) {
-      showToast(e.message ?? 'Failed to update show-reasoning', 'error')
+      showToast(e.message ?? tr('settings.show_reasoning_failed'), 'error')
     }
   }
 
@@ -560,7 +561,7 @@
       await api.updateCoauthor(v)
       coauthorVal = v
     } catch (e: any) {
-      showToast(e.message ?? 'Failed to update coauthor', 'error')
+      showToast(e.message ?? tr('settings.coauthor_failed'), 'error')
     }
   }
 
@@ -569,7 +570,7 @@
       await api.updateUpdateCheck(v)
       updateCheckVal = v
     } catch (e: any) {
-      showToast(e.message ?? 'Failed to update update-check', 'error')
+      showToast(e.message ?? tr('settings.update_check_failed'), 'error')
     }
   }
 
@@ -578,7 +579,7 @@
       await api.updateComputerEnabled(v)
       computerUse = v
     } catch (e: any) {
-      showToast(e.message ?? 'Failed to update computer-use', 'error')
+      showToast(e.message ?? tr('settings.computer_use_failed'), 'error')
     }
   }
 
@@ -587,7 +588,7 @@
       await api.updateWorkspaceDir(v)
       workspaceDir = v
     } catch (e: any) {
-      showToast(e.message ?? 'Failed to update workspace directory', 'error')
+      showToast(e.message ?? tr('settings.workspace_dir_failed'), 'error')
     }
   }
 
@@ -604,7 +605,7 @@
       // older language on the next login.
       await setProductLocale(v === 'zh' ? 'zh' : 'en')
     } catch (e: any) {
-      showToast(e.message ?? 'Failed to update language', 'error')
+      showToast(e.message ?? tr('settings.language_failed'), 'error')
     }
   }
 

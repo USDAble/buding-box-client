@@ -4,6 +4,7 @@
   import * as api from '../lib/api'
   import type { LightApp } from '../lib/api'
   import { t, tr } from '../lib/i18n'
+  // OCTO-FORK: light-app action feedback and generated prompts follow the chosen language.
   import { confirmDialog } from '../lib/confirm'
 
   let apps     = $state<LightApp[]>([])
@@ -17,7 +18,7 @@
     try {
       apps = await api.listLightApps()
     } catch (e: any) {
-      showToast(`Failed to load Light Apps: ${e.message}`, 'error')
+      showToast(tr('lightapps.load_failed').replace('{error}', e.message), 'error')
     } finally {
       loading = false
     }
@@ -40,7 +41,7 @@
     try {
       cacheLightApp(slug, await api.getLightApp(slug))
     } catch (e: any) {
-      showToast(`Failed to open: ${e.message}`, 'error')
+      showToast(tr('lightapps.open_failed').replace('{error}', e.message), 'error')
     }
   }
 
@@ -48,14 +49,14 @@
     try {
       const detail = await api.getLightApp(app.slug)
       const contentPreview = detail.html.length > 3000
-        ? detail.html.slice(0, 3000) + '\n…(truncated)'
+        ? detail.html.slice(0, 3000) + '\n' + tr('lightapps.content_truncated')
         : detail.html
       const prompt = tr('lightapps.edit_prompt')
         .replace('{name}', app.name)
         .replace('{content}', contentPreview)
       await openAgentSession(prompt, tr('lightapps.session_edit').replace('{name}', app.name))
     } catch (e: any) {
-      showToast(`Failed to load app: ${e.message}`, 'error')
+      showToast(tr('lightapps.load_app_failed').replace('{error}', e.message), 'error')
     }
   }
 
@@ -71,7 +72,7 @@
       apps = apps.filter(a => a.slug !== slug)
       showToast($t('lightapps.deleted'), 'success')
     } catch (e: any) {
-      showToast(`Failed to delete: ${e.message}`, 'error')
+      showToast(tr('lightapps.delete_failed').replace('{error}', e.message), 'error')
     } finally {
       busyId = null
     }

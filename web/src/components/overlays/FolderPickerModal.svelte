@@ -2,7 +2,7 @@
   import { onMount, tick } from 'svelte'
   import * as api from '../../lib/api'
   import type { FsListing } from '../../lib/api'
-  import { t } from '../../lib/i18n'
+  import { t, tr } from '../../lib/i18n'
 
   // Controlled by the composer: initialPath seeds the first listing (the
   // session's current working dir, or '' to start at home). onSelect receives
@@ -76,7 +76,8 @@
       // other failure (bad path, permission) shows its message too. Keep the
       // previous listing — and the text the user typed — so the path can be
       // corrected rather than retyped from scratch.
-      error = e?.message ?? 'Failed to list directory'
+      // OCTO-FORK: local folder-picker fallback follows the selected language.
+      error = e?.message ?? tr('folder_picker.list_failed')
     } finally {
       if (seq === loadSeq) loading = false
     }

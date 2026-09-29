@@ -23,6 +23,8 @@
   import DOMPurify from 'dompurify'
   import type { GenuiMermaidNode } from '../../lib/genui/types'
   import { nextMermaidId } from '../../lib/genui/mermaid-id'
+  // OCTO-FORK: generated-panel status text follows the selected UI language.
+  import { t } from '../../lib/i18n'
 
   let { node }: { node: GenuiMermaidNode } = $props()
 
@@ -75,11 +77,11 @@
 
 {#if failed}
   <!-- A model writing invalid diagram syntax must never blank the panel. -->
-  <div class="genui-mermaid-error">diagram could not be rendered</div>
+  <div class="genui-mermaid-error">{$t('genui.diagram_failed')}</div>
 {:else if svg !== null}
   <div class="genui-mermaid">{@html svg}</div>
 {:else}
-  <div class="genui-mermaid-loading">rendering diagram…</div>
+  <div class="genui-mermaid-loading">{$t('genui.diagram_loading')}</div>
 {/if}
 
 <style>

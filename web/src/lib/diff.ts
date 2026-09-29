@@ -8,6 +8,8 @@ import { writable, get } from 'svelte/store'
 import type { GitDiffFile, GitDiffResponse } from './types'
 import * as api from './api'
 import { activeSessionId, panelContent } from './stores'
+// OCTO-FORK: diff-loading fallback follows the selected UI language.
+import { tr } from './i18n'
 
 /** The current session's diff, or null before the first load. */
 export const diffData = writable<GitDiffResponse | null>(null)
@@ -47,7 +49,7 @@ export async function loadDiff(sessionId: string): Promise<void> {
   } catch (e: any) {
     if (loadedFor !== sessionId) return
     diffData.set(null)
-    diffError.set(e?.message ?? 'failed to load diff')
+    diffError.set(e?.message ?? tr('diff.load_failed'))
   } finally {
     if (loadedFor === sessionId) diffLoading.set(false)
   }

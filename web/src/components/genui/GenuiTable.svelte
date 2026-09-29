@@ -6,6 +6,8 @@
   import type { GenuiTableNode } from '../../lib/genui/types'
   import { useGenuiFieldContext } from '../../lib/genui/context'
   import { tableRows, nextSort, type TableSort } from '../../lib/genui/table-view'
+  // OCTO-FORK: generated-table empty state follows the selected UI language.
+  import { t } from '../../lib/i18n'
 
   let { node }: { node: GenuiTableNode } = $props()
   const ctx = useGenuiFieldContext()
@@ -56,7 +58,7 @@
     </tbody>
   </table>
   {#if rows.length === 0 && node.rows.length > 0}
-    <div class="table-empty">no rows match</div>
+    <div class="table-empty">{$t('genui.no_rows_match')}</div>
   {/if}
 </div>
 

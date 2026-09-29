@@ -18,7 +18,8 @@ import { brandName, brandShortName } from './brand'
 // vitest runs with cwd = web/ (see vitest.config.ts); import.meta.url is not
 // a file:// URL under the jsdom environment, so resolve from cwd instead.
 const SRC = join(process.cwd(), 'src')
-const KEY_CALL = /\$?\bt\(\s*'([A-Za-z0-9_.]+)'/g
+// OCTO-FORK: cover both reactive $t() markup and one-shot tr() notifications.
+const KEY_CALL = /\$?\b(?:t|tr)\(\s*'([A-Za-z][A-Za-z0-9_.]*)'/g
 
 function sourceFiles(dir: string): string[] {
   const out: string[] = []
@@ -49,6 +50,35 @@ function usedKeys(): Map<string, string> {
 }
 
 describe('i18n coverage', () => {
+  // OCTO-FORK: stop new direct English toast fallbacks from bypassing the locale table.
+  it('does not introduce directly authored English toast messages', () => {
+    const offenders: string[] = []
+    const directToast = /showToast\(\s*['"`](?:Failed|Could|Error|Unable|Unknown|Loading|Thinking)\b/g
+    for (const file of sourceFiles(SRC)) {
+      const lines = readFileSync(file, 'utf8').split('\n')
+      lines.forEach((line, i) => {
+        if (directToast.test(line)) offenders.push(`${file.slice(SRC.length + 1)}:${i + 1}`)
+        directToast.lastIndex = 0
+      })
+    }
+    expect(offenders).toEqual([])
+  })
+
+  // OCTO-FORK: recently added expert, skill and task feedback must switch language with the UI.
+  it('localizes published content and action feedback in both directions', () => {
+    setLocale('en')
+    expect(get(t)('skills.platform_title')).toBe('Published skills')
+    expect(get(t)('agents.deleted')).toBe('Expert deleted')
+    expect(get(t)('tasks.load_failed')).toBe('Could not load tasks')
+    expect(get(t)('channels.platform.weixin')).toBe('WeChat')
+    setLocale('zh')
+    expect(get(t)('skills.platform_title')).toBe('中台发布技能')
+    expect(get(t)('agents.deleted')).toBe('专家已删除')
+    expect(get(t)('tasks.load_failed')).toBe('加载任务失败')
+    expect(get(t)('channels.platform.weixin')).toBe('微信')
+    setLocale('en')
+  })
+
   it('every literal key used in the app is defined in both locales', () => {
     const missing: string[] = []
     for (const [key, where] of usedKeys()) {

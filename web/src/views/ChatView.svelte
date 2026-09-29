@@ -652,7 +652,8 @@ import QuestionModal from '../components/overlays/QuestionModal.svelte'
     // is already scoped to this session — so only filter when one is present.
     cleanups.push(ws.on('error', (ev) => {
       if ((ev as any).session_id && (ev as any).session_id !== sid) return
-      showToast((ev as any).message ?? 'Error', 'error')
+      // OCTO-FORK: WebSocket fallbacks are client-authored copy, not server messages.
+      showToast((ev as any).message ?? tr('turn_error.unknown'), 'error')
     }))
 
     // The server rejected a user_message (session bound to another entry,
@@ -680,7 +681,7 @@ import QuestionModal from '../components/overlays/QuestionModal.svelte'
       // slot — drop it here or it would outlive this send and be handed to a
       // later turn's failure.
       turnInput.delete(sid)
-      showToast((ev as any).message ?? 'Error', 'error')
+      showToast((ev as any).message ?? tr('turn_error.unknown'), 'error')
     }))
 
     // The session is bound to another entry but no turn lease is active. Offer
@@ -692,7 +693,7 @@ import QuestionModal from '../components/overlays/QuestionModal.svelte'
       if (!meta) return
       // Keep the pending bubble and streaming state; the user can confirm.
       bindRequiredFor = sid
-      bindRequiredMessage = (ev as any).message ?? 'Session is bound to another entry.'
+      bindRequiredMessage = (ev as any).message ?? tr('chat.session_bound_elsewhere')
     }))
 
     // A pending steer was successfully pulled back out of the running turn's
@@ -1050,7 +1051,7 @@ import QuestionModal from '../components/overlays/QuestionModal.svelte'
 
     cleanups.push(ws.on('tool_error', (ev) => {
       if ((ev as any).session_id && (ev as any).session_id !== sid) return
-      setToolError(sid, (ev as any).tool_id, (ev as any).error ?? 'error', (ev as any).ts)
+      setToolError(sid, (ev as any).tool_id, (ev as any).error ?? tr('turn_error.unknown'), (ev as any).ts)
     }))
 
     // A text-only model is having an image described for it. "started" shows
@@ -1127,7 +1128,7 @@ import QuestionModal from '../components/overlays/QuestionModal.svelte'
       if ((ev as any).session_id && (ev as any).session_id !== sid) return
       chatProgress.update(p => ({
         ...p,
-        [sid]: { message: (ev as any).message || 'Thinking', phase: (ev as any).phase },
+        [sid]: { message: (ev as any).message || tr('chat.thinking'), phase: (ev as any).phase },
       }))
       // A fresh or replayed progress event means a turn is in flight. When the
       // user switches back to a running session the indicator was reset, so
@@ -2019,20 +2020,21 @@ import QuestionModal from '../components/overlays/QuestionModal.svelte'
     for (const ev of events) {
       const type = ev.type ?? ''
       if (type === 'history_user_message') {
-        lines.push('## You', '')
+        // OCTO-FORK: Markdown export uses the same selected-language labels as the HTML export.
+        lines.push(`## ${tr('chat.you')}`, '')
         lines.push(ev.content ?? '', '')
       } else if (type === 'assistant_message') {
         lines.push(`## ${brandName(getExportLocale())}`, '')
         if (ev.thinking) {
-          lines.push('<details><summary>Thoughts</summary>', '', ev.thinking, '', '</details>', '')
+          lines.push(`<details><summary>${tr('chat.thoughts')}</summary>`, '', ev.thinking, '', '</details>', '')
         }
         lines.push(ev.content ?? '', '')
       } else if (type === 'thinking' && ev.text) {
-        lines.push('<!-- Thinking -->', ev.text, '')
+        lines.push(`<!-- ${tr('chat.thinking')} -->`, ev.text, '')
       } else if (type === 'tool_call') {
-        lines.push(`- **Tool call**: ${ev.tool_name ?? ev.name ?? 'unknown'}`, '')
+        lines.push(`- **${tr('chat.export_tool_call')}**: ${ev.tool_name ?? ev.name ?? tr('chat.export_unknown_tool')}`, '')
       } else if (type === 'tool_result') {
-        lines.push(`- **Tool result**: ${typeof ev.result === 'string' ? ev.result.slice(0, TOOL_RESULT_CHARS) : '(non-text result)'}`, '')
+        lines.push(`- **${tr('chat.export_tool_result')}**: ${typeof ev.result === 'string' ? ev.result.slice(0, TOOL_RESULT_CHARS) : tr('chat.export_non_text_result')}`, '')
       }
     }
 
@@ -2106,14 +2108,14 @@ import QuestionModal from '../components/overlays/QuestionModal.svelte'
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>${escapeHtml(title)} - ${brandName(locale)} Export</title>
+  <title>${escapeHtml(title)} - ${escapeHtml(tr('chat.export_document_title'))}</title>
   <style>${exportConversationStyles()}</style>
 </head>
 <body>
   <main class="export-shell">
     <header class="export-header">
       <h1 class="export-title">${escapeHtml(title)}</h1>
-      <div class="export-meta">${escapeHtml(exportTime)} · Exported from ${escapeHtml(brandName(locale))}</div>
+      <div class="export-meta">${escapeHtml(exportTime)} · ${escapeHtml(tr('chat.exported_from'))}</div>
     </header>
     <section class="conversation">
       ${buildExportConversation(events)}
@@ -2258,7 +2260,7 @@ import QuestionModal from '../components/overlays/QuestionModal.svelte'
     const existing = get(activeSessionId)
     if (existing) {
       try { await pendingPermissionGate.ensure(existing) }
-      catch (e: any) { showToast(e.message ?? 'Failed to apply permission mode', 'error'); return null }
+      catch (e: any) { showToast(e.message ?? tr('chat.permission_failed'), 'error'); return null }
       return { id: existing, created: false }
     }
     if (creating) return creating
@@ -2346,7 +2348,7 @@ import QuestionModal from '../components/overlays/QuestionModal.svelte'
             chatShowReasoning.update(r => ({ ...r, [newSess.id]: false }))
           }
         } catch (e: any) {
-          showToast(e.message ?? 'Failed to apply reasoning effort', 'error')
+          showToast(e.message ?? tr('chat.reasoning_failed'), 'error')
         }
       }
       // Same story as reasoning effort above: permission mode and the
@@ -2359,7 +2361,7 @@ import QuestionModal from '../components/overlays/QuestionModal.svelte'
           chatPermMode.update(m => ({ ...m, [newSess.id]: permPick }))
         } catch (e: any) {
           pendingPermissionGate.require(newSess.id, permPick)
-          showToast(e.message ?? 'Failed to apply permission mode', 'error')
+          showToast(e.message ?? tr('chat.permission_failed'), 'error')
           return null
         }
       }
@@ -2370,7 +2372,7 @@ import QuestionModal from '../components/overlays/QuestionModal.svelte'
           await api.updateSessionShowReasoning(newSess.id, showReasoningPick)
           chatShowReasoning.update(r => ({ ...r, [newSess.id]: showReasoningPick }))
         } catch (e: any) {
-          showToast(e.message ?? 'Failed to apply reasoning visibility', 'error')
+          showToast(e.message ?? tr('chat.reasoning_visibility_failed'), 'error')
         }
       }
       return { id: newSess.id, created: true }
@@ -2555,7 +2557,8 @@ import QuestionModal from '../components/overlays/QuestionModal.svelte'
 
   function formatBindMessage(msg: string): string {
     // Keep the message concise for the inline banner.
-    return msg.replace(/since [^;]+;?/i, '').trim() || 'Session is bound to another entry.'
+    // OCTO-FORK: keep the server's message intact, but localize our empty fallback.
+    return msg.replace(/since [^;]+;?/i, '').trim() || tr('chat.session_bound_elsewhere')
   }
 
   // ── inline edit: turn a user message into an input, truncate history, resend ──
@@ -2863,7 +2866,7 @@ import QuestionModal from '../components/overlays/QuestionModal.svelte'
                           {#if ref.startsWith('pdf:')}
                             <span class="attach-chip"><iconify-icon icon="ant-design:paper-clip-outlined" width="12"></iconify-icon>{ref.slice(4)}</span>
                           {:else}
-                            <img src={ref} alt="attachment" class="msg-image" onclick={() => { lightboxSrc = ref }} />
+                            <img src={ref} alt={$t('chat.image_alt')} class="msg-image" onclick={() => { lightboxSrc = ref }} />
                           {/if}
                         {/each}
                       </div>

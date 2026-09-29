@@ -1,7 +1,7 @@
 <script lang="ts">
   import { artifacts, panelContent, panelExpanded, artifactSel, artifactView, lightappSel, lightappOpen, lightapps, lightappHTML, lightappStamp, cacheLightApp, dropLightApp, showToast, isDesktopShell, localAccess, activeSessionId, savePanelMode, type PanelMode } from '../lib/stores'
   import { titlebarDblClick } from '../lib/nativeWindow'
-  import { t } from '../lib/i18n'
+  import { t, tr } from '../lib/i18n'
   import { copyArtifact, downloadArtifact, imagePreviewError } from '../lib/artifact-actions'
   import { ARTIFACT_ORIGIN_SANDBOX, hydrateArtifact, themeRev } from '../lib/artifacts'
   import { CENTER_MIN } from '../lib/sidebarWidth'
@@ -99,7 +99,8 @@
       // reload always restarts the app even when nothing on disk changed.
       laReloadGen++
     } catch (e: any) {
-      showToast(`Failed to reload: ${e.message}`, 'error')
+      // OCTO-FORK: locally composed reload feedback follows the selected language.
+      showToast(tr('lightapps.reload_failed').replace('{error}', e.message), 'error')
     } finally {
       laLoading = false
     }

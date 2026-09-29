@@ -4,7 +4,7 @@ import { flushSync, mount, unmount } from 'svelte'
 import { get } from 'svelte/store'
 import { locale } from '../../lib/i18n'
 import { productPhase, productState } from '../../lib/product'
-import { settingsModalOpen, settingsTarget, openSettingsAt } from '../../lib/stores'
+import { nativeShell, settingsModalOpen, settingsTarget, openSettingsAt } from '../../lib/stores'
 import SettingsModal from './SettingsModal.svelte'
 
 let app: ReturnType<typeof mount> | undefined
@@ -13,7 +13,7 @@ const accountState = { loggedIn: true, activated: true, account: { nickname: '�
 function json(value: unknown) { return new Response(JSON.stringify(value), { headers: { 'Content-Type': 'application/json' } }) }
 beforeEach(() => {
   locale.set('zh'); productPhase.set('ready'); productState.set(accountState as never)
-  settingsModalOpen.set(false); settingsTarget.set(null)
+  settingsModalOpen.set(false); settingsTarget.set(null); nativeShell.set(false)
   sessionStorage.setItem('octo_window_token', 'test')
   vi.stubGlobal('fetch', vi.fn(async (input: unknown) => {
     const path = String(input).split('?')[0]
@@ -29,7 +29,7 @@ beforeEach(() => {
 afterEach(async () => {
   if (app) await unmount(app)
   app = undefined; target.remove(); settingsModalOpen.set(false); settingsTarget.set(null)
-  vi.unstubAllGlobals(); sessionStorage.clear(); productPhase.set('unknown')
+  vi.unstubAllGlobals(); sessionStorage.clear(); productPhase.set('unknown'); nativeShell.set(false)
 })
 function activePage() { return target.querySelector('.rail [aria-current="page"]')?.textContent?.trim() }
 function open() { app = mount(SettingsModal, { target }); flushSync() }
@@ -189,4 +189,50 @@ it('opens only one FAQ item at a time', async () => {
   expect(items[0].classList.contains('open')).toBe(false)
   expect(items[1].classList.contains('open')).toBe(true)
   expect(target.querySelectorAll('.help-faq-item.open')).toHaveLength(1)
+})
+
+// OCTO-FORK: the desktop Mobile page owns the one-click tunnel lifecycle and
+// shows the existing pairing QR only after the relay reports connected.
+it('starts and stops the desktop phone tunnel from Settings', async () => {
+  nativeShell.set(true)
+  let state = 'off'
+  const original = globalThis.fetch
+  vi.stubGlobal('fetch', vi.fn(async (input: unknown, init?: RequestInit) => {
+    const path = String(input).split('?')[0]
+    if (path.endsWith('/api/product/tunnel/start')) { state = 'connected'; return json({ state }) }
+    if (path.endsWith('/api/product/tunnel/stop')) { state = 'off'; return json({ state }) }
+    if (path.endsWith('/api/product/tunnel')) return json({ state })
+    if (path.endsWith('/api/tunnel/pairing')) return json({ enabled: state === 'connected', pair_url: 'octo-pair://v1?tok=test', relay: 'wss://relay.example.com', tunnel_id: 'test-id' })
+    return original(input as RequestInfo, init)
+  }))
+  openSettingsAt('mobile'); open()
+  const control = () => target.querySelector<HTMLButtonElement>('.mobile-control button')
+  await vi.waitFor(() => expect(control()?.textContent).toContain('启动连接'))
+  expect(target.querySelector('.mobile-pair')).toBeNull()
+  control()!.click()
+  await vi.waitFor(() => expect(target.querySelector('.mobile-pair')).not.toBeNull())
+  await vi.waitFor(() => expect(target.querySelector<HTMLImageElement>('.mobile-pair img.qr')?.src).toMatch(/^data:image\/png;base64,/))
+  expect(target.querySelector('.mobile-status')?.textContent).toContain('已连接')
+  expect(control()?.textContent).toContain('关闭连接')
+  control()!.click()
+  await vi.waitFor(() => expect(control()?.textContent).toContain('启动连接'))
+  expect(target.querySelector('.mobile-pair')).toBeNull()
+  const paths = vi.mocked(globalThis.fetch).mock.calls.map(([input]) => String(input))
+  expect(paths).toContain('/api/product/tunnel/start')
+  expect(paths).toContain('/api/product/tunnel/stop')
+})
+
+it('shows a relay error without exposing a stale pairing QR', async () => {
+  nativeShell.set(true)
+  const original = globalThis.fetch
+  vi.stubGlobal('fetch', vi.fn(async (input: unknown, init?: RequestInit) => {
+    const path = String(input).split('?')[0]
+    if (path.endsWith('/api/product/tunnel')) return json({ state: 'retrying', error: 'relay_unavailable' })
+    if (path.endsWith('/api/tunnel/pairing')) throw new Error('pairing should be hidden while retrying')
+    return original(input as RequestInfo, init)
+  }))
+  openSettingsAt('mobile'); open()
+  await vi.waitFor(() => expect(target.querySelector('.mobile-error')?.textContent).toMatch(/中继连接失败|Relay connection failed/))
+  expect(target.querySelector('.mobile-status')?.textContent).toMatch(/正在重试|retrying/)
+  expect(target.querySelector('.mobile-pair')).toBeNull()
 })

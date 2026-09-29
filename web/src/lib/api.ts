@@ -1376,6 +1376,25 @@ export async function getTunnelPairing(): Promise<TunnelPairing> {
   return request<TunnelPairing>('/api/tunnel/pairing', { cache: 'no-store' })
 }
 
+// OCTO-FORK: the desktop window controls its in-process tunnel; the QR itself
+// still comes from the existing pairing endpoint above.
+export interface DesktopTunnelStatus {
+  state: 'off' | 'connecting' | 'connected' | 'retrying' | 'stopping'
+  error?: 'start_failed' | 'relay_unavailable'
+}
+
+export async function getDesktopTunnelStatus(): Promise<DesktopTunnelStatus> {
+  return request<DesktopTunnelStatus>('/api/product/tunnel', { cache: 'no-store' })
+}
+
+export async function startDesktopTunnel(): Promise<DesktopTunnelStatus> {
+  return request<DesktopTunnelStatus>('/api/product/tunnel/start', { method: 'POST' })
+}
+
+export async function stopDesktopTunnel(): Promise<DesktopTunnelStatus> {
+  return request<DesktopTunnelStatus>('/api/product/tunnel/stop', { method: 'POST' })
+}
+
 // Browser automation setup
 
 export interface BrowserStatus {

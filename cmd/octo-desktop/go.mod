@@ -18,6 +18,8 @@ require (
 	git.sr.ht/~jackmordaunt/go-toast/v2 v2.0.3 // indirect
 	github.com/adrg/xdg v0.5.3 // indirect
 	github.com/coder/websocket v1.8.14 // indirect
+	// OCTO-FORK: desktop now runs the existing encrypted phone tunnel in-process.
+	github.com/flynn/noise v1.1.0 // indirect
 	github.com/go-ole/go-ole v1.3.0 // indirect
 	github.com/godbus/dbus/v5 v5.2.2 // indirect
 	github.com/gorilla/websocket v1.5.3 // indirect
@@ -27,6 +29,8 @@ require (
 	github.com/robfig/cron/v3 v3.0.1 // indirect
 	github.com/tetratelabs/wazero v1.12.0 // indirect
 	github.com/yuin/goldmark v1.8.5 // indirect
+	// OCTO-FORK: Noise uses the existing cryptographic primitives transitively.
+	golang.org/x/crypto v0.55.0 // indirect
 	golang.org/x/image v0.45.0 // indirect
 	golang.org/x/mod v0.38.0 // indirect
 	golang.org/x/net v0.58.0 // indirect

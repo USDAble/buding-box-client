@@ -46,3 +46,34 @@ func TestHandleTunnelPairing(t *testing.T) {
 		t.Errorf("tunnel_id = %v", on["tunnel_id"])
 	}
 }
+
+// OCTO-FORK: the desktop QR carries a one-time remote-access token and may
+// only be read by its local window; the CLI's ungated route stays covered above.
+func TestHandleTunnelPairingDesktopGate(t *testing.T) {
+	s := &Server{cfg: Config{WindowToken: "window-token"}}
+	s.SetTunnelPairing(&TunnelPairing{PairURL: "octo-pair://v1?tok=secret"})
+	for _, tc := range []struct {
+		name, remote, token string
+		want                int
+	}{
+		{"window", "127.0.0.1:3000", "window-token", http.StatusOK},
+		{"other browser", "127.0.0.1:3000", "", http.StatusForbidden},
+		{"remote phone", "127.0.0.1:3000", "window-token", http.StatusForbidden},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			req := httptest.NewRequest(http.MethodGet, "http://127.0.0.1:8088/api/tunnel/pairing", nil)
+			req.RemoteAddr = tc.remote
+			if tc.token != "" {
+				req.Header.Set(windowTokenHeader, tc.token)
+			}
+			if tc.name == "remote phone" {
+				req.Header.Set(HeaderForwarded, "relay")
+			}
+			rec := httptest.NewRecorder()
+			s.handleTunnelPairing(rec, req)
+			if rec.Code != tc.want {
+				t.Fatalf("status = %d, want %d", rec.Code, tc.want)
+			}
+		})
+	}
+}

@@ -53,9 +53,10 @@ npm test          # vitest: pairing + frames + shim + buffering-transport
 npm run typecheck # tsc
 ```
 
+<!-- OCTO-FORK: show the shipped product CLI alias while retaining the upstream relay protocol. -->
 Both the **Android** and **iOS** apps are verified end to end, from a
 **from-scratch build** (`cap add` → `wire-native` → build): paired to a local
-`octo serve --tunnel` + `octo-relay` over a real Noise XX session, and the
+`puddingbox serve --tunnel` + `octo-relay` over a real Noise XX session, and the
 mobile UI shell drove `/api` + `/ws` through the tunnel. `wire-native` automates
 the whole native setup for both platforms — see `native/README.md` for what it
 does per platform.
@@ -106,7 +107,8 @@ xcodebuild -project ios/App/App.xcodeproj -scheme App \
   -destination 'platform=iOS Simulator,name=iPhone 15 Pro' build
 ```
 
-Then pair: run `octo serve --tunnel` on the host, and scan the printed QR (or,
+<!-- OCTO-FORK: use the installed product command in the phone pairing steps. -->
+Then pair: run `puddingbox serve --tunnel` on the host, and scan the printed QR (or,
 on a simulator/emulator, open the `octo-pair://` deep link directly —
 `xcrun simctl openurl booted '<url>'` / `adb shell am start -a android.intent.action.VIEW -d '<url>'`).
 

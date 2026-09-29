@@ -2,8 +2,9 @@
 ;
 ; OCTO-FORK: 便携交付物：安装器与发行配置的品牌化 — see the portable packaging design
 ; Installs the desktop app (PuddingBox.exe) + the octo CLI to
-; %LOCALAPPDATA%\Programs\octo, puts that dir on the user PATH (HKCU — no admin,
-; no UAC) so `octo` works in a terminal, creates a Start-menu shortcut that
+; %LOCALAPPDATA%\Programs\octo, puts that dir and cli/ on the user PATH
+; (HKCU — no admin, no UAC) so `octo` and `puddingbox` work in a terminal,
+; creates a Start-menu shortcut that
 ; launches the app, seeds uv into ~/.octo/bin, and opens the app. Per-user is
 ; deliberate: the install dir stays user-writable so `octo upgrade` (CLI) can
 ; replace the binary without elevation.
@@ -64,6 +65,8 @@ UninstallDisplayName={#BrandAppName} {#AppVersion}
 [Files]
 Source: "{#SourceDir}\PuddingBox.exe"; DestDir: "{app}"; Flags: ignoreversion
 Source: "{#SourceDir}\octo.exe"; DestDir: "{app}"; Flags: ignoreversion
+; OCTO-FORK: ship the preferred branded CLI name alongside the old compatible command.
+Source: "{#SourceDir}\octo.exe"; DestDir: "{app}\cli"; DestName: "{#BrandCLIExeName}"; Flags: ignoreversion
 Source: "{#SourceDir}\LICENSE.txt"; DestDir: "{app}"; Flags: ignoreversion
 ; uv, staged by `make bundle-tools-windows` into SourceDir before ISCC runs.
 ; Lands in {app} beside PuddingBox.exe so the app self-provisions it into
@@ -91,38 +94,53 @@ end;
 
 procedure AddToPath;
 var
-  Path, Entry: string;
+  Path, Entry, CLIDir: string;
 begin
   Entry := ExpandConstant('{app}');
+  CLIDir := ExpandConstant('{app}\cli');
   if not RegQueryStringValue(HKEY_CURRENT_USER, EnvKey, 'Path', Path) then
     Path := '';
-  if PathContains(Path, Entry) then
-    exit;
-  if (Path <> '') and (Path[Length(Path)] <> ';') then
-    Path := Path + ';';
-  RegWriteExpandStringValue(HKEY_CURRENT_USER, EnvKey, 'Path', Path + Entry);
+  // OCTO-FORK: Windows ignores filename case, so the CLI lives in cli\ and
+  // must precede the GUI directory when resolving the puddingbox command.
+  if not PathContains(Path, CLIDir) then
+    Path := CLIDir + ';' + Path;
+  if not PathContains(Path, Entry) then
+  begin
+    if (Path <> '') and (Path[Length(Path)] <> ';') then
+      Path := Path + ';';
+    Path := Path + Entry;
+  end;
+  RegWriteExpandStringValue(HKEY_CURRENT_USER, EnvKey, 'Path', Path);
 end;
 
-// RemoveFromPath strips exactly our {app} element, preserving the case of the
-// rest. Works on a ';'-padded copy so the first/last elements are bounded like
-// any other, then trims the padding back off.
-procedure RemoveFromPath;
+// OCTO-FORK: remove both installer-owned PATH entries while preserving every
+// unrelated entry and the legacy CLI upgrade path.
+function WithoutPathEntry(const Path, Entry: string): string;
 var
-  Path, Padded, EntryLower: string;
+  Padded, EntryLower: string;
   P: Integer;
 begin
-  if not RegQueryStringValue(HKEY_CURRENT_USER, EnvKey, 'Path', Path) then
-    exit;
+  Result := Path;
   Padded := ';' + Path + ';';
-  EntryLower := ';' + Lowercase(ExpandConstant('{app}')) + ';';
+  EntryLower := ';' + Lowercase(Entry) + ';';
   P := Pos(EntryLower, Lowercase(Padded));
   if P = 0 then
     exit;
   Delete(Padded, P, Length(EntryLower) - 1);
   if Length(Padded) >= 2 then
-    Path := Copy(Padded, 2, Length(Padded) - 2)
+    Result := Copy(Padded, 2, Length(Padded) - 2)
   else
-    Path := '';
+    Result := '';
+end;
+
+procedure RemoveFromPath;
+var
+  Path: string;
+begin
+  if not RegQueryStringValue(HKEY_CURRENT_USER, EnvKey, 'Path', Path) then
+    exit;
+  Path := WithoutPathEntry(Path, ExpandConstant('{app}\cli'));
+  Path := WithoutPathEntry(Path, ExpandConstant('{app}'));
   RegWriteExpandStringValue(HKEY_CURRENT_USER, EnvKey, 'Path', Path);
 end;
 

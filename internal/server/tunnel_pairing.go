@@ -3,10 +3,9 @@ package server
 import "net/http"
 
 // TunnelPairing is the material a phone needs to pair with this host over the
-// managed tunnel: the deep-link URL a QR encodes, plus display fields. It is
-// published by `octo serve --tunnel` (see cmd/octo) and read by the web UI to
-// render a pairing QR. The server holds it as opaque display data — it learns
-// nothing about the tunnel's Noise or relay mechanics from it.
+// managed tunnel: the deep-link URL a QR encodes, plus display fields.
+// OCTO-FORK: CLI serve and the desktop's in-process tunnel share this display
+// contract, while the server remains unaware of Noise and relay mechanics.
 type TunnelPairing struct {
 	PairURL  string `json:"pair_url"`
 	Relay    string `json:"relay"`
@@ -22,6 +21,13 @@ func (s *Server) SetTunnelPairing(p *TunnelPairing) {
 // handleTunnelPairing returns the pairing material for the web UI. When the
 // managed tunnel is off, enabled is false and there is nothing to render.
 func (s *Server) handleTunnelPairing(w http.ResponseWriter, r *http.Request) {
+	// OCTO-FORK: once the desktop can start a tunnel, its one-time pairing
+	// token must be visible only to that local window, never to a relayed phone
+	// or an unrelated browser. Plain CLI serve keeps its original behavior.
+	if s.cfg.WindowToken != "" && (!isLocalRequest(r) || !s.windowAllowed(r)) {
+		writeJSON(w, http.StatusForbidden, map[string]string{"error": "product_gate"})
+		return
+	}
 	p := s.tunnelPairing.Load()
 	if p == nil {
 		writeJSON(w, http.StatusOK, map[string]any{"enabled": false})

@@ -76,8 +76,18 @@ test('the installer takes the fixed Windows display name, not a localized one', 
   const rendered = renderWindowsInstallerBrand(brand)
   assert.match(rendered, /^; Generated from branding\/brand\.json/m)
   assert.match(rendered, /#define BrandAppName "Pudding Box"/)
+  // OCTO-FORK: installer CLI alias must follow the brand source.
+  assert.ok(rendered.includes('#define BrandCLIExeName "puddingbox.exe"'))
   assert.match(rendered, /#define BrandAppPublisher "Pudding Box Studio"/)
   assert.match(rendered, /#define BrandAppPublisherURL "https:\/\/[^"]+"/)
+})
+
+// OCTO-FORK: Windows treats PuddingBox.exe and puddingbox.exe as the same
+// filename, so the branded CLI must be installed outside the GUI directory.
+test('the Windows installer keeps the branded CLI separate from the GUI executable', async () => {
+  const installer = await fs.readFile(path.join(root, 'packaging/windows/octo.iss'), 'utf8')
+  assert.ok(installer.includes('DestDir: "{app}\\cli"; DestName: "{#BrandCLIExeName}"'))
+  assert.ok(installer.includes("CLIDir := ExpandConstant('{app}\\cli')"))
 })
 
 test('a quote in a brand value cannot break out of the Inno string literal', () => {

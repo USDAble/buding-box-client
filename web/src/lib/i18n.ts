@@ -1,5 +1,5 @@
 import { writable, derived, get } from "svelte/store";
-import { brandName, brandShortName } from "./brand";
+import { brandIdentifier, brandName, brandShortName, IDENTIFIER } from "./brand";
 
 export const en: Record<string, string> = {
   // OCTO-FORK: client platform error codes are translated locally; the server's Chinese message is diagnostic data.
@@ -636,12 +636,29 @@ export const en: Record<string, string> = {
   "settings.on": "On",
   "settings.off": "Off",
   "settings.mobile": "Mobile",
-  "settings.mobile.scan": "Scan this QR with the octo mobile app to pair this device.",
-  "settings.mobile.disabled": "Start the server with `octo serve --tunnel` to pair a phone over the managed tunnel.",
+  // OCTO-FORK: the pairing prompt must not show the upstream product name.
+  "settings.mobile.scan": "Scan this QR with the {brand} mobile app to pair this device.",
+  // OCTO-FORK: the mobile setup command follows the shipped CLI brand alias.
+  "settings.mobile.disabled": "Start the server with `{cliCommand} serve --tunnel` to pair a phone over the managed tunnel.",
   "settings.mobile.relay": "Relay",
   "settings.mobile.tunnel_id": "Tunnel ID",
   "settings.mobile.copy_url": "Copy pairing link",
   "settings.mobile.copied": "Pairing link copied",
+  // OCTO-FORK: one-click desktop tunnel has explicit action, retry and failure states.
+  "settings.mobile.start": "Start connection",
+  "settings.mobile.stop": "Stop connection",
+  "settings.mobile.start_hint": "Start to show a pairing QR code. Closing the desktop app stops the connection.",
+  "settings.mobile.state_loading": "Checking connection…",
+  "settings.mobile.state_off": "Not connected",
+  "settings.mobile.state_connecting": "Connecting to relay…",
+  "settings.mobile.state_connected": "Connected — scan the QR code below",
+  "settings.mobile.state_retrying": "Disconnected — retrying…",
+  "settings.mobile.state_stopping": "Stopping…",
+  "settings.mobile.start_failed": "Could not start the phone connection. Check local data access and try again.",
+  "settings.mobile.relay_unavailable": "Relay connection failed or dropped. Check that the relay service and network are available; reconnection is automatic.",
+  "settings.mobile.status_failed": "Could not read the connection status. Try reopening Settings.",
+  "settings.mobile.stop_failed": "Could not stop the connection. Try again or quit the desktop app.",
+  "settings.mobile.pairing_failed": "Connected, but the pairing QR could not be loaded. Try reopening Settings.",
   "settings.data": "Data Management",
   "settings.data.archived": "Archived tasks",
   "settings.data.archived_empty": "No archived tasks.",
@@ -2088,12 +2105,29 @@ export const zh: Record<string, string> = {
   "settings.on": "开",
   "settings.off": "关",
   "settings.mobile": "手机",
-  "settings.mobile.scan": "用 octo 手机 App 扫描此二维码，配对本机。",
-  "settings.mobile.disabled": "用 `octo serve --tunnel` 启动服务端，即可通过托管隧道配对手机。",
+  // OCTO-FORK: the pairing prompt must not show the upstream product name.
+  "settings.mobile.scan": "用{brand}手机 App 扫描此二维码，配对本机。",
+  // OCTO-FORK: the mobile setup command follows the shipped CLI brand alias.
+  "settings.mobile.disabled": "用 `{cliCommand} serve --tunnel` 启动服务端，即可通过托管隧道配对手机。",
   "settings.mobile.relay": "中继",
   "settings.mobile.tunnel_id": "隧道 ID",
   "settings.mobile.copy_url": "复制配对链接",
   "settings.mobile.copied": "配对链接已复制",
+  // OCTO-FORK: one-click desktop tunnel has explicit action, retry and failure states.
+  "settings.mobile.start": "启动连接",
+  "settings.mobile.stop": "关闭连接",
+  "settings.mobile.start_hint": "启动后显示配对二维码；关闭桌面应用时会自动断开。",
+  "settings.mobile.state_loading": "正在检查连接状态…",
+  "settings.mobile.state_off": "未连接",
+  "settings.mobile.state_connecting": "正在连接中继…",
+  "settings.mobile.state_connected": "已连接，请扫描下方二维码",
+  "settings.mobile.state_retrying": "连接中断，正在重试…",
+  "settings.mobile.state_stopping": "正在关闭…",
+  "settings.mobile.start_failed": "手机连接启动失败，请检查本地数据目录后重试。",
+  "settings.mobile.relay_unavailable": "中继连接失败或中断，请确认中继服务和网络可用；程序会自动重试。",
+  "settings.mobile.status_failed": "无法读取连接状态，请重新打开设置后重试。",
+  "settings.mobile.stop_failed": "关闭连接失败，请重试或退出桌面应用。",
+  "settings.mobile.pairing_failed": "已连接，但二维码加载失败，请重新打开设置后重试。",
   "settings.data": "数据管理",
   "settings.data.archived": "已归档任务",
   "settings.data.archived_empty": "暂无已归档任务。",
@@ -2901,13 +2935,14 @@ function dictFor(l: string): Record<string, string> {
 // to inherit the same spacing, whereas a placeholder lets each dictionary
 // decide: English writes "About {brand}" with a space, Chinese writes
 // "关于{brand}" without one, because CJK takes no space around an inline name.
-const BRAND_PLACEHOLDER = /\{(brand|brandShort)\}/g;
+const BRAND_PLACEHOLDER = /\{(brand|brandShort|cliCommand)\}/g;
 
 function interpolateBrand(text: string, locale: string): string {
   // Cheap guard: t() is called on every re-render for keys that mostly have no
   // placeholder, so skip building the regex match state for them.
-  if (!text.includes("{brand")) return text;
+  if (!text.includes("{brand") && !text.includes("{cliCommand")) return text;
   return text.replace(BRAND_PLACEHOLDER, (_, token: string) =>
+    token === "cliCommand" ? brandIdentifier(IDENTIFIER.cliCommand) :
     token === "brandShort" ? brandShortName(locale) : brandName(locale),
   );
 }

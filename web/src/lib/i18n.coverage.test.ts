@@ -101,6 +101,15 @@ const BRAND_LITERAL_ALLOWED: Record<string, string> = {
 describe('i18n brand placeholders', () => {
   const dicts = { en, zh }
 
+  // OCTO-FORK: tunnel guidance must resolve to the branded, installed CLI command.
+  it('renders the mobile tunnel command from the brand identifier', () => {
+    setLocale('en')
+    expect(get(t)('settings.mobile.disabled')).toContain('puddingbox serve --tunnel')
+    setLocale('zh')
+    expect(get(t)('settings.mobile.disabled')).toContain('puddingbox serve --tunnel')
+    setLocale('en')
+  })
+
   it('no dictionary value spells the product name out', () => {
     const offenders: string[] = []
     for (const [locale, dict] of Object.entries(dicts)) {

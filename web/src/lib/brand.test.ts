@@ -134,10 +134,11 @@ describe('class C identifiers and paths', () => {
     expect(brandIdentifier(IDENTIFIER.singleInstanceId)).toBe('app.puddingbox.desktop')
   })
 
-  // These stay on the upstream values this phase; changing them breaks
-  // in-place upgrades for already-installed copies.
-  it('keeps the compatibility identifiers unchanged', () => {
-    expect(brandIdentifier(IDENTIFIER.cliCommand)).toBe('octo')
+  // OCTO-FORK: the preferred CLI command is branded; data/config identifiers
+  // remain compatible with existing installations.
+  it('uses the branded CLI command without moving compatibility paths', () => {
+    expect(brandIdentifier(IDENTIFIER.cliCommand)).toBe('puddingbox')
+    expect(brandIdentifier(IDENTIFIER.cliExeName)).toBe('puddingbox.exe')
     expect(brandIdentifier(IDENTIFIER.configDir)).toBe('~/.octo')
     expect(brandIdentifier(IDENTIFIER.envPrefix)).toBe('OCTO_')
   })

@@ -3,9 +3,43 @@ package main
 import (
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 )
+
+// OCTO-FORK: the desktop seed must provide the preferred command without
+// overwriting a user's own executable.
+func TestEnsureBundledCLIAlias(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("desktop CLI aliases are created only on macOS and Linux")
+	}
+	dir := t.TempDir()
+	target := filepath.Join(dir, "octo")
+	alias := filepath.Join(dir, "puddingbox")
+	ensureBundledCLIAlias(target, "puddingbox")
+	if _, err := os.Lstat(alias); !os.IsNotExist(err) {
+		t.Fatalf("alias created without a CLI: %v", err)
+	}
+	if err := os.WriteFile(target, []byte("cli"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	ensureBundledCLIAlias(target, "puddingbox")
+	if got, err := os.Readlink(alias); err != nil || got != "octo" {
+		t.Fatalf("alias target = %q, %v; want octo", got, err)
+	}
+	ensureBundledCLIAlias(target, "puddingbox") // idempotent
+	if err := os.Remove(alias); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(alias, []byte("user command"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	ensureBundledCLIAlias(target, "puddingbox")
+	if got, _ := os.ReadFile(alias); string(got) != "user command" {
+		t.Fatalf("user command overwritten: %q", got)
+	}
+}
 
 func TestShouldSeedOcto(t *testing.T) {
 	tests := []struct {

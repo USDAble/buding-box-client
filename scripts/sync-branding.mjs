@@ -51,12 +51,16 @@ export function renderWindowsInstallerBrand(brand) {
   const appName = requireText(brand.display?.windows?.productName, 'display.windows.productName')
   const publisher = requireText(brand.about?.teamName?.['en-US'], "about.teamName['en-US']")
   const publisherURL = requireText(brand.links?.external?.website, 'links.external.website')
+  // OCTO-FORK: the Windows installer emits the preferred CLI alias from the
+  // brand source while still retaining the upstream executable.
+  const cliExeName = requireText(brand.identifiers?.current?.cliExeName, 'identifiers.current.cliExeName')
 
   return [
     `; ${GENERATED_NOTICE}`,
     `#define BrandAppName "${escapeInnoString(appName)}"`,
     `#define BrandAppPublisher "${escapeInnoString(publisher)}"`,
     `#define BrandAppPublisherURL "${escapeInnoString(publisherURL)}"`,
+    `#define BrandCLIExeName "${escapeInnoString(cliExeName)}"`,
     '',
   ].join('\n')
 }

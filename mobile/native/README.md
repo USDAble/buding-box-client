@@ -21,8 +21,9 @@ why** — read it to understand or debug the wiring, not to perform it.
 
 ## Status
 
+<!-- OCTO-FORK: document the product CLI alias without renaming the relay protocol. -->
 Both plugins are implemented and **verified end to end** on a simulator/emulator:
-paired to a local `octo serve --tunnel` + `octo-relay` over a real Noise XX
+paired to a local `puddingbox serve --tunnel` + `octo-relay` over a real Noise XX
 session, and the bundled web frontend drove `/api` + `/ws` through the tunnel.
 They interoperate with the Go host (`internal/tunnel`) and relay
 (`cmd/octo-relay`). Android uses noise-java; iOS implements Noise XX on CryptoKit.

@@ -328,8 +328,8 @@ type Server struct {
 	artifactGrants   map[string]*artifactGrant
 
 	// tunnelPairing holds the managed-tunnel pairing material the web UI renders
-	// as a QR, published by `octo serve --tunnel` via SetTunnelPairing. Nil when
-	// the tunnel is off. The server otherwise knows nothing about the tunnel.
+	// as a QR, published via SetTunnelPairing. Nil when the tunnel is off.
+	// OCTO-FORK: desktop owns the same pairing slot as CLI serve, without a second server.
 	tunnelPairing atomic.Pointer[TunnelPairing]
 
 	// agent factory state (resolved once at start)

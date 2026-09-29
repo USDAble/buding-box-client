@@ -92,6 +92,29 @@ describe('observeArtifact — image artifacts', () => {
 
 })
 
+// OCTO-FORK: Office files should be listed for download without decoding binary bytes as preview text.
+describe('observeArtifact — Office downloads', () => {
+  it.each([
+    ['report.doc', 'Word'], ['report.docx', 'Word'],
+    ['table.xls', 'Excel'], ['table.xlsx', 'Excel'],
+    ['slides.ppt', 'PowerPoint'], ['slides.pptx', 'PowerPoint'],
+  ])('lists %s as a download-only %s artifact', async (name, type) => {
+    const fetchMock = vi.fn()
+    vi.stubGlobal('fetch', fetchMock)
+
+    observeArtifact(SID, payload(`/tmp/${name}`), false)
+    const [entry] = get(artifacts)
+    expect(entry.type).toBe(type)
+    expect(entry.name).toBe(name)
+    expect(entry.src).toContain(`/artifacts?path=${encodeURIComponent(`/tmp/${name}`)}`)
+    expect(entry.loaded).toBe(true)
+    expect(entry.code).toBe(`/tmp/${name}`)
+    expect(entry.preview).toBe('')
+    await hydrateArtifact(entry)
+    expect(fetchMock).not.toHaveBeenCalled()
+  })
+})
+
 // Entries land in the store metadata-only and the body is built on first
 // selection, so history replay costs no network and a session's unopened
 // artifacts hold no data: URIs (#1893).

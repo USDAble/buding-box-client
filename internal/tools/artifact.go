@@ -11,7 +11,7 @@ import (
 	"github.com/open-octo/octo-agent/internal/agent"
 )
 
-// artifactContentTypes maps previewable extensions to the explicit
+// artifactContentTypes maps supported extensions to the explicit
 // Content-Type served for them. Shared by ShowArtifactTool (early validation
 // with a useful error) and the server's artifact endpoint (response headers
 // and final gate) so the two can't drift apart. It must also match the web
@@ -19,7 +19,7 @@ import (
 // but the endpoint refuses makes the fetch 404 and the artifact silently
 // vanish from the panel (#1895).
 //
-// Only kinds the panel can actually render belong here — a source or config
+// Only kinds the panel can render or download belong here — a source or config
 // file is not a deliverable, and the panel's Git Diff mode already shows the
 // session's code changes with context. Listing them here would flood the
 // artifact list with the routine bulk of a coding session and bury the
@@ -35,6 +35,13 @@ var artifactContentTypes = map[string]string{
 	".gif":      "image/gif",
 	".svg":      "image/svg+xml",
 	".webp":     "image/webp",
+	// OCTO-FORK: Office deliverables belong in the artifact panel as downloads without requiring a preview renderer.
+	".doc":  "application/octet-stream",
+	".docx": "application/octet-stream",
+	".xls":  "application/octet-stream",
+	".xlsx": "application/octet-stream",
+	".ppt":  "application/octet-stream",
+	".pptx": "application/octet-stream",
 }
 
 // artifactAssetContentTypes is the second table: files an HTML artifact may
@@ -84,17 +91,11 @@ func ArtifactAssetContentType(path string) (ctype string, ok bool) {
 		return ctype, true
 	}
 	ctype, ok = artifactContentTypes[ext]
-	if ok && strings.HasPrefix(ctype, "text/html") {
-		return "", false
-	}
-	if ok && strings.HasPrefix(ctype, "text/markdown") {
-		return "", false
-	}
-	return ctype, ok
+	// OCTO-FORK: Only images from the artifact table are page assets; downloadable Office neighbors stay private.
+	return ctype, ok && strings.HasPrefix(ctype, "image/")
 }
 
-// ArtifactContentType returns the Content-Type for a previewable artifact
-// path, or ok=false when the extension isn't previewable.
+// ArtifactContentType returns the Content-Type for a supported artifact path.
 func ArtifactContentType(path string) (ctype string, ok bool) {
 	ctype, ok = artifactContentTypes[strings.ToLower(filepath.Ext(path))]
 	return ctype, ok
@@ -109,7 +110,7 @@ func artifactExtList() string {
 	return strings.Join(exts, ", ")
 }
 
-// ShowArtifactTool surfaces an existing file to the user as a previewable
+// ShowArtifactTool surfaces an existing file to the user as an
 // artifact. write_file/edit_file payloads already feed the web Artifacts
 // panel automatically; this tool covers files produced any other way —
 // build scripts (e.g. web-artifacts-builder's bundle.html), generators,
@@ -120,9 +121,10 @@ type ShowArtifactTool struct{}
 func (ShowArtifactTool) Definition() agent.ToolDefinition {
 	return agent.ToolDefinition{
 		Name: "show_artifact",
-		Description: "Present a previewable file (HTML page, Markdown document, or image) " +
+		// OCTO-FORK: Tell the model to surface generated Office files for download, without claiming they can be previewed.
+		Description: "Present an artifact (HTML page, Markdown document, image, or downloadable Word, Excel, or PowerPoint file) " +
 			"to the user as an artifact. ALWAYS call this right after you " +
-			"produce a previewable file the user would want to look at — a generated HTML page or " +
+			"produce a supported file the user would want to look at or download — a generated HTML page or " +
 			"slide deck, a Markdown report, a chart or image — whenever " +
 			"it was created by some means other than write_file (a terminal " +
 			"heredoc/redirect like `cat > x.html`, a script, a build step, or a download). Files you " +
@@ -137,7 +139,7 @@ func (ShowArtifactTool) Definition() agent.ToolDefinition {
 			"properties": map[string]any{
 				"path": map[string]any{
 					"type":        "string",
-					"description": "Absolute path of the file to present. Previewable types: " + artifactExtList() + ".",
+					"description": "Absolute path of the file to present. Supported types: " + artifactExtList() + ".",
 				},
 			},
 			"required": []string{"path"},
@@ -155,7 +157,7 @@ func (ShowArtifactTool) Execute(_ context.Context, _ string, input map[string]an
 		return agent.ToolResult{Text: ""}, fmt.Errorf("show_artifact: %w", err)
 	}
 	if _, ok := ArtifactContentType(abs); !ok {
-		return agent.ToolResult{Text: ""}, fmt.Errorf("show_artifact: %q is not a previewable type (want %s)", abs, artifactExtList())
+		return agent.ToolResult{Text: ""}, fmt.Errorf("show_artifact: %q is not a supported artifact type (want %s)", abs, artifactExtList())
 	}
 	fi, err := os.Stat(abs)
 	if err != nil {

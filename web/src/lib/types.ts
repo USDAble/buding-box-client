@@ -150,13 +150,14 @@ export interface Artifact {
   code: string
   preview: string
   path: string
-  // src is set for image artifacts only: the artifacts endpoint URL. Images are
+  // OCTO-FORK: Office artifacts also use src to download their bytes, without an inline preview.
+  // src is the artifacts endpoint URL for binary files. Images are
   // rendered by a plain <img> in the host document rather than through the
   // sandboxed `preview` iframe (which cannot authenticate — see lib/artifacts.ts),
   // and the download action saves these bytes.
   src?: string
   // code and preview are built lazily on first selection (hydrateArtifact in
-  // lib/artifacts.ts); loaded flips true once they are populated. Image
+  // lib/artifacts.ts); loaded flips true once they are populated. Binary
   // artifacts observe as loaded — they carry src instead of a preview document.
   loaded: boolean
   // Set when the lazy build could not fetch the body: preview holds a

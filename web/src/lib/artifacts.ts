@@ -72,9 +72,10 @@ export const ARTIFACT_ORIGIN_SANDBOX = 'allow-scripts allow-same-origin allow-fo
 // resolves after a session switch is discarded instead of polluting the new view.
 export const artifactSelSession = writable<string | null>(null)
 
-type Kind = 'html' | 'markdown' | 'image'
+// OCTO-FORK: Generated Office deliverables are downloadable artifacts even though the panel cannot preview their bytes.
+type Kind = 'html' | 'markdown' | 'image' | 'word' | 'excel' | 'powerpoint'
 
-// Only kinds the panel can render are artifacts. Source, config, and data
+// Only kinds the panel can render or download are artifacts. Source, config, and data
 // files are deliberately absent: they are the routine bulk of a coding
 // session, would bury the reports and pages the panel exists for, and the
 // panel's Git Diff mode already shows code changes with context. Must match
@@ -85,6 +86,9 @@ const EXT_KIND: Record<string, Kind> = {
   html: 'html', htm: 'html',
   md: 'markdown', markdown: 'markdown',
   png: 'image', jpg: 'image', jpeg: 'image', gif: 'image', svg: 'image', webp: 'image',
+  doc: 'word', docx: 'word',
+  xls: 'excel', xlsx: 'excel',
+  ppt: 'powerpoint', pptx: 'powerpoint',
 }
 
 // Once-per-session guard so a live write auto-opens the panel only the first time.
@@ -125,6 +129,9 @@ function typeLabel(kind: Kind): string {
     case 'html':     return 'HTML'
     case 'markdown': return 'Markdown'
     case 'image':    return 'Image'
+    case 'word':     return 'Word'
+    case 'excel':    return 'Excel'
+    case 'powerpoint': return 'PowerPoint'
     default:         return 'File'
   }
 }
@@ -408,7 +415,7 @@ export function observeArtifact(
   let loaded = false
   const rev = (revisions.get(path) ?? 0) + 1
   revisions.set(path, rev)
-  if (kind === 'image') {
+  if (kind !== 'html' && kind !== 'markdown') {
     // Images render as a plain <img> in the host document — see the
     // file-header note on why an <img src="/api/…"> inside the sandboxed
     // iframe 401s. The host document's own request is same-site and
@@ -417,6 +424,7 @@ export function observeArtifact(
     // renders one at a time. There is no preview document to build either, so
     // an image observes as already loaded.
     //
+    // OCTO-FORK: Office files share this authenticated binary URL for download, but are never rendered as images.
     // The revision counter matters: re-observing a path (the agent overwrote
     // the file) otherwise yields a byte-identical src, so Svelte skips the
     // attribute update and the panel keeps showing the previous bytes — the
@@ -485,7 +493,7 @@ export async function hydrateArtifact(a: Artifact | null | undefined): Promise<v
   if (!a || a.loaded || hydrating.has(a)) return
   const sessionId = get(artifactSelSession)
   const kind = kindOf(a.path)
-  if (!sessionId || !kind || kind === 'image') return
+  if (!sessionId || !kind || (kind !== 'html' && kind !== 'markdown')) return
   hydrating.add(a)
   let body: HydratedBody | null = null
   try {

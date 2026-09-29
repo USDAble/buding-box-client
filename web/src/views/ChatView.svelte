@@ -92,6 +92,9 @@
   import { inlineSlashCommand } from '../lib/inlineSlash'
   import { exportModeStore, selectedMessagesStore } from '../lib/exportStore'
   import { filenameStem } from '../lib/filename'
+  // OCTO-FORK: browser exports choose a destination before fetching or rendering the transcript.
+  import { pickBrowserExport, writeBrowserExport, type ExportSaveHandle } from '../lib/exportSave'
+  import { confirmDialog } from '../lib/confirm'
   import { fmtDur, thinkingTokenSegment, turnSummarySegments } from '../lib/turnSummary'
   import { anchorBgTasks } from '../lib/bgTaskAnchor'
   import DOMPurify from 'dompurify'
@@ -1987,26 +1990,36 @@ import QuestionModal from '../components/overlays/QuestionModal.svelte'
     const a = document.createElement('a')
     a.href = url
     a.download = filename
+    // OCTO-FORK: the unsupported-picker fallback must also work in Firefox.
+    document.body.appendChild(a)
     a.click()
+    a.remove()
     URL.revokeObjectURL(url)
   }
 
-  // Hand the built transcript to the user. Every format must go through here:
+  // Hand the built transcript to the user. Every text format must go through here:
   // the octo-served desktop webview has no download delegate, so a blob
   // <a download> click there silently does nothing and the bytes have to take
   // the native save dialog instead. Returns false when the save was cancelled
   // or failed, so the caller keeps export mode (and the selection) open.
-  async function deliverExport(content: string, filename: string, mime: string): Promise<boolean> {
+  async function deliverExport(content: string, filename: string, mime: string, browserHandle?: ExportSaveHandle): Promise<boolean> {
     if (get(nativeShell)) {
       try {
         const r = await api.nativeSaveFile(filename, content)
+        if (!r.cancelled) showToast(tr('chat.export_saved_to').replace('{path}', r.path))
         return !r.cancelled
       } catch {
         showToast(tr('chat.export_failed'), 'error')
         return false
       }
     }
+    if (browserHandle) {
+      await writeBrowserExport(browserHandle, new Blob([content], { type: mime }))
+      showToast(tr('chat.export_saved_named').replace('{name}', browserHandle.name))
+      return true
+    }
     triggerDownload(content, filename, mime)
+    showToast(tr('chat.export_download_started'))
     return true
   }
 
@@ -2014,7 +2027,7 @@ import QuestionModal from '../components/overlays/QuestionModal.svelte'
   // export mode (and drops the user's checkbox selection) on success — not on
   // a cancelled or failed native save. Events arrive already filtered by
   // exportEvents.
-  async function exportAsMarkdown(events: any[], title: string): Promise<boolean> {
+  async function exportAsMarkdown(events: any[], title: string, browserHandle?: ExportSaveHandle): Promise<boolean> {
     const lines: string[] = [`# ${title}`, '']
 
     for (const ev of events) {
@@ -2040,13 +2053,13 @@ import QuestionModal from '../components/overlays/QuestionModal.svelte'
 
     const title_safe = filenameStem(title)
     const content = lines.join('\n')
-    return deliverExport(content, `${title_safe}.md`, 'text/markdown')
+    return deliverExport(content, `${title_safe}.md`, 'text/markdown', browserHandle)
   }
 
-  async function exportAsJSON(events: any[], title: string): Promise<boolean> {
+  async function exportAsJSON(events: any[], title: string, browserHandle?: ExportSaveHandle): Promise<boolean> {
     const title_safe = filenameStem(title)
     const json = JSON.stringify(events, null, 2)
-    return deliverExport(json, `${title_safe}.json`, 'application/json')
+    return deliverExport(json, `${title_safe}.json`, 'application/json', browserHandle)
   }
 
   // PDF prints the conversation that is already on screen rather than building a
@@ -2091,7 +2104,9 @@ import QuestionModal from '../components/overlays/QuestionModal.svelte'
     const a = document.createElement('a')
     a.href = url
     a.download = filename
+    document.body.appendChild(a)
     a.click()
+    a.remove()
     URL.revokeObjectURL(url)
   }
 
@@ -2146,7 +2161,7 @@ import QuestionModal from '../components/overlays/QuestionModal.svelte'
     return { root: host, cleanup: () => host.remove() }
   }
 
-  async function exportAsPNG(events: any[], title: string): Promise<boolean> {
+  async function exportAsPNG(events: any[], title: string, browserHandle?: ExportSaveHandle): Promise<boolean> {
     const { default: html2canvas } = await import('html2canvas')
     const { root, cleanup } = createExportRenderRoot(events, title, getExportLocale())
     try {
@@ -2175,20 +2190,25 @@ import QuestionModal from '../components/overlays/QuestionModal.svelte'
         try {
           const res = await api.nativeSaveBinary(filename, b64)
           if (res.cancelled) return false
+          showToast(tr('chat.export_saved_to').replace('{path}', res.path))
         } catch {
           showToast(tr('chat.export_failed'), 'error')
           return false
         }
+      } else if (browserHandle) {
+        await writeBrowserExport(browserHandle, blob)
+        showToast(tr('chat.export_saved_named').replace('{name}', browserHandle.name))
       } else {
         triggerBlobDownload(blob, filename)
+        showToast(tr('chat.export_download_started'))
       }
       return true
     } finally { cleanup() }
   }
 
-  async function exportAsHTML(events: any[], title: string): Promise<boolean> {
+  async function exportAsHTML(events: any[], title: string, browserHandle?: ExportSaveHandle): Promise<boolean> {
     const content = buildExportHTMLDocument(events, title, getExportLocale())
-    return deliverExport(content, `${filenameStem(title)}.html`, 'text/html')
+    return deliverExport(content, `${filenameStem(title)}.html`, 'text/html', browserHandle)
   }
 
   async function exportByFormat(format: string) {
@@ -2203,6 +2223,22 @@ import QuestionModal from '../components/overlays/QuestionModal.svelte'
       }
       // OCTO-FORK: stored upstream placeholders remain compatible but render as product copy.
       const title = sessionDisplayTitle(currentSession, $locale, 'session')
+      let browserHandle: ExportSaveHandle | undefined
+      if (!get(nativeShell)) {
+        // OCTO-FORK: showSaveFilePicker requires the click's transient activation;
+        // fetchEvents and PNG rendering must happen after the user chooses a destination.
+        const chosen = await pickBrowserExport(`${filenameStem(title)}.${format}`)
+        if (chosen === null) return
+        if (chosen === undefined) {
+          const useDownload = await confirmDialog(tr('chat.export_picker_unavailable'), {
+            title: tr('chat.export_picker_unavailable_title'),
+            confirmLabel: tr('chat.export_use_browser_download'),
+          })
+          if (!useDownload) return
+        } else {
+          browserHandle = chosen
+        }
+      }
       // Every transcript-backed format fetches the same server events and
       // narrows them once here, so the checkbox selection and the "include
       // tool calls" toggle mean the same thing in all four.
@@ -2213,16 +2249,16 @@ import QuestionModal from '../components/overlays/QuestionModal.svelte'
       let ok = true
       switch (format) {
         case 'md':
-          ok = await exportAsMarkdown(events, title)
+          ok = await exportAsMarkdown(events, title, browserHandle)
           break
         case 'json':
-          ok = await exportAsJSON(events, title)
+          ok = await exportAsJSON(events, title, browserHandle)
           break
         case 'png':
-          ok = await exportAsPNG(events, title)
+          ok = await exportAsPNG(events, title, browserHandle)
           break
         case 'html':
-          ok = await exportAsHTML(events, title)
+          ok = await exportAsHTML(events, title, browserHandle)
           break
       }
       if (ok && omittedTools) showToast(tr('chat.export_tools_omitted'), 'info')
@@ -2685,7 +2721,8 @@ import QuestionModal from '../components/overlays/QuestionModal.svelte'
           <span>HTML</span>
         </button>
       </div>
-      <span class="export-count">{$t('chat.export_selected_count').replace('{n}', String(selectedIds.size))}</span>
+      <!-- OCTO-FORK: the native save dialog opens only after transcript preparation; show immediate feedback. -->
+      <span class="export-count">{exportBusy ? $t('chat.export_preparing') : $t('chat.export_selected_count').replace('{n}', String(selectedIds.size))}</span>
       <label class="export-tools-toggle" title={$t('chat.export_include_tools')}>
         <input type="checkbox" bind:checked={exportIncludeTools} />
         <span>{$t('chat.export_include_tools')}</span>
@@ -3307,6 +3344,8 @@ import QuestionModal from '../components/overlays/QuestionModal.svelte'
 @keyframes octo-pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.35; } }
 .header-actions { display: flex; align-items: center; gap: 8px; flex: none; }
 .hdr-btn {
+  /* OCTO-FORK: the native titlebar drag handler must not swallow export/compact clicks. */
+  --wails-draggable: no-drag;
   height: 30px; padding: 0 11px; border: none; background: transparent;
   border-radius: var(--radius-sm); display: flex; align-items: center; gap: 6px; white-space: nowrap;
   font-size: 12px; font-weight: 500; color: var(--text-secondary); cursor: pointer; font-family: inherit;

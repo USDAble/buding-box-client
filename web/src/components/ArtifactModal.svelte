@@ -6,8 +6,9 @@
   import ArtifactFrame from './ArtifactFrame.svelte'
 
   const cur = $derived($artifacts[$artifactSel] ?? $artifacts[0])
-  // OCTO-FORK: A binary download URL does not imply the file can be rendered as an image.
-  const curIsDownloadOnly = $derived(!!cur?.src && cur.type !== 'Image')
+  // OCTO-FORK: Office files use their binary URL for lazy local preview and download.
+  const curIsOffice = $derived(cur?.type === 'Word' || cur?.type === 'Excel' || cur?.type === 'PowerPoint')
+  const curIsDownloadOnly = $derived(!!cur?.src && cur.type !== 'Image' && (!curIsOffice || (cur.loaded && !cur.officePreview)))
   let modalEl = $state<HTMLDivElement | null>(null)
 
   // Entries observe metadata-only; the body is fetched and the preview built
@@ -89,7 +90,22 @@
 
     <!-- Body — always preview, no toolbar / footer chrome -->
     <div class="body">
-      {#if curIsDownloadOnly}
+      {#if curIsOffice}
+        {#if !cur.loaded}
+          <div class="body-loading"><iconify-icon icon="ant-design:loading-outlined" width="28" class="spin"></iconify-icon></div>
+        {:else if cur.officePreview}
+          <ArtifactFrame artifact={cur} />
+        {:else}
+          <div class="office-wrap">
+            <iconify-icon icon={cur.icon} width="32"></iconify-icon>
+            <span>{$t('artifacts.download_only')}</span>
+            <button class="office-download-btn" onclick={onDownload}>
+              <iconify-icon icon="ant-design:download-outlined" width="14"></iconify-icon>
+              {$t('artifacts.download')}
+            </button>
+          </div>
+        {/if}
+      {:else if curIsDownloadOnly}
         <div class="office-wrap">
           <iconify-icon icon={cur.icon} width="32"></iconify-icon>
           <span>{$t('artifacts.download_only')}</span>

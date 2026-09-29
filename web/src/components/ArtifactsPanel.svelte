@@ -19,9 +19,10 @@
 
   // ── Session artifacts (existing) ──────────────────────────────────────────
   const cur = $derived($artifacts[$artifactSel] ?? $artifacts[0])
-  // OCTO-FORK: Office files have a binary src for download, but must never be rendered as <img> or source text.
+  // OCTO-FORK: Office files use their binary src for lazy local preview and download.
   const curIsImage = $derived(cur?.type === 'Image')
-  const curIsDownloadOnly = $derived(!!cur?.src && !curIsImage)
+  const curIsOffice = $derived(cur?.type === 'Word' || cur?.type === 'Excel' || cur?.type === 'PowerPoint')
+  const curIsDownloadOnly = $derived(!!cur?.src && !curIsImage && (!curIsOffice || (cur.loaded && !cur.officePreview)))
 
   // Entries observe metadata-only; the body is fetched and the preview built
   // on first selection. Re-runs when a live re-write swaps the entry object,
@@ -550,7 +551,7 @@
           <span class="file-meta">{cur.type}</span>
         </span>
         <span style="flex:1"></span>
-        {#if !curIsImage && !curIsDownloadOnly}
+        {#if !curIsImage && !curIsOffice && !curIsDownloadOnly}
           <div class="seg">
             <button class="seg-btn" class:active={$artifactView === 'preview'} onclick={() => artifactView.set('preview')}>{$t('artifacts.preview')}</button>
             <button class="seg-btn" class:active={$artifactView === 'code'} onclick={() => artifactView.set('code')}>{$t('artifacts.code')}</button>
@@ -570,6 +571,21 @@
             {/if}
             <img src={cur.src} alt={cur.name} class:img-hidden={imgFailed} onerror={onImgError} onload={onImgLoad} />
           </div>
+        {:else if curIsOffice}
+          {#if !cur.loaded}
+            <div class="body-loading"><iconify-icon icon="ant-design:loading-outlined" width="28" class="spin"></iconify-icon></div>
+          {:else if cur.officePreview}
+            <ArtifactFrame artifact={cur} />
+          {:else}
+            <div class="office-wrap">
+              <iconify-icon icon={cur.icon} width="32"></iconify-icon>
+              <span>{$t('artifacts.download_only')}</span>
+              <button class="office-download-btn" onclick={onDownload}>
+                <iconify-icon icon="ant-design:download-outlined" width="14"></iconify-icon>
+                {$t('artifacts.download')}
+              </button>
+            </div>
+          {/if}
         {:else if curIsDownloadOnly}
           <div class="office-wrap">
             <iconify-icon icon={cur.icon} width="32"></iconify-icon>

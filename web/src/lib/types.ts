@@ -156,9 +156,12 @@ export interface Artifact {
   // sandboxed `preview` iframe (which cannot authenticate — see lib/artifacts.ts),
   // and the download action saves these bytes.
   src?: string
+  // True when a modern Office file was successfully converted to a safe HTML
+  // preview. Legacy binary formats keep src for download and leave this false.
+  officePreview?: boolean
   // code and preview are built lazily on first selection (hydrateArtifact in
-  // lib/artifacts.ts); loaded flips true once they are populated. Binary
-  // artifacts observe as loaded — they carry src instead of a preview document.
+  // lib/artifacts.ts); loaded flips true once they are populated. Legacy binary
+  // artifacts observe as loaded; modern Office files hydrate their preview.
   loaded: boolean
   // Set when the lazy build could not fetch the body: preview holds a
   // placeholder note rather than the document, and code is empty. Actions

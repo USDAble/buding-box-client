@@ -858,7 +858,7 @@ export const en: Record<string, string> = {
   "artifacts.code": "Code",
   "artifacts.copy": "Copy",
   "artifacts.download": "Download",
-  // OCTO-FORK: Office artifacts are downloadable but have no in-app preview.
+  // OCTO-FORK: legacy Office binaries remain download-only when browser parsing is unavailable.
   "artifacts.download_only": "Preview isn't available for this file. Download it to open locally.",
   "artifacts.maximize": "Expand panel",
   "artifacts.collapse_panel": "Collapse panel",
@@ -2439,7 +2439,7 @@ export const zh: Record<string, string> = {
   "artifacts.code": "代码",
   "artifacts.copy": "复制",
   "artifacts.download": "下载",
-  // OCTO-FORK: Make the download-only Office state explicit in Chinese as well.
+  // OCTO-FORK: Make the legacy Office fallback explicit in Chinese as well.
   "artifacts.download_only": "暂不支持预览此文件，请下载后在本地打开。",
   "artifacts.maximize": "展开面板",
   "artifacts.collapse_panel": "收起面板",

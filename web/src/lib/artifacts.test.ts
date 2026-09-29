@@ -92,14 +92,15 @@ describe('observeArtifact — image artifacts', () => {
 
 })
 
-// OCTO-FORK: Office files should be listed for download without decoding binary bytes as preview text.
-describe('observeArtifact — Office downloads', () => {
+// OCTO-FORK: modern Office files hydrate into a local HTML preview; legacy
+// binary formats stay download-only because browsers cannot decode them safely.
+describe('observeArtifact — Office files', () => {
   it.each([
     ['report.doc', 'Word'], ['report.docx', 'Word'],
     ['table.xls', 'Excel'], ['table.xlsx', 'Excel'],
     ['slides.ppt', 'PowerPoint'], ['slides.pptx', 'PowerPoint'],
-  ])('lists %s as a download-only %s artifact', async (name, type) => {
-    const fetchMock = vi.fn()
+  ])('lists %s as a %s artifact', async (name, type) => {
+    const fetchMock = vi.fn(async () => new Response(new Uint8Array([1, 2, 3])))
     vi.stubGlobal('fetch', fetchMock)
 
     observeArtifact(SID, payload(`/tmp/${name}`), false)
@@ -107,11 +108,18 @@ describe('observeArtifact — Office downloads', () => {
     expect(entry.type).toBe(type)
     expect(entry.name).toBe(name)
     expect(entry.src).toContain(`/artifacts?path=${encodeURIComponent(`/tmp/${name}`)}`)
-    expect(entry.loaded).toBe(true)
+    expect(entry.loaded).toBe(!/\.(docx|xlsx|pptx)$/.test(name))
     expect(entry.code).toBe(`/tmp/${name}`)
     expect(entry.preview).toBe('')
     await hydrateArtifact(entry)
-    expect(fetchMock).not.toHaveBeenCalled()
+    if (/\.(docx|xlsx|pptx)$/.test(name)) {
+      expect(fetchMock).toHaveBeenCalledOnce()
+      expect(get(artifacts)[0].loaded).toBe(true)
+      if (/\.xlsx$/.test(name)) expect(get(artifacts)[0].officePreview).toBe(true)
+      else expect(get(artifacts)[0].loadFailed).toBe(true)
+    } else {
+      expect(fetchMock).not.toHaveBeenCalled()
+    }
   })
 })
 

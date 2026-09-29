@@ -31,6 +31,9 @@ esac
 # separately compiled Profile; production packages remain covered by the
 # release-profile guard's product_production assertion.
 node "$ROOT/scripts/preflight.mjs" "--profile=$PACKAGE_PROFILE"
+# OCTO-FORK: the macOS bundle path must follow the generated product name;
+# the bundle ID and executable remain stable for installed-app compatibility.
+source "$ROOT/packaging/macos/scripts/brand.sh"
 if [ "$PACKAGE_PROFILE" = test ]; then
 	make -C "$ROOT" test-profile-check
 fi
@@ -62,10 +65,10 @@ if ! printf '%s' "$PLIST_VERSION" | grep -qE '^[0-9]+(\.[0-9]+){1,2}$'; then
 	exit 1
 fi
 COMMIT="$(git -C "$ROOT" rev-parse --short HEAD 2>/dev/null || echo unknown)"
-APP="$ROOT/Octo${APP_SUFFIX}.app"
+APP="$ROOT/${MAC_APP_NAME}${APP_SUFFIX}.app"
 CONTENTS="$APP/Contents"
 
-# Build a universal (x86_64 + arm64) octo-desktop so Octo.app runs natively on
+# Build a universal (x86_64 + arm64) octo-desktop so the app runs natively on
 # both Intel and Apple Silicon. Each arch is compiled separately and lipo'd
 # together — Wails links WKWebView via CGO, and the macOS SDK ships both arch
 # slices, so CC="clang -arch <arch>" cross-compiles the C/ObjC side while GOARCH
@@ -133,6 +136,10 @@ mv "$ROOT/octo-desktop" "$CONTENTS/MacOS/octo-desktop"
 # git describe used to produce here was read as the delimiter and aborted the
 # build (V-103).
 sed "s|__VERSION__|$PLIST_VERSION|g" "$MOD_DIR/build/darwin/Info.plist" > "$CONTENTS/Info.plist"
+# OCTO-FORK: AppKit and the Dock read the bundle metadata, not Wails' runtime
+# name alone. Populate both native names from the same brand value as the path.
+plutil -replace CFBundleName -string "$MAC_APP_NAME" "$CONTENTS/Info.plist"
+plutil -replace CFBundleDisplayName -string "$MAC_APP_NAME" "$CONTENTS/Info.plist"
 
 # Self-check the output, the way package-portable.mjs verifies its own: the two
 # version fields are read by LaunchServices and the notary, so shipping a
@@ -142,6 +149,13 @@ for key in CFBundleShortVersionString CFBundleVersion; do
 	got="$(plutil -extract "$key" raw -o - "$CONTENTS/Info.plist" 2>/dev/null || true)"
 	if [ "$got" != "$PLIST_VERSION" ]; then
 		echo "Info.plist $key = '$got', want '$PLIST_VERSION'" >&2
+		exit 1
+	fi
+done
+for key in CFBundleName CFBundleDisplayName; do
+	got="$(plutil -extract "$key" raw -o - "$CONTENTS/Info.plist" 2>/dev/null || true)"
+	if [ "$got" != "$MAC_APP_NAME" ]; then
+		echo "Info.plist $key = '$got', want '$MAC_APP_NAME' from branding/brand.json" >&2
 		exit 1
 	fi
 done

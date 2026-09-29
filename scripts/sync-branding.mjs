@@ -8,7 +8,7 @@
 //   node scripts/sync-branding.mjs --check   fail if any target is stale (CI)
 //
 // The source is validated first — an invalid configuration is never
-// distributed, so a bad value cannot reach six consumers before anyone notices.
+// distributed, so a bad value cannot reach consumers before anyone notices.
 
 import fs from 'node:fs/promises'
 import path from 'node:path'
@@ -65,6 +65,17 @@ export function renderWindowsInstallerBrand(brand) {
   ].join('\n')
 }
 
+// OCTO-FORK: macOS package scripts run without Node, so ship the brand name as
+// a generated shell value instead of keeping a second product-name literal.
+export function renderMacInstallerBrand(brand) {
+  const appName = requireText(brand.product?.names?.['en-US'], "product.names['en-US']")
+  if (appName !== appName.trim() || /[\\/:\x00-\x1f]/.test(appName)) {
+    throw new Error("branding/brand.json 的 product.names['en-US'] 不能作为 macOS 应用文件名")
+  }
+  const shellValue = appName.replaceAll("'", "'\\''")
+  return `# ${GENERATED_NOTICE}\nMAC_APP_NAME='${shellValue}'\n`
+}
+
 // buildTargets returns the full generated-file set. Adding a consumer means
 // adding one row here — nothing else in the pipeline changes.
 export function buildTargets(brand) {
@@ -88,6 +99,10 @@ export function buildTargets(brand) {
     {
       destination: path.join('packaging', 'windows', 'brand.iss'),
       content: Buffer.from(renderWindowsInstallerBrand(brand), 'utf8'),
+    },
+    {
+      destination: path.join('packaging', 'macos', 'scripts', 'brand.sh'),
+      content: Buffer.from(renderMacInstallerBrand(brand), 'utf8'),
     },
   ]
 }

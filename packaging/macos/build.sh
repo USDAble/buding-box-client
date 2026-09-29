@@ -1,7 +1,7 @@
 #!/bin/sh
 # octo-setup.pkg — per-user macOS installer for the Octo desktop app.
 #
-# Installs Octo.app (a self-contained bundle: the desktop GUI + the octo CLI +
+# Installs the branded .app (the desktop GUI + the octo CLI +
 # uv, see scripts/package-desktop-macos.sh) into ~/Applications, puts the octo
 # CLI on PATH, and opens the app. Per-user (no root/admin) is deliberate and
 # mirrors packaging/windows/octo.iss.
@@ -22,24 +22,26 @@ set -eu
 
 script_dir=$(cd "$(dirname "$0")" && pwd)
 repo_root=$(cd "$script_dir/../.." && pwd)
+# OCTO-FORK: use the generated brand value for the installer payload path.
+. "$script_dir/scripts/brand.sh"
 work=$(mktemp -d)
 trap 'rm -rf "$work"' EXIT
 
-# Build the self-contained Octo.app, embedding the released CLI + uv.
+# Build the self-contained app, embedding the released CLI + uv.
 uv_arg=""
 [ -f "$SourceDir/uv" ] && uv_arg="$SourceDir/uv"
 OCTO_CLI="$SourceDir/octo" UV_BINARY="$uv_arg" \
   sh "$repo_root/scripts/package-desktop-macos.sh" "$AppVersion"
 
-# Payload: Octo.app under the user's Applications (currentUserHome domain, so
+# Payload: the app under the user's Applications (currentUserHome domain, so
 # --install-location is relative to the home dir). --root is the tree whose
 # CONTENTS land at --install-location, so it must be the directory that *holds*
-# Octo.app — not its parent. Rooting one level up ("$work/payload", which
-# contains Applications/Octo.app) plus --install-location 'Applications' would
-# nest it as ~/Applications/Applications/Octo.app.
+# app bundle — not its parent. Rooting one level up ("$work/payload", which
+# contains Applications/<app>.app) plus --install-location 'Applications' would
+# nest it under ~/Applications/Applications/.
 payload="$work/payload/Applications"
 mkdir -p "$payload"
-cp -R "$repo_root/Octo.app" "$payload/Octo.app"
+cp -R "$repo_root/$MAC_APP_NAME.app" "$payload/$MAC_APP_NAME.app"
 
 pkgbuild \
   --root "$payload" \

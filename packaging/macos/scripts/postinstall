@@ -11,7 +11,10 @@
 # open the browser dashboard" onboarding — that surrogate GUI is now a real app.
 set -eu
 
-app_bundle="$HOME/Applications/Octo.app"
+# OCTO-FORK: source the generated product name so launch and uninstall follow
+# the same bundle path as the package payload.
+. "$(dirname "$0")/brand.sh"
+app_bundle="$HOME/Applications/$MAC_APP_NAME.app"
 res="$app_bundle/Contents/Resources"
 # Kept byte-identical to octoInstallerMarker in cmd/octo-desktop/octo_cli.go: the
 # app writes the PATH line, this uninstaller strips it.
@@ -44,7 +47,7 @@ rm -rf "$app_bundle"
 for rc in "\$HOME/.zshrc" "\$HOME/.zprofile" "\$HOME/.bash_profile" "\$HOME/.profile"; do
   [ -f "\$rc" ] && sed -i '' '/$marker/d' "\$rc"
 done
-echo "Octo uninstalled (your ~/.octo data was left intact)."
+echo "$MAC_APP_NAME uninstalled (your ~/.octo data was left intact)."
 UNINSTALL
 chmod +x "$config_dir/uninstall.sh"
 

@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { flushSync, mount, unmount } from 'svelte'
 import { get } from 'svelte/store'
 import { locale } from '../../lib/i18n'
-import { fetchDict, importWords, saveDict } from '../../lib/sensitiveDict'
+import { downloadDictText, fetchDict, importWords, parseDictText, saveDict } from '../../lib/sensitiveDict'
 import { RequestError } from '../../lib/api'
 import { confirmDialog } from '../../lib/confirm'
 import { toasts } from '../../lib/stores'
@@ -12,7 +12,7 @@ import SensitiveDictPage from './SensitiveDictPage.svelte'
 // 先走 dryRun 预览（展示 added/skipped）再经确认落盘。开发规范 §6.4.3 / V-23：
 // 一个返回字符串的函数证明不了用户看见什么，所以断言读渲染树与 confirm 文案。
 //
-// 这里 mock 的只有网络（fetchDict / saveDict / importWords / exportDict）与
+// 这里 mock 的只有网络（fetchDict / saveDict / importWords）与文件保存、
 // confirmDialog；parseDictText / normalizeWord 等纯函数走真实实现（它们也是
 // 导入流程的一部分）。
 
@@ -23,7 +23,7 @@ vi.mock('../../lib/sensitiveDict', async (importOriginal) => {
     fetchDict: vi.fn(async () => ({ builtin: [], user: [] })),
     saveDict: vi.fn(async (user: string[]) => ({ user })),
     importWords: vi.fn(async () => ({ added: 0, skipped: 0 })),
-    exportDict: vi.fn(async () => {}),
+    downloadDictText: vi.fn(async () => ({ path: '', cancelled: false })),
   }
 })
 
@@ -42,6 +42,8 @@ beforeEach(() => {
   vi.mocked(fetchDict).mockClear()
   vi.mocked(saveDict).mockClear()
   vi.mocked(importWords).mockClear()
+  vi.mocked(downloadDictText).mockReset()
+  vi.mocked(downloadDictText).mockResolvedValue({ path: '', cancelled: false })
   vi.mocked(confirmDialog).mockClear()
 })
 
@@ -70,6 +72,62 @@ function toastMessages(): string[] {
 }
 
 describe('SensitiveDictPage', () => {
+  it('downloads a valid import example and explains where to find a browser download', async () => {
+    render()
+    await settle()
+
+    expect(target.textContent).toContain('每行一个词')
+    target.querySelector<HTMLButtonElement>('.text-action')!.click()
+    await settle()
+
+    const [name, content] = vi.mocked(downloadDictText).mock.calls[0]
+    expect(name).toBe('sensitive-words-example.txt')
+    expect(parseDictText(content)).toEqual(['示例词一', '示例词二'])
+    expect(target.textContent).toContain('浏览器下载记录')
+    expect(target.textContent).toContain(name)
+  })
+
+  it('shows and copies the actual desktop save path', async () => {
+    vi.mocked(downloadDictText).mockResolvedValueOnce({ path: '/tmp/sensitive-words.txt', cancelled: false })
+    const writeText = vi.fn(async () => {})
+    Object.defineProperty(navigator, 'clipboard', { value: { writeText }, configurable: true })
+    render()
+    await settle()
+
+    target.querySelector<HTMLButtonElement>('.actions button:last-child')!.click()
+    await settle()
+    expect(target.textContent).toContain('/tmp/sensitive-words.txt')
+    target.querySelector<HTMLButtonElement>('.download-result button')!.click()
+    await settle()
+    expect(writeText).toHaveBeenCalledWith('/tmp/sensitive-words.txt')
+  })
+
+  it('does not report a cancelled desktop save as exported', async () => {
+    vi.mocked(downloadDictText).mockResolvedValueOnce({ path: '', cancelled: true })
+    render()
+    await settle()
+
+    target.querySelector<HTMLButtonElement>('.actions button:last-child')!.click()
+    await settle()
+    expect(target.querySelector('.download-result')).toBeNull()
+    expect(toastMessages()).not.toContain('已导出')
+  })
+
+  it('explains when an imported file has no words', async () => {
+    render()
+    await settle()
+
+    const input = target.querySelector<HTMLInputElement>('input.file-input')!
+    Object.defineProperty(input, 'files', {
+      value: [{ text: async () => '# only a comment\n\n' }],
+      configurable: true,
+    })
+    input.dispatchEvent(new Event('change', { bubbles: true }))
+    await settle()
+    expect(toastMessages()).toContain('文件中没有可导入的词')
+    expect(importWords).not.toHaveBeenCalled()
+  })
+
   // 判据 4：fetchDict 的 builtin + user 各渲染一栏，且内置词只读（无删除钮）。
   it('renders builtin (read-only) and user words from fetchDict', async () => {
     vi.mocked(fetchDict).mockResolvedValueOnce({ builtin: ['内置词'], user: ['用户词'] })

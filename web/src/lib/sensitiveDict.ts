@@ -85,13 +85,10 @@ export function serializeDict(user: string[]): string {
   return user.map((w) => w + '\n').join('')
 }
 
-/** Exports the user list: OS save dialog in the shell, blob download in web. */
-export async function exportDict(user: string[]): Promise<void> {
-  const content = serializeDict(user)
-  const name = 'sensitive-words.txt'
+/** Saves dictionary text and reports the actual native path when available. */
+export async function downloadDictText(name: string, content: string): Promise<{ path: string; cancelled: boolean }> {
   if (get(nativeShell)) {
-    await api.nativeSaveFile(name, content)
-    return
+    return api.nativeSaveFile(name, content)
   }
   const blob = new Blob([content], { type: 'text/plain;charset=utf-8' })
   const url = URL.createObjectURL(blob)
@@ -102,4 +99,5 @@ export async function exportDict(user: string[]): Promise<void> {
   a.click()
   a.remove()
   URL.revokeObjectURL(url)
+  return { path: '', cancelled: false }
 }

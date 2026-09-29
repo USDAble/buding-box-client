@@ -20,6 +20,7 @@
 //   node scripts/wire-native.mjs --android  # Android only
 //   node scripts/wire-native.mjs --local    # also inject the local-testing
 //                                           # cleartext switches (NEVER for release)
+//   node scripts/wire-native.mjs --icons-only --android  # refresh launcher icons only
 import { execFileSync } from 'node:child_process'
 import { existsSync, readFileSync, writeFileSync, mkdirSync, copyFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
@@ -32,6 +33,7 @@ const androidRoot = join(mobileRoot, 'android')
 
 const args = new Set(process.argv.slice(2))
 const local = args.has('--local')
+const iconsOnly = args.has('--icons-only')
 const onlyIos = args.has('--ios')
 const onlyAndroid = args.has('--android')
 const wantIos = onlyIos || !onlyAndroid
@@ -41,6 +43,36 @@ const warnings = []
 const warn = (msg) => warnings.push(msg)
 const done = []
 const did = (msg) => done.push(msg)
+
+// OCTO-FORK: generated native projects are ignored; restore the launcher
+// artwork from the same brand master used by the desktop build after cap add.
+function copyIosIcon() {
+  if (!existsSync(iosRoot)) {
+    warn('iOS: ios/ not found — run `npx cap add ios` first, then re-run.')
+    return
+  }
+  const target = join(iosRoot, 'App', 'App', 'Assets.xcassets', 'AppIcon.appiconset')
+  mkdirSync(target, { recursive: true })
+  copyFileSync(join(nativeDir, 'launcher', 'apple', 'AppIcon-512@2x.png'), join(target, 'AppIcon-512@2x.png'))
+  did('iOS: installed brand launcher icon')
+}
+
+function copyAndroidIcons() {
+  if (!existsSync(androidRoot)) {
+    warn('Android: android/ not found — run `npx cap add android` first, then re-run.')
+    return
+  }
+  for (const density of ['mdpi', 'hdpi', 'xhdpi', 'xxhdpi', 'xxxhdpi']) {
+    const folder = `mipmap-${density}`
+    const source = join(nativeDir, 'launcher', 'google', folder)
+    const target = join(androidRoot, 'app', 'src', 'main', 'res', folder)
+    mkdirSync(target, { recursive: true })
+    for (const name of ['ic_launcher.png', 'ic_launcher_round.png', 'ic_launcher_foreground.png']) {
+      copyFileSync(join(source, name), join(target, name))
+    }
+  }
+  did('Android: installed brand launcher icons for all densities')
+}
 
 // injectOnce inserts `insert` into the file at `path` only when `marker` is
 // absent. It splices `insert` right after the first line matching `anchor`. If
@@ -73,6 +105,8 @@ function wireIos() {
     warn(`iOS: ${appDir} not found — is this a Capacitor-generated ios/ project?`)
     return
   }
+
+  copyIosIcon()
 
   // 1. Plugin source + the bridge VC that registers it (see writeBridgeVC).
   const pluginDst = join(appDir, 'OctoTunnelPlugin.swift')
@@ -251,6 +285,8 @@ function wireAndroid() {
     return
   }
 
+  copyAndroidIcons()
+
   // 3. Plugin source into the app package.
   const pkgDir = join(androidRoot, 'app', 'src', 'main', 'java', 'dev', 'octo', 'mobile')
   mkdirSync(pkgDir, { recursive: true })
@@ -400,8 +436,8 @@ if (!existsSync(nativeDir)) {
   console.error(`wire-native: ${nativeDir} not found — run from the mobile/ project.`)
   process.exit(1)
 }
-if (wantIos) wireIos()
-if (wantAndroid) wireAndroid()
+if (wantIos) (iconsOnly ? copyIosIcon : wireIos)()
+if (wantAndroid) (iconsOnly ? copyAndroidIcons : wireAndroid)()
 
 console.log('wire-native: done.')
 for (const d of done) console.log(`  ✓ ${d}`)

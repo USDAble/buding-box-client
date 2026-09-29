@@ -4,8 +4,8 @@
   import { confirmDialog } from '../../lib/confirm'
   import { RequestError } from '../../lib/api'
   import {
-    fetchDict, saveDict, importWords, exportDict,
-    normalizeWord, isUsableWord, containsWord, parseDictText,
+    fetchDict, saveDict, importWords, downloadDictText,
+    normalizeWord, isUsableWord, containsWord, parseDictText, serializeDict,
     type SensitiveDict,
   } from '../../lib/sensitiveDict'
 
@@ -20,6 +20,8 @@
   let editDraft = $state('')
   let saving = $state(false)
   let fileInput = $state<HTMLInputElement | null>(null)
+  let savingFile = $state(false)
+  let lastDownload = $state<{ name: string; path: string } | null>(null)
 
   async function load() {
     loading = true
@@ -94,12 +96,29 @@
     await persist(dict.user.map((w, j) => (j === i ? word : w)))
   }
 
-  async function onExport() {
+  async function onSaveFile(name: string, content: string) {
+    if (savingFile) return
+    savingFile = true
+    lastDownload = null
     try {
-      await exportDict(dict.user)
-      showToast($t('product.dict.exported'))
+      const result = await downloadDictText(name, content)
+      if (result.cancelled) return
+      lastDownload = { name, path: result.path }
+      if (result.path) showToast($t('product.dict.exported'))
     } catch {
       showToast($t('product.send_failed'), 'error')
+    } finally {
+      savingFile = false
+    }
+  }
+
+  async function copyExportPath() {
+    if (!lastDownload?.path) return
+    try {
+      await navigator.clipboard.writeText(lastDownload.path)
+      showToast($t('product.dict.path_copied'))
+    } catch {
+      showToast($t('product.dict.path_copy_failed'), 'error')
     }
   }
 
@@ -108,10 +127,12 @@
     const file = input.files?.[0]
     input.value = ''
     if (!file) return
-    const text = await file.text()
-    const words = parseDictText(text)
-    if (words.length === 0) return
     try {
+      const words = parseDictText(await file.text())
+      if (words.length === 0) {
+        showToast($t('product.dict.empty_import'), 'error')
+        return
+      }
       const preview = await importWords(words, true)
       const msg = $t('product.dict.import_preview')
         .replaceAll('{added}', String(preview.added))
@@ -198,8 +219,22 @@
 
     <div class="actions">
       <button class="action" onclick={() => fileInput?.click()}>{$t('product.dict.import')}</button>
-      <button class="action" onclick={onExport}>{$t('product.dict.export')}</button>
+      <button class="action" disabled={savingFile} onclick={() => onSaveFile('sensitive-words.txt', serializeDict(dict.user))}>{$t('product.dict.export')}</button>
     </div>
+
+    <p class="hint">{$t('product.dict.import_rules')} <button class="text-action" disabled={savingFile} onclick={() => onSaveFile('sensitive-words-example.txt', $t('product.dict.example_content'))}>{$t('product.dict.example_download')}</button></p>
+
+    {#if lastDownload}
+      <div class="download-result" aria-live="polite">
+        {#if lastDownload.path}
+          <span>{$t('product.dict.saved_path')}</span>
+          <span class="saved-path">{lastDownload.path}</span>
+          <button class="text-action" onclick={copyExportPath}>{$t('product.dict.copy_path')}</button>
+        {:else}
+          <span>{$t('product.dict.browser_download').replace('{name}', lastDownload.name)}</span>
+        {/if}
+      </div>
+    {/if}
 
     <input type="file" accept=".txt,text/plain" bind:this={fileInput} class="file-input" onchange={onImportFile} />
 
@@ -272,6 +307,19 @@
     background: transparent; color: var(--text-secondary); font-family: inherit; font-size: 12px; cursor: pointer;
   }
   .action:hover { background: var(--hover-neutral); color: var(--text); }
+  .action:disabled, .text-action:disabled { opacity: 0.5; cursor: not-allowed; }
+
+  .text-action {
+    border: none; padding: 0; background: transparent; color: var(--blue-6);
+    font: inherit; cursor: pointer; text-decoration: underline; text-underline-offset: 2px;
+  }
+  .action:focus-visible, .text-action:focus-visible { outline: 2px solid var(--blue-6); outline-offset: 2px; }
+  .download-result {
+    display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 8px;
+    padding: 8px 10px; border: 1px solid var(--border-secondary); border-radius: 8px;
+    color: var(--text-secondary); font-size: 12px; line-height: 1.6;
+  }
+  .saved-path { min-width: 0; overflow-wrap: anywhere; user-select: text; color: var(--text); }
 
   .file-input { display: none; }
   .hint { margin: 0; font-size: 12px; color: var(--text-tertiary); line-height: 1.6; }

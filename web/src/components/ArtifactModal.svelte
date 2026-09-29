@@ -6,6 +6,9 @@
   import ArtifactFrame from './ArtifactFrame.svelte'
 
   const cur = $derived($artifacts[$artifactSel] ?? $artifacts[0])
+  // OCTO-FORK: Office files use their binary URL for lazy local preview and download.
+  const curIsOffice = $derived(cur?.type === 'Word' || cur?.type === 'Excel' || cur?.type === 'PowerPoint')
+  const curIsDownloadOnly = $derived(!!cur?.src && cur.type !== 'Image' && (!curIsOffice || (cur.loaded && !cur.officePreview)))
   let modalEl = $state<HTMLDivElement | null>(null)
 
   // Entries observe metadata-only; the body is fetched and the preview built
@@ -87,7 +90,31 @@
 
     <!-- Body — always preview, no toolbar / footer chrome -->
     <div class="body">
-      {#if cur.src}
+      {#if curIsOffice}
+        {#if !cur.loaded}
+          <div class="body-loading"><iconify-icon icon="ant-design:loading-outlined" width="28" class="spin"></iconify-icon></div>
+        {:else if cur.officePreview}
+          <ArtifactFrame artifact={cur} />
+        {:else}
+          <div class="office-wrap">
+            <iconify-icon icon={cur.icon} width="32"></iconify-icon>
+            <span>{$t('artifacts.download_only')}</span>
+            <button class="office-download-btn" onclick={onDownload}>
+              <iconify-icon icon="ant-design:download-outlined" width="14"></iconify-icon>
+              {$t('artifacts.download')}
+            </button>
+          </div>
+        {/if}
+      {:else if curIsDownloadOnly}
+        <div class="office-wrap">
+          <iconify-icon icon={cur.icon} width="32"></iconify-icon>
+          <span>{$t('artifacts.download_only')}</span>
+          <button class="office-download-btn" onclick={onDownload}>
+            <iconify-icon icon="ant-design:download-outlined" width="14"></iconify-icon>
+            {$t('artifacts.download')}
+          </button>
+        </div>
+      {:else if cur.src}
         <!-- Images render outside the sandboxed iframe (see lib/artifacts.ts). -->
         <div class="img-wrap">
           {#if imgFailed}
@@ -155,6 +182,10 @@
 .icon-btn:disabled { opacity: 0.45; cursor: default; }
 .body { flex: 1; min-height: 0; background: var(--bg-container); }
 .body-loading { height: 100%; display: flex; align-items: center; justify-content: center; color: var(--text-tertiary); }
+/* OCTO-FORK: The expanded artifact view must offer the same Office download action as the sidebar. */
+.office-wrap { height: 100%; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 12px; color: var(--text-tertiary); font-size: 13px; text-align: center; padding: 20px; box-sizing: border-box; }
+.office-download-btn { display: inline-flex; align-items: center; gap: 6px; border: 1px solid var(--border-secondary); border-radius: 6px; padding: 6px 12px; background: var(--bg-container); color: var(--text); cursor: pointer; font: inherit; }
+.office-download-btn:hover { background: var(--hover-neutral); }
 .img-wrap {
   width: 100%; height: 100%; box-sizing: border-box; padding: 12px;
   display: flex; align-items: center; justify-content: center;

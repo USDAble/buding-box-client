@@ -32,7 +32,9 @@ type nativeBridge struct {
 	// srv is the in-process hub, set once bound. Atomic because startHub (the
 	// ApplicationStarted goroutine) writes it while the tray-refresh loop reads it.
 	srv atomic.Pointer[server.Server]
-	url string // http://127.0.0.1:8088, set once bound
+	// OCTO-FORK: the phone tunnel shares the desktop hub and stops with the app.
+	tunnel atomic.Pointer[desktopTunnel]
+	url    string // http://127.0.0.1:8088, set once bound
 
 	// closeLog releases the rotating serve.log writer that startHub installs once
 	// this process owns the port. Written by startHub (the ApplicationStarted

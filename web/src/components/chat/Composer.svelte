@@ -11,7 +11,7 @@
   } from '../../lib/stores'
   import { ws } from '../../lib/ws'
   import * as api from '../../lib/api'
-  import { t } from '../../lib/i18n'
+  import { t, tr } from '../../lib/i18n'
   import { submitIntent } from '../../lib/composerKeys'
   import { composeSlashCommand } from '../../lib/slashCompose'
   import { parkDraft, takeDraft, patchParkedAttachments, type Attachment } from '../../lib/composerDrafts'
@@ -114,7 +114,8 @@
         const res = await api.nativePickFile(attachStartDir)
         if (!res.cancelled && res.path) attachLocalFile(res.path)
       } catch (e: any) {
-        showToast(e.message ?? 'Failed to open file dialog', 'error')
+        // OCTO-FORK: composer-authored failure fallbacks follow the selected UI language.
+        showToast(e.message ?? tr('chat.open_file_failed'), 'error')
       }
       return
     }
@@ -253,7 +254,7 @@
         patchAttachment(originSid, id, { data_url: dataUrl, mime_type: dataUrl.startsWith('data:image/jpeg') ? 'image/jpeg' : file.type, uploading: false })
       } catch (e: any) {
         dropAttachment(originSid, id)
-        showToast(e?.message ?? `Failed to read ${name}`, 'error')
+        showToast(e?.message ?? tr('chat.read_file_failed').replace('{name}', name), 'error')
       }
       return
     }
@@ -269,7 +270,7 @@
       patchAttachment(originSid, id, { path: url, uploading: false })
     } catch (e: any) {
       dropAttachment(originSid, id)
-      showToast(e.message ?? `Failed to upload ${name}`, 'error')
+      showToast(e.message ?? tr('chat.upload_file_failed').replace('{name}', name), 'error')
     }
   }
 
@@ -838,7 +839,7 @@
           await api.updateSessionAgentProfile(sid, id)
           sessions.update(list => list.map((s: any) => s.id === sid ? { ...s, agent_profile: id } : s))
         } catch (e: any) {
-          showToast(e.message ?? 'Failed to change agent', 'error')
+          showToast(e.message ?? tr('chat.agent_change_failed'), 'error')
         }
       }
     } else {
@@ -919,7 +920,7 @@
         : session))
       chatModel.update(values => ({ ...values, [sid]: result.model }))
     } catch (e: any) {
-      showToast(e.message ?? 'Failed to switch model', 'error')
+      showToast(e.message ?? tr('m.model_fail'), 'error')
     }
   }
 
@@ -972,7 +973,7 @@
       const result = await api.setModelReasoning(model.modelId,level)
       models = models.map(row => row.id === model.id ? {...row,reasoningEffort:result.effort} : row)
     } catch (e: any) {
-      showToast(e.message ?? 'Failed to set reasoning', 'error')
+      showToast(e.message ?? tr('chat.reasoning_failed'), 'error')
     } finally { savingReasoning = false }
   }
 
@@ -988,7 +989,7 @@
       await api.updateSessionShowReasoning(sid, next)
       chatShowReasoning.update(r => ({ ...r, [sid]: next }))
     } catch (e: any) {
-      showToast(e.message ?? 'Failed to toggle reasoning visibility', 'error')
+      showToast(e.message ?? tr('chat.reasoning_visibility_failed'), 'error')
     }
   }
 
@@ -1018,7 +1019,7 @@
       confirmPendingPermissionChoice(id)
       chatPermMode.update(m => ({ ...m, [id]: next }))
     } catch (e: any) {
-      showToast(e.message ?? 'Failed to switch permission mode', 'error')
+      showToast(e.message ?? tr('chat.permission_failed'), 'error')
     } finally {
       permissionSaving = false
     }
@@ -1071,7 +1072,7 @@
       showToast(`${$t('chat.dir_set_toast')} ${shortDir(res.working_dir)}`, 'success')
       return true
     } catch (e: any) {
-      showToast(e.message ?? 'Failed to set working directory', 'error')
+      showToast(e.message ?? tr('chat.working_dir_failed'), 'error')
       return false
     } finally {
       dirSaving = false
@@ -1088,7 +1089,7 @@
         const res = await api.nativePickFolder(workingDir)
         if (!res.cancelled && res.path) await applyWorkingDir(res.path)
       } catch (e: any) {
-        showToast(e.message ?? 'Failed to open folder dialog', 'error')
+        showToast(e.message ?? tr('folder_picker.open_failed'), 'error')
       }
       return
     }
@@ -1494,7 +1495,8 @@
             <div class="menu agent-menu" onclick={(e) => e.stopPropagation()}>
               <div class="menu-label">{$t('composer.assign_agent')}</div>
               <button class="menu-item" class:active={effectiveAgentId === 'default'} onclick={() => pickAgent('default')}>
-                <span class="mi-name">Default</span>
+                <!-- OCTO-FORK: the agent picker label follows the chosen UI language. -->
+                <span class="mi-name">{$t('profile.default')}</span>
               </button>
               {#each pickableAgents as a (a.id)}
                 <button class="menu-item" class:active={effectiveAgentId === a.id} onclick={() => pickAgent(a.id)}>

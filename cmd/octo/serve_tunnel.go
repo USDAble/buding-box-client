@@ -2,125 +2,38 @@ package main
 
 import (
 	"context"
-	"crypto/rand"
-	"encoding/hex"
 	"fmt"
 	"io"
-	"net"
-	"net/url"
 
-	"github.com/open-octo/octo-agent/internal/datapath"
 	"github.com/open-octo/octo-agent/internal/server"
 	"github.com/open-octo/octo-agent/internal/tunnel"
 )
 
-// defaultRelayURL is octo's hosted relay. A user can point --relay elsewhere to
-// self-host the relay or reach a staging one.
-const defaultRelayURL = "wss://relay.octo.dev"
+const defaultRelayURL = tunnel.DefaultRelayURL
 
-// startTunnel brings up the managed-tunnel host bridge for `octo serve --tunnel`.
-// It runs in the serve worker: the tunnel is a goroutine in this process and an
-// ordinary key-authenticated /ws client of the local server, so internal/server
-// is untouched. The goroutine stops when ctx is cancelled (serve shutdown).
+// OCTO-FORK: CLI and desktop share one host setup so their pairing URLs and
+// identity path cannot drift; the CLI keeps its existing headless output.
 func startTunnel(ctx context.Context, srv *server.Server, addr, relayURL string, stdout io.Writer) error {
-	// Validate the relay URL scheme early — the relay speaks WebSocket and a
-	// bare http:// URL silently fails with retry-loop noise instead of a clear
-	// startup error (the mobile app also expects ws:// / wss:// in pairing URLs).
-	u, err := url.Parse(relayURL)
-	if err != nil || (u.Scheme != "ws" && u.Scheme != "wss") {
-		return fmt.Errorf("--relay must be a ws:// or wss:// URL (got %q)", relayURL)
-	}
-
-	idPath, err := tunnelIdentityPath()
+	tun, pairing, err := tunnel.NewHost(addr, relayURL, srv.AccessKey(), nil)
 	if err != nil {
 		return err
 	}
-	identity, err := tunnel.LoadOrCreateIdentity(idPath)
-	if err != nil {
-		return err
-	}
-	token, err := newPairToken()
-	if err != nil {
-		return err
-	}
-
-	tun, err := tunnel.New(tunnel.Config{
-		RelayURL:    relayURL,
-		TunnelID:    identity.TunnelID(),
-		PairTokens:  []string{token},
-		LoopbackURL: loopbackWSURL(addr),
-		AccessKey:   srv.AccessKey(),
-		Identity:    identity,
-	})
-	if err != nil {
-		return err
-	}
-
-	// Publish the pairing material so the web UI can render it as a QR, and
-	// print it too so a headless server can pair without a browser.
-	pairURL := pairingURL(relayURL, identity, token)
 	srv.SetTunnelPairing(&server.TunnelPairing{
-		PairURL:  pairURL,
-		Relay:    relayURL,
-		TunnelID: identity.TunnelID(),
+		PairURL:  pairing.URL,
+		Relay:    pairing.Relay,
+		TunnelID: pairing.TunnelID,
 	})
-	printPairingMaterial(stdout, relayURL, identity, token, pairURL)
-
+	printPairingMaterial(stdout, pairing)
 	go func() { _ = tun.Serve(ctx) }()
 	return nil
 }
 
-// pairingURL is the deep link a pairing QR encodes: the four things a phone
-// needs to reach and authenticate this host — relay, tunnel id, host public
-// key, and the one-time token.
-func pairingURL(relayURL string, id *tunnel.Identity, token string) string {
-	q := url.Values{
-		"relay": {relayURL},
-		"tid":   {id.TunnelID()},
-		"hk":    {id.PublicKeyBase64()},
-		"tok":   {token},
-	}
-	return "octo-pair://v1?" + q.Encode()
-}
-
-// tunnelIdentityPath is data/tunnel.json, alongside the other serve state.
-// OCTO-FORK: tunnel identity lives under data/ — see P1-便携数据根.md.
-func tunnelIdentityPath() (string, error) {
-	return datapath.Join("tunnel.json")
-}
-
-// newPairToken returns a one-time, single-use pairing token (128 bits of hex).
-func newPairToken() (string, error) {
-	var b [16]byte
-	if _, err := rand.Read(b[:]); err != nil {
-		return "", err
-	}
-	return hex.EncodeToString(b[:]), nil
-}
-
-// loopbackWSURL derives the local /ws URL the tunnel bridges into. A wildcard or
-// empty bind host means the server listens on loopback too, so dial 127.0.0.1; a
-// specific bind host is dialed as-is (that is the only interface it accepts).
-func loopbackWSURL(addr string) string {
-	host, port, err := net.SplitHostPort(addr)
-	if err != nil {
-		host, port = "127.0.0.1", "8088"
-	}
-	if host == "" || host == "0.0.0.0" || host == "::" {
-		host = "127.0.0.1"
-	}
-	return "ws://" + net.JoinHostPort(host, port) + "/ws"
-}
-
-// printPairingMaterial shows the raw data a pairing QR encodes. Rendering it as
-// a scannable QR (CLI ASCII, web/desktop panel) is a later step; the text is
-// enough to pair a device by hand and to test against a relay.
-func printPairingMaterial(w io.Writer, relayURL string, id *tunnel.Identity, token, pairURL string) {
+func printPairingMaterial(w io.Writer, pairing tunnel.Pairing) {
 	fmt.Fprintln(w, "octo serve: managed tunnel enabled — pair a device with:")
-	fmt.Fprintf(w, "  relay:      %s\n", relayURL)
-	fmt.Fprintf(w, "  tunnel id:  %s\n", id.TunnelID())
-	fmt.Fprintf(w, "  host key:   %s\n", id.PublicKeyBase64())
-	fmt.Fprintf(w, "  pair token: %s  (one-time)\n", token)
-	fmt.Fprintf(w, "  pair url:   %s\n", pairURL)
+	fmt.Fprintf(w, "  relay:      %s\n", pairing.Relay)
+	fmt.Fprintf(w, "  tunnel id:  %s\n", pairing.TunnelID)
+	fmt.Fprintf(w, "  host key:   %s\n", pairing.HostKey)
+	fmt.Fprintf(w, "  pair token: %s  (one-time)\n", pairing.Token)
+	fmt.Fprintf(w, "  pair url:   %s\n", pairing.URL)
 	fmt.Fprintln(w, "  (or open Settings › Mobile in the web UI to scan a QR)")
 }

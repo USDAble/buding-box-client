@@ -36,6 +36,7 @@ import { get, writable } from 'svelte/store'
 import { artifacts, panelContent, panelExpanded, artifactSel } from './stores'
 import { renderMarkdown } from './markdown'
 import { grantArtifactOrigin } from './api'
+import { officeKindForPath, renderOfficePreview } from './office-preview'
 import type { Artifact } from './types'
 
 // The sandbox the Markdown preview frame runs with — the one srcdoc frame
@@ -72,9 +73,11 @@ export const ARTIFACT_ORIGIN_SANDBOX = 'allow-scripts allow-same-origin allow-fo
 // resolves after a session switch is discarded instead of polluting the new view.
 export const artifactSelSession = writable<string | null>(null)
 
-type Kind = 'html' | 'markdown' | 'image'
+// OCTO-FORK: Generated Office deliverables are artifacts; modern OOXML files
+// are previewed locally and legacy binary files remain download-only.
+type Kind = 'html' | 'markdown' | 'image' | 'word' | 'excel' | 'powerpoint'
 
-// Only kinds the panel can render are artifacts. Source, config, and data
+// Only kinds the panel can render or download are artifacts. Source, config, and data
 // files are deliberately absent: they are the routine bulk of a coding
 // session, would bury the reports and pages the panel exists for, and the
 // panel's Git Diff mode already shows code changes with context. Must match
@@ -85,6 +88,9 @@ const EXT_KIND: Record<string, Kind> = {
   html: 'html', htm: 'html',
   md: 'markdown', markdown: 'markdown',
   png: 'image', jpg: 'image', jpeg: 'image', gif: 'image', svg: 'image', webp: 'image',
+  doc: 'word', docx: 'word',
+  xls: 'excel', xlsx: 'excel',
+  ppt: 'powerpoint', pptx: 'powerpoint',
 }
 
 // Once-per-session guard so a live write auto-opens the panel only the first time.
@@ -125,6 +131,9 @@ function typeLabel(kind: Kind): string {
     case 'html':     return 'HTML'
     case 'markdown': return 'Markdown'
     case 'image':    return 'Image'
+    case 'word':     return 'Word'
+    case 'excel':    return 'Excel'
+    case 'powerpoint': return 'PowerPoint'
     default:         return 'File'
   }
 }
@@ -408,7 +417,7 @@ export function observeArtifact(
   let loaded = false
   const rev = (revisions.get(path) ?? 0) + 1
   revisions.set(path, rev)
-  if (kind === 'image') {
+  if (kind !== 'html' && kind !== 'markdown') {
     // Images render as a plain <img> in the host document — see the
     // file-header note on why an <img src="/api/…"> inside the sandboxed
     // iframe 401s. The host document's own request is same-site and
@@ -417,6 +426,8 @@ export function observeArtifact(
     // renders one at a time. There is no preview document to build either, so
     // an image observes as already loaded.
     //
+    // OCTO-FORK: binary artifacts share this authenticated URL for download;
+    // modern Office files also fetch it lazily to build their preview.
     // The revision counter matters: re-observing a path (the agent overwrote
     // the file) otherwise yields a byte-identical src, so Svelte skips the
     // attribute update and the panel keeps showing the previous bytes — the
@@ -433,7 +444,7 @@ export function observeArtifact(
     // path instead: it is the one text form worth copying. Download saves
     // the bytes from `src`.
     code = path
-    loaded = true
+    loaded = officeKindForPath(path) === null
   }
 
   const name = basename(path)
@@ -485,11 +496,15 @@ export async function hydrateArtifact(a: Artifact | null | undefined): Promise<v
   if (!a || a.loaded || hydrating.has(a)) return
   const sessionId = get(artifactSelSession)
   const kind = kindOf(a.path)
-  if (!sessionId || !kind || kind === 'image') return
+  if (!sessionId || !kind || (kind !== 'html' && kind !== 'markdown' && officeKindForPath(a.path) === null)) return
   hydrating.add(a)
   let body: HydratedBody | null = null
   try {
-    body = kind === 'html' ? await buildHTMLEntry(sessionId, a.path) : await buildTextBody(sessionId, a.path)
+    body = kind === 'html'
+      ? await buildHTMLEntry(sessionId, a.path)
+      : kind === 'markdown'
+        ? await buildTextBody(sessionId, a.path)
+        : await buildOfficeBody(sessionId, a.path)
   } catch {
     body = null
   } finally {
@@ -513,6 +528,7 @@ export async function hydrateArtifact(a: Artifact | null | undefined): Promise<v
 type HydratedBody = {
   code: string
   preview: string
+  officePreview?: boolean
   originURL?: string
   originUnavailable?: boolean
 }
@@ -588,7 +604,9 @@ export function installArtifactThemeRefresh(): void {
     last = cur
     themeRev.update(n => n + 1)
     artifacts.update(list => list.map(e =>
-      e.loaded && !e.src && !e.originURL ? { ...e, loaded: false, loadFailed: false, preview: '', code: '' } : e))
+      e.loaded && (e.officePreview || (!e.src && !e.originURL))
+        ? { ...e, loaded: false, loadFailed: false, officePreview: false, preview: '', code: '' }
+        : e))
   })
   obs.observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] })
 }
@@ -653,6 +671,18 @@ async function buildTextBody(
   const body = await inlineLocalRefs(renderMarkdown(code, true, { rawHtml: true }), sessionId, path)
   const preview = `<style>${MD_STYLES}</style><body style="${bodyStyle}">${body}${COPY_SCRIPT}</body>`
   return { code, preview }
+}
+
+async function buildOfficeBody(
+  sessionId: string,
+  path: string,
+): Promise<HydratedBody | null> {
+  const res = await fetch(artifactURL(sessionId, path))
+  if (!res.ok) return null
+  const bytes = await res.arrayBuffer()
+  const isDark = document.documentElement.getAttribute('data-theme') === 'dark'
+  const preview = await renderOfficePreview(path, bytes, isDark)
+  return { code: path, preview, officePreview: true }
 }
 
 // darkMDStyles returns inline CSS for code blocks and syntax highlighting

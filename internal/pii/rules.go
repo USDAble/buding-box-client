@@ -62,12 +62,18 @@ func placeholderSpans(text string) []span {
 var (
 	residentIDRE = regexp.MustCompile(`[0-9]{17}[0-9Xx]`)
 	mobileRE     = regexp.MustCompile(`1[3-9](?:[ -]?[0-9]){9}`)
-	emailRE      = regexp.MustCompile("[A-Za-z0-9.!#$%&'*+/=?^_`{|}~-]+@[A-Za-z0-9.-]+\\.[A-Za-z]{2,63}")
-	bankCardRE   = regexp.MustCompile(`[0-9](?:[ -]?[0-9]){11,18}`)
-	vinRE        = regexp.MustCompile(`[A-HJ-NPR-Z0-9]{17}`)
-	ipv4RE       = regexp.MustCompile(`(?:[0-9]{1,3}\.){3}[0-9]{1,3}`)
-	ipTokenRE    = regexp.MustCompile(`[0-9A-Fa-f:.]{2,64}`)
-	otpRE        = regexp.MustCompile(`[0-9]{4,8}`)
+	// OCTO-FORK: international numbers are accepted only with a calling-code
+	// prefix and a validated digit count; malformed labelled values stay intact.
+	internationalMobileRE = regexp.MustCompile(`(?:\+[1-9][0-9]{0,2}|00[1-9][0-9]{0,2})(?:[ .()-]*[0-9]){6,14}`)
+	emailRE               = regexp.MustCompile("[A-Za-z0-9.!#$%&'*+/=?^_`{|}~-]+@[A-Za-z0-9.-]+\\.[A-Za-z]{2,63}")
+	bankCardRE            = regexp.MustCompile(`[0-9](?:[ -]?[0-9]){11,18}`)
+	// OCTO-FORK: a Luhn-valid plan/task ID is not evidence of a payment card.
+	nonCardIDRE           = regexp.MustCompile(`(?i)(?:^|[^a-z0-9_])(?:(?:计划|任务|plan|task)(?:[ _-]*(?:id|编号))?|(?:id|编号))[ _-]*(?:[:：=]|为|是)?\s*$`)
+	internationalPrefixRE = regexp.MustCompile(`(?:\+|00)[1-9][0-9]{0,2}[ .()-]*$`)
+	vinRE                 = regexp.MustCompile(`[A-HJ-NPR-Z0-9]{17}`)
+	ipv4RE                = regexp.MustCompile(`(?:[0-9]{1,3}\.){3}[0-9]{1,3}`)
+	ipTokenRE             = regexp.MustCompile(`[0-9A-Fa-f:.]{2,64}`)
+	otpRE                 = regexp.MustCompile(`[0-9]{4,8}`)
 )
 
 func regexMatches(scan scanText, re *regexp.Regexp, valid func(string, int, int) bool) []span {
@@ -89,13 +95,42 @@ func findResidentIDs(scan scanText) []span {
 }
 
 func findMobileNumbers(scan scanText) []span {
-	return regexMatches(scan, mobileRE, func(text string, start, end int) bool {
+	out := regexMatches(scan, mobileRE, func(text string, start, end int) bool {
 		if !numericBounded(text, start, end) {
 			return false
 		}
 		digits := stripNumberSeparators(text[start:end])
 		return len(digits) == 11 && digits[0] == '1' && digits[1] >= '3' && digits[1] <= '9'
 	})
+	for _, idx := range internationalMobileRE.FindAllStringIndex(scan.normalized, -1) {
+		if validInternationalPhone(scan.normalized, idx[0], idx[1]) {
+			out = append(out, scan.originalSpan(idx[0], idx[1]))
+		}
+	}
+	return out
+}
+
+func validInternationalPhone(text string, start, end int) bool {
+	if !phoneBounded(text, start, end) {
+		return false
+	}
+	raw := stripPhoneFormatting(text[start:end])
+	digits := raw
+	if strings.HasPrefix(digits, "+") {
+		digits = digits[1:]
+	} else if strings.HasPrefix(digits, "00") {
+		digits = digits[2:]
+	}
+	if len(digits) < 7 || len(digits) > 15 {
+		return false
+	}
+	if strings.HasPrefix(digits, "861") {
+		return len(digits) == 13 && digits[3] >= '3' && digits[3] <= '9'
+	}
+	if strings.HasPrefix(digits, "1") {
+		return len(digits) == 11 && digits[1] >= '2' && digits[1] <= '9'
+	}
+	return len(digits) >= 8
 }
 
 func findEmails(scan scanText) []span {
@@ -127,6 +162,14 @@ func findEmails(scan scanText) []span {
 func findBankCards(scan scanText) []span {
 	return regexMatches(scan, bankCardRE, func(text string, start, end int) bool {
 		if !numericBounded(text, start, end) {
+			return false
+		}
+		if (start > 0 && text[start-1] == '+') || internationalPrefixRE.MatchString(runePrefix(text, start, 12)) {
+			return false
+		}
+		// ponytail: only an adjacent ID label is exempt; unlabelled valid card
+		// numbers keep their existing protection.
+		if nonCardIDRE.MatchString(runePrefix(text, start, 24)) {
 			return false
 		}
 		digits := stripNumberSeparators(text[start:end])
@@ -294,6 +337,10 @@ func numericBounded(text string, start, end int) bool {
 	return (start == 0 || !asciiDigit(text[start-1])) && (end == len(text) || !asciiDigit(text[end]))
 }
 
+func phoneBounded(text string, start, end int) bool {
+	return (start == 0 || !asciiWord(text[start-1])) && (end == len(text) || !asciiWord(text[end]))
+}
+
 func ipBounded(text string, start, end int) bool {
 	// A preceding colon is a valid label separator ("IP:192.0.2.1") and can
 	// also introduce an IPv4 tail inside an IPv6 address. Overlap resolution
@@ -334,6 +381,17 @@ func stripNumberSeparators(value string) string {
 			return -1
 		}
 		return r
+	}, value)
+}
+
+func stripPhoneFormatting(value string) string {
+	return strings.Map(func(r rune) rune {
+		switch r {
+		case ' ', '\t', '-', '.', '(', ')':
+			return -1
+		default:
+			return r
+		}
 	}, value)
 }
 

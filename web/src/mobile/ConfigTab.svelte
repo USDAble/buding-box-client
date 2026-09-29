@@ -166,7 +166,8 @@
         {#each skills as s (s.name)}
           <div class="row">
             <div class="names">
-              <span class="rlabel">{s.name} <span class="tag">{s.tagLabel}</span></span>
+              <!-- OCTO-FORK: source badges repaint with the active locale on mobile. -->
+              <span class="rlabel">{s.name} <span class="tag">{$t(s.source === 'default' ? 'source.system' : s.source === 'expert' ? 'source.expert' : 'source.user')}</span></span>
               {#if s.desc}<span class="sub">{s.desc}</span>{/if}
             </div>
             <button class="switch" class:on={s.enabled} role="switch" aria-checked={s.enabled}
@@ -201,7 +202,7 @@
         {#each workflows as w (w.name)}
           <div class="row">
             <div class="names">
-              <span class="rlabel">{w.name} <span class="tag">{w.tagLabel}</span></span>
+              <span class="rlabel">{w.name} <span class="tag">{$t(w.source === 'default' ? 'source.system' : 'source.user')}</span></span>
               {#if w.desc}<span class="sub">{w.desc}</span>{/if}
             </div>
           </div>

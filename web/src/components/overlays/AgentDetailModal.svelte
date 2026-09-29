@@ -66,16 +66,16 @@
       <div class="header-text">
         <span class="agent-name">{name}</span>
         {#if agent.source === 'platform'}
-          <span class="official-badge">中台发布 · v{agent.version}</span>
+          <span class="official-badge">{$t('agents.gallery_platform')} · v{agent.version}</span>
         {/if}
       </div>
     </div>
 
     <div class="modal-body">
-      {#if loadingDetail}<p>正在加载专家详情…</p>{/if}
-      {#if detailError}<p role="alert">{detailError} <button onclick={loadDetail}>重试</button></p>{/if}
+      {#if loadingDetail}<p>{$t('agents.detail_loading')}</p>{/if}
+      {#if detailError}<p role="alert">{detailError} <button onclick={loadDetail}>{$t('agents.gallery_retry')}</button></p>{/if}
       {#if (detail ?? agent).platform_skills?.length}
-        <section><h4>关联技能</h4>
+        <section><h4>{$t('agents.related_skills')}</h4>
           {#each (detail ?? agent).platform_skills ?? [] as skill}
             <details><summary>{skill.name} · v{skill.version}</summary><p>{skill.description}</p><pre style="white-space:pre-wrap">{skill.content}</pre></details>
           {/each}

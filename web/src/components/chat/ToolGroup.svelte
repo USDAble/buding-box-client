@@ -42,7 +42,8 @@
         showToast(tr('tools.undo_done'), 'success')
       }
     } catch (e: any) {
-      showToast(`Undo failed: ${e.message}`, 'error')
+      // OCTO-FORK: undo feedback follows the selected language.
+      showToast(tr('tools.undo_failed').replace('{error}', e.message), 'error')
     }
   }
   // A collapsible group of tool calls for one agent turn.

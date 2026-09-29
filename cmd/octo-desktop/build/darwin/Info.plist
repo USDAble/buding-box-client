@@ -3,10 +3,10 @@
 <plist version="1.0">
 <dict>
 	<key>CFBundleName</key>
-	<!-- OCTO-FORK: 桌面壳的打包与品牌资产（图标/清单/启动器） — see the portable packaging design -->
-	<string>Pudding Box</string>
+	<!-- OCTO-FORK: the packager fills the native app name from branding/brand.json. -->
+	<string>__APP_NAME__</string>
 	<key>CFBundleDisplayName</key>
-	<string>Pudding Box</string>
+	<string>__APP_NAME__</string>
 	<key>CFBundleExecutable</key>
 	<string>octo-desktop</string>
 	<key>CFBundleIdentifier</key>

@@ -61,10 +61,10 @@
     if (!confirmed) return
     try {
       await api.deleteAgent(agent.id)
-      showToast('Agent deleted', 'success')
+      showToast(tr('agents.deleted'), 'success')
       await loadAgents()
     } catch (err) {
-      showToast('Failed to delete agent: ' + (err as Error).message, 'error')
+      showToast(tr('agents.delete_failed').replace('{error}', (err as Error).message), 'error')
     }
   }
 
@@ -73,7 +73,7 @@
       await api.toggleAgent(agent.id)
       await loadAgents()
     } catch (err) {
-      showToast('Failed to update agent: ' + (err as Error).message, 'error')
+      showToast(tr('agents.update_failed').replace('{error}', (err as Error).message), 'error')
     }
   }
 

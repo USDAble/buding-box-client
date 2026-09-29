@@ -4,6 +4,7 @@
   import StatusTag from '../components/ui/StatusTag.svelte'
   import * as api from '../lib/api'
   import { t, tr } from '../lib/i18n'
+  // OCTO-FORK: trash-action feedback follows the selected UI language.
   import { confirmDialog } from '../lib/confirm'
 
   interface TrashEntry {
@@ -47,7 +48,7 @@
       totalSize  = data.total_size  ?? items.reduce((s: number, e: TrashEntry) => s + (e.size ?? 0), 0)
       orphanCount = data.orphan_count ?? items.filter((e: TrashEntry) => e.orphan).length
     } catch (e: any) {
-      showToast(`Failed to load trash: ${e.message}`, 'error')
+      showToast(tr('files.load_failed').replace('{error}', e.message), 'error')
     } finally {
       loading = false
     }
@@ -73,7 +74,7 @@
         if (res.backedUpExisting) await reload()
       }
     } catch (e: any) {
-      showToast(`Restore failed: ${e.message}`, 'error')
+      showToast(tr('files.restore_failed').replace('{error}', e.message), 'error')
     } finally {
       busyId = null
     }
@@ -99,7 +100,7 @@
       totalCount = Math.max(0, totalCount - 1)
       showToast(tr('files.toast_deleted'), 'success')
     } catch (e: any) {
-      showToast(`Delete failed: ${e.message}`, 'error')
+      showToast(tr('files.delete_failed').replace('{error}', e.message), 'error')
     } finally {
       busyId = null
     }
@@ -115,7 +116,7 @@
       orphanCount = 0
       showToast(tr('files.toast_emptied'), 'success')
     } catch (e: any) {
-      showToast(`Empty failed: ${e.message}`, 'error')
+      showToast(tr('files.empty_failed').replace('{error}', e.message), 'error')
     }
   }
 
@@ -125,7 +126,7 @@
       showToast(tr('files.toast_old_cleared'), 'success')
       await reload()
     } catch (e: any) {
-      showToast(`Failed: ${e.message}`, 'error')
+      showToast(tr('files.clean_failed').replace('{error}', e.message), 'error')
     }
   }
 
@@ -135,7 +136,7 @@
       showToast(tr('files.toast_orphans_cleared'), 'success')
       await reload()
     } catch (e: any) {
-      showToast(`Failed: ${e.message}`, 'error')
+      showToast(tr('files.clean_failed').replace('{error}', e.message), 'error')
     }
   }
 

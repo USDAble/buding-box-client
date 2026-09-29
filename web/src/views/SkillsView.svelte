@@ -39,7 +39,7 @@
     try {
       const detail = skillDetails[key] ?? await api.getPlatformSkill(skill.id, skill.version)
       skillDetails[key] = detail
-      await openAgentSession(`请使用以下中台发布技能协助我，并先询问本次任务所需信息。\n技能：${detail.name}（v${detail.version}，${detail.id}）\n\n${detail.content}`, detail.name)
+      await openAgentSession(`${tr('skills.platform_use_prompt').replace('{name}', detail.name).replace('{version}', String(detail.version)).replace('{id}', detail.id)}\n\n${detail.content}`, detail.name)
     }
     catch (err) { showToast((err as Error).message, 'error') }
     finally { usingPlatformSkill = '' }
@@ -140,7 +140,7 @@
       a.remove()
       URL.revokeObjectURL(url)
     } catch (e: any) {
-      showToast(`Export failed: ${e.message}`, 'error')
+      showToast(tr('skills.export_failed').replace('{error}', e.message), 'error')
     }
   }
 
@@ -208,7 +208,8 @@
         return
       }
       if (!r.ok) {
-        showToast(tr('skills.import_error') + (r.error ?? 'unknown'), 'error')
+        // OCTO-FORK: only the server-provided detail is raw; our empty fallback is localized.
+        showToast(tr('skills.import_error') + (r.error ?? tr('turn_error.unknown')), 'error')
         return
       }
       skills.set(await api.listSkills())
@@ -225,18 +226,18 @@
 <div class="page">
   <div class="inner">
     <section>
-      <h2>中台发布技能</h2>
-      {#if refreshingPlatform}<p>已显示缓存，正在更新…</p>{:else if cachedPlatform}<p>当前显示缓存版本</p>{/if}
-      {#if platformLoading}<p>正在加载中台技能…</p>
-      {:else if platformError}<p role="alert">技能加载失败：{platformError} <button onclick={loadPlatformSkills}>重新加载</button></p>
-      {:else if platformSkills.length === 0}<p>暂无已发布技能</p>{/if}
+      <h2>{$t('skills.platform_title')}</h2>
+      {#if refreshingPlatform}<p>{$t('skills.platform_refreshing')}</p>{:else if cachedPlatform}<p>{$t('skills.platform_cached')}</p>{/if}
+      {#if platformLoading}<p>{$t('skills.platform_loading')}</p>
+      {:else if platformError}<p role="alert">{$t('skills.platform_load_failed').replace('{error}', platformError)} <button onclick={loadPlatformSkills}>{$t('agents.gallery_retry')}</button></p>
+      {:else if platformSkills.length === 0}<p>{$t('skills.platform_empty')}</p>{/if}
       {#each platformSkills as skill (skill.id)}
         <details style="padding:12px;border-bottom:1px solid var(--border-color)" ontoggle={(event) => { if (event.currentTarget.open) loadSkillDetail(skill) }}>
           <summary>{skill.name} · v{skill.version}</summary>
           <p>{skill.description}</p>
-          {#if skillDetailErrors[`${skill.id}:${skill.version}`]}<p role="alert">{skillDetailErrors[`${skill.id}:${skill.version}`]} <button onclick={() => loadSkillDetail(skill)}>重试</button></p>{/if}
-          <pre style="white-space:pre-wrap">{skillDetails[`${skill.id}:${skill.version}`]?.content ?? '正在加载详情…'}</pre>
-          <button class="btn-primary" disabled={!!usingPlatformSkill} onclick={() => usePlatformSkill(skill)}>{usingPlatformSkill === `${skill.id}:${skill.version}` ? '正在打开…' : '使用技能'}</button>
+          {#if skillDetailErrors[`${skill.id}:${skill.version}`]}<p role="alert">{skillDetailErrors[`${skill.id}:${skill.version}`]} <button onclick={() => loadSkillDetail(skill)}>{$t('agents.gallery_retry')}</button></p>{/if}
+          <pre style="white-space:pre-wrap">{skillDetails[`${skill.id}:${skill.version}`]?.content ?? $t('skills.platform_detail_loading')}</pre>
+          <button class="btn-primary" disabled={!!usingPlatformSkill} onclick={() => usePlatformSkill(skill)}>{usingPlatformSkill === `${skill.id}:${skill.version}` ? $t('skills.platform_opening') : $t('skills.platform_use')}</button>
         </details>
       {/each}
     </section>
@@ -294,7 +295,8 @@
               <span class="mono name">{sk.name}</span>
             </div>
             <span class="desc">{sk.desc}</span>
-            <span><StatusTag status={sk.tagStatus}>{sk.tagLabel}</StatusTag></span>
+            <!-- OCTO-FORK: source badges react to language changes without re-fetching the catalog. -->
+            <span><StatusTag status={sk.tagStatus}>{$t(sk.source === 'default' ? 'source.system' : sk.source === 'expert' ? 'source.expert' : 'source.user')}</StatusTag></span>
             <span>
               <Switch
                 checked={sk.enabled}

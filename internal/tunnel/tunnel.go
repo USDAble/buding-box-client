@@ -107,6 +107,8 @@ type Config struct {
 	Identity *Identity
 	// Logf overrides the logger. nil uses log.Printf.
 	Logf func(string, ...any)
+	// OCTO-FORK: desktop pairing is shown only while the relay is connected.
+	OnStateChange func(connected bool, err error)
 }
 
 // Tunnel is the host side of the managed tunnel: one relay connection bridging N
@@ -205,6 +207,10 @@ func (t *Tunnel) Serve(ctx context.Context) error {
 		if ctxErr := ctx.Err(); ctxErr != nil {
 			return ctxErr
 		}
+		// OCTO-FORK: hide the desktop pairing QR while the relay reconnects.
+		if t.cfg.OnStateChange != nil {
+			t.cfg.OnStateChange(false, err)
+		}
 		t.logf("[tunnel] relay connection ended (%v); reconnecting in %s", err, backoff)
 		select {
 		case <-ctx.Done():
@@ -236,6 +242,10 @@ func (t *Tunnel) runOnce(ctx context.Context) error {
 	t.devices = map[string]*device{}
 	t.mu.Unlock()
 	t.logf("[tunnel] connected to relay tunnel=%s", t.cfg.TunnelID)
+	// OCTO-FORK: the desktop only publishes pairing after the relay accepted the host.
+	if t.cfg.OnStateChange != nil {
+		t.cfg.OnStateChange(true, nil)
+	}
 
 	// When the read loop exits, stop the relay socket and tear down every
 	// device's bridge (which closes its loopback streams).

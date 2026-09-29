@@ -22,7 +22,8 @@ cmd/octo-desktop/*.syso
 cmd/octo-desktop/PuddingBox.exe
 /cmd/octo/octo
 /cmd/octo/octo.exe
-/Octo.app
+# OCTO-FORK: macOS app bundle names are brand-derived; keep all root build outputs out of Git.
+/*.app/
 /Octo.AppDir/
 /Octo-x86_64.AppImage
 /appimagetool.AppImage

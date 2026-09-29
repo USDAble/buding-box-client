@@ -10,19 +10,26 @@ These files are the **reference source**, committed here because the generated
 
 **You normally don't apply any of this by hand** — `../scripts/wire-native.mjs`
 does all of it (copy the plugin, register it, patch Gradle / Manifest /
-Info.plist / the Xcode project) idempotently. Run it after every `npx cap add`:
+Info.plist / the Xcode project, and install the generated brand launcher icons)
+idempotently. Run it after every `npx cap add`:
 
 ```bash
 npm run wire-native -- --local   # drop --local for a release build
 ```
+
+<!-- OCTO-FORK: keep ignored native launcher resources synchronized with the desktop brand master. -->
+The committed icons under `launcher/` come from `branding/source/logo-mark.png`
+via `go run ./cmd/generate-brand-assets`. To refresh only icons in an existing
+native project, run `npm run wire-native -- --icons-only --android` (or `--ios`).
 
 The rest of this document is the reference for **what wire-native does and
 why** — read it to understand or debug the wiring, not to perform it.
 
 ## Status
 
+<!-- OCTO-FORK: document the product CLI alias without renaming the relay protocol. -->
 Both plugins are implemented and **verified end to end** on a simulator/emulator:
-paired to a local `octo serve --tunnel` + `octo-relay` over a real Noise XX
+paired to a local `puddingbox serve --tunnel` + `octo-relay` over a real Noise XX
 session, and the bundled web frontend drove `/api` + `/ws` through the tunnel.
 They interoperate with the Go host (`internal/tunnel`) and relay
 (`cmd/octo-relay`). Android uses noise-java; iOS implements Noise XX on CryptoKit.

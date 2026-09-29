@@ -175,7 +175,8 @@ desktop-dev:
 		go build -ldflags='$(DESKTOP_LDFLAGS)' -o ../../octo-desktop-dev .
 	OCTO_DESKTOP_DEV_URL="http://localhost:5173" ./octo-desktop-dev
 
-# Package the desktop shell into a double-clickable macOS Octo.app bundle
+# OCTO-FORK: the macOS app filename follows the configured product name.
+# Package the desktop shell into a double-clickable, brand-named macOS .app bundle
 # (embeds the web UI, ad-hoc signed for local use). Real Developer ID
 # notarization is a release step. Windows packaging rides the Inno Setup
 # installer track.

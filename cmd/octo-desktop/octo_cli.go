@@ -7,6 +7,7 @@ import (
 	"runtime"
 	"strings"
 
+	"github.com/open-octo/octo-agent/internal/brand"
 	"github.com/open-octo/octo-agent/internal/version"
 )
 
@@ -56,6 +57,9 @@ func ensureBundledOcto(settings *desktopSettings) {
 			// launch retries.
 		}
 	}
+	// OCTO-FORK: expose the branded command without replacing a user's own CLI
+	// or changing the upstream binary that upgrades already know how to find.
+	ensureBundledCLIAlias(target, brand.Load().Identifier(brand.IdentifierCLICommand))
 
 	// Put ~/.local/bin on PATH (macOS only — Linux's XDG bin dir is already
 	// there). This is deliberately NOT gated on the seed above: it's idempotent
@@ -67,6 +71,20 @@ func ensureBundledOcto(settings *desktopSettings) {
 			ensureDirOnPath(home, filepath.Dir(target))
 		}
 	}
+}
+
+func ensureBundledCLIAlias(target, command string) {
+	if command == "" || command == filepath.Base(target) {
+		return
+	}
+	if _, err := os.Stat(target); err != nil {
+		return
+	}
+	alias := filepath.Join(filepath.Dir(target), command)
+	if _, err := os.Lstat(alias); err == nil || !os.IsNotExist(err) {
+		return // preserve any existing user-owned command, including a broken link
+	}
+	_ = os.Symlink(filepath.Base(target), alias)
 }
 
 // shouldSeedOcto decides whether to (re)write ~/.local/bin/octo. Fresh target:

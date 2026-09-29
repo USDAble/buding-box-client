@@ -1,6 +1,7 @@
 // OCTO-FORK: panel-created tasks need an explicit usable model just like the composer.
 import { get } from 'svelte/store'
 import { selectableModels, defaultSelectableModel, loadSelectableModels, type SelectableModel } from './selectableModels'
+import { tr } from './i18n'
 
 let loading: ReturnType<typeof loadSelectableModels> | null = null
 
@@ -19,6 +20,7 @@ export async function resolveActionModel(preferred: string[]): Promise<string> {
   if (!loading) loading = loadSelectableModels(false).finally(() => { loading = null })
   const snapshot = await loading
   const model = choose(snapshot.models, snapshot.defaultModelId, preferred)
-  if (!model) throw new Error('暂无可用模型，请刷新模型目录或联系管理员配置')
+  // OCTO-FORK: this client-generated model error follows the selected UI language.
+  if (!model) throw new Error(tr('models.none_available'))
   return model
 }

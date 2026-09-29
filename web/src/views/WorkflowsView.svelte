@@ -79,7 +79,8 @@
       a.remove()
       URL.revokeObjectURL(url)
     } catch (e: any) {
-      showToast(`Export failed: ${e.message}`, 'error')
+      // OCTO-FORK: workflow export feedback follows the selected UI language.
+      showToast(tr('workflows.export_failed').replace('{error}', e.message), 'error')
     }
   }
 
@@ -157,7 +158,8 @@
               <span class="mono name">{wf.name}</span>
             </div>
             <span class="desc">{wf.desc}</span>
-            <span><StatusTag status={wf.tagStatus}>{wf.tagLabel}</StatusTag></span>
+            <!-- OCTO-FORK: source badges react to language changes without re-fetching workflows. -->
+            <span><StatusTag status={wf.tagStatus}>{$t(wf.source === 'default' ? 'source.system' : 'source.user')}</StatusTag></span>
             <div class="row-actions">
               <button class="act-btn" title={$t('workflows.run')} onclick={() => handleRun(wf.name)}><iconify-icon icon="ant-design:play-circle-outlined" width="15"></iconify-icon></button>
               <button class="act-btn" title={$t('workflows.view_source')} onclick={() => handleViewSource(wf.name)}><iconify-icon icon="ant-design:code-outlined" width="15"></iconify-icon></button>

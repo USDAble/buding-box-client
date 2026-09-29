@@ -142,7 +142,7 @@
 - `PUT /api/product/sensitive/dict` 用 `{"user":[...]}` 完整替换用户词，返回实际持久化后的 `{"user":[...]}`。归一化后为空的词返回 `{"code":"invalid_word","word":"<原词>"}`，整次写入不得改变文件；重复词和内置词被去重。
 - `POST /api/product/sensitive/dict/import` 用 `{"words":[...],"dryRun":<bool>}` 合并导入，返回 `{"added":<int>,"skipped":<int>}`。空词、重复词和内置同形词计入 `skipped`；`dryRun:true` 绝不写盘。
 - `POST /api/product/sensitive/check` 接收 `{"text":"..."}`，始终返回 `{"hit":<bool>,"masked":"..."}`。这是输入提示，不是安全边界；实际发送链路必须再次检测。
-- `GET /api/product/privacy/rules` 返回 `{"ruleVersion":"builtin-1","rules":["cn_resident_id","..."]}`。它是 `internal/pii` 内置注册表的只读投影，供“设置 → 安全与隐私”的个人信息规则页展示；不得返回正则、命中原文、样例或逐规则开关，也不依赖个人信息引擎是否已组装。
+- `GET /api/product/privacy/rules` 返回 `{"ruleVersion":"builtin-2","rules":["cn_resident_id","..."]}`。它是 `internal/pii` 内置注册表的只读投影，供“设置 → 安全与隐私”的个人信息规则页展示；不得返回正则、命中原文、样例或逐规则开关，也不依赖个人信息引擎是否已组装。
 
 ## 运行时可用性与余额
 

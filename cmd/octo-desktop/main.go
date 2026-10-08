@@ -473,6 +473,10 @@ func main() {
 	// The app has quit: release our pid-file entry (only if it's still ours —
 	// a successor that took the port over must keep its own) and shut the
 	// server down cleanly.
+	// OCTO-FORK: closing the desktop app revokes the phone tunnel before the hub exits.
+	if mobileTunnel := bridge.tunnel.Load(); mobileTunnel != nil {
+		mobileTunnel.stop()
+	}
 	serveproc.ReleaseOwned(os.Getpid())
 	if srv := bridge.srv.Load(); srv != nil {
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
@@ -664,8 +668,12 @@ func startHub(app *application.App, bridge *nativeBridge, settings desktopSettin
 	// OCTO-FORK: keep the portable-only manual lookup in the desktop assembly,
 	// registered through the existing product gate rather than changing upstream
 	// native routes. It can discover a release but cannot download or install it.
+	// OCTO-FORK: the desktop owns an opt-in tunnel on its existing hub; only
+	// window-gated product routes may start or stop it.
+	mobileTunnel := &desktopTunnel{}
 	mountProductAndUpdate := func(api func(pattern string, h http.HandlerFunc)) {
 		mountProduct(api)
+		mobileTunnel.mount(api)
 		api("POST /api/product/check-updates", func(w http.ResponseWriter, r *http.Request) {
 			latest, available, err := bridge.CheckForUpdates(r.Context())
 			if err != nil {
@@ -767,6 +775,8 @@ func startHub(app *application.App, bridge *nativeBridge, settings desktopSettin
 		return
 	}
 	bridge.srv.Store(srv)
+	mobileTunnel.bind(srv)
+	bridge.tunnel.Store(mobileTunnel)
 	go func() {
 		if err := srv.ServeOn(ln); err != nil {
 			log.Printf("octo-desktop: server stopped: %v", err)

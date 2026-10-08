@@ -2,3 +2,4 @@
 #define BrandAppName "Pudding Box"
 #define BrandAppPublisher "Pudding Box Studio"
 #define BrandAppPublisherURL "https://octo-agent.dev/"
+#define BrandCLIExeName "puddingbox.exe"

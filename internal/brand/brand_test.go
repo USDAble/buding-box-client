@@ -149,12 +149,13 @@ func TestSingleInstanceIDIsRebranded(t *testing.T) {
 	}
 }
 
-// Compatibility identifiers stay on the upstream values this phase; changing
-// them breaks in-place upgrades for already-installed copies.
-func TestCompatibilityIdentifiersUnchanged(t *testing.T) {
+// OCTO-FORK: expose the branded CLI command while keeping data and protocol
+// identifiers on their compatible upstream values.
+func TestCLINameAndCompatibilityIdentifiers(t *testing.T) {
 	cfg := Load()
 	for key, want := range map[string]string{
-		IdentifierCLICommand:  "octo",
+		IdentifierCLICommand:  "puddingbox",
+		IdentifierCLIExeName:  "puddingbox.exe",
 		IdentifierConfigDir:   "~/.octo",
 		IdentifierEnvPrefix:   "OCTO_",
 		IdentifierGoModule:    "github.com/open-octo/octo-agent",
@@ -162,7 +163,7 @@ func TestCompatibilityIdentifiersUnchanged(t *testing.T) {
 		IdentifierMobileAppID: "dev.octo.mobile",
 	} {
 		if got := cfg.Identifier(key); got != want {
-			t.Errorf("Identifier(%q) = %q, want %q (must stay on the upstream value this phase)", key, got, want)
+			t.Errorf("Identifier(%q) = %q, want %q", key, got, want)
 		}
 	}
 }

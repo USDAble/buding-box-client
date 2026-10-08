@@ -102,11 +102,12 @@
 
   {#if $nativeShell && !isMac}
     <div class="window-controls">
-      <button class="window-btn minimise" aria-label="Minimise" title="Minimise" onclick={() => nativeMinimise()}>−</button>
-      <button class="window-btn maximise" aria-label={$isMaximised ? 'Restore' : 'Maximise'} title={$isMaximised ? 'Restore' : 'Maximise'} onclick={flipMaximise}>
+      <!-- OCTO-FORK: native window controls expose localized labels to sighted and screen-reader users. -->
+      <button class="window-btn minimise" aria-label={$t('header.minimise')} title={$t('header.minimise')} onclick={() => nativeMinimise()}>−</button>
+      <button class="window-btn maximise" aria-label={$isMaximised ? $t('header.restore') : $t('header.maximise')} title={$isMaximised ? $t('header.restore') : $t('header.maximise')} onclick={flipMaximise}>
         {$isMaximised ? '❐' : '□'}
       </button>
-      <button class="window-btn close" aria-label="Close" title="Close" onclick={() => nativeClose()}>×</button>
+      <button class="window-btn close" aria-label={$t('common.close')} title={$t('common.close')} onclick={() => nativeClose()}>×</button>
     </div>
   {/if}
 </header>

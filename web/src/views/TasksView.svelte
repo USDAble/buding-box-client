@@ -58,7 +58,8 @@
     try {
       applyTasks(await fetchTasks())
     } catch (e: any) {
-      showToast(e?.message ?? 'Failed to load tasks', 'error')
+      // OCTO-FORK: scheduled-task failures follow the selected interface language.
+      showToast(e?.message ?? tr('tasks.load_failed'), 'error')
     } finally {
       loading = false
     }
@@ -84,7 +85,7 @@
       // doesn't keep showing the "—" it carried while paused.
       fetchTasks().then(applyTasks).catch(() => {})
     } catch (e: any) {
-      showToast(e?.message ?? 'Failed to update task', 'error')
+      showToast(e?.message ?? tr('tasks.update_failed'), 'error')
     } finally {
       togglingId = null
     }
@@ -114,7 +115,7 @@
         view.set('chat')
       }
     } catch (e: any) {
-      showToast(e?.message ?? 'Failed to run task', 'error')
+      showToast(e?.message ?? tr('tasks.run_failed'), 'error')
     }
   }
 
@@ -125,7 +126,7 @@
       rawTasks = rawTasks.filter(r => r.id !== t.id)
       showToast(tr('tasks.toast_deleted'))
     } catch (e: any) {
-      showToast(e?.message ?? 'Failed to delete task', 'error')
+      showToast(e?.message ?? tr('tasks.delete_failed'), 'error')
     }
   }
 

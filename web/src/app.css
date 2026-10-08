@@ -1,13 +1,14 @@
 /* ──────────────────────────────────────────────────────────────────────────
    THEMING — two orthogonal axes, both set as attributes on <html>:
      • data-theme       = "light" | "dark"   (resolved mode; "system" → one of these)
-     • data-theme-pack  = "azure" (default) | <future packs>
+     • data-theme-pack  = "precision" (default) | one of the shipped packs
 
    Components reference ONLY the semantic vars below, never raw colors, so a
    theme is just a set of var values — no per-component rules.
 
-   The default pack ("azure") lives in :root (light) and :root[data-theme="dark"]
-   (dark). To add a pack, add TWO blocks:
+   The legacy azure pack lives in :root (light) and :root[data-theme="dark"]
+   (dark). The precision pack is the product default and overrides it through
+   an explicit data-theme-pack attribute. To add a pack, add TWO blocks:
 
      :root[data-theme-pack="ocean"]                    { --…: …; }  // ocean light
      :root[data-theme-pack="ocean"][data-theme="dark"] { --…: …; }  // ocean dark
@@ -221,6 +222,138 @@
    Adding a pack: add the two blocks here, then add its id to PACKS in
    lib/theme.ts. Nothing else in the app needs to learn about it.
    ══════════════════════════════════════════════════════════════════════════ */
+
+/* OCTO-FORK: add the precision palette from the supplied Stripe-style design
+   constitution while keeping the legacy azure palette as the root fallback. */
+/* ── precision — deep ink, cool surfaces, concentrated blurple energy ────── */
+:root[data-theme-pack="precision"] {
+  --blue-1: #F0EEFF;
+  --blue-2: #C9C4FF;
+  --blue-5: #554CDB;
+  --blue-6: #635BFF;
+  --blue-7: #4A43B8;
+
+  --text: #0A2540;
+  --text-secondary: #425466;
+  --text-tertiary: #697386;
+  --text-quaternary: #AAB7C4;
+  --text-heading: #0A2540;
+
+  --bg-layout: #F6F9FC;
+  --bg-container: #FFFFFF;
+  --bg-sidebar: #F7FAFC;
+  --bg-table-header: #F7FAFC;
+  --bg-zebra: #F6F9FC;
+
+  --border: #E6EBF1;
+  --border-secondary: rgba(230,235,241,0.70);
+  --border-table: rgba(230,235,241,0.90);
+
+  --success: #0E9F6E;
+  --success-bg: rgba(14,159,110,0.12);
+  --success-border: rgba(14,159,110,0.35);
+  --success-text: #087A54;
+  --warning: #D97706;
+  --warning-bg: rgba(217,119,6,0.12);
+  --warning-border: rgba(217,119,6,0.35);
+  --warning-text: #A05205;
+  --error: #E25950;
+  --error-bg: rgba(226,89,80,0.12);
+  --error-border: rgba(226,89,80,0.35);
+  --error-text: #B13D37;
+  --error-dark: #B13D37;
+  --info-bg: rgba(5,112,222,0.10);
+  --info-border: rgba(5,112,222,0.35);
+  --info-text: #0570DE;
+
+  --hover-neutral: rgba(10,37,64,0.05);
+  --row-hover: rgba(99,91,255,0.08);
+  --active-blue-bg: rgba(99,91,255,0.12);
+  --focus-ring: rgba(99,91,255,0.20);
+  --scrim: rgba(10,37,64,0.45);
+
+  --card-shadow: 0 1px 3px rgba(10,37,64,0.08);
+  --surface-info: #F4F3FF;
+  --control-track: rgba(10,37,64,0.06);
+  --search-bg: rgba(10,37,64,0.05);
+  --search-hover: rgba(10,37,64,0.08);
+  --scrollbar-thumb: rgba(10,37,64,0.20);
+  --placeholder: #697386;
+
+  --font-sans: Sohne, 'Helvetica Neue', Arial, ui-sans-serif, system-ui,
+               -apple-system, BlinkMacSystemFont, 'PingFang SC',
+               'Noto Sans CJK SC', 'Microsoft YaHei', sans-serif;
+  --font-mono: ui-monospace, 'SF Mono', SFMono-Regular, Menlo, monospace;
+
+  --chat-bg: linear-gradient(180deg, #FFFFFF 0%, #F6F9FC 100%);
+  --chat-bg-image: none;
+  --on-accent: #FFFFFF;
+  --terminal-bg: #0A2540;
+  --terminal-text: #E6EDF5;
+  color-scheme: light;
+}
+
+:root[data-theme-pack="precision"][data-theme="dark"] {
+  --blue-1: rgba(99,91,255,0.18);
+  --blue-2: rgba(140,133,255,0.35);
+  --blue-5: #7A73FF;
+  --blue-6: #635BFF;
+  --blue-7: #554CDB;
+
+  --text: #F6F9FC;
+  --text-secondary: #B8C5D1;
+  --text-tertiary: #7B8A99;
+  --text-quaternary: #526273;
+  --text-heading: #FFFFFF;
+
+  --bg-layout: #0A2540;
+  --bg-container: #102F4D;
+  --bg-sidebar: #0D2944;
+  --bg-table-header: #173754;
+  --bg-zebra: #1B3C5A;
+
+  --border: rgba(230,235,241,0.16);
+  --border-secondary: rgba(230,235,241,0.09);
+  --border-table: rgba(230,235,241,0.12);
+
+  --success: #34D399;
+  --success-bg: rgba(52,211,153,0.16);
+  --success-border: rgba(52,211,153,0.40);
+  --success-text: #6EE7B7;
+  --warning: #F5B23B;
+  --warning-bg: rgba(245,178,59,0.16);
+  --warning-border: rgba(245,178,59,0.42);
+  --warning-text: #F7C96B;
+  --error: #FB7185;
+  --error-bg: rgba(251,113,133,0.16);
+  --error-border: rgba(251,113,133,0.42);
+  --error-text: #FDA4AF;
+  --error-dark: #FDA4AF;
+  --info-bg: rgba(102,183,255,0.16);
+  --info-border: rgba(102,183,255,0.40);
+  --info-text: #80C7FF;
+
+  --hover-neutral: rgba(230,235,241,0.07);
+  --row-hover: rgba(99,91,255,0.16);
+  --active-blue-bg: rgba(99,91,255,0.20);
+  --focus-ring: rgba(140,133,255,0.28);
+  --scrim: rgba(0,0,0,0.64);
+
+  --card-shadow: 0 1px 3px rgba(0,0,0,0.32);
+  --surface-info: rgba(99,91,255,0.12);
+  --control-track: rgba(230,235,241,0.08);
+  --search-bg: rgba(230,235,241,0.07);
+  --search-hover: rgba(230,235,241,0.12);
+  --scrollbar-thumb: rgba(230,235,241,0.24);
+  --placeholder: #7B8A99;
+
+  --chat-bg:
+    radial-gradient(ellipse 120% 70% at 50% 0%, rgba(99,91,255,0.14) 0%, transparent 62%),
+    linear-gradient(180deg, #0A2540 0%, #081D32 100%);
+  --terminal-bg: #071A2A;
+  --terminal-text: #E6EDF5;
+  color-scheme: dark;
+}
 
 /* ── blossom — soft rose, rounded type, generous radii ────────────────────── */
 :root[data-theme-pack="blossom"] {

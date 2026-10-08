@@ -107,7 +107,8 @@
       liteCid = ep.lite ?? ''
       visionCid = ep.vision_helper ?? ''
     } catch (e: any) {
-      showToast(e.message ?? 'Failed to load endpoints', 'error')
+      // OCTO-FORK: endpoint-editor fallback feedback follows the selected language.
+      showToast(e.message ?? tr('settings.endpoints.load_failed'), 'error')
     }
   }
 
@@ -128,7 +129,7 @@
       await fn()
       await reload()
     } catch (e: any) {
-      showToast(e.message ?? 'Request failed', 'error')
+      showToast(e.message ?? tr('turn_error.unknown'), 'error')
     } finally {
       busy = false
     }
@@ -334,7 +335,7 @@
       await reload()
       view = 'list'
     } catch (e: any) {
-      showToast(e.message ?? 'Save failed', 'error')
+      showToast(e.message ?? tr('models.save.fail'), 'error')
     } finally {
       busy = false
     }
@@ -370,7 +371,8 @@
           <option value={p.id}>{p.name}</option>
         {/each}
         {#if !providers.some((p) => p.id === 'custom')}
-          <option value="custom">Custom</option>
+          <!-- OCTO-FORK: the fallback provider label follows the chosen UI language. -->
+          <option value="custom">{$t('models.provider.custom')}</option>
         {/if}
       </select>
     </label>

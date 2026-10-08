@@ -213,11 +213,12 @@
       oauthDeadline = setTimeout(() => {
         stopPolling()
         if (oauth?.name === name && !oauthSettled(oauth.state)) {
-          oauth = { ...oauth, state: 'failed', error: 'Authorization timed out — the link may have expired. Try again.' }
+          // OCTO-FORK: client-side OAuth timeout is localized independently of server errors.
+          oauth = { ...oauth, state: 'failed', error: tr('mcp.oauth.timeout') }
         }
       }, OAUTH_TIMEOUT_MS)
     } catch (e: any) {
-      showToast(e.message ?? 'Authorization failed', 'error')
+      showToast(e.message ?? tr('mcp.oauth.failed'), 'error')
     }
   }
 
@@ -249,7 +250,7 @@
       showToast(tr('mcp.toast_reconnecting').replace('{name}', name))
       setTimeout(reload, 1500)
     } catch (e: any) {
-      showToast(e.message ?? 'Failed to reconnect', 'error')
+      showToast(e.message ?? tr('mcp.reconnect_failed'), 'error')
     }
   }
 
@@ -261,12 +262,13 @@
       await api.updateToolSearch(mode)
       toolSearchMode.set(mode)
     } catch (e: any) {
-      showToast(e.message ?? 'Failed to update tool search', 'error')
+      showToast(e.message ?? tr('mcp.tool_search_failed'), 'error')
     }
   }
 
   // Capitalize first letter for segment display value
   function capitalize(s: string): string {
+    // OCTO-FORK: Segment matches stable option values; its visible labels use $t.
     return s ? s.charAt(0).toUpperCase() + s.slice(1) : 'Auto'
   }
 </script>
@@ -400,7 +402,7 @@
       <iconify-icon icon="ant-design:key-outlined" width="16" style="color:var(--blue-6)"></iconify-icon>
       <span class="oauth-title">{$t('mcp.oauth.title')}</span>
       <span class="oauth-name mono">{oauth.name}</span>
-      <button class="oauth-close" onclick={closeOAuth} aria-label="close">
+      <button class="oauth-close" onclick={closeOAuth} aria-label={$t('common.close')}>
         <iconify-icon icon="ant-design:close-outlined" width="14"></iconify-icon>
       </button>
     </div>

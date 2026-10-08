@@ -175,6 +175,70 @@ func TestHandleGetArtifact_SizeCap(t *testing.T) {
 	}
 }
 
+// OCTO-FORK: Office output must download as bytes without widening preview or cross-session grants.
+func TestHandleGetArtifact_OfficeDownloads(t *testing.T) {
+	tmp := t.TempDir()
+	t.Setenv("HOME", tmp)
+	t.Setenv("OCTO_DATA_ROOT", tmp)
+	t.Setenv("USERPROFILE", tmp)
+
+	artDir := t.TempDir()
+	var paths []string
+	for _, ext := range []string{".doc", ".docx", ".xls", ".xlsx", ".ppt", ".pptx"} {
+		p := filepath.Join(artDir, "report"+ext)
+		if err := os.WriteFile(p, []byte{0, 1, 255}, 0o644); err != nil {
+			t.Fatal(err)
+		}
+		paths = append(paths, p)
+	}
+	id := newArtifactSession(t, paths...)
+	otherID := newArtifactSession(t)
+	srv := mustServer(t, Config{Addr: "127.0.0.1:0", Tools: false})
+	for _, p := range paths {
+		w := getArtifact(t, srv, id, p)
+		if w.Code != http.StatusOK || !bytes.Equal(w.Body.Bytes(), []byte{0, 1, 255}) {
+			t.Errorf("%s: status=%d body=%v", p, w.Code, w.Body.Bytes())
+		}
+		if ct := w.Header().Get("Content-Type"); ct != "application/octet-stream" {
+			t.Errorf("%s: Content-Type=%q", p, ct)
+		}
+		if cd := w.Header().Get("Content-Disposition"); cd != "attachment; filename="+filepath.Base(p) {
+			t.Errorf("%s: Content-Disposition=%q", p, cd)
+		}
+		if w := getArtifact(t, srv, otherID, p); w.Code != http.StatusNotFound {
+			t.Errorf("%s: other session status=%d, want 404", p, w.Code)
+		}
+	}
+}
+
+func TestHandleGetArtifact_OfficeDownloadCap(t *testing.T) {
+	tmp := t.TempDir()
+	t.Setenv("HOME", tmp)
+	t.Setenv("OCTO_DATA_ROOT", tmp)
+	t.Setenv("USERPROFILE", tmp)
+
+	p := filepath.Join(t.TempDir(), "large.xlsx")
+	f, err := os.Create(p)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer f.Close()
+	if err := f.Truncate(artifactMaxBytes + 1); err != nil {
+		t.Fatal(err)
+	}
+	id := newArtifactSession(t, p)
+	srv := mustServer(t, Config{Addr: "127.0.0.1:0", Tools: false})
+	if w := getArtifact(t, srv, id, p); w.Code != http.StatusOK || w.Body.Len() != artifactMaxBytes+1 {
+		t.Errorf("office file above preview cap: status=%d bytes=%d", w.Code, w.Body.Len())
+	}
+	if err := f.Truncate(artifactDownloadMaxBytes + 1); err != nil {
+		t.Fatal(err)
+	}
+	if w := getArtifact(t, srv, id, p); w.Code != http.StatusRequestEntityTooLarge {
+		t.Errorf("office file above download cap: status=%d, want 413", w.Code)
+	}
+}
+
 // Models routinely pass relative paths (or ~/…) to write_file/edit_file; the
 // tools resolve them against the session working dir and record the absolute
 // result in the ui payload, which is also what the panel lists. The whitelist

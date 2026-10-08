@@ -22,8 +22,10 @@ beforeEach(() => {
 })
 
 describe('getPack', () => {
-  it('defaults to azure when nothing is stored', () => {
-    expect(getPack()).toBe('azure')
+  // OCTO-FORK: the precision palette is now the product default; azure stays
+  // available as the legacy fallback for users who explicitly chose it.
+  it('defaults to precision when nothing is stored', () => {
+    expect(getPack()).toBe('precision')
   })
 
   it('returns a stored pack that is still shipped', () => {
@@ -38,7 +40,7 @@ describe('getPack', () => {
 
   it('falls back to the default for an id the app no longer ships', () => {
     localStorage.setItem(KEY, 'not-a-pack')
-    expect(getPack()).toBe('azure')
+    expect(getPack()).toBe('precision')
   })
 })
 
@@ -49,9 +51,9 @@ describe('setPack', () => {
     expect(getPack()).toBe('vogue')
   })
 
-  // The default palette lives in bare :root, so it is addressed by the absence
-  // of the attribute — writing data-theme-pack="azure" would match no rule.
-  it('removes the attribute for the default pack', () => {
+  // OCTO-FORK: azure remains the bare :root fallback, while precision uses an
+  // explicit attribute even though it is the default choice.
+  it('removes the attribute for the legacy azure fallback', () => {
     setPack('vogue')
     setPack('azure')
     expect(document.documentElement.getAttribute('data-theme-pack')).toBeNull()
@@ -60,9 +62,9 @@ describe('setPack', () => {
 
   it('normalizes an id the app does not ship instead of persisting it', () => {
     setPack('not-a-pack')
-    expect(document.documentElement.getAttribute('data-theme-pack')).toBeNull()
-    expect(localStorage.getItem('octo.themePack')).toBe('azure')
-    expect(getPack()).toBe('azure')
+    expect(document.documentElement.getAttribute('data-theme-pack')).toBe('precision')
+    expect(localStorage.getItem('octo.themePack')).toBe('precision')
+    expect(getPack()).toBe('precision')
   })
 
   it('stores the current id when handed a renamed one', () => {
@@ -74,7 +76,7 @@ describe('setPack', () => {
 
 describe('PACKS', () => {
   it('lists the default first and has no duplicate ids', () => {
-    expect(PACKS[0].id).toBe('azure')
+    expect(PACKS[0].id).toBe('precision')
     expect(new Set(PACKS.map((p) => p.id)).size).toBe(PACKS.length)
   })
 

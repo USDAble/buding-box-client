@@ -1,7 +1,7 @@
 <script lang="ts">
   import { artifacts, panelContent, panelExpanded, artifactSel, artifactView, lightappSel, lightappOpen, lightapps, lightappHTML, lightappStamp, cacheLightApp, dropLightApp, showToast, isDesktopShell, localAccess, activeSessionId, savePanelMode, type PanelMode } from '../lib/stores'
   import { titlebarDblClick } from '../lib/nativeWindow'
-  import { t } from '../lib/i18n'
+  import { t, tr } from '../lib/i18n'
   import { copyArtifact, downloadArtifact, imagePreviewError } from '../lib/artifact-actions'
   import { ARTIFACT_ORIGIN_SANDBOX, hydrateArtifact, themeRev } from '../lib/artifacts'
   import { CENTER_MIN } from '../lib/sidebarWidth'
@@ -19,8 +19,10 @@
 
   // ── Session artifacts (existing) ──────────────────────────────────────────
   const cur = $derived($artifacts[$artifactSel] ?? $artifacts[0])
-  // Images render outside the sandboxed iframe and have no source view.
-  const curIsImage = $derived(!!cur?.src)
+  // OCTO-FORK: Office files use their binary src for lazy local preview and download.
+  const curIsImage = $derived(cur?.type === 'Image')
+  const curIsOffice = $derived(cur?.type === 'Word' || cur?.type === 'Excel' || cur?.type === 'PowerPoint')
+  const curIsDownloadOnly = $derived(!!cur?.src && !curIsImage && (!curIsOffice || (cur.loaded && !cur.officePreview)))
 
   // Entries observe metadata-only; the body is fetched and the preview built
   // on first selection. Re-runs when a live re-write swaps the entry object,
@@ -99,7 +101,8 @@
       // reload always restarts the app even when nothing on disk changed.
       laReloadGen++
     } catch (e: any) {
-      showToast(`Failed to reload: ${e.message}`, 'error')
+      // OCTO-FORK: locally composed reload feedback follows the selected language.
+      showToast(tr('lightapps.reload_failed').replace('{error}', e.message), 'error')
     } finally {
       laLoading = false
     }
@@ -548,7 +551,7 @@
           <span class="file-meta">{cur.type}</span>
         </span>
         <span style="flex:1"></span>
-        {#if !curIsImage}
+        {#if !curIsImage && !curIsOffice && !curIsDownloadOnly}
           <div class="seg">
             <button class="seg-btn" class:active={$artifactView === 'preview'} onclick={() => artifactView.set('preview')}>{$t('artifacts.preview')}</button>
             <button class="seg-btn" class:active={$artifactView === 'code'} onclick={() => artifactView.set('code')}>{$t('artifacts.code')}</button>
@@ -567,6 +570,30 @@
               </div>
             {/if}
             <img src={cur.src} alt={cur.name} class:img-hidden={imgFailed} onerror={onImgError} onload={onImgLoad} />
+          </div>
+        {:else if curIsOffice}
+          {#if !cur.loaded}
+            <div class="body-loading"><iconify-icon icon="ant-design:loading-outlined" width="28" class="spin"></iconify-icon></div>
+          {:else if cur.officePreview}
+            <ArtifactFrame artifact={cur} />
+          {:else}
+            <div class="office-wrap">
+              <iconify-icon icon={cur.icon} width="32"></iconify-icon>
+              <span>{$t('artifacts.download_only')}</span>
+              <button class="office-download-btn" onclick={onDownload}>
+                <iconify-icon icon="ant-design:download-outlined" width="14"></iconify-icon>
+                {$t('artifacts.download')}
+              </button>
+            </div>
+          {/if}
+        {:else if curIsDownloadOnly}
+          <div class="office-wrap">
+            <iconify-icon icon={cur.icon} width="32"></iconify-icon>
+            <span>{$t('artifacts.download_only')}</span>
+            <button class="office-download-btn" onclick={onDownload}>
+              <iconify-icon icon="ant-design:download-outlined" width="14"></iconify-icon>
+              {$t('artifacts.download')}
+            </button>
           </div>
         {:else if !cur.loaded}
           <div class="body-loading"><iconify-icon icon="ant-design:loading-outlined" width="28" class="spin"></iconify-icon></div>
@@ -737,6 +764,10 @@
 .seg-btn.active { background: var(--bg-container); color: var(--blue-6); font-weight: 600; box-shadow: 0 1px 2px rgba(0,0,0,0.12); }
 .body { flex: 1; min-height: 0; background: var(--bg-container); }
 .body-loading { height: 100%; display: flex; align-items: center; justify-content: center; color: var(--text-tertiary); }
+/* OCTO-FORK: Download-only Office artifacts show a clear action instead of an empty preview frame. */
+.office-wrap { height: 100%; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 12px; color: var(--text-tertiary); font-size: 13px; text-align: center; padding: 20px; box-sizing: border-box; }
+.office-download-btn { display: inline-flex; align-items: center; gap: 6px; border: 1px solid var(--border-secondary); border-radius: 6px; padding: 6px 12px; background: var(--bg-container); color: var(--text); cursor: pointer; font: inherit; }
+.office-download-btn:hover { background: var(--hover-neutral); }
 .empty {
   flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center;
   gap: 12px; padding: 32px; text-align: center; color: var(--text-tertiary); font-size: 13px;

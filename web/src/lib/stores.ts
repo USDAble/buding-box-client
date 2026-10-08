@@ -94,8 +94,8 @@ export const frozen = writable(false)
 // True when the page runs inside the desktop-shell webview. The shell tags its
 // window URL with this marker (cmd/octo-desktop/bridge.go shellURL); an
 // external browser on the same hub lacks it and stays plain web. Fixed for the
-// page's lifetime — unlike nativeShell below it needs no API round-trip, so
-// page-load-time code (framelessDrag) can use it directly.
+// page's lifetime, so page-load-time code (framelessDrag and nativeShell) can
+// use it without an API round-trip.
 export const isDesktopShell =
   typeof location !== 'undefined' && new URLSearchParams(location.search).get('shell') === 'octo-desktop'
 
@@ -123,10 +123,11 @@ export const mobileShell =
   typeof window !== 'undefined' &&
   !!(window as unknown as { Capacitor?: { isNativePlatform?: () => boolean } }).Capacitor?.isNativePlatform?.()
 
-// True when served by the Wails desktop shell (a NativeBridge is wired,
-// reported by /api/version's `native` flag). Lets the folder picker use the OS
-// dialog instead of the in-app directory tree. False under `octo serve`.
-export const nativeShell = writable(false)
+// OCTO-FORK: the version badge is intentionally unmounted in this product, so
+// its /api/version check cannot initialize native capabilities. The shell URL
+// marker is already available at first paint; without seeding from it, file
+// saves silently take the webview's unsupported blob-download path.
+export const nativeShell = writable(isDesktopShell)
 
 // Major macOS version of the desktop shell's host (e.g. 26). Seeded
 // synchronously from the shell URL (shellMacosMajor above) so window chrome

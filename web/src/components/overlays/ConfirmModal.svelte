@@ -44,6 +44,16 @@
     clearCurrent()
   }
 
+  // OCTO-FORK: stop the whole turn so queued parallel-agent approvals are
+  // cancelled together instead of forcing the user through them one by one.
+  function stopTask() {
+    if (!current) return
+    ws.interrupt(current.sessionId)
+    // Let the cancelled turn resolve the current confirmation. Sending a
+    // separate deny could race the interrupt and release the next queued ask.
+    clearCurrent()
+  }
+
   // #1105: Esc / Enter, matching AuthGate / CommandPalette. Bound on the
   // modal element itself (focused via the $effect above), not on
   // svelte:window — a window-level listener fires *in addition to*
@@ -107,12 +117,15 @@
 
     <div class="modal-footer">
       {#if current.kind === 'ok'}
+        <button class="btn-stop" onclick={stopTask}>{$t('perm.stop_task')}</button>
+        <span class="spacer"></span>
         <button class="btn-primary" onclick={() => answer('ok')}>{$t('common.ok')}</button>
       {:else}
         <button class="btn-deny" onclick={deny}>
           <iconify-icon icon="ant-design:close-outlined" width="12"></iconify-icon>
           {$t('perm.deny')}
         </button>
+        <button class="btn-stop" onclick={stopTask}>{$t('perm.stop_task')}</button>
         <span class="spacer"></span>
         <!-- Result strings are the wire contract with the server's mapConfirmResult:
              'yes' = allow once, 'always' = allow + remember for the session.
@@ -220,6 +233,14 @@
   cursor: pointer; font-family: inherit;
 }
 .btn-deny:hover { border-color: var(--error); color: var(--error); }
+.btn-stop {
+  height: 32px; padding: 0 12px;
+  border: 1px solid var(--error-border); background: var(--error-bg);
+  border-radius: 6px; font-size: 13px; color: var(--error);
+  cursor: pointer; font-family: inherit;
+  white-space: nowrap; flex-shrink: 0;
+}
+.btn-stop:hover { border-color: var(--error); }
 .btn-secondary {
   height: 32px; padding: 0 12px;
   border: 1px solid var(--border); background: var(--bg-container);

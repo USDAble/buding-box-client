@@ -18,7 +18,9 @@
 
   // brandAsset('mark') is a consumer-relative path ('assets/logo-mark.png'
   // under web/public), so prefix with the static root.
-  const src = `/${brandAsset('mark')}`
+  // OCTO-FORK: the content hash changes the URL with the generated mark, so
+  // Windows WebView cannot reuse an old immutable response after an upgrade.
+  const src = `/${brandAsset('mark')}?v=${import.meta.env.VITE_BRAND_LOGO_HASH}`
 </script>
 
 <img src={src} class={className} width={size} height={size} alt="" draggable="false" />

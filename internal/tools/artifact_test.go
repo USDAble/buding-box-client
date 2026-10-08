@@ -29,6 +29,22 @@ func TestShowArtifact_HappyPath(t *testing.T) {
 	}
 }
 
+// OCTO-FORK: Script-generated spreadsheets need show_artifact to enter the same session-scoped download path.
+func TestShowArtifact_OfficeFile(t *testing.T) {
+	p := filepath.Join(t.TempDir(), "report.xlsx")
+	if err := os.WriteFile(p, []byte{0, 1, 255}, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	res, err := (ShowArtifactTool{}).Execute(context.Background(), "show_artifact", map[string]any{"path": p})
+	if err != nil {
+		t.Fatal(err)
+	}
+	ui, ok := res.UI.(map[string]any)
+	if !ok || ui["type"] != "artifact" || ui["path"] != p {
+		t.Errorf("ui = %+v", res.UI)
+	}
+}
+
 func TestShowArtifact_Errors(t *testing.T) {
 	dir := t.TempDir()
 	binFile := filepath.Join(dir, "tool.exe")
@@ -62,6 +78,16 @@ func TestShowArtifact_Errors(t *testing.T) {
 }
 
 func TestArtifactContentType(t *testing.T) {
+	// OCTO-FORK: Office documents are downloadable artifacts, not HTML-page assets.
+	for _, ext := range []string{".doc", ".docx", ".xls", ".xlsx", ".ppt", ".pptx"} {
+		p := "/x/report" + ext
+		if ct, ok := ArtifactContentType(p); !ok || ct != "application/octet-stream" {
+			t.Errorf("%s: ct=%q ok=%v, want download-only binary", p, ct, ok)
+		}
+		if ct, ok := ArtifactAssetContentType(p); ok {
+			t.Errorf("%s: asset ct=%q, want denied", p, ct)
+		}
+	}
 	if ct, ok := ArtifactContentType("/x/y/Report.MD"); !ok || !strings.HasPrefix(ct, "text/markdown") {
 		t.Errorf("case-insensitive ext: ct=%q ok=%v", ct, ok)
 	}

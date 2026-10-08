@@ -3,9 +3,12 @@ package main
 import (
 	"encoding/hex"
 	"testing"
+
+	"github.com/open-octo/octo-agent/internal/tunnel"
 )
 
 func TestLoopbackWSURL(t *testing.T) {
+	// OCTO-FORK: CLI and desktop now use the same loopback URL helper.
 	cases := map[string]string{
 		"127.0.0.1:8088":   "ws://127.0.0.1:8088/ws",
 		":8088":            "ws://127.0.0.1:8088/ws",   // empty host = wildcard, dial loopback
@@ -15,14 +18,15 @@ func TestLoopbackWSURL(t *testing.T) {
 		"localhost:8088":   "ws://localhost:8088/ws",
 	}
 	for addr, want := range cases {
-		if got := loopbackWSURL(addr); got != want {
+		if got := tunnel.LoopbackWSURL(addr); got != want {
 			t.Errorf("loopbackWSURL(%q) = %q, want %q", addr, got, want)
 		}
 	}
 }
 
 func TestNewPairToken(t *testing.T) {
-	a, err := newPairToken()
+	// OCTO-FORK: CLI and desktop now use the same pairing token helper.
+	a, err := tunnel.NewPairToken()
 	if err != nil {
 		t.Fatalf("newPairToken: %v", err)
 	}
@@ -32,7 +36,7 @@ func TestNewPairToken(t *testing.T) {
 	if _, err := hex.DecodeString(a); err != nil {
 		t.Errorf("token %q is not hex: %v", a, err)
 	}
-	b, _ := newPairToken()
+	b, _ := tunnel.NewPairToken()
 	if a == b {
 		t.Error("two tokens should differ")
 	}

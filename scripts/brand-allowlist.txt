@@ -25,8 +25,9 @@
 # to extend that token set and re-verify a real package build — tracked as V-81
 # in the product baseline §5.6. Removing an entry here is
 # what closing V-81 means.
+# OCTO-FORK: the macOS bundle plist now receives the name at packaging time,
+# so it no longer needs a literal-copy exception here.
 
-cmd/octo-desktop/build/darwin/Info.plist  V-81: CFBundleName/CFBundleDisplayName; plist has no build-time interpolation yet.
 cmd/octo-desktop/build/linux/AppRun  V-81: zenity/kdialog dependency + menu-prompt copy in a POSIX shell launcher.
 cmd/octo-desktop/build/linux/octo-desktop.desktop  V-81: freedesktop Name=/Comment= for the app menu.
 packaging/macos/distribution.xml  V-81: installer <title>; packaging/macos/build.sh already sed-substitutes {{VERSION}}.

@@ -53,7 +53,8 @@ func TestPrivacyTransformReturnsVersionedMaskedResult(t *testing.T) {
 	if err := json.Unmarshal(raw, &body); err != nil {
 		t.Fatalf("decode transform response: %v", err)
 	}
-	if !body.Hit || body.Masked != "电话 <手机号>" || body.RuleVersion != "builtin-1" {
+	// OCTO-FORK: assert the route exposes the current versioned privacy contract.
+	if !body.Hit || body.Masked != "电话 <手机号>" || body.RuleVersion != pii.RuleVersion {
 		t.Fatal("transform response does not match the versioned masking contract")
 	}
 	if len(body.Matches) != 1 || body.Matches[0].Category != "cn_mobile" || body.Matches[0].Count != 1 {

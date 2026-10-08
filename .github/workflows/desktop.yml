@@ -151,7 +151,8 @@ jobs:
         working-directory: cmd/octo-desktop
         run: go test -tags product_production ./...
 
-      - name: Build + package macOS Octo.app
+      # OCTO-FORK: upload the branded bundle name without assuming a fixed product literal.
+      - name: Build + package macOS app
         if: runner.os == 'macOS'
         run: bash scripts/package-desktop-macos.sh
 
@@ -159,8 +160,9 @@ jobs:
         if: runner.os == 'macOS'
         uses: actions/upload-artifact@v7
         with:
-          name: Octo-macos
-          path: Octo.app
+          name: macos-app
+          path: '*.app'
+          if-no-files-found: error
 
       # AppImage bundles the binary + AppRun launcher (which preflights the host
       # GTK4/WebKitGTK 6.0 libs — not bundled). Build-verified in CI; running it

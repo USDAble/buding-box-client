@@ -1,6 +1,6 @@
 #!/bin/sh
 # Upgrade + migration prep, run unprivileged (currentUserHome domain, $HOME is
-# the real account). Quit a running Octo desktop app so the .pkg can replace its
+# the real account). Quit a running desktop app so the .pkg can replace its
 # bundle in place, stop any running `octo serve -d` daemon, and remove the legacy
 # login LaunchAgent that the pre-desktop installer registered (it auto-started
 # serve on login and opened the browser dashboard). The desktop app is that UI
@@ -8,8 +8,12 @@
 # No-op on a clean first install.
 set -eu
 
-# Quit a running Octo desktop app before its bundle is replaced. Without this the
-# .pkg overwrites Octo.app underneath the live process, and postinstall's `open`
+# OCTO-FORK: the new bundle name comes from branding; still recognize a running
+# legacy Octo.app so an upgrade never leaves the old process serving the UI.
+. "$(dirname "$0")/brand.sh"
+
+# Quit a running desktop app before its bundle is replaced. Without this the
+# .pkg overwrites the bundle underneath the live process, and postinstall's `open`
 # on an already-running app only reactivates the OLD process — so the user
 # silently keeps running the previous version after "upgrading". Mirrors the
 # taskkill in packaging/windows/octo.iss. The desktop app runs serve in-process
@@ -23,11 +27,11 @@ set -eu
 osascript -e 'tell application id "dev.octo-agent.desktop" to quit' >/dev/null 2>&1 || true
 n=0
 while [ "$n" -lt 20 ]; do
-  pgrep -f 'Octo.app/Contents/MacOS/octo-desktop' >/dev/null 2>&1 || break
+  pgrep -f "($MAC_APP_NAME|Octo)\.app/Contents/MacOS/octo-desktop" >/dev/null 2>&1 || break
   sleep 0.25
   n=$((n + 1))
 done
-pkill -f 'Octo.app/Contents/MacOS/octo-desktop' >/dev/null 2>&1 || true
+pkill -f "($MAC_APP_NAME|Octo)\.app/Contents/MacOS/octo-desktop" >/dev/null 2>&1 || true
 
 # Stop a running serve daemon — from an old CLI install or one started by hand.
 old_bin="$HOME/Library/Application Support/octo/bin/octo"

@@ -31,7 +31,8 @@ Pay attention to context cues. Not every user is a programmer — some may be us
 Start by understanding the user's intent. The current conversation may already contain a workflow they want to capture.
 
 Ask:
-1. What should this skill enable octo to do?
+<!-- OCTO-FORK: keep generated skill prompts product-neutral; runtime brand copy comes from branding/brand.json. -->
+1. What should this skill enable the assistant to do?
 2. When should this skill trigger? (what user phrases / contexts)
 3. What's the expected output format?
 4. Should we set up test cases? Skills with objectively verifiable outputs (file transforms, code generation, fixed workflow steps) benefit from tests. Skills with subjective outputs (writing style, creative tasks) often don't.
@@ -104,7 +105,7 @@ Always use this exact template:
 
 After writing the draft, come up with 2–3 realistic test prompts. Share them with the user for approval, then test.
 
-**How to test in octo:**
+**How to test the skill:**
 1. Create a test workspace directory
 2. For each test prompt, spawn a subagent:
    - Give it the skill path (`<data root>/skills/<name>/`)

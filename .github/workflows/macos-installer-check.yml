@@ -51,7 +51,7 @@ jobs:
       - name: Build the CLI to embed in the app
         run: |
           mkdir -p staging
-          # The CLI the installer puts on PATH (embedded inside Octo.app by
+          # The CLI the installer puts on PATH (embedded inside the app by
           # build.sh → package-desktop-macos.sh). The desktop GUI binary itself
           # is built from source inside that script (CGO / WKWebView).
           go build -o staging/octo ./cmd/octo # plain build; embedded rg is irrelevant to packaging
@@ -77,13 +77,13 @@ jobs:
           test -x expanded/octo-component.pkg/Scripts/postinstall
           # Payload is the self-contained app bundle: the GUI binary + the
           # embedded CLI the installer puts on PATH. The payload root is the
-          # directory that HOLDS Octo.app (install-location 'Applications'
-          # supplies the parent), so the bundle sits at Payload/Octo.app. If it
-          # were Payload/Applications/Octo.app it would install to
-          # ~/Applications/Applications/Octo.app — the double-nesting this guards.
-          test -d expanded/octo-component.pkg/Payload/Octo.app
-          test -x expanded/octo-component.pkg/Payload/Octo.app/Contents/MacOS/octo-desktop
-          test -x expanded/octo-component.pkg/Payload/Octo.app/Contents/Resources/octo
+          # OCTO-FORK: the payload name comes from the generated brand value.
+          . packaging/macos/scripts/brand.sh
+          app="expanded/octo-component.pkg/Payload/$MAC_APP_NAME.app"
+          test -d "$app"
+          test -x "$app/Contents/MacOS/octo-desktop"
+          test -x "$app/Contents/Resources/octo"
+          test "$(plutil -extract CFBundleDisplayName raw -o - "$app/Contents/Info.plist")" = "$MAC_APP_NAME"
 
       - name: Verify the package installs under the user's real home directory
         run: |
@@ -107,9 +107,8 @@ jobs:
           # Simulate Installer.app placing the payload's CONTENTS under the home
           # domain's install-location ('Applications'), then run postinstall
           # exactly as it would. Copying the payload contents — not a hand-picked
-          # Octo.app — mirrors the real mapping: a payload that nested
-          # Applications/Octo.app would land at ~/Applications/Applications/Octo.app
-          # and the postinstall's $HOME/Applications/Octo.app lookup would fail here.
+          # The payload copy mirrors the real mapping: nesting another
+          # Applications directory would make postinstall miss the app.
           mkdir -p "$fake/Applications"
           cp -R expanded/octo-component.pkg/Payload/. "$fake/Applications/"
 
@@ -125,7 +124,8 @@ jobs:
           HOME="$fake" PATH="$stub:$PATH" expanded/octo-component.pkg/Scripts/postinstall
 
           # The bundled CLI must be present and runnable inside the installed app.
-          bin="$fake/Applications/Octo.app/Contents/Resources/octo"
+          . packaging/macos/scripts/brand.sh
+          bin="$fake/Applications/$MAC_APP_NAME.app/Contents/Resources/octo"
           test -x "$bin" || { echo "octo CLI missing at $bin"; exit 1; }
           HOME="$fake" "$bin" version
           test -x "$fake/.octo/uninstall.sh" || { echo "uninstall.sh missing"; exit 1; }
@@ -145,5 +145,6 @@ jobs:
       - name: Uninstall it
         run: |
           fake="$RUNNER_TEMP/fake-home"
+          . packaging/macos/scripts/brand.sh
           HOME="$fake" "$fake/.octo/uninstall.sh"
-          test ! -d "$fake/Applications/Octo.app" || { echo "uninstall left the app behind"; exit 1; }
+          test ! -d "$fake/Applications/$MAC_APP_NAME.app" || { echo "uninstall left the app behind"; exit 1; }

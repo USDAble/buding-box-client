@@ -122,8 +122,7 @@ describe('class C identifiers and paths', () => {
 
     for (const [group, values] of Object.entries(groups)) {
       for (const [key, value] of Object.entries(values)) {
-        // The help center is intentionally an empty, optional integration slot
-        // until the official website URL is approved.
+        // The optional help center slot may remain empty before configuration.
         if (group === 'links.external' && key === 'helpCenter' && value === '') continue
         expect(value, `${group}.${key}`).toMatch(/^[\x21-\x7E]+$/)
       }
@@ -134,17 +133,21 @@ describe('class C identifiers and paths', () => {
     expect(brandIdentifier(IDENTIFIER.singleInstanceId)).toBe('app.puddingbox.desktop')
   })
 
-  // These stay on the upstream values this phase; changing them breaks
-  // in-place upgrades for already-installed copies.
-  it('keeps the compatibility identifiers unchanged', () => {
-    expect(brandIdentifier(IDENTIFIER.cliCommand)).toBe('octo')
+  // OCTO-FORK: the preferred CLI command is branded; data/config identifiers
+  // remain compatible with existing installations.
+  it('uses the branded CLI command without moving compatibility paths', () => {
+    expect(brandIdentifier(IDENTIFIER.cliCommand)).toBe('puddingbox')
+    expect(brandIdentifier(IDENTIFIER.cliExeName)).toBe('puddingbox.exe')
     expect(brandIdentifier(IDENTIFIER.configDir)).toBe('~/.octo')
     expect(brandIdentifier(IDENTIFIER.envPrefix)).toBe('OCTO_')
   })
 
   it('exposes usable links, assets and colours', () => {
     expect(brandLink('external', 'license')).toMatch(/^https:\/\//)
-    expect(brandLink('external', 'helpCenter')).toBe('')
+    // OCTO-FORK: resolve the configured destination without requiring this optional slot.
+    const helpCenter = brandLink('external', 'helpCenter')
+    expect(helpCenter).toBe(brand.links.external.helpCenter)
+    if (helpCenter) expect(helpCenter).toMatch(/^https:\/\//)
     expect(brandLink('external', 'license')).not.toMatch(/[<>]/)
     expect(brandLink('inApp', 'terms')).toMatch(/^\//)
     expect(brandLink('nope', 'license')).toBe('')

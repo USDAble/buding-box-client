@@ -196,7 +196,8 @@ export function wireMobileSession(sid: string): () => void {
 
   cleanups.push(ws.on('tool_error', (ev: any) => {
     if (!forSid(ev)) return
-    setToolError(sid, ev.tool_id, ev.error ?? 'error', ev.ts)
+    // OCTO-FORK: mobile fallbacks mirror the selected-language desktop copy.
+    setToolError(sid, ev.tool_id, ev.error ?? tr('turn_error.unknown'), ev.ts)
   }))
 
   cleanups.push(ws.on('tool_stdout', (ev: any) => {
@@ -206,7 +207,7 @@ export function wireMobileSession(sid: string): () => void {
 
   cleanups.push(ws.on('progress', (ev: any) => {
     if (!forSid(ev)) return
-    chatProgress.update(p => ({ ...p, [sid]: { message: ev.message || 'Thinking', phase: ev.phase } }))
+    chatProgress.update(p => ({ ...p, [sid]: { message: ev.message || tr('chat.thinking'), phase: ev.phase } }))
     if (ev.phase === 'active') chatStreaming.update(s => ({ ...s, [sid]: true }))
   }))
 
@@ -248,7 +249,7 @@ export function wireMobileSession(sid: string): () => void {
   // Operation errors surfaced over WS (retry-while-running, session-not-found…).
   cleanups.push(ws.on('error', (ev: any) => {
     if (!forSid(ev)) return
-    showToast(ev.message ?? 'Error', 'error')
+    showToast(ev.message ?? tr('turn_error.unknown'), 'error')
   }))
 
   // The server rejected the send (session bound to another client, not found…).

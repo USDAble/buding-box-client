@@ -797,6 +797,47 @@ func waitTurnsQuiesced(t *testing.T, srv *Server) {
 	}
 }
 
+// OCTO-FORK: drain includes the binding release, not just the model turn.
+func TestChannelIdleTurn_DrainWaitsForBindingRelease(t *testing.T) {
+	srv, _ := goalTestServer(t)
+	srv.channelMgr = channel.NewManager(&channel.Config{}, func(*agentprofile.Profile) *agent.Agent {
+		return agent.New(&stubSender{}, "stub-model")
+	}, channel.BindByChat)
+	ev := goalChatEv("idle-drain", "seed")
+	sess := srv.channelMgr.GetOrCreateSession(ev, agentprofile.DefaultProfile())
+	_, finish := sess.BeginRun(context.Background())
+	finish = sync.OnceFunc(finish)
+	defer finish()
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		srv.runChannelIdleTurn(context.Background(), sess, &fullFakeAdapter{}, ev)
+	}()
+	waitFor(t, func() bool {
+		srv.entryBindingsMu.Lock()
+		bound := srv.entryBindings[sess.Store.ID] != nil
+		srv.entryBindingsMu.Unlock()
+		srv.drain.mu.Lock()
+		defer srv.drain.mu.Unlock()
+		return bound && srv.drain.active > 0
+	})
+	// Acquiring this lock proves the idle turn finished claiming its binding.
+	// The turn is still parked in BeginRun; releasing it makes binding cleanup
+	// block here, so drain must continue reporting an active turn.
+	mu := srv.sessionBindingLock(sess.Store.ID)
+	mu.Lock()
+	finish()
+	clean := srv.drain.drain(20 * time.Millisecond)
+	mu.Unlock()
+	<-done
+	if clean {
+		t.Fatal("drain completed before the session binding was released")
+	}
+	if !srv.drain.drain(time.Second) {
+		t.Fatal("drain did not complete after binding cleanup")
+	}
+}
+
 // A command that only reports or parks the goal must not start a turn.
 func TestChannelGoalCommand_PauseDoesNotStartATurn(t *testing.T) {
 	tmp := t.TempDir()

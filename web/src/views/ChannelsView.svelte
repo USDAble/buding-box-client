@@ -7,6 +7,7 @@
   import * as api from '../lib/api'
   import { t, tr } from '../lib/i18n'
   import { confirmDialog } from '../lib/confirm'
+  // OCTO-FORK: channel action feedback uses the active locale, not fixed English copy.
 
   // platform-to-icon mapping for well-known channels
   const platformIcons: Record<string, string> = {
@@ -56,7 +57,7 @@
         rows = configured
       }
     } catch (e: any) {
-      showToast(`Failed to load channels: ${e.message}`, 'error')
+      showToast(tr('channels.load_failed').replace('{error}', e.message), 'error')
     } finally {
       loading = false
     }
@@ -84,9 +85,9 @@
     busyPlatform = platform
     try {
       await api.testChannel(platform)
-      showToast(`${platform} connection test passed`, 'success')
+      showToast(tr('channels.test_passed').replace('{platform}', labelFor(platform)), 'success')
     } catch (e: any) {
-      showToast(`Test failed: ${e.message}`, 'error')
+      showToast(tr('channels.test_failed').replace('{error}', e.message), 'error')
     } finally {
       busyPlatform = null
     }
@@ -102,9 +103,9 @@
       rows = rows.map(r => r.platform === platform
         ? { ...r, enabled: false, running: false, has_config: false, fields: {} }
         : r)
-      showToast(`${labelFor(platform)} configuration cleared`, 'success')
+      showToast(tr('channels.config_cleared').replace('{platform}', labelFor(platform)), 'success')
     } catch (e: any) {
-      showToast(`Failed to clear configuration: ${e.message}`, 'error')
+      showToast(tr('channels.clear_failed').replace('{error}', e.message), 'error')
     } finally {
       busyPlatform = null
     }
@@ -139,15 +140,9 @@
   }
 
   function labelFor(platform: string): string {
-    const labels: Record<string, string> = {
-      telegram: 'Telegram',
-      discord:  'Discord',
-      feishu:   'Feishu (飞书)',
-      dingtalk: 'DingTalk (钉钉)',
-      wecom:    'WeCom (企业微信)',
-      weixin:   'WeChat (微信)',
-    }
-    return labels[platform.toLowerCase()] ?? platform
+    const key = `channels.platform.${platform.toLowerCase()}`
+    const label = tr(key)
+    return label === key ? platform : label
   }
 
   function handleFor(row: ChannelRow): string {

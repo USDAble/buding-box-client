@@ -1,5 +1,21 @@
-import { describe, it, expect } from 'vitest'
-import { normalizeWord, isUsableWord, containsWord, parseDictText, serializeDict, type SensitiveDict } from './sensitiveDict'
+import { describe, it, expect, vi } from 'vitest'
+import { nativeShell } from './stores'
+import * as api from './api'
+import { downloadDictText, normalizeWord, isUsableWord, containsWord, parseDictText, serializeDict, type SensitiveDict } from './sensitiveDict'
+
+describe('downloadDictText', () => {
+  it('returns the native save path and cancellation status', async () => {
+    nativeShell.set(true)
+    const save = vi.spyOn(api, 'nativeSaveFile').mockResolvedValueOnce({ path: '/tmp/example.txt', cancelled: false })
+    try {
+      expect(await downloadDictText('example.txt', '词\n')).toEqual({ path: '/tmp/example.txt', cancelled: false })
+      expect(save).toHaveBeenCalledWith('example.txt', '词\n')
+    } finally {
+      save.mockRestore()
+      nativeShell.set(false)
+    }
+  })
+})
 
 describe('normalizeWord', () => {
   it('collapses whitespace and symbols so 发 票 and 发票 are the same', () => {

@@ -40,6 +40,7 @@ import (
 	"flag"
 	"fmt"
 	"image"
+	"image/color"
 	"image/png"
 	"os"
 	"path/filepath"
@@ -492,7 +493,7 @@ func markArtifacts(src *image.NRGBA) []artifact {
 	// Browser-tab / docs favicon (16/32/48 PNG frames in one .ico) and the
 	// in-UI logo the Svelte components load via brandAsset('mark').
 	favicon := icoBytes([]int{16, 32, 48}, frames)
-	return []artifact{
+	artifacts := []artifact{
 		{path: filepath.Join("cmd", "octo-desktop", "build", "windows", "icon.ico"), data: ico},
 		{path: filepath.Join("cmd", "octo-desktop", "build", "darwin", "icon.icns"), data: icns},
 		{path: filepath.Join("cmd", "octo-desktop", "build", "linux", "icon.png"), data: frames[256]},
@@ -500,6 +501,53 @@ func markArtifacts(src *image.NRGBA) []artifact {
 		{path: filepath.Join("web", "public", "favicon.ico"), data: favicon},
 		{path: filepath.Join("docs", "public", "favicon.ico"), data: favicon},
 	}
+	// OCTO-FORK: native phone launchers must consume the desktop mark, not
+	// Capacitor's generated default icon after a fresh platform add.
+	return append(artifacts, mobileIconArtifacts(src)...)
+}
+
+func mobileIconArtifacts(src *image.NRGBA) []artifact {
+	const baseSize = 1024
+	makeIcon := func(logoSize int, shape string) *image.NRGBA {
+		out := image.NewNRGBA(image.Rect(0, 0, baseSize, baseSize))
+		if shape == "square" {
+			draw.Draw(out, out.Bounds(), image.NewUniform(color.White), image.Point{}, draw.Src)
+		} else if shape == "round" {
+			for y := 0; y < baseSize; y++ {
+				for x := 0; x < baseSize; x++ {
+					dx, dy := 2*x+1-baseSize, 2*y+1-baseSize
+					if dx*dx+dy*dy <= baseSize*baseSize {
+						out.SetNRGBA(x, y, color.NRGBA{R: 255, G: 255, B: 255, A: 255})
+					}
+				}
+			}
+		}
+		logo := downscale(src, logoSize)
+		offset := (baseSize - logoSize) / 2
+		draw.Draw(out, image.Rect(offset, offset, offset+logoSize, offset+logoSize), logo, image.Point{}, draw.Over)
+		return out
+	}
+	square := makeIcon(768, "square")
+	round := makeIcon(656, "round")
+	foreground := makeIcon(672, "transparent")
+	artifacts := []artifact{{
+		path: filepath.Join("mobile", "native", "launcher", "apple", "AppIcon-512@2x.png"),
+		data: pngBytes(square),
+	}}
+	for _, density := range []struct {
+		name string
+		size int
+	}{
+		{"mdpi", 48}, {"hdpi", 72}, {"xhdpi", 96}, {"xxhdpi", 144}, {"xxxhdpi", 192},
+	} {
+		dir := filepath.Join("mobile", "native", "launcher", "google", "mipmap-"+density.name)
+		artifacts = append(artifacts,
+			artifact{path: filepath.Join(dir, "ic_launcher.png"), data: pngBytes(downscale(square, density.size))},
+			artifact{path: filepath.Join(dir, "ic_launcher_round.png"), data: pngBytes(downscale(round, density.size))},
+			artifact{path: filepath.Join(dir, "ic_launcher_foreground.png"), data: pngBytes(downscale(foreground, density.size*9/4))},
+		)
+	}
+	return artifacts
 }
 
 // monoArtifacts derives the macOS menu-bar template icon from logo-mono.

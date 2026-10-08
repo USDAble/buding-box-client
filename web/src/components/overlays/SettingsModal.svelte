@@ -29,10 +29,9 @@
 
   const fontZoomMap: Record<string, string> = { Small: '0.9', Medium: '1', Large: '1.1' }
   const modeToThemeLabel: Record<string, string> = { light: 'Light', dark: 'Dark', system: 'System' }
-  // OCTO-FORK: keep the theme-pack implementation available, but hide its
-  // settings entry while the product controls the palette — see the settings
-  // surface decision.
-  const showThemePackPicker = false
+  // OCTO-FORK: expose the theme-pack picker so users can switch between the
+  // precision default and the existing palette families from Settings.
+  const showThemePackPicker = true
   // OCTO-FORK: keep the co-author preference and API, but do not offer its toggle in product settings.
   const showCoauthorSetting = false
   // OCTO-FORK: keep the update preference and handler for compatibility, but
@@ -279,6 +278,12 @@
   // Managed-tunnel pairing material (null until fetched; .enabled false when
   // the server was not started with --tunnel).
   let tunnelPairing = $state<api.TunnelPairing | null>(null)
+  // OCTO-FORK: only the desktop window starts its own tunnel; plain web keeps
+  // the existing read-only QR/command behavior.
+  let mobileStatus = $state<api.DesktopTunnelStatus | null>(null)
+  let mobileError = $state('')
+  let mobileBusy = $state(false)
+  let mobileRequestVersion = 0
 
   // ── Agent defaults — each control saves immediately on change (see the
   // save* functions below), no separate Save button.
@@ -345,7 +350,7 @@
       loadConfig()
       loadVersion()
       if (get(nativeShell)) api.getAutostart().then(v => (autostart = v)).catch(() => {})
-      api.getTunnelPairing().then(p => { tunnelPairing = p }).catch(() => {})
+      if (!get(nativeShell)) api.getTunnelPairing().then(p => { tunnelPairing = p }).catch(() => {})
       theme = modeToThemeLabel[getMode()] ?? 'Light'
       fontSize = storedFontSize()
       nicknameDraft = $productState?.account?.nickname ?? ''
@@ -354,6 +359,13 @@
       modalEl?.focus()
       })
     }
+  })
+
+  $effect(() => {
+    if (!$settingsModalOpen || cat !== 'mobile' || !$nativeShell) return
+    void refreshMobileTunnel()
+    const timer = window.setInterval(() => { if (!mobileBusy) void refreshMobileTunnel() }, 2000)
+    return () => window.clearInterval(timer)
   })
 
   // A box read is deliberately tied to its own top-level page. Opening an
@@ -383,7 +395,7 @@
       if (cfg.language) language = cfg.language
       setLocale(cfg.language === 'zh' || cfg.language === 'zh-TW' ? 'zh' : 'en')
     } catch (e: any) {
-      showToast(`Failed to load config: ${e.message}`, 'error')
+      showToast(tr('settings.config_load_failed').replace('{error}', e.message), 'error')
     } finally {
       loading = false
     }
@@ -445,7 +457,59 @@
       await navigator.clipboard.writeText(tunnelPairing.pair_url)
       showToast($t('settings.mobile.copied'), 'success')
     } catch {
-      showToast('Copy failed', 'error')
+      showToast(tr('settings.mobile.copy_failed'), 'error')
+    }
+  }
+
+  async function refreshMobileTunnel() {
+    const version = ++mobileRequestVersion
+    try {
+      const status = await api.getDesktopTunnelStatus()
+      if (version !== mobileRequestVersion) return
+      mobileStatus = status
+      mobileError = status.error ? $t(`settings.mobile.${status.error}`) : ''
+      if (status.state !== 'connected') {
+        tunnelPairing = null
+        return
+      }
+      try {
+        const pairing = await api.getTunnelPairing()
+        if (version === mobileRequestVersion) tunnelPairing = pairing
+      } catch {
+        if (version === mobileRequestVersion) mobileError = $t('settings.mobile.pairing_failed')
+      }
+    } catch {
+      if (version === mobileRequestVersion) mobileError = $t('settings.mobile.status_failed')
+    }
+  }
+
+  async function startMobileTunnel() {
+    if (mobileBusy) return
+    mobileBusy = true
+    mobileRequestVersion++
+    mobileError = ''
+    try {
+      mobileStatus = await api.startDesktopTunnel()
+      await refreshMobileTunnel()
+    } catch {
+      mobileError = $t('settings.mobile.start_failed')
+    } finally {
+      mobileBusy = false
+    }
+  }
+
+  async function stopMobileTunnel() {
+    if (mobileBusy) return
+    mobileBusy = true
+    mobileRequestVersion++
+    tunnelPairing = null
+    mobileError = ''
+    try {
+      mobileStatus = await api.stopDesktopTunnel()
+    } catch {
+      mobileError = $t('settings.mobile.stop_failed')
+    } finally {
+      mobileBusy = false
     }
   }
 
@@ -454,7 +518,8 @@
       await api.setAutostart(v)
       autostart = v
     } catch (e: any) {
-      showToast(e.message ?? 'Failed to change autostart', 'error')
+      // OCTO-FORK: settings' client-side failure fallbacks follow the selected language.
+      showToast(e.message ?? tr('settings.autostart_failed'), 'error')
       autostart = !v
     }
   }
@@ -468,7 +533,7 @@
       await api.updateReasoningEffort(v)
       reasoningEffort = v
     } catch (e: any) {
-      showToast(e.message ?? 'Failed to update reasoning effort', 'error')
+      showToast(e.message ?? tr('settings.reasoning_failed'), 'error')
     }
   }
 
@@ -477,7 +542,7 @@
       await api.updatePermissionMode(v)
       permissionMode = v
     } catch (e: any) {
-      showToast(e.message ?? 'Failed to update permission mode', 'error')
+      showToast(e.message ?? tr('settings.permission_failed'), 'error')
     }
   }
 
@@ -486,7 +551,7 @@
       await api.updateShowReasoning(v)
       showReasoningVal = v
     } catch (e: any) {
-      showToast(e.message ?? 'Failed to update show-reasoning', 'error')
+      showToast(e.message ?? tr('settings.show_reasoning_failed'), 'error')
     }
   }
 
@@ -495,7 +560,7 @@
       await api.updateCoauthor(v)
       coauthorVal = v
     } catch (e: any) {
-      showToast(e.message ?? 'Failed to update coauthor', 'error')
+      showToast(e.message ?? tr('settings.coauthor_failed'), 'error')
     }
   }
 
@@ -504,7 +569,7 @@
       await api.updateUpdateCheck(v)
       updateCheckVal = v
     } catch (e: any) {
-      showToast(e.message ?? 'Failed to update update-check', 'error')
+      showToast(e.message ?? tr('settings.update_check_failed'), 'error')
     }
   }
 
@@ -513,7 +578,7 @@
       await api.updateComputerEnabled(v)
       computerUse = v
     } catch (e: any) {
-      showToast(e.message ?? 'Failed to update computer-use', 'error')
+      showToast(e.message ?? tr('settings.computer_use_failed'), 'error')
     }
   }
 
@@ -522,7 +587,7 @@
       await api.updateWorkspaceDir(v)
       workspaceDir = v
     } catch (e: any) {
-      showToast(e.message ?? 'Failed to update workspace directory', 'error')
+      showToast(e.message ?? tr('settings.workspace_dir_failed'), 'error')
     }
   }
 
@@ -539,7 +604,7 @@
       // older language on the next login.
       await setProductLocale(v === 'zh' ? 'zh' : 'en')
     } catch (e: any) {
-      showToast(e.message ?? 'Failed to update language', 'error')
+      showToast(e.message ?? tr('settings.language_failed'), 'error')
     }
   }
 
@@ -1047,6 +1112,20 @@
           </div>
 
         {:else if cat === 'mobile'}
+          {#if $nativeShell}
+            <!-- OCTO-FORK: the desktop tunnel's status and controls stay beside
+                 the pairing QR, with retry/error feedback but no second server. -->
+            <div class="mobile-control">
+              <span class="mobile-status" aria-live="polite">{$t(`settings.mobile.state_${mobileStatus?.state ?? 'loading'}`)}</span>
+              {#if mobileStatus?.state === 'off' || mobileStatus === null}
+                <button class="btns" disabled={mobileBusy} onclick={startMobileTunnel}>{$t('settings.mobile.start')}</button>
+              {:else}
+                <button class="btns" disabled={mobileBusy || mobileStatus.state === 'stopping'} onclick={stopMobileTunnel}>{$t('settings.mobile.stop')}</button>
+              {/if}
+            </div>
+            {#if mobileError}<p class="mobile-error" role="alert">{mobileError}</p>{/if}
+            {#if mobileStatus?.state === 'off'}<p class="mobile-hint">{$t('settings.mobile.start_hint')}</p>{/if}
+          {/if}
           {#if tunnelPairing?.enabled && tunnelPairing.pair_url}
             <div class="mobile-pair">
               <QrCode text={tunnelPairing.pair_url} />
@@ -1059,7 +1138,7 @@
                 <button class="btns" onclick={copyPairURL}>{$t('settings.mobile.copy_url')}</button>
               </div>
             </div>
-          {:else}
+          {:else if !$nativeShell}
             <div class="mobile-disabled">{$t('settings.mobile.disabled')}</div>
           {/if}
 
@@ -1312,6 +1391,12 @@ select.sinput { cursor: pointer; }
 .mobile-meta > div { min-width: 0; }
 .mobile-info .btns { align-self: flex-start; }
 .mobile-disabled { padding: 28px 16px; text-align: center; font-size: 13px; color: var(--text-tertiary); }
+/* OCTO-FORK: keep desktop tunnel actions at the same compact size as other settings buttons. */
+.mobile-control { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; margin-bottom: 16px; }
+.mobile-control .btns:focus-visible { outline: 2px solid var(--blue-6); outline-offset: 2px; }
+.mobile-status { font-size: 13px; color: var(--text-secondary); }
+.mobile-error { margin: 0 0 12px; color: var(--error); font-size: 13px; }
+.mobile-hint { margin: 0; color: var(--text-tertiary); font-size: 13px; line-height: 1.5; }
 .mono { font-family: var(--font-mono); }
 
 /* ── data management ─────────────────────────────────────────────────────── */

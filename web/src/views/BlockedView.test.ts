@@ -117,7 +117,8 @@ async function switchTo() {
 
 describe('BlockedView first activation', () => {
   it('persists the language chosen on the login wall for Settings', async () => {
-    const fetchMock = vi.fn(async () => ({
+    // OCTO-FORK: retain the fetch argument types when asserting language persistence.
+    const fetchMock = vi.fn(async (_input: RequestInfo | URL, _init?: RequestInit) => ({
       ok: true,
       status: 200,
       json: async () => ({}),

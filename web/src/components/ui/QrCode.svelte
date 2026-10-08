@@ -1,5 +1,7 @@
 <script lang="ts">
   import QRCode from 'qrcode'
+  // OCTO-FORK: pairing accessibility and error text follow the selected UI language.
+  import { t } from '../../lib/i18n'
 
   let { text, size = 220 }: { text: string; size?: number } = $props()
 
@@ -26,9 +28,9 @@
 </script>
 
 {#if dataUrl}
-  <img class="qr" src={dataUrl} alt="pairing QR code" width={size} height={size} />
+  <img class="qr" src={dataUrl} alt={$t('qr.pairing_alt')} width={size} height={size} />
 {:else if failed}
-  <div class="qr-error">QR render failed</div>
+  <div class="qr-error">{$t('qr.render_failed')}</div>
 {/if}
 
 <style>

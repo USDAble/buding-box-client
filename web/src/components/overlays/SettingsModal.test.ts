@@ -4,7 +4,9 @@ import { flushSync, mount, unmount } from 'svelte'
 import { get } from 'svelte/store'
 import { locale } from '../../lib/i18n'
 import { productPhase, productState } from '../../lib/product'
-import { settingsModalOpen, settingsTarget, openSettingsAt } from '../../lib/stores'
+import { nativeShell, settingsModalOpen, settingsTarget, openSettingsAt } from '../../lib/stores'
+import * as branding from '../../lib/brand'
+import * as externalLinks from '../../lib/externalLinks'
 import SettingsModal from './SettingsModal.svelte'
 
 let app: ReturnType<typeof mount> | undefined
@@ -13,7 +15,7 @@ const accountState = { loggedIn: true, activated: true, account: { nickname: '�
 function json(value: unknown) { return new Response(JSON.stringify(value), { headers: { 'Content-Type': 'application/json' } }) }
 beforeEach(() => {
   locale.set('zh'); productPhase.set('ready'); productState.set(accountState as never)
-  settingsModalOpen.set(false); settingsTarget.set(null)
+  settingsModalOpen.set(false); settingsTarget.set(null); nativeShell.set(false)
   sessionStorage.setItem('octo_window_token', 'test')
   vi.stubGlobal('fetch', vi.fn(async (input: unknown) => {
     const path = String(input).split('?')[0]
@@ -29,7 +31,7 @@ beforeEach(() => {
 afterEach(async () => {
   if (app) await unmount(app)
   app = undefined; target.remove(); settingsModalOpen.set(false); settingsTarget.set(null)
-  vi.unstubAllGlobals(); sessionStorage.clear(); productPhase.set('unknown')
+  vi.restoreAllMocks(); vi.unstubAllGlobals(); sessionStorage.clear(); productPhase.set('unknown'); nativeShell.set(false)
 })
 function activePage() { return target.querySelector('.rail [aria-current="page"]')?.textContent?.trim() }
 function open() { app = mount(SettingsModal, { target }); flushSync() }
@@ -171,12 +173,32 @@ it('shows a compact feedback form with optional details and sends the visible fi
 })
 
 it('keeps the official help center slot visible but disabled until its brand URL is configured', async () => {
+  // OCTO-FORK: exercise the unconfigured state independently of the shipped URL.
+  const brandLink = branding.brandLink
+  vi.spyOn(branding, 'brandLink').mockImplementation((group, key) =>
+    group === 'external' && key === 'helpCenter' ? '' : brandLink(group, key))
   openSettingsAt('help'); open()
   await vi.waitFor(() => expect(target.querySelector('.help-portal-card')).not.toBeNull())
   expect(target.querySelector('.rail .scat[aria-current="page"]')?.textContent).toContain('帮助与反馈')
   expect(target.querySelector('.help-portal-card')?.textContent).toContain('官网帮助中心')
   expect(target.querySelector<HTMLButtonElement>('.help-portal-action')?.disabled).toBe(true)
   expect(target.querySelector('.help-portal-status')?.textContent).toContain('待配置')
+})
+
+// OCTO-FORK: configured help links must stay enabled and open their brand destination.
+it('opens the configured official help center', async () => {
+  const destination = 'https://help.example.test/'
+  const brandLink = branding.brandLink
+  vi.spyOn(branding, 'brandLink').mockImplementation((group, key) =>
+    group === 'external' && key === 'helpCenter' ? destination : brandLink(group, key))
+  const openUrl = vi.spyOn(externalLinks, 'openUrl').mockImplementation(() => {})
+  openSettingsAt('help'); open()
+  await vi.waitFor(() => expect(target.querySelector('.help-portal-card')).not.toBeNull())
+  const button = target.querySelector<HTMLButtonElement>('.help-portal-action')!
+  expect(button.disabled).toBe(false)
+  expect(target.querySelector('.help-portal-status')).toBeNull()
+  button.click()
+  expect(openUrl).toHaveBeenCalledWith(destination)
 })
 
 it('opens only one FAQ item at a time', async () => {
@@ -189,4 +211,50 @@ it('opens only one FAQ item at a time', async () => {
   expect(items[0].classList.contains('open')).toBe(false)
   expect(items[1].classList.contains('open')).toBe(true)
   expect(target.querySelectorAll('.help-faq-item.open')).toHaveLength(1)
+})
+
+// OCTO-FORK: the desktop Mobile page owns the one-click tunnel lifecycle and
+// shows the existing pairing QR only after the relay reports connected.
+it('starts and stops the desktop phone tunnel from Settings', async () => {
+  nativeShell.set(true)
+  let state = 'off'
+  const original = globalThis.fetch
+  vi.stubGlobal('fetch', vi.fn(async (input: unknown, init?: RequestInit) => {
+    const path = String(input).split('?')[0]
+    if (path.endsWith('/api/product/tunnel/start')) { state = 'connected'; return json({ state }) }
+    if (path.endsWith('/api/product/tunnel/stop')) { state = 'off'; return json({ state }) }
+    if (path.endsWith('/api/product/tunnel')) return json({ state })
+    if (path.endsWith('/api/tunnel/pairing')) return json({ enabled: state === 'connected', pair_url: 'octo-pair://v1?tok=test', relay: 'wss://relay.example.com', tunnel_id: 'test-id' })
+    return original(input as RequestInfo, init)
+  }))
+  openSettingsAt('mobile'); open()
+  const control = () => target.querySelector<HTMLButtonElement>('.mobile-control button')
+  await vi.waitFor(() => expect(control()?.textContent).toContain('启动连接'))
+  expect(target.querySelector('.mobile-pair')).toBeNull()
+  control()!.click()
+  await vi.waitFor(() => expect(target.querySelector('.mobile-pair')).not.toBeNull())
+  await vi.waitFor(() => expect(target.querySelector<HTMLImageElement>('.mobile-pair img.qr')?.src).toMatch(/^data:image\/png;base64,/))
+  expect(target.querySelector('.mobile-status')?.textContent).toContain('已连接')
+  expect(control()?.textContent).toContain('关闭连接')
+  control()!.click()
+  await vi.waitFor(() => expect(control()?.textContent).toContain('启动连接'))
+  expect(target.querySelector('.mobile-pair')).toBeNull()
+  const paths = vi.mocked(globalThis.fetch).mock.calls.map(([input]) => String(input))
+  expect(paths).toContain('/api/product/tunnel/start')
+  expect(paths).toContain('/api/product/tunnel/stop')
+})
+
+it('shows a relay error without exposing a stale pairing QR', async () => {
+  nativeShell.set(true)
+  const original = globalThis.fetch
+  vi.stubGlobal('fetch', vi.fn(async (input: unknown, init?: RequestInit) => {
+    const path = String(input).split('?')[0]
+    if (path.endsWith('/api/product/tunnel')) return json({ state: 'retrying', error: 'relay_unavailable' })
+    if (path.endsWith('/api/tunnel/pairing')) throw new Error('pairing should be hidden while retrying')
+    return original(input as RequestInfo, init)
+  }))
+  openSettingsAt('mobile'); open()
+  await vi.waitFor(() => expect(target.querySelector('.mobile-error')?.textContent).toMatch(/中继连接失败|Relay connection failed/))
+  expect(target.querySelector('.mobile-status')?.textContent).toMatch(/正在重试|retrying/)
+  expect(target.querySelector('.mobile-pair')).toBeNull()
 })

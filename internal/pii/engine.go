@@ -12,7 +12,9 @@ import (
 )
 
 // RuleVersion identifies the exact built-in rule contract used for a result.
-const RuleVersion = "builtin-1"
+// OCTO-FORK: builtin-2 adds validated international phone formats and avoids
+// classifying explicit plan/task IDs as cards.
+const RuleVersion = "builtin-2"
 
 // ErrUnavailable means no usable rule engine was available for a protected operation.
 var ErrUnavailable = errors.New("pii: engine is unavailable")

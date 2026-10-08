@@ -256,14 +256,17 @@ jobs:
 
       # The .app zip is what the desktop app's in-place updater downloads and
       # swaps over the installed bundle (build.sh leaves the universal, ad-hoc
-      # signed Octo.app at the repo root). ditto preserves the bundle's symlinks
+      # signed branded .app at the repo root). ditto preserves the bundle's symlinks
       # and permissions where plain zip would not. Its name must stay in sync
       # with the desktop shell's asset matcher (cmd/octo-desktop).
       - name: Attach installer + updater app zip to the release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          ditto -c -k --keepParent Octo.app staging/Octo-darwin-universal.zip
+          # OCTO-FORK: keep the historical release ZIP key for existing clients,
+          # but place the brand-named app bundle inside it.
+          . packaging/macos/scripts/brand.sh
+          ditto -c -k --keepParent "$MAC_APP_NAME.app" staging/Octo-darwin-universal.zip
           gh release upload "$GITHUB_REF_NAME" staging/octo-setup.pkg staging/Octo-darwin-universal.zip --clobber
 
   # Build the Linux desktop AppImages (Octo-x86_64.AppImage,

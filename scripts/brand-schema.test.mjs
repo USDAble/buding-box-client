@@ -69,7 +69,7 @@ test('rule C covers links and visual, not just identifiers', () => {
 })
 
 test('the planned help center link may stay empty until the website is ready', () => {
-  assert.equal(fixture.links.external.helpCenter, '')
+  assert.deepEqual(validateBrand(withBrand((brand) => { brand.links.external.helpCenter = '' })), [])
   assert.deepEqual(validateBrand(fixture), [])
 
   const errors = validateBrand(withBrand((brand) => { brand.links.external.website = '' }))

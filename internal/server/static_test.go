@@ -1,5 +1,8 @@
 package server
 
+// OCTO-FORK: cover fixed-name branded assets so Windows WebView upgrades do
+// not regress to the previous cached Logo.
+
 import (
 	"compress/gzip"
 	"io"
@@ -14,9 +17,9 @@ import (
 // .gitkeep in a checkout, so the real embed can't be used here.
 func testDist() fstest.MapFS {
 	return fstest.MapFS{
-		"index.html":             {Data: []byte(`<html><script src="/assets/index-abc123.js"></script></html>`)},
-		"assets/index-abc123.js": {Data: []byte(strings.Repeat("console.log('octo');\n", 200))},
-		"assets/logo.png":        {Data: []byte{0x89, 'P', 'N', 'G', 0, 0, 0, 0}},
+		"index.html":               {Data: []byte(`<html><script src="/assets/index-abc12345.js"></script></html>`)},
+		"assets/index-abc12345.js": {Data: []byte(strings.Repeat("console.log('octo');\n", 200))},
+		"assets/logo-mark.png":     {Data: []byte{0x89, 'P', 'N', 'G', 0, 0, 0, 0}},
 	}
 }
 
@@ -48,7 +51,7 @@ func gunzip(t *testing.T, body []byte) string {
 // body must round-trip to the original bytes.
 func TestStaticFileHandler_HashedAssetImmutableAndGzipped(t *testing.T) {
 	dist := testDist()
-	w := getStatic(t, staticFileHandler(dist), "/assets/index-abc123.js", map[string]string{"Accept-Encoding": "gzip, deflate, br"})
+	w := getStatic(t, staticFileHandler(dist), "/assets/index-abc12345.js", map[string]string{"Accept-Encoding": "gzip, deflate, br"})
 
 	if w.Code != http.StatusOK {
 		t.Fatalf("status = %d, want 200", w.Code)
@@ -68,7 +71,7 @@ func TestStaticFileHandler_HashedAssetImmutableAndGzipped(t *testing.T) {
 	if ct := w.Header().Get("Content-Type"); !strings.Contains(ct, "javascript") {
 		t.Errorf("Content-Type = %q, want javascript", ct)
 	}
-	want := string(dist["assets/index-abc123.js"].Data)
+	want := string(dist["assets/index-abc12345.js"].Data)
 	if got := gunzip(t, w.Body.Bytes()); got != want {
 		t.Errorf("gunzipped body differs from the asset (%d vs %d bytes)", len(got), len(want))
 	}
@@ -80,7 +83,7 @@ func TestStaticFileHandler_HashedAssetImmutableAndGzipped(t *testing.T) {
 // Without Accept-Encoding the asset is served verbatim, with its real length.
 func TestStaticFileHandler_IdentityWhenNotAccepted(t *testing.T) {
 	dist := testDist()
-	w := getStatic(t, staticFileHandler(dist), "/assets/index-abc123.js", nil)
+	w := getStatic(t, staticFileHandler(dist), "/assets/index-abc12345.js", nil)
 
 	if w.Code != http.StatusOK {
 		t.Fatalf("status = %d, want 200", w.Code)
@@ -88,7 +91,7 @@ func TestStaticFileHandler_IdentityWhenNotAccepted(t *testing.T) {
 	if ce := w.Header().Get("Content-Encoding"); ce != "" {
 		t.Errorf("Content-Encoding = %q, want none", ce)
 	}
-	if got, want := w.Body.String(), string(dist["assets/index-abc123.js"].Data); got != want {
+	if got, want := w.Body.String(), string(dist["assets/index-abc12345.js"].Data); got != want {
 		t.Errorf("body differs from the asset")
 	}
 	if cc := w.Header().Get("Cache-Control"); cc != "public, max-age=31536000, immutable" {
@@ -96,11 +99,10 @@ func TestStaticFileHandler_IdentityWhenNotAccepted(t *testing.T) {
 	}
 }
 
-// Already-compressed formats are never gzipped, even when accepted — but they
-// are still hashed assets and cache forever.
+// A fixed-name public image is never gzipped or cached as immutable.
 func TestStaticFileHandler_ImageNotCompressed(t *testing.T) {
 	dist := testDist()
-	w := getStatic(t, staticFileHandler(dist), "/assets/logo.png", map[string]string{"Accept-Encoding": "gzip"})
+	w := getStatic(t, staticFileHandler(dist), "/assets/logo-mark.png?v=updated", map[string]string{"Accept-Encoding": "gzip"})
 
 	if w.Code != http.StatusOK {
 		t.Fatalf("status = %d, want 200", w.Code)
@@ -108,18 +110,18 @@ func TestStaticFileHandler_ImageNotCompressed(t *testing.T) {
 	if ce := w.Header().Get("Content-Encoding"); ce != "" {
 		t.Errorf("Content-Encoding = %q, want none for a PNG", ce)
 	}
-	if got, want := w.Body.Bytes(), dist["assets/logo.png"].Data; string(got) != string(want) {
+	if got, want := w.Body.Bytes(), dist["assets/logo-mark.png"].Data; string(got) != string(want) {
 		t.Errorf("PNG body altered")
 	}
-	if cc := w.Header().Get("Cache-Control"); cc != "public, max-age=31536000, immutable" {
-		t.Errorf("Cache-Control = %q, want immutable", cc)
+	if cc := w.Header().Get("Cache-Control"); cc != "no-cache" {
+		t.Errorf("Cache-Control = %q, want no-cache", cc)
 	}
 }
 
 // A Range request must get real bytes of the file, never a slice of gzip output.
 func TestStaticFileHandler_RangeBypassesGzip(t *testing.T) {
 	dist := testDist()
-	w := getStatic(t, staticFileHandler(dist), "/assets/index-abc123.js", map[string]string{
+	w := getStatic(t, staticFileHandler(dist), "/assets/index-abc12345.js", map[string]string{
 		"Accept-Encoding": "gzip",
 		"Range":           "bytes=0-9",
 	})
@@ -130,7 +132,7 @@ func TestStaticFileHandler_RangeBypassesGzip(t *testing.T) {
 	if ce := w.Header().Get("Content-Encoding"); ce != "" {
 		t.Errorf("Content-Encoding = %q, want none on a range", ce)
 	}
-	if got, want := w.Body.String(), string(dist["assets/index-abc123.js"].Data[:10]); got != want {
+	if got, want := w.Body.String(), string(dist["assets/index-abc12345.js"].Data[:10]); got != want {
 		t.Errorf("range body = %q, want %q", got, want)
 	}
 }
@@ -160,7 +162,7 @@ func TestStaticFileHandler_IndexNoCacheAndGzipped(t *testing.T) {
 // HEAD carries no body, so the gzip writer must not append its header/trailer
 // to an otherwise empty response.
 func TestStaticFileHandler_HeadHasNoBody(t *testing.T) {
-	req := httptest.NewRequest(http.MethodHead, "/assets/index-abc123.js", nil)
+	req := httptest.NewRequest(http.MethodHead, "/assets/index-abc12345.js", nil)
 	req.Header.Set("Accept-Encoding", "gzip")
 	w := httptest.NewRecorder()
 	staticFileHandler(testDist()).ServeHTTP(w, req)
@@ -199,7 +201,7 @@ func TestStaticFileHandler_RedirectPassesThrough(t *testing.T) {
 
 // The gzip path must not re-advertise byte ranges it will not honour.
 func TestStaticFileHandler_GzipDropsAcceptRanges(t *testing.T) {
-	w := getStatic(t, staticFileHandler(testDist()), "/assets/index-abc123.js", map[string]string{"Accept-Encoding": "gzip"})
+	w := getStatic(t, staticFileHandler(testDist()), "/assets/index-abc12345.js", map[string]string{"Accept-Encoding": "gzip"})
 
 	if w.Code != http.StatusOK {
 		t.Fatalf("status = %d, want 200", w.Code)

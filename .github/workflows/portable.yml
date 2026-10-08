@@ -192,4 +192,6 @@ jobs:
         uses: actions/upload-artifact@v7
         with:
           name: PuddingBox-macos
-          path: Octo.app
+          # OCTO-FORK: the app bundle is named from branding/brand.json.
+          path: '*.app'
+          if-no-files-found: error

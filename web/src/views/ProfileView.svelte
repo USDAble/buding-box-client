@@ -6,7 +6,8 @@
   import * as api from '../lib/api'
   import { confirmDialog } from '../lib/confirm'
   import type { Memory } from '../lib/types'
-  import { t, tr } from '../lib/i18n'
+  import { t, tr, locale } from '../lib/i18n'
+  // OCTO-FORK: profile and memory status text follows the selected UI language.
 
   // embedded=true when mounted inside Settings' 数据管理 pane rather than as a
   // standalone view — same pattern as FileRecallView.
@@ -27,6 +28,8 @@
   let memLoaded   = $state(false)
   // Lazily-fetched memory bodies, keyed by file name.
   let memContent = $state<Record<string, string>>({})
+  // OCTO-FORK: store the failure state, not translated copy, so open rows repaint on language changes.
+  let memLoadFailed = $state<Record<string, boolean>>({})
 
   // Load on tab change
   $effect(() => {
@@ -41,7 +44,7 @@
     try {
       soulData = await api.getProfileSoul() as any
     } catch (e: any) {
-      showToast(`Could not load soul.md: ${e.message}`, 'error')
+      showToast(tr('profile.load_soul_failed').replace('{error}', e.message), 'error')
     } finally {
       loadingSoul = false
     }
@@ -52,7 +55,7 @@
     try {
       userData = await api.getProfileUser() as any
     } catch (e: any) {
-      showToast(`Could not load user.md: ${e.message}`, 'error')
+      showToast(tr('profile.load_user_failed').replace('{error}', e.message), 'error')
     } finally {
       loadingUser = false
     }
@@ -64,7 +67,7 @@
       memFiles = await api.getMemories()
       memLoaded = true
     } catch (e: any) {
-      showToast(`Could not load memories: ${e.message}`, 'error')
+      showToast(tr('profile.load_memories_failed').replace('{error}', e.message), 'error')
     } finally {
       loadingMem = false
     }
@@ -80,7 +83,7 @@
         const d = await api.getMemory(f.name, f.source)
         memContent = { ...memContent, [f.path]: d.content ?? '' }
       } catch {
-        memContent = { ...memContent, [f.path]: '_Could not load memory._' }
+        memLoadFailed = { ...memLoadFailed, [f.path]: true }
       }
     }
   }
@@ -93,9 +96,9 @@
       // reload. api.deleteMemory throws on non-2xx via request().
       await api.deleteMemory(f.name, f.source)
       memFiles = memFiles.filter(m => m.path !== f.path)
-      showToast('Memory removed', 'success')
+      showToast(tr('profile.memory_removed'), 'success')
     } catch (e: any) {
-      showToast(`Failed to remove memory: ${e.message}`, 'error')
+      showToast(tr('profile.remove_memory_failed').replace('{error}', e.message), 'error')
     }
   }
 
@@ -103,14 +106,14 @@
   // run the onboard skill scoped to that one file; memories opens a freeform turn.
   // Closing the modal is a no-op when this view isn't embedded in it — but
   // embedded, the chat this opens would otherwise be stuck behind Settings.
-  function openAssistantChat(prompt: string, name = 'Profile update') {
+  function openAssistantChat(prompt: string, name = tr('profile.session_update')) {
     settingsModalOpen.set(false)
     openAgentSession(prompt, name)
   }
 
-  function fmtDate(iso: string): string {
+  function fmtDate(iso: string, lang: string): string {
     try {
-      return new Date(iso).toLocaleDateString()
+      return new Date(iso).toLocaleDateString(lang.startsWith('zh') ? 'zh-CN' : 'en-US')
     } catch { return iso }
   }
 
@@ -227,7 +230,7 @@
                 </span>
                 <div class="mem-content">
                   <span class="mem-text mono">{f.name}</span>
-                  <span class="mem-meta">{f.source} · {fmtDate(f.updated_at)}</span>
+                  <span class="mem-meta">{f.source} · {fmtDate(f.updated_at, $locale)}</span>
                 </div>
                 <StatusTag status="default">{f.source}</StatusTag>
                 <button class="forget-btn" onclick={(e) => { e.preventDefault(); forgetMemory(f) }}>
@@ -237,7 +240,9 @@
                 <iconify-icon icon="lucide:chevron-right" width="14" class="mem-chevron" style="color:var(--text-tertiary)"></iconify-icon>
               </summary>
               <div class="mem-body">
-                {#if memContent[f.path] === undefined || memContent[f.path] === ''}
+                {#if memLoadFailed[f.path]}
+                  <div class="md-content"><em>{$t('profile.load_memory_failed')}</em></div>
+                {:else if memContent[f.path] === undefined || memContent[f.path] === ''}
                   <span class="mem-loading">{$t('common.loading')}</span>
                 {:else}
                   <div class="md-content">{@html renderMarkdown(memContent[f.path])}</div>

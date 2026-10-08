@@ -9,6 +9,7 @@ import { sameGeneratedText } from './generated-text.mjs'
 import {
   buildTargets,
   renderBrandJSON,
+  renderMacInstallerBrand,
   renderWindowsInstallerBrand,
   staleTargets,
 } from './sync-branding.mjs'
@@ -76,8 +77,28 @@ test('the installer takes the fixed Windows display name, not a localized one', 
   const rendered = renderWindowsInstallerBrand(brand)
   assert.match(rendered, /^; Generated from branding\/brand\.json/m)
   assert.match(rendered, /#define BrandAppName "Pudding Box"/)
+  // OCTO-FORK: installer CLI alias must follow the brand source.
+  assert.ok(rendered.includes('#define BrandCLIExeName "puddingbox.exe"'))
   assert.match(rendered, /#define BrandAppPublisher "Pudding Box Studio"/)
   assert.match(rendered, /#define BrandAppPublisherURL "https:\/\/[^"]+"/)
+})
+
+// OCTO-FORK: a brand rename must update the macOS package without a shell injection.
+test('macOS package name follows the English product name and remains shell-safe', () => {
+  assert.match(renderMacInstallerBrand(brand), /MAC_APP_NAME='Pudding Box'/)
+  const hostile = structuredClone(brand)
+  hostile.product.names['en-US'] = "Pudding's Box"
+  assert.match(renderMacInstallerBrand(hostile), /MAC_APP_NAME='Pudding'\\''s Box'/)
+  hostile.product.names['en-US'] = '../Other'
+  assert.throws(() => renderMacInstallerBrand(hostile), /不能作为 macOS 应用文件名/)
+})
+
+// OCTO-FORK: Windows treats PuddingBox.exe and puddingbox.exe as the same
+// filename, so the branded CLI must be installed outside the GUI directory.
+test('the Windows installer keeps the branded CLI separate from the GUI executable', async () => {
+  const installer = await fs.readFile(path.join(root, 'packaging/windows/octo.iss'), 'utf8')
+  assert.ok(installer.includes('DestDir: "{app}\\cli"; DestName: "{#BrandCLIExeName}"'))
+  assert.ok(installer.includes("CLIDir := ExpandConstant('{app}\\cli')"))
 })
 
 test('a quote in a brand value cannot break out of the Inno string literal', () => {
@@ -105,6 +126,7 @@ test('the target list covers every consumer the plan enumerates', () => {
     'internal/brand/brand.json',
     'landing/brand.config.json',
     'mobile/src/brand.config.json',
+    'packaging/macos/scripts/brand.sh',
     'packaging/windows/brand.iss',
     'web/src/lib/brand.config.json',
   ])

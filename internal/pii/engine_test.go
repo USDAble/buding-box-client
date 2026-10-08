@@ -30,6 +30,12 @@ func TestTransformBuiltInRules(t *testing.T) {
 			wantMatches: []MatchSummary{{Category: "cn_mobile", Count: 1}},
 		},
 		{
+			name:        "international mobile",
+			input:       "国际电话：+1 (415) 555-0123，备用 +86 138 0013 8000",
+			want:        "国际电话：<手机号>，备用 <手机号>",
+			wantMatches: []MatchSummary{{Category: "cn_mobile", Count: 2}},
+		},
+		{
 			name:        "email",
 			input:       "联系 alice.smith+tag@example.co.uk，谢谢",
 			want:        "联系 <邮箱>，谢谢",
@@ -107,14 +113,19 @@ func TestTransformRejectsLookalikes(t *testing.T) {
 		name  string
 		input string
 	}{
-		{name: "resident ID checksum", input: "错误身份证 110105194912310021"},
-		{name: "resident ID date", input: "非法日期 11010519490231002X"},
+		{name: "resident ID checksum without label", input: "错误号码 110105194912310021"},
+		{name: "resident ID date without label", input: "非法日期 11010519490231002X"},
 		{name: "mobile embedded in longer number", input: "更长号码 91380013800138000"},
 		{name: "email placeholder", input: "邮箱占位 a@b"},
 		{name: "email consecutive dots", input: "连续点 a..b@example.com"},
 		{name: "email domain underscore", input: "域名下划线 user@example_test.com"},
 		{name: "bank card checksum", input: "错误卡号 4111 1111 1111 1112"},
 		{name: "bank card repeated digits", input: "全同卡号 1111 1111 1111 1111"},
+		{name: "plan ID coincidentally passes Luhn", input: "修改计划 ID: 4111 1111 1111 1111"},
+		{name: "task ID coincidentally passes Luhn", input: "任务编号为 4111 1111 1111 1111"},
+		{name: "plan number coincidentally passes Luhn", input: "plan-4111111111111111"},
+		{name: "计划 number coincidentally passes Luhn", input: "计划 4111111111111111"},
+		{name: "generic ID coincidentally passes Luhn", input: "id=4111111111111111"},
 		{name: "VIN checksum", input: "错误 VIN 1M8GDM8AXKP042788"},
 		{name: "VIN forbidden letter", input: "禁用字符 1M8GDM9AOKP042788"},
 		{name: "version label", input: "版本 version 1.2.3.4"},
@@ -182,6 +193,35 @@ func TestTransformMixedRepeatedAndOverlapping(t *testing.T) {
 	}
 	if got.Masked != want || !reflect.DeepEqual(got.Matches, wantMatches) {
 		t.Fatalf("mixed masked output mismatch; matches = %#v", got.Matches)
+	}
+}
+
+func TestTransformMasksMultipleValidPersonalValues(t *testing.T) {
+	input := "我的手机号是13800138000，身份证是11010519491231002X，银行卡是4111 1111 1111 1111"
+	want := "我的手机号是<手机号>，身份证是<身份证号>，银行卡是<银行卡号>"
+	wantMatches := []MatchSummary{
+		{Category: "cn_resident_id", Count: 1},
+		{Category: "cn_mobile", Count: 1},
+		{Category: "bank_card", Count: 1},
+	}
+	got, err := New().Transform(input)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.Masked != want || !reflect.DeepEqual(got.Matches, wantMatches) {
+		t.Fatalf("multiple values were not all masked: %#v", got)
+	}
+}
+
+func TestTransformLeavesMalformedPersonalValues(t *testing.T) {
+	// OCTO-FORK: malformed values remain unchanged even when a label is present.
+	input := "我的手机号是138625442442，国际手机号是+86 138625442442，身份证是110345987640930098"
+	got, err := New().Transform(input)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.Masked != input || len(got.Matches) != 0 {
+		t.Fatalf("malformed values were unexpectedly masked: %#v", got)
 	}
 }
 

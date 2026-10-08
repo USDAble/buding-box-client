@@ -33,8 +33,8 @@
 //   - `_test.go` / `*.test.*` / `*.spec.*` — a test's job is to pin the value
 //     it asserts, so the literal there is the fixture, not a copy defect.
 //   - `branding/` — the value's origin.
-//   - the six files scripts/sync-branding.mjs generates from brand.json (five
-//     JSON copies + packaging/windows/brand.iss). Those legitimately contain
+//   - the generated files scripts/sync-branding.mjs writes from brand.json.
+//     Those legitimately contain
 //     the names; `make brand-check`'s sync check owns them.
 //   - any line that STARTS with a comment opener (`//`, `#`, `;`, `*`, `<!--`,
 //     `/*`). A comment naming the brand is documentation — `internal/brand`'s
@@ -80,7 +80,7 @@ const SKIP_EXT = new Set([
   '.pdf', '.woff', '.woff2', '.ttf', '.otf', '.wasm', '.bin', '.syso', '.sum',
 ])
 
-// The six generated copies of brand.json. scripts/sync-branding.mjs writes
+// The generated copies of brand.json. scripts/sync-branding.mjs writes
 // them and its --check mode asserts they are current, so a literal here is
 // expected — scanning them would only duplicate that check.
 export const GENERATED_RELS = [
@@ -90,6 +90,8 @@ export const GENERATED_RELS = [
   'landing/brand.config.json',
   'cmd/octo-relay/internal/push/brand.json',
   'packaging/windows/brand.iss',
+  // OCTO-FORK: the macOS install scripts source this generated brand value.
+  'packaging/macos/scripts/brand.sh',
 ]
 
 // A leading comment opener. Deliberately anchored: only a line whose first

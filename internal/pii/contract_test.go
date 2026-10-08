@@ -37,7 +37,8 @@ func TestRuleRegistryMatchesProductDocument(t *testing.T) {
 	if got := RuleIDs(); !reflect.DeepEqual(got, want) {
 		t.Fatalf("RuleIDs() = %#v, stable contract = %#v", got, want)
 	}
-	if RuleVersion != "builtin-1" {
-		t.Fatalf("RuleVersion = %q, want builtin-1", RuleVersion)
+	// OCTO-FORK: the international-phone privacy rule contract is versioned separately.
+	if RuleVersion != "builtin-2" {
+		t.Fatalf("RuleVersion = %q, want builtin-2", RuleVersion)
 	}
 }

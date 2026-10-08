@@ -120,14 +120,14 @@
   "identifiers": {
     "current": {
       "exeName": "PuddingBox.exe",
-      "cliExeName": "octo.exe",
+      "cliExeName": "puddingbox.exe",
       "portableDirName": "PuddingBox",
       "singleInstanceId": "app.puddingbox.desktop",
       "windowsInternalName": "pudding-box-desktop",
       "dataRoot": "data/",
       "workspaceDir": "data/workspace/",
       "port": "8088",
-      "cliCommand": "octo",
+      "cliCommand": "puddingbox",
       "configDir": "~/.octo",
       "envPrefix": "OCTO_",
       "uiProtocol": "octo-ui",
@@ -140,7 +140,6 @@
       "linuxDesktopEntry": "octo-desktop.desktop"
     },
     "future": {
-      "cliCommand": "puddingbox",
       "configDir": "~/.puddingbox",
       "envPrefix": "PUDDINGBOX_",
       "uiProtocol": "puddingbox-ui",
@@ -158,7 +157,7 @@
     "external": {
       "license": "https://github.com/open-octo/octo-agent/blob/main/LICENSE.txt",
       "website": "https://octo-agent.dev/",
-      "helpCenter": ""
+      "helpCenter": "https://www.baidu.com/"
     }
   },
   "visual": {

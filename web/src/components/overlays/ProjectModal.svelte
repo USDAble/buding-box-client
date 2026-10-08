@@ -1,7 +1,7 @@
 <script lang="ts">
   import { get } from 'svelte/store'
   import * as api from '../../lib/api'
-  import { t } from '../../lib/i18n'
+  import { t, tr } from '../../lib/i18n'
   import { sessionGroups, nativeShell, showToast, normalizeDir } from '../../lib/stores'
   import FolderPickerModal from './FolderPickerModal.svelte'
   import type { SessionGroup } from '../../lib/types'
@@ -41,7 +41,8 @@
         const res = await api.nativePickFolder('')
         if (!res.cancelled && res.path) addFolder(res.path)
       } catch (e: any) {
-        showToast(e.message ?? 'Failed to open folder dialog', 'error')
+        // OCTO-FORK: project-dialog fallback feedback follows the selected language.
+        showToast(e.message ?? tr('folder_picker.open_failed'), 'error')
       }
       return
     }
@@ -67,7 +68,7 @@
       }
       onSaved?.(g)
     } catch (e: any) {
-      showToast(e.message ?? 'Failed to save the project', 'error')
+      showToast(e.message ?? tr('project.save_failed'), 'error')
     } finally {
       saving = false
     }
@@ -85,7 +86,7 @@
   <div class="modal" role="dialog" aria-modal="true" tabindex="-1" bind:this={modalEl} onkeydown={onKeydown}>
     <div class="modal-header">
       <span class="modal-title">{group ? $t('project.modal_settings') : $t('project.modal_create')}</span>
-      <button class="close" onclick={onClose} aria-label="close">
+      <button class="close" onclick={onClose} aria-label={$t('common.close')}>
         <iconify-icon icon="lucide:x" width="16"></iconify-icon>
       </button>
     </div>

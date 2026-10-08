@@ -2,7 +2,25 @@
 // the current implementation plan §PR-5d3.
 package server
 
-import "fmt"
+import (
+	"context"
+	"fmt"
+
+	"github.com/open-octo/octo-agent/internal/agent"
+)
+
+// OCTO-FORK: keep the fork's fail-closed sender alongside its refusal errors,
+// leaving upstream server.go responsible only for routing.
+// failingSender preserves the upstream Sender signature without sending a request.
+type failingSender struct{ err error }
+
+func (f failingSender) SendMessages(_ context.Context, _, _ string, _ []agent.Message, _ int) (agent.Reply, error) {
+	if f.err == nil {
+		// A missing reason must not silently succeed as an empty reply.
+		return agent.Reply{}, fmt.Errorf("internal: refusing sender without a reason")
+	}
+	return agent.Reply{}, f.err
+}
 
 // codeModelWithdrawn is the client-side fail-closed code for "this session's model
 // is not in the catalog we hold" (PR-5e's refusal). It is registered in the

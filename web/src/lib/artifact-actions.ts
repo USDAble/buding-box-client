@@ -14,14 +14,14 @@ export function copyArtifact(code: string, showToast: (msg: string, type?: strin
 }
 
 // Saves the artifact to disk. Text kinds carry their whole body in `code`; an
-// image carries only its on-disk path there, so it takes the binary path below.
+// OCTO-FORK: Images and Office files carry only their on-disk path; both use the binary save path.
 export async function downloadArtifact(
   artifact: Artifact | undefined,
   showToast: (msg: string, type?: string) => void,
 ) {
   if (!artifact) return
   if (artifact.src) {
-    await downloadImage(artifact.name, artifact.src, showToast)
+    await downloadBinary(artifact.name, artifact.src, showToast)
     return
   }
   const fname = artifact.name || 'artifact.txt'
@@ -44,13 +44,13 @@ export async function downloadArtifact(
   URL.revokeObjectURL(url)
 }
 
-// Image artifacts are binary: saving `code` would write a text file holding a
+// Binary artifacts: saving `code` would write a text file holding a
 // path. Fetch the bytes instead — and fetch rather than point <a download>
 // straight at the endpoint, so a non-2xx surfaces as a toast instead of
 // silently doing nothing (#1109). The desktop webview has no download
 // delegate, so there the bytes go through the native save dialog
 // base64-encoded, same shape as the skill zip export.
-async function downloadImage(
+async function downloadBinary(
   name: string,
   src: string,
   showToast: (msg: string, type?: string) => void,
@@ -63,7 +63,7 @@ async function downloadImage(
     }
     if (get(nativeShell)) {
       const bytes = new Uint8Array(await res.arrayBuffer())
-      // Chunked so a multi-MB screenshot doesn't blow the spread argument limit.
+      // Chunked so a multi-MB artifact doesn't blow the spread argument limit.
       let binary = ''
       const chunk = 0x8000
       for (let i = 0; i < bytes.length; i += chunk) {

@@ -2,6 +2,7 @@ package server
 
 import (
 	"io"
+	"mime"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -23,6 +24,9 @@ import (
 // artifactMaxBytes caps what the panel will serve inline; bigger files get a
 // 413 and the panel offers no preview. Artifact HTML bundles run 200 KB–2 MB.
 const artifactMaxBytes = 10 << 20
+
+// OCTO-FORK: Download-only Office files need a larger limit than inline previews; bound browser/native buffering to 100 MB.
+const artifactDownloadMaxBytes = 100 << 20
 
 func (s *Server) handleGetArtifact(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
@@ -68,7 +72,17 @@ func (s *Server) handleGetArtifact(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusNotFound, "file not found")
 		return
 	}
-	if fi.Size() > artifactMaxBytes {
+	// OCTO-FORK: Keep the preview cap while allowing ordinary Office documents to download as attachments.
+	downloadOnly := ctype == "application/octet-stream"
+	limit := int64(artifactMaxBytes)
+	if downloadOnly {
+		limit = artifactDownloadMaxBytes
+	}
+	if fi.Size() > limit {
+		if downloadOnly {
+			writeError(w, http.StatusRequestEntityTooLarge, "artifact exceeds the 100 MB download cap")
+			return
+		}
 		writeError(w, http.StatusRequestEntityTooLarge, "artifact exceeds the 10 MB preview cap")
 		return
 	}
@@ -81,6 +95,9 @@ func (s *Server) handleGetArtifact(w http.ResponseWriter, r *http.Request) {
 	defer f.Close()
 
 	w.Header().Set("Content-Type", ctype)
+	if downloadOnly {
+		w.Header().Set("Content-Disposition", mime.FormatMediaType("attachment", map[string]string{"filename": filepath.Base(served)}))
+	}
 	w.Header().Set("X-Content-Type-Options", "nosniff")
 	// Defense in depth for a URL opened directly in a tab; the panel's primary
 	// isolation is the sandboxed iframe (no allow-same-origin).

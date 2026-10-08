@@ -1,8 +1,17 @@
 import { defineConfig } from 'vite'
 import { svelte } from '@sveltejs/vite-plugin-svelte'
+import { createHash } from 'node:crypto'
+import { readFileSync } from 'node:fs'
+
+// OCTO-FORK: fingerprint the configured logo so an upgraded WebView bypasses
+// an older package's year-long cache for the fixed public asset URL.
+const brand = JSON.parse(readFileSync(new URL('./src/lib/brand.config.json', import.meta.url), 'utf8'))
+const logo = readFileSync(new URL(`./public/${brand.visual.logo.mark}`, import.meta.url))
+const logoHash = createHash('sha256').update(logo).digest('hex').slice(0, 12)
 
 export default defineConfig({
   plugins: [svelte()],
+  define: { 'import.meta.env.VITE_BRAND_LOGO_HASH': JSON.stringify(logoHash) },
   build: {
     outDir: '../internal/server/webdist',
     // Must stay false: webdist is gitignored except a tracked .gitkeep (which

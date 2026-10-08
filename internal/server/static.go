@@ -7,6 +7,7 @@ import (
 	"mime"
 	"net/http"
 	"path"
+	"regexp"
 	"strings"
 )
 
@@ -81,16 +82,19 @@ func staticFileHandler(dist fs.FS) http.Handler {
 	})
 }
 
-// setStaticCacheControl picks the cache policy for a Web UI file. Vite names
-// everything under assets/ by content hash, so those may be cached forever: a
-// rebuild changes the name, never the bytes behind an existing one. The
-// entrypoint and anything else unhashed must be revalidated on every load —
+// OCTO-FORK: public/ also contributes fixed-name files under assets/ (including
+// the brand mark); only Vite's fingerprinted filenames may be immutable.
+var fingerprintedAsset = regexp.MustCompile(`-[A-Za-z0-9_-]{8,}\.[A-Za-z0-9]+$`)
+
+// setStaticCacheControl picks the cache policy for a Web UI file. Vite's
+// fingerprinted files may be cached forever; fixed-name assets and the
+// entrypoint must be revalidated on every load —
 // left without a policy, WKWebView caches heuristically, and a stale index.html
 // pointing at hashes the upgraded binary no longer embeds is a blank window.
 // Embedded files carry no modtime, so there is no validator to offer and
 // no-cache means a (small) full fetch each time, exactly as before.
 func setStaticCacheControl(h http.Header, name string) {
-	if strings.HasPrefix(name, "assets/") {
+	if strings.HasPrefix(name, "assets/") && fingerprintedAsset.MatchString(path.Base(name)) {
 		h.Set("Cache-Control", "public, max-age=31536000, immutable")
 		return
 	}

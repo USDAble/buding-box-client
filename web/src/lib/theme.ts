@@ -1,6 +1,6 @@
 // Theme system — two orthogonal axes applied as <html> attributes:
 //   data-theme       resolved mode: "light" | "dark"
-//   data-theme-pack  palette family: "azure" (default) | one of PACKS below
+//   data-theme-pack  palette family: "precision" (default) | one of PACKS below
 //
 // The user's *choice* of mode is "light" | "dark" | "system"; "system" tracks
 // the OS preference live. The two axes are independent: every pack ships both
@@ -10,7 +10,12 @@ export type ThemeMode = 'light' | 'dark' | 'system'
 
 const MODE_KEY = 'octo.themeMode'
 const PACK_KEY = 'octo.themePack'
-const DEFAULT_PACK = 'azure'
+// OCTO-FORK: make the precision palette from the supplied design constitution
+// the default while retaining azure as the legacy root fallback.
+// The legacy azure palette remains the unqualified :root fallback so existing
+// users who explicitly chose it keep their current colors.
+const ROOT_FALLBACK_PACK = 'azure'
+const DEFAULT_PACK = 'precision'
 
 // Ids this app has shipped under a different name. A stored value listed here
 // is read as its current id, so a user keeps the pack they chose across a
@@ -30,6 +35,7 @@ export type ThemePack = {
 }
 
 export const PACKS: ThemePack[] = [
+  { id: 'precision', labelKey: 'settings.pack_precision', swatch: ['#635BFF', '#F6F9FC'] },
   { id: 'azure', labelKey: 'settings.pack_azure', swatch: ['#007AFF', '#F5F5F7'] },
   { id: 'blossom', labelKey: 'settings.pack_blossom', swatch: ['#FF6FA5', '#FFF5F8'] },
   { id: 'celestia', labelKey: 'settings.pack_celestia', swatch: ['#2BB3FF', '#F0F9FF'] },
@@ -73,8 +79,9 @@ function resolveMode(mode: ThemeMode): 'light' | 'dark' {
 function apply(mode: ThemeMode, pack: string): void {
   const root = document.documentElement
   root.setAttribute('data-theme', resolveMode(mode))
-  // The default pack lives in :root, so only set the attribute for others.
-  if (pack && pack !== DEFAULT_PACK) root.setAttribute('data-theme-pack', pack)
+  // Azure is the legacy :root fallback. All other packs, including the new
+  // default, use an explicit attribute so they can override that fallback.
+  if (pack && pack !== ROOT_FALLBACK_PACK) root.setAttribute('data-theme-pack', pack)
   else root.removeAttribute('data-theme-pack')
 
   if (systemMql && systemListener) {

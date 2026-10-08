@@ -1015,6 +1015,9 @@ export const en: Record<string, string> = {
   "settings.theme_desc": "Light, dark, or follow the system",
   "settings.pack": "Theme",
   "settings.pack_desc": "Palette, typeface and conversation backdrop. Works in either appearance.",
+  // OCTO-FORK: expose the new precision palette derived from the supplied
+  // Stripe-style design constitution.
+  "settings.pack_precision": "Precision",
   "settings.pack_azure": "Azure",
   "settings.pack_blossom": "Blossom",
   "settings.pack_celestia": "Celestia",
@@ -2600,6 +2603,9 @@ export const zh: Record<string, string> = {
   "settings.theme_desc": "浅色、深色或跟随系统",
   "settings.pack": "主题",
   "settings.pack_desc": "配色、字体和会话背景。浅色深色下都适用。",
+  // OCTO-FORK: expose the new precision palette derived from the supplied
+  // Stripe-style design constitution.
+  "settings.pack_precision": "精确",
   "settings.pack_azure": "晴空",
   "settings.pack_blossom": "少女",
   "settings.pack_celestia": "二次元",

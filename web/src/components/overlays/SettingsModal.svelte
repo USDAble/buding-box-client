@@ -29,10 +29,9 @@
 
   const fontZoomMap: Record<string, string> = { Small: '0.9', Medium: '1', Large: '1.1' }
   const modeToThemeLabel: Record<string, string> = { light: 'Light', dark: 'Dark', system: 'System' }
-  // OCTO-FORK: keep the theme-pack implementation available, but hide its
-  // settings entry while the product controls the palette — see the settings
-  // surface decision.
-  const showThemePackPicker = false
+  // OCTO-FORK: expose the theme-pack picker so users can switch between the
+  // precision default and the existing palette families from Settings.
+  const showThemePackPicker = true
   // OCTO-FORK: keep the co-author preference and API, but do not offer its toggle in product settings.
   const showCoauthorSetting = false
   // OCTO-FORK: keep the update preference and handler for compatibility, but

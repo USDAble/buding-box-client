@@ -324,7 +324,9 @@ export const en: Record<string, string> = {
   "chat.starter_research_prompt": "Research a topic for me and write it up as a short brief, with the key takeaways and the sources they came from.",
   "chat.starter_write_title": "Write or organize",
   "chat.starter_write_prompt": "Help me write a document. Ask about the audience, the length and the main points first, then start drafting.",
+  // OCTO-FORK: explain deferred project-session creation after the sidebar + is clicked.
   "sidebar.new_session_in_group": "New session in this project",
+  "sidebar.new_session_queued": "New session prepared in this project. Send a message to create it.",
   "folder.title": "Select a folder",
   "folder.title_file": "Select a file",
   "folder.this_pc": "This PC",
@@ -413,6 +415,8 @@ export const en: Record<string, string> = {
   "perm.deny": "Deny",
   "perm.allow_once": "Allow Once",
   "perm.allow_session": "Allow for Session",
+  // OCTO-FORK: stop the current turn and clear queued parallel-agent asks.
+  "perm.stop_task": "Stop task",
   "status.running": "Running",
   "status.idle": "Idle",
   "status.connected": "Connected",
@@ -1910,7 +1914,9 @@ export const zh: Record<string, string> = {
   "chat.starter_research_prompt": "帮我查一个主题的资料，整理成一份简报，写清楚关键结论和信息来源。",
   "chat.starter_write_title": "写点东西或整理",
   "chat.starter_write_prompt": "帮我写一份文档，先问清楚读者是谁、要多长、重点讲什么，再开始写。",
+  // OCTO-FORK: 说明项目会话在发送首条消息时创建，避免点击 + 后看起来无响应。
   "sidebar.new_session_in_group": "在此项目新建会话",
+  "sidebar.new_session_queued": "已准备在此项目新建会话，发送消息后创建。",
   "folder.title": "选择文件夹",
   "folder.title_file": "选择文件",
   "folder.this_pc": "此电脑",
@@ -1999,6 +2005,8 @@ export const zh: Record<string, string> = {
   "perm.deny": "拒绝",
   "perm.allow_once": "允许一次",
   "perm.allow_session": "本次会话允许",
+  // OCTO-FORK: 中断当前任务并清理并行子 Agent 排队的审批请求。
+  "perm.stop_task": "停止并清空队列",
   "status.running": "运行中",
   "status.idle": "空闲",
   "status.connected": "已连接",

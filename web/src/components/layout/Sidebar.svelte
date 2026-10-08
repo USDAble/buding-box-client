@@ -861,7 +861,7 @@
           <span class="row-action on-hover" title={$t('sidebar.project_more')} onclick={(e) => { e.stopPropagation(); const open = projectMenuFor === g.id; closeRowMenus(); if (!open) { captureRowMenuPos(e.currentTarget as HTMLElement); projectMenuFor = g.id } }}>
             <iconify-icon icon="ant-design:more-outlined" width="14"></iconify-icon>
           </span>
-          <span class="row-action on-hover" title={tr('sidebar.new_session_in_group')} onclick={(e) => { e.stopPropagation(); createSessionInGroup(g.id) }}>
+          <span class="row-action on-hover" title={tr('sidebar.new_session_in_group')} onclick={(e) => { e.stopPropagation(); createSessionInGroup(g.id); showToast(tr('sidebar.new_session_queued')) }}>
             <iconify-icon icon="ant-design:plus-outlined" width="13"></iconify-icon>
           </span>
           {#if projectMenuFor === g.id}

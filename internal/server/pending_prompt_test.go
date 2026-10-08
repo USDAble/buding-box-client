@@ -1,5 +1,7 @@
 package server
 
+// OCTO-FORK: verify interrupting one confirmation cancels queued parallel asks.
+
 import (
 	"context"
 	"encoding/json"
@@ -177,6 +179,63 @@ func TestAcquireAskSlot_CtxCancel(t *testing.T) {
 	cancel()
 	if _, err := srv.acquireAskSlot(ctx, sid); err == nil {
 		t.Fatal("cancelled ctx should not acquire a held slot")
+	}
+}
+
+func TestRequestConfirmation_InterruptCancelsQueuedAsks(t *testing.T) {
+	srv := mustServer(t, Config{Addr: "127.0.0.1:0"})
+	srv.initWS()
+	srv.confirmations = map[string]chan string{}
+	srv.pendingQuestions = map[string]wsEventRequestUserQuestion{}
+	srv.pendingConfirms = map[string]wsEventRequestConfirmation{}
+
+	const sid = "interrupt-confirmation-session"
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	srv.interruptMu.Lock()
+	srv.interrupts[sid] = cancel
+	srv.interruptMu.Unlock()
+
+	firstDone := make(chan error, 1)
+	go func() {
+		_, err := srv.requestConfirmation(ctx, sid, "first", "yes_no_always", confirmDetail{ToolName: "browser"})
+		firstDone <- err
+	}()
+
+	deadline := time.Now().Add(2 * time.Second)
+	for time.Now().Before(deadline) {
+		srv.pendingPromptMu.Lock()
+		_, ok := srv.pendingConfirms[sid]
+		srv.pendingPromptMu.Unlock()
+		if ok {
+			break
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
+
+	secondDone := make(chan error, 1)
+	go func() {
+		_, err := srv.requestConfirmation(ctx, sid, "second", "yes_no_always", confirmDetail{ToolName: "browser"})
+		secondDone <- err
+	}()
+
+	srv.interruptSession(sid)
+	for name, done := range map[string]chan error{"first": firstDone, "second": secondDone} {
+		select {
+		case err := <-done:
+			if err == nil {
+				t.Errorf("%s confirmation returned nil error after interrupt", name)
+			}
+		case <-time.After(2 * time.Second):
+			t.Fatalf("%s confirmation remained blocked after interrupt", name)
+		}
+	}
+
+	srv.pendingPromptMu.Lock()
+	_, stillPending := srv.pendingConfirms[sid]
+	srv.pendingPromptMu.Unlock()
+	if stillPending {
+		t.Fatal("confirmation remained pending after interrupt")
 	}
 }
 

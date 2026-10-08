@@ -853,6 +853,11 @@ func (s *Server) wsSessionTakenOver(sid, prev, entry string) {
 // the interrupted event so the frontend shows the cancellation to the user.
 func (s *Server) handleWSInterrupt(sessionID string) {
 	s.interruptSession(sessionID)
+	// OCTO-FORK: stop detached sub-agents and workflows too, otherwise their
+	// independent contexts can keep browser approvals queued after the parent
+	// turn has been interrupted.
+	tools.CloseSessionSubAgentManager(sessionID)
+	tools.CloseSessionWorkflowManager(sessionID)
 	s.wsHub.broadcast(sessionID, map[string]any{
 		"type":       "interrupted",
 		"session_id": sessionID,

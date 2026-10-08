@@ -19,7 +19,7 @@ func testDist() fstest.MapFS {
 	return fstest.MapFS{
 		"index.html":               {Data: []byte(`<html><script src="/assets/index-abc12345.js"></script></html>`)},
 		"assets/index-abc12345.js": {Data: []byte(strings.Repeat("console.log('octo');\n", 200))},
-		"assets/logo-mark.png":   {Data: []byte{0x89, 'P', 'N', 'G', 0, 0, 0, 0}},
+		"assets/logo-mark.png":     {Data: []byte{0x89, 'P', 'N', 'G', 0, 0, 0, 0}},
 	}
 }
 

@@ -71,7 +71,9 @@ export const MARKER_DEBT_CEILING = 0
 // ALLOWLIST_CEILING is a second ratchet: adding an entry is a deliberate act,
 // and a file that could have carried a marker must not sneak in to dodge one.
 export const ALLOWLIST_PATH = 'scripts/fork-marker-allowlist.txt'
-export const ALLOWLIST_CEILING = 7
+// OCTO-FORK: the desktop tunnel's generated go.sum needs one explicitly approved
+// exception because checksum records cannot carry native comments.
+export const ALLOWLIST_CEILING = 8
 
 // ─── pure analyzers (unit-tested) ───────────────────────────────────────────
 

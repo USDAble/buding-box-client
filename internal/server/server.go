@@ -2189,37 +2189,6 @@ func (s *Server) resolveSenderForSession(sess *agent.Session) (agent.Sender, str
 	return sender, model, false
 }
 
-// failingSender is what a turn gets when it must not be sent. It implements only
-// agent.Sender on purpose: it has no streaming capability to offer (the agent
-// falls back to the buffered call), and the single thing it can honestly do is
-// fail before anything leaves the device.
-//
-// It carries the reason rather than building it, because PR-5a brought three of
-// them (no gateway wired, a factory that refused, no sender for the model at
-// all) and they want different words while sharing this one behavior. Refusing
-// by returning an error from a sender looks unusual, and it is: 开发规范 §4.5
-// keeps upstream's (Sender, string) signature without an error, so the refusal
-// has to travel as a sender.
-//
-// The agent loop prefixes the message ("agent: loop[0]: ") and UserFacingError
-// strips that back off, so each reason reads as one complete sentence and must
-// not start with a provider prefix.
-//
-// Messages are English like every other server-side turn error on this path;
-// localising the picker/turn copy is PR-4c's job (开发规范 §3.8 — interface copy
-// lives in the frontend's i18n, and there is no code channel on turn_error yet).
-type failingSender struct{ err error }
-
-func (f failingSender) SendMessages(_ context.Context, _, _ string, _ []agent.Message, _ int) (agent.Reply, error) {
-	if f.err == nil {
-		// A failingSender with no reason would silently succeed as an empty
-		// reply, which is worse than a wrong error: the turn would look like it
-		// completed. This is unreachable today and is here so it stays that way.
-		return agent.Reply{}, fmt.Errorf("internal: refusing sender without a reason")
-	}
-	return agent.Reply{}, f.err
-}
-
 // cachedSenderForEntry returns the entry's sender from the cache, building
 // and caching it on first use.
 //
@@ -4078,6 +4047,11 @@ func (s *Server) runChannelIdleTurn(ctx context.Context, sess *channel.Session, 
 	// Spawned via bare `go` (loop.go + the async-completion paths), so it runs a
 	// full turn outside any recover — guard it here or a panic crashes the process.
 	defer s.recoverBg("channel idle turn")
+	// OCTO-FORK: drain must cover binding writes and finish after their deferred release.
+	if err := s.drain.begin(); err != nil {
+		return
+	}
+	defer s.drain.end()
 
 	// Acquire the persistent binding before locking the turn, unless the
 	// session is suppressed (/unbind mid-turn). In that case the session is
@@ -4092,13 +4066,6 @@ func (s *Server) runChannelIdleTurn(ctx context.Context, sess *channel.Session, 
 		}
 		defer s.releaseSessionBinding(storeID, agent.EntryChannel)
 	}
-
-	// Enroll in the drain gate so graceful shutdown waits for idle follow-up
-	// turns just like user-initiated channel turns and web turns.
-	if err := s.drain.begin(); err != nil {
-		return
-	}
-	defer s.drain.end()
 
 	ctx, done := sess.BeginRun(ctx)
 	defer done()

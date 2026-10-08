@@ -5,6 +5,8 @@ import { get } from 'svelte/store'
 import { locale } from '../../lib/i18n'
 import { productPhase, productState } from '../../lib/product'
 import { nativeShell, settingsModalOpen, settingsTarget, openSettingsAt } from '../../lib/stores'
+import * as branding from '../../lib/brand'
+import * as externalLinks from '../../lib/externalLinks'
 import SettingsModal from './SettingsModal.svelte'
 
 let app: ReturnType<typeof mount> | undefined
@@ -29,7 +31,7 @@ beforeEach(() => {
 afterEach(async () => {
   if (app) await unmount(app)
   app = undefined; target.remove(); settingsModalOpen.set(false); settingsTarget.set(null)
-  vi.unstubAllGlobals(); sessionStorage.clear(); productPhase.set('unknown'); nativeShell.set(false)
+  vi.restoreAllMocks(); vi.unstubAllGlobals(); sessionStorage.clear(); productPhase.set('unknown'); nativeShell.set(false)
 })
 function activePage() { return target.querySelector('.rail [aria-current="page"]')?.textContent?.trim() }
 function open() { app = mount(SettingsModal, { target }); flushSync() }
@@ -171,12 +173,32 @@ it('shows a compact feedback form with optional details and sends the visible fi
 })
 
 it('keeps the official help center slot visible but disabled until its brand URL is configured', async () => {
+  // OCTO-FORK: exercise the unconfigured state independently of the shipped URL.
+  const brandLink = branding.brandLink
+  vi.spyOn(branding, 'brandLink').mockImplementation((group, key) =>
+    group === 'external' && key === 'helpCenter' ? '' : brandLink(group, key))
   openSettingsAt('help'); open()
   await vi.waitFor(() => expect(target.querySelector('.help-portal-card')).not.toBeNull())
   expect(target.querySelector('.rail .scat[aria-current="page"]')?.textContent).toContain('帮助与反馈')
   expect(target.querySelector('.help-portal-card')?.textContent).toContain('官网帮助中心')
   expect(target.querySelector<HTMLButtonElement>('.help-portal-action')?.disabled).toBe(true)
   expect(target.querySelector('.help-portal-status')?.textContent).toContain('待配置')
+})
+
+// OCTO-FORK: configured help links must stay enabled and open their brand destination.
+it('opens the configured official help center', async () => {
+  const destination = 'https://help.example.test/'
+  const brandLink = branding.brandLink
+  vi.spyOn(branding, 'brandLink').mockImplementation((group, key) =>
+    group === 'external' && key === 'helpCenter' ? destination : brandLink(group, key))
+  const openUrl = vi.spyOn(externalLinks, 'openUrl').mockImplementation(() => {})
+  openSettingsAt('help'); open()
+  await vi.waitFor(() => expect(target.querySelector('.help-portal-card')).not.toBeNull())
+  const button = target.querySelector<HTMLButtonElement>('.help-portal-action')!
+  expect(button.disabled).toBe(false)
+  expect(target.querySelector('.help-portal-status')).toBeNull()
+  button.click()
+  expect(openUrl).toHaveBeenCalledWith(destination)
 })
 
 it('opens only one FAQ item at a time', async () => {

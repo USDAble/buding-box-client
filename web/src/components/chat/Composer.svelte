@@ -2,7 +2,7 @@
   import { get } from 'svelte/store'
   import { onDestroy, onMount, untrack, tick } from 'svelte'
   import {
-    running, activeSessionId, chatStreaming, sessions, sessionGroups,
+    running, activeSessionId, chatStreaming, chatMessages, sessions, sessionGroups, createNewSession,
     chatContextUsage, chatWorkingDir, chatPermMode, chatReasoningEffort, chatShowReasoning, showToast, chatGoal, chatModel,
     globalPermissionMode, globalReasoningEffort, nativeShell, localAccess, activeAgent, pendingModel, view, settingsModalOpen,
     pendingAgent, pendingWorkingDir, pendingGroupId, pendingReasoningEffort, pendingPermissionMode, pendingShowReasoning,
@@ -12,6 +12,7 @@
   import { ws } from '../../lib/ws'
   import * as api from '../../lib/api'
   import { t, tr } from '../../lib/i18n'
+  import { confirmDialog } from '../../lib/confirm'
   import { submitIntent } from '../../lib/composerKeys'
   import { composeSlashCommand } from '../../lib/slashCompose'
   import { parkDraft, takeDraft, patchParkedAttachments, type Attachment } from '../../lib/composerDrafts'
@@ -809,7 +810,9 @@
   // both pickers, while `agents` stays whole so an already-assigned (now
   // hidden) expert still resolves to its own name in the chip label.
   let pickableAgents = $derived(agents.filter(a => a.enabled !== false))
-  let agentLocked = $derived(!!currentSession && ((currentSession as any)?.turn_count ?? 0) > 0)
+  // OCTO-FORK: a failed or unfinished turn may have messages but no completed turn count.
+  let agentLocked = $derived(!!currentSession && (((currentSession as any)?.turn_count ?? 0) > 0 || ($chatMessages[sid]?.length ?? 0) > 0 || isStreaming))
+  let agentChanging = $state(false)
   let sessionAgent = $derived((currentSession as any)?.agent_profile ?? '')
   // Which id is "current" right now: the session's own profile once one
   // exists (even pre-lock), else the pending pick for the session about to be
@@ -829,26 +832,50 @@
   // hasn't loaded yet, which must not read as "no expert" (see filteredItems).
   let currentExpertToolSkills = $derived.by((): string[] | null => {
     if (!effectiveAgentId || effectiveAgentId === 'default') return null
-    return agents.find(a => a.id === effectiveAgentId)?.tool_skills ?? []
+    const selected = agents.find(a => a.id === effectiveAgentId)
+    // OCTO-FORK: platform experts use the client's built-in profile and local skills.
+    if (selected?.source === 'platform' || effectiveAgentId.startsWith('platform:')) return null
+    return selected?.tool_skills ?? []
   })
+  async function leaveExpertSession() {
+    const origin = sid
+    if (!(await confirmDialog(tr('chat.leave_expert_confirm'), { confirmLabel: tr('chat.leave_expert') }))) return
+    if (sid !== origin || isStreaming) return
+    const model = activeModelId
+    const protection = personalInfoProtection
+    const confidential = confidentialSession
+    // Keep the original transcript and its draft attached to the original expert.
+    createNewSession('default')
+    activeAgent.set('default')
+    pendingModel.set(model)
+    pendingPersonalInfoProtection.set(protection)
+    pendingConfidentialSession.set(confidential)
+  }
   async function pickAgent(id: string) {
+    if (agentChanging || isStreaming) return
+    agentChanging = true
     agentMenu = false
-    if (currentSession) {
-      if (id !== sessionAgent) {
-        try {
-          await api.updateSessionAgentProfile(sid, id)
-          sessions.update(list => list.map((s: any) => s.id === sid ? { ...s, agent_profile: id } : s))
-        } catch (e: any) {
-          showToast(e.message ?? tr('chat.agent_change_failed'), 'error')
+    try {
+      if (currentSession) {
+        if (id === sessionAgent) return
+        if (agentLocked) {
+          if (id === 'default') await leaveExpertSession()
+          return
         }
+        const origin = sid
+        try {
+          await api.updateSessionAgentProfile(origin, id)
+          sessions.update(list => list.map(s => s.id === origin ? { ...s, agent_profile: id } : s))
+        } catch (e: any) {
+          if (e.code === 'agent_profile_locked' && id === 'default' && sid === origin) await leaveExpertSession()
+          else showToast(tr('chat.agent_change_failed'), 'error')
+        }
+      } else {
+        activeAgent.set(id)
+        pendingAgent.set(id)
       }
-    } else {
-      // Overwrite the sidebar caret's pick too, or ensureActiveSession would
-      // prefer the parked one over what the composer now displays.
-      activeAgent.set(id)
-      pendingAgent.set(id)
-    }
-    queueMicrotask(() => textareaEl?.focus())
+      queueMicrotask(() => textareaEl?.focus())
+    } finally { agentChanging = false }
   }
   let dirSaving = $state(false)
   let pickerOpen = $state(false)
@@ -1339,11 +1366,9 @@
       }
     }
 
-    // Backspace on an empty box un-assigns the picked agent (back to Default)
-    // instead of doing nothing — only while it's still changeable (agentLocked
-    // false) and there's actually something assigned to clear. Lets the user
-    // immediately reselect via "@" without hunting for the dropdown.
-    if (e.key === 'Backspace' && text === '' && !slashMenu && !agentLocked && agentLabel) {
+    // OCTO-FORK: cancel an unsent expert or offer a new ordinary conversation.
+    // Ignore held-key repeats so a single gesture cannot queue requests/dialogs.
+    if (e.key === 'Backspace' && text === '' && !slashMenu && !e.repeat && agentLabel) {
       e.preventDefault()
       pickAgent('default')
       return
@@ -1515,6 +1540,9 @@
           {/if}
         </div>
         {/if}
+        <button class="agent-remove" title={$t('chat.leave_expert')} aria-label={$t('chat.leave_expert')} disabled={agentChanging || isStreaming} onclick={() => pickAgent('default')}>
+          <iconify-icon icon="ant-design:close-outlined" width="12"></iconify-icon>
+        </button>
         {/if}
         <textarea
           bind:this={textareaEl}
@@ -1922,6 +1950,8 @@ textarea {
   color: var(--blue-6); font-size: 12px; font-weight: 600;
   font-family: inherit; flex: 0 0 auto;
 }
+.agent-remove { border: 0; background: transparent; color: var(--text-secondary); cursor: pointer; padding: 4px; display: grid; place-items: center; }
+.agent-remove:disabled { opacity: .5; cursor: default; }
 .agent-chip.pickable { cursor: pointer; }
 .agent-chip.pickable:hover { background: var(--row-hover); }
 .agent-at {

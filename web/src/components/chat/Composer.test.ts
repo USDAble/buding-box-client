@@ -4,7 +4,7 @@ import { get } from 'svelte/store'
 import { locale } from '../../lib/i18n'
 import { allowEnvironmentModelSource, productState } from '../../lib/product'
 import {
-  activeSessionId,
+  activeSessionId, activeAgent, pendingAgent, chatMessages,
   pendingConfidentialSession,
   pendingModel,
   pendingPersonalInfoProtection,
@@ -12,9 +12,10 @@ import {
   toasts,
 } from '../../lib/stores'
 import { checkSensitive } from '../../lib/sensitive'
-import { getEndpoints, getProductModels, transformPersonalInfo, setModelReasoning } from '../../lib/api'
+import { getEndpoints, getProductModels, transformPersonalInfo, setModelReasoning, updateSessionAgentProfile, listAgents, listSkills } from '../../lib/api'
 import { parkDraft, takeDraft } from '../../lib/composerDrafts'
 import Composer from './Composer.svelte'
+import { confirmRequest } from '../../lib/confirm'
 
 // V-58 / PR-5d3: the composer must not turn a zero balance into a UI conclusion.
 //
@@ -42,6 +43,7 @@ vi.mock('../../lib/api', () => ({
   getEndpoints: vi.fn(async () => ({ endpoints: [] })),
   setSessionProtection: vi.fn(),
   updateSessionModel: vi.fn(),
+  updateSessionAgentProfile: vi.fn(async (_sid, id) => ({agent_profile:id})),
   setModelReasoning: vi.fn(async (modelId: string,effort: string) => ({modelId,effort})),
   transformPersonalInfo: vi.fn(async (text: string) => ({ hit: false, masked: text, matches: [], ruleVersion: 'builtin-1' })),
 }))
@@ -111,6 +113,9 @@ beforeEach(() => {
   locale.set('zh')
   activeSessionId.set('s1')
   sessions.set([])
+  chatMessages.set({}); activeAgent.set('default'); pendingAgent.set(''); confirmRequest.set(null)
+  vi.mocked(updateSessionAgentProfile).mockClear()
+  vi.mocked(listAgents).mockResolvedValue([]); vi.mocked(listSkills).mockResolvedValue([])
   pendingModel.set('')
   pendingPersonalInfoProtection.set(true)
   pendingConfidentialSession.set(false)
@@ -160,6 +165,9 @@ afterEach(() => {
   productState.set(null)
   activeSessionId.set(null)
   sessions.set([])
+  chatMessages.set({}); activeAgent.set('default'); pendingAgent.set(''); confirmRequest.set(null)
+  vi.mocked(updateSessionAgentProfile).mockClear()
+  vi.mocked(listAgents).mockResolvedValue([]); vi.mocked(listSkills).mockResolvedValue([])
   pendingModel.set('')
   pendingPersonalInfoProtection.set(true)
   pendingConfidentialSession.set(false)
@@ -347,5 +355,46 @@ describe('safety and privacy controls', () => {
     expect(get(pendingConfidentialSession)).toBe(true)
     expect(get(pendingModel)).toBe('local::private-chat')
     expect(get(toasts).at(-1)?.msg).toContain('已切换到私密模型：private-chat')
+  })
+})
+
+// OCTO-FORK: exiting a pinned expert must not pretend to change its past instructions.
+describe('exit expert', () => {
+  const expertID = 'platform:translator:1'
+  function expertSession(turns = 0) {
+    sessions.set([{id:'s1', agent_profile:expertID, turn_count:turns, model_id:'gateway::chosen'} as never])
+    vi.mocked(listAgents).mockResolvedValue([{id:expertID, name:'翻译专家', source:'platform', enabled:true} as never])
+  }
+  it('removes an expert before any message without opening another conversation', async () => {
+    expertSession(); render(); await settle()
+    ;(target.querySelector('.agent-remove') as HTMLButtonElement).click(); await settle()
+    expect(updateSessionAgentProfile).toHaveBeenCalledWith('s1', 'default')
+    expect(get(activeSessionId)).toBe('s1')
+    expect(get(sessions)[0].agent_profile).toBe('default')
+    expect(get(confirmRequest)).toBeNull()
+  })
+  it('preserves a started conversation and opens ordinary chat only after confirmation', async () => {
+    expertSession(); chatMessages.set({s1:[{role:'user',content:'hello'}]})
+    render(); await settle()
+    const box=target.querySelector('textarea')!
+    box.dispatchEvent(new KeyboardEvent('keydown',{key:'Backspace',bubbles:true})); await settle()
+    const first=get(confirmRequest); expect(first).not.toBeNull()
+    box.dispatchEvent(new KeyboardEvent('keydown',{key:'Backspace',repeat:true,bubbles:true})); await settle()
+    expect(get(confirmRequest)).toBe(first)
+    expect(updateSessionAgentProfile).not.toHaveBeenCalled()
+    first!.resolve(true); await settle()
+    expect(get(activeSessionId)).toBeNull()
+    expect(get(pendingAgent)).toBe('default')
+    expect(get(pendingModel)).toBe('gateway::chosen')
+    expect(get(sessions)[0].agent_profile).toBe(expertID)
+    expect(get(toasts)).toHaveLength(0)
+  })
+  it('offers client built-in skills while a platform expert is selected', async () => {
+    expertSession()
+    vi.mocked(listSkills).mockResolvedValue([{name:'local-writing',desc:'Write locally',source:'default',enabled:true} as never])
+    render(); await settle()
+    const box=target.querySelector('textarea')!
+    box.value='/local-writing';box.dispatchEvent(new Event('input',{bubbles:true}));await settle()
+    expect(target.querySelector('.skill-menu')?.textContent).toContain('local-writing')
   })
 })

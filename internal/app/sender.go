@@ -21,6 +21,7 @@ import (
 	"github.com/open-octo/octo-agent/internal/provider/anthropic"
 	"github.com/open-octo/octo-agent/internal/provider/openai"
 	"github.com/open-octo/octo-agent/internal/provider/ratelimit"
+	"github.com/open-octo/octo-agent/internal/provider/retry"
 )
 
 // Provider name constants (legacy).  New code should use vendor IDs directly.
@@ -131,10 +132,11 @@ func NewSender(opts SenderOptions) (agent.Sender, error) {
 	if err != nil {
 		return nil, err
 	}
-	// OCTO-FORK: preserve explicit default/off and maximum effort to our gateway.
+	// OCTO-FORK: the platform owns reasoning translation and bounded upstream retries.
 	if opts.GatewayReasoningPassthrough {
 		if client, ok := p.(*openai.Client); ok {
 			client.Dialect = openai.DialectPlatformGateway
+			client.Retry = retry.Policy{MaxAttempts: 1}
 		}
 	}
 	// Anthropic-protocol models on the legacy budget path (older Claude,

@@ -57,7 +57,8 @@ LDFLAGS := -X github.com/open-octo/octo-agent/internal/version.Version=$(VERSION
 DESKTOP_LDFLAGS := -X github.com/open-octo/octo-agent/internal/version.Version=$(VERSION) \
                    -X github.com/open-octo/octo-agent/internal/version.Commit=$(COMMIT)
 
-GOFILES := $(shell find . -name '*.go' -not -path './vendor/*' -not -path '*/_vendor/*')
+# OCTO-FORK: enumerate source through Git, not Windows' unrelated find.exe.
+GOFILES = git ls-files -z --cached --others --exclude-standard -- '*.go' ':!:vendor/*' ':!:**/_vendor/*'
 
 RG_EMBED_DIR := internal/tools/rgembed/binaries
 RG_EMBED_BIN := $(RG_EMBED_DIR)/rg
@@ -253,10 +254,10 @@ vet:
 	go vet ./...
 
 fmt:
-	gofmt -w $(GOFILES)
+	$(GOFILES) | xargs -0 -r -s 8000 gofmt -w
 
 fmt-check:
-	@unformatted=$$(gofmt -l $(GOFILES)); \
+	@unformatted=$$($(GOFILES) | xargs -0 -r -s 8000 gofmt -l) || exit $$?; \
 	if [ -n "$$unformatted" ]; then \
 		echo "gofmt found unformatted files:"; \
 		echo "$$unformatted"; \

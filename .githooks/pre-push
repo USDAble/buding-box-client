@@ -11,7 +11,8 @@ fi
 
 echo "Running full gate..."
 . "$(git rev-parse --show-toplevel)/.githooks/make-env.sh"
-if ! make gate; then
+# The race detector requires CGO; keep this setting local to the gate.
+if ! CGO_ENABLED=1 make gate; then
     echo "Error: Full gate failed"
     exit 1
 fi

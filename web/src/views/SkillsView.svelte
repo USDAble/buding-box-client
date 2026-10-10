@@ -10,11 +10,30 @@
   import Switch from '../components/ui/Switch.svelte'
 
   let loading = $state(true)
-  let showSystem = $state(true)
+  // OCTO-FORK: remember the visibility preference across visits while defaulting to on.
+  const showSystemKey = 'octo.skills.showSystem'
+  let showSystem = $state(readShowSystem())
   let fileInput: HTMLInputElement
 
+  function readShowSystem(): boolean {
+    try {
+      return localStorage.getItem(showSystemKey) !== 'false'
+    } catch (err: any) {
+      showToast(err.message, 'error')
+      return true
+    }
+  }
+
+  function handleShowSystemChange(checked: boolean) {
+    try {
+      localStorage.setItem(showSystemKey, String(checked))
+    } catch (err: any) {
+      showToast(err.message, 'error')
+    }
+  }
+
   let filtered = $derived(
-    // Built-in and user skills are visible initially; this filter only changes visibility.
+    // This preference only changes visibility, not whether a skill is enabled.
     $skills.filter((sk) => showSystem || (sk.source !== 'default' && sk.source !== 'expert'))
   )
 
@@ -201,7 +220,8 @@
     <div class="toolbar-row">
       <div></div>
       <div class="system-toggle">
-        <Switch bind:checked={showSystem} />
+        <!-- OCTO-FORK: persist the user's filter choice instead of resetting it on each visit. -->
+        <Switch bind:checked={showSystem} onchange={handleShowSystemChange} />
         <span>{$t('skills.show_system')}</span>
       </div>
     </div>

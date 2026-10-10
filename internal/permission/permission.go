@@ -321,6 +321,10 @@ func (e *Engine) SetMode(mode Mode) {
 //  4. Mode adjustment: ModeAutoApprove turns Ask into Allow; ModeStrict
 //     turns Ask into Deny.
 func (e *Engine) Check(toolName string, input map[string]any) Decision {
+	// OCTO-FORK: malformed fetch URLs must not bypass host policy via modes or remembered approval.
+	if invalidWebFetchURL(toolName, input) {
+		return Deny
+	}
 	sig := signature(toolName, e.cwd, input)
 
 	deny, ask, allow := e.classify(toolName, input)
@@ -393,6 +397,10 @@ func (e *Engine) Remember(toolName string, input map[string]any, decision Decisi
 // was denied. Useful for surfacing to the LLM so it knows the failure
 // was a policy denial, not a tool malfunction.
 func (e *Engine) DenialReason(toolName string, input map[string]any) string {
+	// OCTO-FORK: report invalid input rather than an interactive refusal for rejected fetch URLs.
+	if invalidWebFetchURL(toolName, input) {
+		return "permission_denied: web_fetch — URL has no parseable hostname. Correct the URL before retrying."
+	}
 	deny, ask, _ := e.classify(toolName, input)
 	switch {
 	case deny != nil:

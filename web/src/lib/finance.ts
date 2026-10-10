@@ -16,7 +16,8 @@ async function request<T>(path:string,method='GET',body?:unknown,signal?:AbortSi
  if(signal?.aborted)throw new FinanceError('cancelled')
  noteSessionLost(res.status)
  const data=await res.json().catch(()=>null)
- if(!res.ok)throw new FinanceError(typeof data?.code==='string'?data.code:'internal_error',res.status,typeof data?.message==='string'?data.message:null)
+ // OCTO-FORK: local window rejection is distinct from a wallet/platform failure.
+ if(!res.ok)throw new FinanceError(res.status===403&&data?.error==='product_gate'?'product_gate':typeof data?.code==='string'?data.code:'internal_error',res.status,typeof data?.message==='string'?data.message:null)
  if(data===undefined)throw new FinanceError('invalid_response')
  return data as T
 }

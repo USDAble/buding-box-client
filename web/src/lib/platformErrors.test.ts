@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { en, zh, platformErrorKey, platformErrorText, setLocale } from './i18n'
 import { readErrorMessage, request, RequestError } from './api'
+import { adoptWindowToken, WINDOW_TOKEN_HEADER } from './product'
 
 // OCTO-FORK: the client translates platform machine codes without displaying
 // a server-authored Chinese message when its UI language is English.
@@ -12,7 +13,7 @@ afterEach(() => {
 describe('platform response code translations', () => {
   it('has matching bilingual coverage for the published client error codes', () => {
     const keys = Object.keys(en).filter(key => key.startsWith('platform.error.'))
-    expect(keys).toHaveLength(52) // 51 contract codes and one generic fallback.
+    expect(keys).toHaveLength(53) // 51 contract codes, the local window gate, and one generic fallback.
     expect(Object.keys(zh).filter(key => key.startsWith('platform.error.')).sort()).toEqual(keys.sort())
     expect(keys.filter(key => /[\u3400-\u9fff]/u.test(en[key]))).toEqual([])
   })
@@ -48,5 +49,20 @@ describe('platform response code translations', () => {
     expect(error.serverMessage).toBe(payload.message)
     expect(await readErrorMessage(new Response(JSON.stringify(payload), { status: 400 }), 'fallback'))
       .toBe(en['platform.error.generic'])
+  })
+
+  // OCTO-FORK: model/skill/settings APIs must localize the same window-gate envelope.
+  it('carries the new process identity and localizes gate failures in both response paths', async () => {
+    sessionStorage.setItem('octo_window_token', 'old-process')
+    window.history.replaceState({}, '', '/?window_token=new-process'); adoptWindowToken()
+    const payload = { error: 'product_gate' }
+    const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify(payload), { status: 403 }))
+    vi.stubGlobal('fetch', fetchMock)
+    const error = await request<never>('/api/product/models').catch(cause => cause as RequestError)
+    expect(error.code).toBe('product_gate')
+    expect(error.message).toBe(en['platform.error.product_gate'])
+    expect(new Headers(fetchMock.mock.calls[0][1].headers).get(WINDOW_TOKEN_HEADER)).toBe('new-process')
+    expect(await readErrorMessage(new Response(JSON.stringify(payload), { status: 403 }), 'fallback')).toBe(en['platform.error.product_gate'])
+    sessionStorage.clear(); window.history.replaceState({}, '', '/')
   })
 })

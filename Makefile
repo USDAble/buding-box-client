@@ -407,6 +407,8 @@ docs-ref-check: node-check
 quick-check: node-check fmt-check docs-ref-check norms-check agents-check \
 	brand-check datapath-check marker-check sensitive-norm-check reuse-check \
 	server-diff-check release-profile-check
+	# OCTO-FORK: keep GUI hook tool discovery and failure propagation covered.
+	node --test scripts/hooks-env.test.mjs
 	@echo "quick-check passed: format + documentation + fork guards."
 
 # Hooks live in the repository so their policy is reviewable. Git does not

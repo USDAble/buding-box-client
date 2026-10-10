@@ -88,6 +88,13 @@ type nativeBridge struct {
 	// window creation would deadlock against it.
 	creating atomic.Bool
 
+	// OCTO-FORK: keep first navigation hidden and overlap WebView/backend startup.
+	backendReady  chan struct{}
+	windowReady   atomic.Bool
+	startupTarget atomic.Pointer[string]
+	// OCTO-FORK: native feedback covers the interval before a WebView can draw.
+	startupClose atomic.Pointer[func()]
+
 	// Test seams: testProbeDelay shortens probeAfterShow's sleep, reviveFn
 	// substitutes the window swap. Both zero/nil in production.
 	testProbeDelay time.Duration
@@ -535,13 +542,23 @@ func (b *nativeBridge) openNewSession() { b.showWindowAt("new") }
 // straight into the view and an existing one navigates via a hashchange — no
 // full reload.
 func (b *nativeBridge) showWindowAt(hash string) {
+	// OCTO-FORK: early startup navigation must carry the same identity as the hub.
+	windowToken()
 	// The marker rides on every navigation the shell performs (fresh window and
 	// SetURL alike) so nativeShell stays true across reloads and route changes.
 	target := shellURL(b.url, hash)
+	// OCTO-FORK: retain tray/deep-link intent while the hub is being assembled.
+	starting := !b.backendIsReady()
 	// Snapshot the pointer once: the frame probe's goroutine can clear it
 	// concurrently, and a lock-free re-read mid-function could see that nil and
 	// panic. Everything below works off win, then publishes it back.
 	win := b.currentWindow()
+	// OCTO-FORK: retain only pending routes, not routes already applied to a live page.
+	if hash != "" && (starting || win == nil || !b.windowReady.Load() || b.startupTarget.Load() != nil) {
+		b.startupTarget.Store(&target)
+	} else if starting {
+		b.startupTarget.CompareAndSwap(nil, &target)
+	}
 	created := false
 	if win == nil {
 		if b.app == nil || b.url == "" {
@@ -572,15 +589,26 @@ func (b *nativeBridge) showWindowAt(hash string) {
 		if maximised {
 			startState = application.WindowStateMaximised
 		}
-		w := b.app.Window.NewWithOptions(application.WebviewWindowOptions{
+		// OCTO-FORK: register navigation hooks before starting the native WebView.
+		initialURL := target
+		if starting {
+			initialURL = "/startup"
+		} else {
+			// OCTO-FORK: creation must not overwrite a concurrent tray route.
+			b.startupTarget.CompareAndSwap(nil, &target)
+		}
+		b.windowReady.Store(false)
+		w := application.NewWindow(application.WebviewWindowOptions{
 			// OCTO-FORK: native window chrome follows the configured product name.
-			Title:      brand.Load().Name(brand.DefaultLocale),
-			Width:      width,
-			Height:     height,
-			MinWidth:   minWindowWidth,
-			MinHeight:  minWindowHeight,
-			StartState: startState,
-			URL:        target,
+			Title:            brand.Load().Name(brand.DefaultLocale),
+			Width:            width,
+			Height:           height,
+			MinWidth:         minWindowWidth,
+			MinHeight:        minWindowHeight,
+			StartState:       startState,
+			URL:              initialURL,
+			Hidden:           true,
+			BackgroundColour: application.NewRGB(246, 249, 252),
 			// Mac keeps its native title bar (hidden, inset traffic lights)
 			// instead of Frameless, so the real NSWindow buttons — and their
 			// native hover/zoom/tiling-menu behaviour — render for free.
@@ -597,6 +625,7 @@ func (b *nativeBridge) showWindowAt(hash string) {
 				TitleBar: application.MacTitleBarHiddenInset,
 			},
 		})
+		b.prepareStartupWindow(w, starting, initialURL)
 		// Closing while the hub keeps running in the tray hides the window
 		// instead of destroying it, so the next show is instant: destroying
 		// meant every reopen paid for a new WebContent process, a cold parse of
@@ -680,6 +709,10 @@ func (b *nativeBridge) showWindowAt(hash string) {
 		b.windowMu.Lock()
 		b.window = w
 		b.windowMu.Unlock()
+		// OCTO-FORK: Add does not run windows; hooks and publication precede Run.
+		b.app.Window.Add(w)
+		b.hidden.Store(false)
+		w.Run()
 	} else {
 		// Re-validate the snapshot before touching the window: a liveness
 		// probe may have detached and closed it meanwhile (its revive path
@@ -693,7 +726,7 @@ func (b *nativeBridge) showWindowAt(hash string) {
 		if b.currentWindow() != win {
 			return
 		}
-		if hash != "" {
+		if hash != "" && !starting && b.windowReady.Load() {
 			// Already open — navigate to the route. ExecJS can't be used here:
 			// the page is served by octo's own server, not Wails' asset server,
 			// so the Wails runtime never loads and ExecJS stays queued forever.
@@ -702,7 +735,14 @@ func (b *nativeBridge) showWindowAt(hash string) {
 		}
 	}
 	// Cleared before Show so the probe below judges a window the user asked for.
-	b.hidden.Store(false)
+	// OCTO-FORK: a close during initial navigation must keep the new window hidden.
+	if !created {
+		b.hidden.Store(false)
+	}
+	// OCTO-FORK: native navigation completion shows the first loading DOM.
+	if !b.windowReady.Load() {
+		return
+	}
 	win.Show()
 	// Only un-minimise here. Wails' Restore() also un-maximises (and exits
 	// fullscreen), so calling it unconditionally on every show/reopen — e.g.
@@ -717,7 +757,8 @@ func (b *nativeBridge) showWindowAt(hash string) {
 	// of life AFTER it was asked to come up. A freshly created window is
 	// exempt — its first load can outlast the probe window, and if it never
 	// comes up the next show judges it.
-	if !created {
+	// OCTO-FORK: backend assembly owes no frontend heartbeat yet.
+	if !created && !starting {
 		b.probeAfterShow(win)
 	}
 }
@@ -894,7 +935,10 @@ func (b *nativeBridge) probeDelay() time.Duration {
 // pipeline alive; the hidden flag says frames aren't expected.
 func (b *nativeBridge) Heartbeat(frameAgeMS int64, hidden bool) {
 	now := time.Now()
-	b.lastBeat.Store(now.UnixNano())
+	// OCTO-FORK: the existing first heartbeat measures when frontend mounting reaches the shell.
+	if b.lastBeat.Swap(now.UnixNano()) == 0 {
+		logDesktopStartup("frontend_alive")
+	}
 	if hidden {
 		// Not visible, so no frames are owed: record that explicitly, or the
 		// probe would read the missing frame as a black window.
@@ -944,6 +988,8 @@ func (b *nativeBridge) confirm(title, message, okLabel, cancelLabel string) bool
 // so a dialog that looked dismissable would be describing something that never
 // happens.
 func (b *nativeBridge) showError(title, message string) {
+	// OCTO-FORK: failed startup hands feedback over to the native error dialog.
+	b.stopNativeStartup()
 	dlg := b.app.Dialog.Error().SetTitle(title).SetMessage(message)
 	dlg.AddButton(L().quitOK).SetAsDefault()
 	dlg.Show()

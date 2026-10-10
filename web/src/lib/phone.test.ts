@@ -24,6 +24,13 @@ describe("normalizePhoneParts", () => {
     expect(normalizePhoneParts('+852', '9123 4567')).toEqual({ ok: true, value: '+85291234567' })
     expect(normalizePhoneParts('+44', '2079460958')).toEqual({ ok: true, value: '+442079460958' })
   })
+  it('accepts full-width input and complete numbers matching the selected calling code', () => {
+    for (const raw of ['１３８ ００００ １２３４', '+86 138-0000-1234', '＋８６ １３８００００１２３４', '86 13800001234']) {
+      expect(normalizePhoneParts('+86', raw)).toEqual({ ok: true, value: '+8613800001234' })
+    }
+    expect(normalizePhoneParts('+1', '+1 (415) 555-0123')).toEqual({ ok: true, value: '+14155550123' })
+    expect(normalizePhoneParts('+852', '＋８５２ ９１２３ ４５６７')).toEqual({ ok: true, value: '+85291234567' })
+  })
   it("rejects a mainland number under an international prefix or a malformed country code", () => {
     expect(normalizePhoneParts('+86', '12345678').ok).toBe(false)
     expect(normalizePhoneParts('+852', '+861380001234').ok).toBe(false)

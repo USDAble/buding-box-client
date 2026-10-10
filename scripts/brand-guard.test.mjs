@@ -1,5 +1,8 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
+import { mkdtemp, mkdir, writeFile, rm } from 'node:fs/promises'
+import { tmpdir } from 'node:os'
+import path from 'node:path'
 
 import {
   ALLOWLIST_REL,
@@ -117,6 +120,21 @@ test('the scanned trees exclude tests, prose, and generated copies', async () =>
   assert.ok(files.includes('web/index.html'))
   assert.ok(files.includes('mobile/capacitor.config.ts'))
   assert.ok(files.includes('cmd/octo-desktop/build/linux/AppRun'))
+})
+
+// OCTO-FORK: Capacitor output embeds generated branding; its inputs remain guarded.
+test('excludes generated mobile projects and bundles while retaining their inputs and unrelated trees', async t => {
+  const fixture = await mkdtemp(path.join(tmpdir(), 'brand-mobile-output-'))
+  t.after(() => rm(fixture, { recursive: true, force: true }))
+  for (const dir of ['mobile/www', 'mobile/ios', 'mobile/android', 'mobile/src', 'mobile/native', 'mobile/public/www']) {
+    await mkdir(path.join(fixture, dir), { recursive: true })
+    await writeFile(path.join(fixture, dir, 'copy.js'), 'const name = "Pudding Box"')
+  }
+  assert.deepEqual((await collectFiles(fixture)).sort(), [
+    path.join('mobile', 'native', 'copy.js'),
+    path.join('mobile', 'public', 'www', 'copy.js'),
+    path.join('mobile', 'src', 'copy.js'),
+  ])
 })
 
 test('a copy-table line naming the upstream product is a hit, a comment is not', () => {

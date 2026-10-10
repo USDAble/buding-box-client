@@ -45,12 +45,10 @@ import (
 // not disguised. The one cause worth naming is a schemaVersion newer than this
 // build understands, which E6.2 rule 4 says to refuse rather than migrate.
 //
-// The window token is generated here, at the top, rather than on first read.
-// That ordering is required, not incidental: windowTokenFragment (which
-// shellURL consults when it builds the window URL) deliberately reports only an
-// already-generated token, so a token born later than the first window show
-// would leave that window unable to identify itself. main.go builds the server
-// before it shows any window, so generating here is early enough.
+// The early window initializes the token before building its navigation URL;
+// assembly reuses it here. windowTokenFragment only reads an existing token,
+// so waiting until server assembly would strand the already-retained URL
+// without the identity that the product routes require.
 // It returns the three seams internal/server needs, all derived from one
 // assembly: the local product API's mount hook, the built-in gateway's sender
 // factory (PR-5a), and the turn guard's "does the catalog still offer this
@@ -278,8 +276,8 @@ var (
 
 // windowToken returns this launch's token, generating it on first call.
 //
-// It must be called before the first window is shown (main.go's server.Config
-// does), because windowTokenFragment reads the value without generating it —
+// The bridge calls it before building any window navigation URL; server.Config
+// reuses that value, because windowTokenFragment reads without generating it —
 // see the note there for why that asymmetry is required.
 func windowToken() string {
 	windowTokenOnce.Do(func() {
@@ -304,8 +302,8 @@ func windowToken() string {
 //   - The empty case is also a real runtime case: `octo serve` has no window, so
 //     its URL must stay exactly upstream's.
 //
-// Generation therefore happens once, early, in main (via server.Config), and
-// this function only reports the result.
+// Generation happens once before native navigation; server assembly reuses it.
+// This function only reports the result.
 func windowTokenFragment() string {
 	if windowTokenVal == "" {
 		return ""

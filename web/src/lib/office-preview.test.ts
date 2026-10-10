@@ -1,9 +1,26 @@
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import { strToU8, zipSync } from 'fflate'
 import * as XLSX from 'xlsx'
 import { officeKindForPath, renderOfficePreview } from './office-preview'
 
+// OCTO-FORK: Vitest externalizes Mammoth's Node entry; use its real browser parser for ArrayBuffers.
+vi.mock('mammoth', async () => {
+  const browserBuild = 'mammoth/mammoth.browser.js'
+  return { default: (await import(browserBuild)).default }
+})
+
 describe('office previews', () => {
+  // OCTO-FORK: cover the deferred Word parser with a real document archive.
+  it('renders Word text after loading the parser on demand', async () => {
+    const zipped = zipSync({
+      '[Content_Types].xml': strToU8('<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/></Types>'),
+      '_rels/.rels': strToU8('<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="word/document.xml"/></Relationships>'),
+      'word/document.xml': strToU8('<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:body><w:p><w:r><w:t>Startup preview</w:t></w:r></w:p></w:body></w:document>'),
+    })
+    const preview = await renderOfficePreview('report.docx', zipped.buffer, false)
+    expect(preview).toContain('Startup preview')
+    expect(preview).toContain('data-office-kind="word"')
+  })
   it('maps only modern Office formats to browser previews', () => {
     expect(officeKindForPath('report.docx')).toBe('word')
     expect(officeKindForPath('table.xlsx')).toBe('excel')

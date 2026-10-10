@@ -2,6 +2,10 @@ import { writable, derived, get } from "svelte/store";
 import { brandIdentifier, brandName, brandShortName, IDENTIFIER } from "./brand";
 
 export const en: Record<string, string> = {
+  // OCTO-FORK: the pre-app startup screen uses the same localized copy as the UI.
+  "startup.failed": "The app could not start. Please retry.",
+  "startup.slow": "Startup is taking longer than expected.",
+  "startup.retry": "Retry",
   // OCTO-FORK: client platform error codes are translated locally; the server's Chinese message is diagnostic data.
   "platform.error.generic": "The request could not be completed. Please try again.",
   "platform.error.CLIENT_TOKEN_REQUIRED": "Please sign in again to continue.",
@@ -14,6 +18,8 @@ export const en: Record<string, string> = {
   "platform.error.INVALID_CLIENT_CREDENTIALS": "Client credentials are invalid.",
   "platform.error.invalid_request": "Please check your request and try again.",
   "platform.error.invalid_phone": "Enter a valid phone number.",
+  // OCTO-FORK: distinguish a stale app window from invalid login input.
+  "platform.error.product_gate": "The app window could not be verified. Quit and reopen the app.",
   "platform.error.code_not_sent": "Request a verification code first.",
   "platform.error.invalid_code": "The verification code is incorrect or no longer valid.",
   "platform.error.code_expired": "The verification code has expired. Request a new one.",
@@ -1371,7 +1377,8 @@ export const en: Record<string, string> = {
   "product.submit_login": "Log in",
   "product.switch_to_activate": "Have an activation code? Activate",
   "product.submitting": "Logging in…",
-  "product.err_phone": "Enter a valid international phone number",
+  // OCTO-FORK: the selected calling code already supplies the international prefix.
+  "product.err_phone": "Enter a valid phone number",
   "product.err_code": "Enter the 6-digit code",
   "product.err_nickname": "Nickname format is invalid",
   "product.err_nickname_sensitive": "Nickname contains sensitive content",
@@ -1615,6 +1622,10 @@ export const en: Record<string, string> = {
 };
 
 export const zh: Record<string, string> = {
+  // OCTO-FORK: keep startup failures actionable before the main script loads.
+  "startup.failed": "应用启动失败，请重试。",
+  "startup.slow": "启动时间比预期更长。",
+  "startup.retry": "重试",
   // OCTO-FORK: 与 en 的服务端 code 集合一致；页面只依赖 code，不展示服务端原始中文 message。
   "platform.error.generic": "请求未完成，请稍后重试。",
   "platform.error.CLIENT_TOKEN_REQUIRED": "请重新登录后继续。",
@@ -1627,6 +1638,8 @@ export const zh: Record<string, string> = {
   "platform.error.INVALID_CLIENT_CREDENTIALS": "客户端凭证无效。",
   "platform.error.invalid_request": "请求参数不正确，请检查后重试。",
   "platform.error.invalid_phone": "手机号格式不正确。",
+  // OCTO-FORK: stale app-window errors must not ask the user to change their number.
+  "platform.error.product_gate": "应用窗口验证失败，请退出并重新打开应用。",
   "platform.error.code_not_sent": "请先获取短信验证码。",
   "platform.error.invalid_code": "短信验证码错误或已失效，请重新获取。",
   "platform.error.code_expired": "短信验证码已过期，请重新获取。",
@@ -2976,7 +2989,8 @@ export const zh: Record<string, string> = {
   "product.submit_login": "登录",
   "product.switch_to_activate": "有激活码？去激活",
   "product.submitting": "登录中…",
-  "product.err_phone": "请输入正确的国际手机号",
+  // OCTO-FORK: the country selector already supplies the calling code.
+  "product.err_phone": "请输入正确的手机号",
   "product.err_code": "请输入 6 位验证码",
   "product.err_nickname": "昵称格式不正确",
   "product.err_nickname_sensitive": "昵称包含敏感内容",

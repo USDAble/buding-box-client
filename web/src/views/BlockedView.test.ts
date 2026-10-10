@@ -48,6 +48,7 @@ afterEach(() => {
   productState.set(null)
   blockedPage.set('login')
   locale.set('en')
+  sessionStorage.clear()
   vi.unstubAllGlobals()
 })
 
@@ -116,6 +117,38 @@ async function switchTo() {
 }
 
 describe('BlockedView first activation', () => {
+  // OCTO-FORK: both auth shapes retain window identity and submit one calling code.
+  it.each([
+    [false, 'CN', '13800001234', '13800001234', '86'],
+    [true, 'CN', '+86 13800001234', '13800001234', '86'],
+    [true, 'US', '+1 (415) 555-0123', '4155550123', '1'],
+  ])('sends accepted phone input with window identity (activated=%s, region=%s)', async (activated, region, value, phone, regionCode) => {
+    productState.set({ ...firstActivationState(), activated } as never)
+    sessionStorage.setItem('octo_window_token', 'test-window-identity')
+    const fetchMock = vi.fn(async (_input: RequestInfo | URL, _init?: RequestInit) => ({
+      ok: true, status: 200, json: async () => ({ cooldownSec: 60 }),
+    }))
+    vi.stubGlobal('fetch', fetchMock)
+    render()
+    selectRegion(region)
+    type('phone', value)
+    target.querySelector<HTMLButtonElement>('.send-btn')!.click()
+    await vi.waitFor(() => expect(fetchMock).toHaveBeenCalled())
+    expect(JSON.parse(String(fetchMock.mock.calls[0][1]?.body))).toEqual({ phone, region_code: regionCode })
+    expect(fetchMock.mock.calls[0][1]?.headers).toMatchObject({ 'X-Octo-Window-Token': 'test-window-identity' })
+  })
+
+  it('shows an app-window failure without marking the phone as invalid', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({ error: 'product_gate' }), { status: 403 })))
+    toasts.set([])
+    render()
+    type('phone', '13800001234')
+    target.querySelector<HTMLButtonElement>('.send-btn')!.click()
+    await vi.waitFor(() => expect(get(toasts).some(toast => toast.msg.includes('应用窗口验证失败'))).toBe(true))
+    expect(target.querySelector('.field-err')).toBeNull()
+    expect(target.textContent).not.toContain('请输入正确的国际手机号')
+  })
+
   // OCTO-FORK: successful sends focus the code field in both auth forms, failures do not.
   it.each([true, false])('focuses the code after sending (activated=%s)', async (activated) => {
     productState.set({ ...firstActivationState(), activated } as never)
@@ -303,7 +336,7 @@ describe('BlockedView first activation', () => {
     vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL) => {
       const url = String(input)
       if (url.includes('/api/product/login')) {
-        return { ok: false, status: 403, json: async () => ({ code: 'activation_required' }) }
+        return new Response(JSON.stringify({ code: 'activation_required' }), { status: 403 })
       }
       return { ok: true, status: 200, json: async () => ({ ...firstActivationState(), activated: false }) }
     }))
@@ -616,7 +649,7 @@ describe('BlockedView control-plane failure tiers (L-B3)', () => {
   // travelled to fieldErrors.phone / formError, and neither switch had a case
   // for it. So the four tiers are asserted by their copy, not by a class name.
   function failLoginWith(status: number, code: string) {
-    vi.stubGlobal('fetch', vi.fn(async () => ({ ok: false, status, json: async () => ({ code }) })))
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({ code }), { status })))
   }
 
   async function fillAndSubmit() {
@@ -662,7 +695,7 @@ describe('BlockedView control-plane failure tiers (L-B3)', () => {
   })
 
   it('reports a restricted account without offering a pointless retry', async () => {
-    const fetchMock = vi.fn(async () => ({ ok: false, status: 403, json: async () => ({ code: 'account_restricted' }) }))
+    const fetchMock = vi.fn(async () => new Response(JSON.stringify({ code: 'account_restricted' }), { status: 403 }))
     vi.stubGlobal('fetch', fetchMock)
     renderWith('login')
     await fillAndSubmit()

@@ -19,6 +19,12 @@ import {
   tierRetryable,
   WINDOW_TOKEN_HEADER,
   allowEnvironmentModelSource,
+  updateNickname,
+  updatePrefs,
+  submitFeedback,
+  getBox,
+  refreshCredits,
+  initializeWorkspace,
 } from "./product";
 import type { ProductStateDTO } from "./product";
 
@@ -32,6 +38,7 @@ function fetchReturning(status: number, body: unknown) {
     status,
     statusText: "",
     json: async () => body,
+    clone: () => new Response(JSON.stringify(body), { status }),
   }));
 }
 
@@ -72,6 +79,39 @@ describe("windowToken / adoptWindowToken / windowTokenQuery", () => {
     expect(windowTokenQuery()).toBe("");
     sessionStorage.setItem("octo_window_token", "abc");
     expect(windowTokenQuery()).toBe("?window_token=abc");
+  });
+});
+
+// OCTO-FORK: every product action must distinguish window identity from user input.
+describe('window identity across product modules', () => {
+  it.each([
+    ['send-code', () => sendCode('13800001234', '86')],
+    ['login', () => login({ phone: '13800001234', region_code: '86', code: '123456' })],
+    ['locale', () => setProductLocale('zh')],
+    ['nickname', () => updateNickname('ValidName')],
+    ['prefs', () => updatePrefs({ inputSensitiveCheck: false })],
+    ['logout', () => logout()],
+    ['credits', () => refreshCredits()],
+    ['box', () => getBox()],
+    ['feedback', () => submitFeedback({ category: 'bug', title: 'test', content: 'test', impact: 'normal' }, 'test-key')],
+    ['initialize', () => initializeWorkspace()],
+  ] as const)('%s carries the new process identity and reports a gate refusal without field errors', async (_module, action) => {
+    sessionStorage.setItem('octo_window_token', 'old-process');
+    window.history.replaceState({}, '', '/?window_token=new-process&desktop_shell=1');
+    adoptWindowToken();
+    const state = { loggedIn: true, prefs: { locale: 'en', inputSensitiveCheck: true } } as ProductStateDTO;
+    productState.set(state);
+    productPhase.set('ready');
+    const fetchMock = fetchReturning(403, { error: 'product_gate' });
+    vi.stubGlobal('fetch', fetchMock);
+
+    const error = await action().catch(error => error);
+    expect(error).toBeInstanceOf(ProductError);
+    expect(error.code).toBe('product_gate');
+    expect(error.fieldErrors).toEqual({});
+    expect(new Headers(fetchMock.mock.calls[0][1]?.headers).get(WINDOW_TOKEN_HEADER)).toBe('new-process');
+    expect(get(productState)).toBe(state);
+    expect(get(productPhase)).toBe('ready');
   });
 });
 
@@ -286,6 +326,19 @@ describe("sendCode", () => {
 
     const err = await sendCode("123").catch((e) => e);
     expect(err.fieldErrors.phone).toBe("invalid_phone");
+  });
+
+  // OCTO-FORK: window-gate and unstructured failures must not blame a valid number.
+  it.each([
+    [403, { error: 'product_gate' }, 'product_gate'],
+    [503, {}, 'internal_error'],
+    [400, { code: 400 }, 'internal_error'],
+  ])('preserves non-phone send failures (status=%s)', async (status, body, code) => {
+    vi.stubGlobal('fetch', fetchReturning(status, body));
+    const err = await sendCode('13800001234', '86').catch((e) => e);
+    expect(err).toBeInstanceOf(ProductError);
+    expect(err.code).toBe(code);
+    expect(err.fieldErrors).toEqual({});
   });
 });
 

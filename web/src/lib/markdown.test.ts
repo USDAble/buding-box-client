@@ -1,6 +1,7 @@
 import { describe, it, expect, vi } from 'vitest'
 import { marked } from 'marked'
-import { renderMarkdown } from './markdown'
+import { assistantDisplayText, renderMarkdown } from './markdown'
+import { en, zh, locale } from './i18n'
 
 describe('renderMarkdown: blockquote contents', () => {
   it('renders bold inside a quote instead of leaking asterisks', () => {
@@ -270,5 +271,40 @@ describe('renderMarkdown: rawHtml opt-out', () => {
     const out = renderMarkdown('<div class="backdrop">x</div>')
     expect(out).not.toContain('<div')
     expect(out).toContain('&lt;div class=')
+  })
+})
+
+// OCTO-FORK: translate only exact terminal runtime paragraphs, never code, quotes or arbitrary replies.
+describe('assistant runtime status display', () => {
+  it('localizes interruption and incomplete-reply markers in both languages', () => {
+    for (const table of [zh, en]) {
+      const translate = (key: string) => table[key]
+      expect(assistantDisplayText('[Interrupted by user.]', translate)).toBe(`[${table['chat.interrupted']}]`)
+      expect(assistantDisplayText('[Interrupted by user.]\n\n', translate).trim()).toBe(`[${table['chat.interrupted']}]`)
+      const text = 'Partial **answer**\n\n[Reply interrupted by an error — the text above is incomplete.]'
+      expect(assistantDisplayText(text, translate)).toBe(`Partial **answer**\n\n[${table['chat.reply_incomplete']}]`)
+    }
+  })
+
+  it.each([
+    'Interrupted by user.',
+    'The model says [Interrupted by user.]',
+    '`[Interrupted by user.]`',
+    '> [Interrupted by user.]',
+    '```text\n[Interrupted by user.]\n```',
+    '```text\n[Interrupted by user.]',
+    '[Interrupted by user.]\n\nMore text',
+  ])('preserves non-runtime content: %s', text => {
+    expect(assistantDisplayText(text, key => zh[key])).toBe(text)
+  })
+
+  it('localizes renderer-owned copy and thinking labels without translating document contents', () => {
+    locale.set('zh')
+    const out = renderMarkdown('```text\nhello\n```\n<think>Thoughts</think>\n[Interrupted by user.]')
+    expect(out).toContain('>复制</button>')
+    expect(out).toContain('>思考</summary>')
+    expect(out).toContain('Interrupted by user.')
+    locale.set('en')
+    expect(renderMarkdown('```text\nhello\n```')).toContain('>Copy</button>')
   })
 })

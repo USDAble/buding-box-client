@@ -4,6 +4,21 @@ import DOMPurify from "dompurify"
 // GenuiCode.svelte gets the same registrations without depending on this
 // module having been imported first.
 import hljs from "./highlight"
+// OCTO-FORK: renderer-owned labels and fixed assistant status markers follow the UI language.
+import { tr } from "./i18n"
+
+export function assistantDisplayText(text: string, translate = tr): string {
+  const notes: Record<string, string> = {
+    '[Interrupted by user.]': 'chat.interrupted',
+    '[Reply interrupted by an error — the text above is incomplete.]': 'chat.reply_incomplete',
+  }
+  if (!Object.keys(notes).some(note => text.trimEnd().endsWith(note))) return text
+  // Only an exact final paragraph is a runtime marker; examples in code/quotes stay verbatim.
+  const last = marked.lexer(text).findLast(token => token.type !== 'space')
+  if (last?.type !== 'paragraph' || !notes[last.text]) return text
+  const index = text.lastIndexOf(last.raw)
+  return text.slice(0, index) + `[${translate(notes[last.text])}]` + text.slice(index + last.raw.length)
+}
 
 export function escapeHtml(s: string): string {
   return s
@@ -34,6 +49,7 @@ export function isSafeHref(href: string): boolean {
 // semantically identical.
 const renderer = new Renderer()
 
+// OCTO-FORK: code-block controls use UI copy rather than fixed English labels.
 renderer.code = function ({ text: codeText, lang }: { text: string; lang?: string }) {
   const language = lang && hljs.getLanguage(lang) ? lang : "plaintext"
   let highlighted: string
@@ -45,7 +61,7 @@ renderer.code = function ({ text: codeText, lang }: { text: string; lang?: strin
   return `<div class="code-block">
   <div class="code-header">
     <span class="code-lang">${escapeHtml(language)}</span>
-    <button class="copy-btn">Copy</button>
+    <button class="copy-btn">${escapeHtml(tr('chat.copy'))}</button>
   </div>
   <pre><code class="hljs language-${escapeHtml(language)}">${highlighted}</code></pre>
 </div>`
@@ -147,7 +163,8 @@ export function renderMarkdown(
     // 3. Build think block HTML for each segment
     thinkBlocks = thinkSegments.map((segment) => {
       const renderedSegment = DOMPurify.sanitize(marked.parse(segment) as string)
-      return `<details class="think-block"><summary class="think-summary"><iconify-icon icon="ant-design:bulb-outlined" width="13"></iconify-icon>Thoughts</summary><div class="think-body">${renderedSegment}</div></details>`
+      // OCTO-FORK: the reasoning heading is interface copy, not model content.
+      return `<details class="think-block"><summary class="think-summary"><iconify-icon icon="ant-design:bulb-outlined" width="13"></iconify-icon>${escapeHtml(tr('chat.thoughts'))}</summary><div class="think-body">${renderedSegment}</div></details>`
     })
   } finally {
     // Escaping is the default the chat depends on: a throw mid-parse must not
@@ -178,7 +195,8 @@ export function setupCopyButtons(el: HTMLElement): { destroy: () => void } {
     const content = code?.textContent ?? ""
     navigator.clipboard.writeText(content).then(() => {
       const original = btn.textContent
-      btn.textContent = "Copied!"
+      // OCTO-FORK: copy feedback follows the same locale as the button label.
+      btn.textContent = tr('chat.copied')
       setTimeout(() => {
         btn.textContent = original
       }, 1500)

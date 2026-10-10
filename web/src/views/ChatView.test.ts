@@ -49,7 +49,7 @@ beforeEach(() => {
   vi.clearAllMocks()
   target = document.createElement('div'); document.body.appendChild(target)
 })
-afterEach(() => { if (app) unmount(app); target.remove(); handlers.clear(); vi.unstubAllGlobals() })
+afterEach(() => { if (app) unmount(app); target.remove(); handlers.clear(); vi.unstubAllGlobals(); vi.useRealTimers() })
 
 it('renders the first message without leaving and reopening the new session', async () => {
   app = mount(ChatView, { target }); flushSync(); await settle()
@@ -97,4 +97,107 @@ it('retains the input and the created session without sending when permission pe
   expect(get(pendingPrompt)).toBeNull()
   expect(ws.sendMessage).not.toHaveBeenCalled()
   expect(input.value).toBe('keep this draft')
+})
+
+// OCTO-FORK: reopening history must not display the page-open time on assistant headers.
+it('shows each historical reply duration and leaves unmeasured legacy replies blank', async () => {
+  locale.set('zh')
+  activeSessionId.set('history')
+  vi.mocked(api.getSessionMessages).mockResolvedValueOnce({ events: [
+    { type: 'history_user_message', content: 'first', created_at: 1_700_000_000_000 },
+    { type: 'assistant_message', content: 'first answer', duration_ms: 80_000, message_index: 1 },
+    { type: 'history_user_message', content: 'second', created_at: 1_700_000_100_000 },
+    { type: 'assistant_message', content: 'second answer', duration_ms: 3_900_000, message_index: 3 },
+    { type: 'history_user_message', content: 'old question' },
+    { type: 'assistant_message', content: 'old answer', message_index: 5 },
+  ] })
+  app = mount(ChatView, { target }); flushSync(); await settle(); await settle()
+  const elapsed = [...target.querySelectorAll('.msg-meta .meta-time')].map(node => node.textContent).filter(text => text?.startsWith('耗时'))
+  expect(elapsed).toEqual(['耗时 1分20秒', '耗时 1时5分'])
+  expect(get(chatMessages).history.filter((message: any) => message.type === 'assistant').every((message: any) => !message.createdAt)).toBe(true)
+})
+
+it('uses live completion duration without replacing the previous turn or waiting for usage', async () => {
+  activeSessionId.set('live')
+  app = mount(ChatView, { target }); flushSync(); await settle(); await settle()
+  for (const [content, duration] of [['first answer', 12_000], ['second answer', 80_000]] as const) {
+    emit('history_user_message', { session_id: 'live', content: `question for ${content}` })
+    emit('assistant_message', { session_id: 'live', content })
+    emit('complete', { session_id: 'live', duration_ms: duration })
+    await settle()
+  }
+  const elapsed = [...target.querySelectorAll('.msg-meta .meta-time')].map(node => node.textContent).filter(text => text?.startsWith('Took'))
+  expect(elapsed).toEqual(['Took 12s', 'Took 1m 20s'])
+})
+
+// OCTO-FORK: the assistant header ticks during silence, text and tools, then freezes on completion.
+it('refreshes live elapsed metadata every second without changing finished turns', async () => {
+  locale.set('zh'); activeSessionId.set('live')
+  vi.useFakeTimers(); vi.setSystemTime(new Date('2026-10-10T00:00:00Z'))
+  app = mount(ChatView, { target }); flushSync()
+  await vi.advanceTimersByTimeAsync(0); flushSync()
+  emit('history_user_message', { session_id: 'live', content: 'previous question' })
+  emit('assistant_message', { session_id: 'live', content: 'previous answer' })
+  emit('complete', { session_id: 'live', duration_ms: 12_000 }); flushSync()
+  emit('history_user_message', { session_id: 'live', content: 'new question' })
+  emit('progress', { session_id: 'live', phase: 'active' }); flushSync()
+  const elapsed = () => [...target.querySelectorAll('.msg-meta .meta-time')]
+    .map(node => node.textContent).filter(text => text?.startsWith('耗时'))
+  expect(elapsed()).toEqual(['耗时 12秒', '耗时 0秒'])
+  await vi.advanceTimersByTimeAsync(1000); flushSync()
+  expect(elapsed()).toEqual(['耗时 12秒', '耗时 1秒'])
+  await vi.advanceTimersByTimeAsync(2000); flushSync()
+  expect(elapsed()).toEqual(['耗时 12秒', '耗时 3秒'])
+  emit('text_delta', { session_id: 'live', text: 'working answer' }); flushSync()
+  expect(elapsed()).toEqual(['耗时 12秒', '耗时 3秒'])
+  emit('tool_call', { session_id: 'live', tool_id: 't1', name: 'terminal', args: '{}' }); flushSync()
+  await vi.advanceTimersByTimeAsync(1000); flushSync()
+  expect(elapsed()).toEqual(['耗时 12秒', '耗时 4秒'])
+  emit('complete', { session_id: 'live', duration_ms: 80_000 }); flushSync()
+  await vi.advanceTimersByTimeAsync(3000); flushSync()
+  expect(elapsed()).toEqual(['耗时 12秒', '耗时 1分20秒'])
+})
+
+// OCTO-FORK: live and replayed runtime notes are display-only translations that follow language changes.
+it('localizes interrupted replies without rewriting the raw assistant content', async () => {
+  locale.set('zh'); activeSessionId.set('live')
+  app = mount(ChatView, { target }); flushSync(); await settle(); await settle()
+  emit('history_user_message', { session_id: 'live', content: 'hello' })
+  emit('assistant_message', { session_id: 'live', content: '[Interrupted by user.]' })
+  flushSync()
+  expect(target.textContent).toContain('[本轮已中断]')
+  expect(get(chatMessages).live.at(-1).content).toBe('[Interrupted by user.]')
+  locale.set('en'); flushSync()
+  expect(target.textContent).toContain('[Turn interrupted]')
+})
+
+it('localizes incomplete runtime notes when reopening historical replies', async () => {
+  locale.set('zh'); activeSessionId.set('history')
+  const content = 'Partial reply\n\n[Reply interrupted by an error — the text above is incomplete.]'
+  vi.mocked(api.getSessionMessages).mockResolvedValueOnce({ events: [
+    { type: 'history_user_message', content: 'question' },
+    { type: 'assistant_message', content },
+  ] })
+  app = mount(ChatView, { target }); flushSync(); await settle(); await settle()
+  expect(target.textContent).toContain('[回复因错误中断，以上内容尚未完成。]')
+  expect(get(chatMessages).history.at(-1).content).toBe(content)
+})
+
+it('localizes frontend-generated task outcomes and error headings', async () => {
+  locale.set('zh'); activeSessionId.set('live')
+  app = mount(ChatView, { target }); flushSync(); await settle(); await settle()
+  emit('background_task_notice', { session_id: 'live', command: 'npm test', status: 'cancelled' })
+  emit('loop_tick_notice', { session_id: 'live' })
+  emit('sub_agent_notice', { session_id: 'live', agent_id: 'a1', status: 'warning' })
+  emit('workflow_event', { session_id: 'live', run_id: 'wf1', kind: 'done', status: 'error' })
+  emit('goal_notice', { session_id: 'live', kind: 'continue' })
+  emit('turn_error', { session_id: 'live', code: 'internal_error', error: 'English server diagnostic' })
+  flushSync()
+  expect(target.textContent).toContain('后台进程 npm test 已取消')
+  expect(target.textContent).toContain('定时循环已触发')
+  expect(target.textContent).toContain('子代理 a1 未完成')
+  expect(target.textContent).toContain('工作流 wf1 执行失败')
+  expect(target.textContent).toContain('目标任务继续')
+  expect(target.textContent).not.toContain('Error:')
+  expect(target.querySelector('.notice-line strong')?.textContent).toBe('错误:')
 })

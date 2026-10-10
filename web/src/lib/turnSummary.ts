@@ -21,6 +21,34 @@ export function fmtDur(seconds: number): string {
   return seconds < 60 ? `${seconds}s` : `${Math.floor(seconds / 60)}m${seconds % 60}s`
 }
 
+// OCTO-FORK: reply metadata shows measured elapsed time, with hours as the largest unit.
+export function fmtTurnElapsed(durationMs: number, translate: (key: string) => string): string {
+  if (!Number.isFinite(durationMs) || durationMs < 0) return ''
+  const seconds = Math.floor(durationMs / 1000)
+  const hours = Math.floor(seconds / 3600)
+  const minutes = Math.floor(seconds / 60) % 60
+  const key = hours > 0 ? 'chat.elapsed_hours' : minutes > 0 ? 'chat.elapsed_minutes' : 'chat.elapsed_seconds'
+  return translate(key)
+    .replace('{hours}', String(hours))
+    .replace('{minutes}', String(minutes))
+    .replace('{seconds}', String(seconds % 60))
+}
+
+// The first text/thinking/tool block owns the header, but the final reply owns
+// the measurement. Carry it backwards only within that user's turn.
+export function turnDurations(messages: { type: string; durationMs?: unknown }[], liveDurationMs?: number): (number | undefined)[] {
+  const durations: (number | undefined)[] = new Array(messages.length)
+  // OCTO-FORK: the unfinished reply uses the existing live clock only until its user boundary.
+  let duration = liveDurationMs
+  for (let i = messages.length - 1; i >= 0; i--) {
+    const message = messages[i]
+    if (message.type === 'user') duration = undefined
+    else if (typeof message.durationMs === 'number' && Number.isFinite(message.durationMs) && message.durationMs >= 0) duration = message.durationMs
+    durations[i] = duration
+  }
+  return durations
+}
+
 export function fmtTokens(n: number): string {
   return n >= 1000 ? `${(n / 1000).toFixed(1)}k` : `${n}`
 }

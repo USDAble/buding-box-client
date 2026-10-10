@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
-import { fmtDur, fmtTokens, thinkingTokenSegment, turnSummarySegments } from './turnSummary'
+import { fmtDur, fmtTokens, fmtTurnElapsed, turnDurations, thinkingTokenSegment, turnSummarySegments } from './turnSummary'
+import { en, zh } from './i18n'
 
 // PR-5d2 / G4: the per-turn summary must not print a number nobody measured.
 //
@@ -80,5 +81,40 @@ describe('formatting', () => {
   it('abbreviates thousands so a long turn does not widen the row', () => {
     expect(fmtTokens(999)).toBe('999')
     expect(fmtTokens(4096)).toBe('4.1k')
+  })
+})
+
+// OCTO-FORK: elapsed metadata is stable across replay and never converts hours to days.
+describe('reply elapsed metadata', () => {
+  it.each([
+    [0, '耗时 0秒', 'Took 0s'],
+    [12_999, '耗时 12秒', 'Took 12s'],
+    [80_000, '耗时 1分20秒', 'Took 1m 20s'],
+    [3_600_000, '耗时 1时0分', 'Took 1h 0m'],
+    [3_900_000, '耗时 1时5分', 'Took 1h 5m'],
+    [90_000_000, '耗时 25时0分', 'Took 25h 0m'],
+  ])('formats %d milliseconds', (ms, chinese, english) => {
+    expect(fmtTurnElapsed(ms, key => zh[key])).toBe(chinese)
+    expect(fmtTurnElapsed(ms, key => en[key])).toBe(english)
+  })
+
+  it('does not invent measurements and does not leak them into another turn', () => {
+    expect(turnDurations([
+      { type: 'user' }, { type: 'thinking' }, { type: 'tool_group' },
+      { type: 'assistant', durationMs: 80_000 }, { type: 'notice' },
+      { type: 'user' }, { type: 'assistant' },
+      { type: 'user' }, { type: 'assistant', durationMs: 3_900_000 },
+    ])).toEqual([undefined, 80_000, 80_000, 80_000, undefined, undefined, undefined, undefined, 3_900_000])
+    for (const ms of [-1, Infinity, NaN]) {
+      expect(fmtTurnElapsed(ms, key => zh[key])).toBe('')
+      expect(turnDurations([{ type: 'assistant', durationMs: ms }])).toEqual([undefined])
+    }
+  })
+
+  it('applies the live clock only to the unfinished turn', () => {
+    expect(turnDurations([
+      { type: 'user' }, { type: 'assistant', durationMs: 12_000 },
+      { type: 'user' }, { type: 'thinking' }, { type: 'tool_group' }, { type: 'assistant' },
+    ], 65_000)).toEqual([undefined, 12_000, undefined, 65_000, 65_000, 65_000])
   })
 })

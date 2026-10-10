@@ -659,6 +659,8 @@ func (s *Server) handleGetSessionMessages(w http.ResponseWriter, r *http.Request
 	// reconstruct tool_call / tool_result pairs from tool_use / tool_result
 	// blocks so the history replay is visually complete.
 	events := make([]map[string]any, 0, len(msgs)*2)
+	// OCTO-FORK: restore elapsed reply time from persisted timestamps, never the replay clock.
+	var turnStartedAt time.Time
 	for i, m := range msgs {
 		switch m.Role {
 		case agent.RoleUser:
@@ -740,6 +742,7 @@ func (s *Server) handleGetSessionMessages(w http.ResponseWriter, r *http.Request
 			// Only emit history_user_message if there is user-visible content
 			// (tool_result-only messages are bookkeeping, not user-visible).
 			if text != "" || len(images) > 0 {
+				turnStartedAt = m.CreatedAt
 				ev := map[string]any{
 					"type":          "history_user_message",
 					"content":       text,
@@ -817,12 +820,17 @@ func (s *Server) handleGetSessionMessages(w http.ResponseWriter, r *http.Request
 				// closes a turn is a valid branch point, an intermediate
 				// (tool_use) round is not — the web UI shows the Branch action
 				// exactly where the index is present.
-				events = append(events, map[string]any{
+				replyEvent := map[string]any{
 					"type":          "assistant_message",
 					"content":       m.Content,
 					"thinking":      thinking,
 					"message_index": i,
-				})
+				}
+				// OCTO-FORK: tool results are bookkeeping, not a new user turn or timer reset.
+				if !turnStartedAt.IsZero() && !m.CreatedAt.IsZero() && !m.CreatedAt.Before(turnStartedAt) {
+					replyEvent["duration_ms"] = m.CreatedAt.Sub(turnStartedAt).Milliseconds()
+				}
+				events = append(events, replyEvent)
 			}
 		}
 	}

@@ -212,6 +212,10 @@
 
 ## 会话路由与 WebSocket
 
+Agent 生成的固定中断标记和回复不完整标记保留在原始历史中，前端通过 `assistantDisplayText` 仅翻译助手内容末尾的完整独立段落；代码块、引用、用户消息及任意模型/服务端文案不参与替换。实时消息、历史回放、手机消息与对话导出使用同一展示规则，旧历史无需迁移。前端自行生成的后台进程、子代理、工作流、目标任务、定时循环及错误标题由本地化表提供文案，命令和描述不改写。
+
+助手消息的时间标签展示回合耗时，不展示加载页面的时刻。正在运行的回合复用前端已有 `chatTurnStart` 与每秒刷新时钟，等待首个助手块时先显示临时助手标题，开始输出或调用工具后由该轮首个助手块接管，不重复显示，也不改变已完成回合的耗时。实时成功回合结束后停止更新并复用 `complete.duration_ms`；`GET /api/sessions/{id}/messages` 的最终 `assistant_message` 通过已持久化的可见用户消息与助手答复时间戳返回可选 `duration_ms`，包含中间工具阶段且不让工具结果消息重置计时。历史恢复的区间从用户消息入库到答复入库，实时统计仍沿用既有运行时回合计时；两者不依赖打开页面时间。旧消息缺少时间戳或时间倒序时省略字段，不推测耗时，也不迁移历史文件。前端将最终答复的耗时显示在该轮首个助手块的标题旁，仅显示一次；不足一分钟按秒，其余按分、小时换算，最长保持小时，中英文均使用本地化文案。
+
 `PATCH /api/sessions/{id}/protection` 接收 `personal_info_protection`、`confidential_session` 和可选 `model_id`，只允许在保护策略锁定前更新。开启私密会话且当前模型不合格时，服务端从当前可信投影自动选择排序最高的合格私密模型；客户端也可用 `model_id` 明确指定。服务端在同一会话锁中校验并原子保存模型绑定与版本化 `protection_policy`。成功返回完整策略和有效模型绑定；锁定后返回 `409 session_policy_locked`，没有合格模型返回 `409 confidential_model_required`。创建会话接口原子接收同样的用户可选字段和初始模型绑定；`version` 与 `locked` 只能由服务端写入。旧 `/api/sessions/{id}/chat_mode` 已删除，旧历史字段仅在 JSON 读取边界被忽略，不迁移为安全保证。详细竞态和生命周期语义见 [模型选择与私密会话](模型选择与私密会话.md)。
 
 `POST /api/product/privacy/transform` 接收 `{"text":"..."}`，返回 `{"hit":<bool>,"masked":"...","matches":[{"category":"...","count":1}],"ruleVersion":"..."}`。前端命中后不请求确认，直接以 `masked` 继续发送并展示“已自动脱敏”提示。它与服务端发送入口使用同一个 `internal/pii` 引擎，标准占位符在重复处理时保持不变；响应使用 `Cache-Control: no-store`，路由不得记录请求或响应 body。发送入口仍对旧客户端或绕过 transform 的请求执行权威脱敏；运行时未组装引擎或处理失败时返回 `500 privacy_transform_failed`，不返回原文。

@@ -86,8 +86,7 @@ func mountProductAPI() (mount func(api func(pattern string, h http.HandlerFunc))
 	}
 
 	state, err := productstate.Open(productstate.Options{
-		// The shell is the only component that knows the OS language, so it
-		// hands it in once (E6.4 rule 1, PQ18).
+		// OCTO-FORK: seed English unless the user has explicitly selected a language.
 		Locale: resolveLang(),
 		// The desktop product has no "configure an API key" onboarding; the
 		// upstream wizard is unreachable here (A4).

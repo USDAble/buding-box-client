@@ -32,6 +32,7 @@
     region_code: selectedDialCode.slice(1),
   })
   let code = $state('')
+  let codeInput = $state<HTMLInputElement>()
   let nickname = $state('')
   let activationCode = $state('')
   let boxCode = $state('')
@@ -95,8 +96,7 @@
   let lastFailed = $state<'login' | 'sendCode' | null>(null)
 
   onMount(() => {
-    // Open in the persisted (or system-derived) language; the state handler
-    // already filled prefs.locale with the system language when unset.
+    // OCTO-FORK: the persisted product preference wins; new installs start in English.
     const loc = $productState?.prefs?.locale
     if (loc === 'zh' || loc === 'en') setLocale(loc)
     // OCTO-FORK: a retained account nickname belongs to the old login, not
@@ -107,9 +107,9 @@
 
   function pickLang(l: 'zh' | 'en') {
     setLocale(l)
-    setProductLocale(l).catch(() => {})
-    // OCTO-FORK: persist the login-page language for the Settings page.
-    api.updateLanguage(l).catch(() => {})
+    // OCTO-FORK: persist the shared preference and its native-shell mirror; report failed saves.
+    Promise.all([setProductLocale(l), api.updateLanguage(l)])
+      .catch(() => showToast($t('settings.language_failed'), 'error'))
     // OCTO-FORK: only an unedited value follows an explicit language switch.
     if (!nicknameEdited) nickname = randomNickname(l)
   }
@@ -138,6 +138,8 @@
       fieldErrors = { ...fieldErrors, code: '' }
       startCountdown(secs)
       showToast($t('product.code_sent'))
+      // OCTO-FORK: move directly to code entry only after a successful send.
+      codeInput?.focus()
     } catch (e) {
       if (e instanceof ProductError && e.retryAfterSec != null) {
         sentCodePhone = normalized.value
@@ -409,7 +411,7 @@
       <div class="field">
         <label for="code">{$t('product.code_label')}</label>
         <div class="code-row">
-          <input id="code" type="text" inputmode="numeric" maxlength="6" bind:value={code} placeholder={$t('product.code_placeholder')} autocomplete="one-time-code" />
+          <input id="code" type="text" inputmode="numeric" maxlength="6" bind:this={codeInput} bind:value={code} placeholder={$t('product.code_placeholder')} autocomplete="one-time-code" />
           <button type="button" class="send-btn" onclick={onSendCode} disabled={sending || (countdown > 0 && sentCodePhone === normalizedPhone.value)}>
             {countdown > 0 && sentCodePhone === normalizedPhone.value
               ? $t('product.resend_in').replaceAll('{s}', String(countdown))

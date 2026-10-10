@@ -8,7 +8,26 @@ import (
 	"testing"
 
 	"github.com/open-octo/octo-agent/internal/brand"
+	"github.com/open-octo/octo-agent/internal/config"
 )
+
+// OCTO-FORK: first-launch language must not depend on the machine's locale.
+func TestResolveLangDefaultsToEnglishAndPreservesChoice(t *testing.T) {
+	t.Setenv("OCTO_DATA_ROOT", t.TempDir())
+	t.Setenv("LANG", "zh_CN.UTF-8")
+	if got := resolveLang(); got != "en" {
+		t.Fatalf("first-launch language = %q, want en", got)
+	}
+	for _, lang := range []string{"zh", "en"} {
+		cfg := config.Config{Language: lang}
+		if err := cfg.Save(); err != nil {
+			t.Fatal(err)
+		}
+		if got := resolveLang(); got != lang {
+			t.Fatalf("saved language = %q, want %q", got, lang)
+		}
+	}
+}
 
 // fields reads every string field of a uiStrings by name. Reflection because
 // the point is to cover fields nobody remembered to list — a check that only

@@ -116,6 +116,28 @@ async function switchTo() {
 }
 
 describe('BlockedView first activation', () => {
+  // OCTO-FORK: successful sends focus the code field in both auth forms, failures do not.
+  it.each([true, false])('focuses the code after sending (activated=%s)', async (activated) => {
+    productState.set({ ...firstActivationState(), activated } as never)
+    vi.stubGlobal('fetch', vi.fn(async () => ({ ok: true, status: 200, json: async () => ({ cooldownSec: 60 }) })))
+    render()
+    type('phone', '13800001234')
+    input('phone').focus()
+    target.querySelector<HTMLButtonElement>('.send-btn')!.click()
+    await vi.waitFor(() => expect(document.activeElement).toBe(input('code')))
+  })
+
+  it('keeps focus in place when sending the code fails', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => ({ ok: false, status: 400, json: async () => ({ code: 'invalid_phone' }) })))
+    render()
+    type('phone', '13800001234')
+    input('phone').focus()
+    const button = target.querySelector<HTMLButtonElement>('.send-btn')!
+    button.click()
+    await vi.waitFor(() => expect(target.querySelector('.field-err')).not.toBeNull())
+    expect(document.activeElement).toBe(input('phone'))
+  })
+
   it('persists the language chosen on the login wall for Settings', async () => {
     // OCTO-FORK: retain the fetch argument types when asserting language persistence.
     const fetchMock = vi.fn(async (_input: RequestInfo | URL, _init?: RequestInit) => ({

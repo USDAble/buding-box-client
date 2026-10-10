@@ -9,6 +9,7 @@
 // inert and the phase stays "ready".
 
 import { get, writable } from "svelte/store";
+import { setLocale } from "./i18n";
 
 // The product gate distinguishes three frontend states: still deciding,
 // not logged in (show the login gate — the UI lands in P4), and logged in.
@@ -16,6 +17,14 @@ export type ProductPhase = "unknown" | "blocked" | "ready";
 
 export const productPhase = writable<ProductPhase>("unknown");
 export const productState = writable<ProductStateDTO | null>(null);
+
+// OCTO-FORK: product preferences own the UI language across login and settings.
+let savedLocale: string | undefined;
+productState.subscribe(state => {
+  const next = state?.prefs?.locale;
+  if ((next === "zh" || next === "en") && next !== savedLocale) setLocale(next);
+  savedLocale = next;
+});
 
 // Header the server's product gate reads (internal/server/server.go, windowAllowed).
 export const WINDOW_TOKEN_HEADER = "X-Octo-Window-Token";
@@ -664,6 +673,7 @@ export async function setProductLocale(locale: "zh" | "en"): Promise<void> {
     body: JSON.stringify({ locale }),
   });
   if (!res.ok) throw new Error(`${res.status} ${res.statusText}`);
+  productState.update(state => state ? { ...state, prefs: { ...state.prefs, locale } } : state);
 }
 
 // ─── P5 account panel ───────────────────────────────────────────────────────

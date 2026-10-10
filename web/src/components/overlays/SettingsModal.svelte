@@ -62,7 +62,8 @@
   }
 
   // --- local state ---
-  let language      = $state('en')
+  // OCTO-FORK: opening Settings must reflect, not replace, the active app language.
+  let language      = $derived($locale === 'zh' ? 'zh' : 'en')
   let fontSize      = $state(storedFontSize())
   let theme         = $state(modeToThemeLabel[getMode()] ?? 'Light')
   let autostart     = $state(false) // desktop shell only
@@ -392,8 +393,7 @@
       const wd = cfg.workspace_dir ?? ''
       workspaceDir        = wd.trim().toLowerCase() === 'auto' ? '' : wd
       workspaceDirDefault = cfg.workspace_dir_default ?? ''
-      if (cfg.language) language = cfg.language
-      setLocale(cfg.language === 'zh' || cfg.language === 'zh-TW' ? 'zh' : 'en')
+      // OCTO-FORK: language is derived from the active locale, not this legacy config response.
     } catch (e: any) {
       showToast(tr('settings.config_load_failed').replace('{error}', e.message), 'error')
     } finally {
@@ -591,18 +591,12 @@
     }
   }
 
-  // Persist the language like every other config-backed field in this modal.
-  // The $effect below already applies it to the live locale store; without
-  // this PUT the choice only lived in memory and a refresh reverted to the
-  // server's stored language (#2076). FirstRunSetup persists through the same
-  // endpoint.
+  // OCTO-FORK: the active locale is shared with login; config mirrors it for the native shell.
   async function saveLanguage(v: string) {
+    setLocale(v)
     try {
+      if (get(productState)) await setProductLocale(v === 'zh' ? 'zh' : 'en')
       await api.updateLanguage(v)
-      // OCTO-FORK: login/register reads the product preference, while the
-      // console reads local config; persist both so logout cannot restore an
-      // older language on the next login.
-      await setProductLocale(v === 'zh' ? 'zh' : 'en')
     } catch (e: any) {
       showToast(e.message ?? tr('settings.language_failed'), 'error')
     }
@@ -777,9 +771,6 @@
     setMode(themeLabelToMode[theme] ?? 'light')
   })
 
-  $effect(() => {
-    setLocale(language === 'zh' || language === 'zh-TW' ? 'zh' : 'en')
-  })
 </script>
 
 {#if $settingsModalOpen}
@@ -819,7 +810,7 @@
               <span class="setl">{$t('settings.language')}</span>
               <span class="setd">{$t('settings.language_desc')}</span>
             </div>
-            <select class="sinput" bind:value={language} onchange={() => saveLanguage(language)}>
+            <select class="sinput" value={language} onchange={(event) => saveLanguage(event.currentTarget.value)}>
               {#each langOptions as o}
                 <option value={o.value}>{o.label}</option>
               {/each}

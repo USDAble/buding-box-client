@@ -136,8 +136,9 @@ func TestNewImageBlock_Normalizes(t *testing.T) {
 // the keep-whichever-is-smaller rule. This one actually reaches the branch —
 // the edge cap is what pushes it past the early pass-through.
 func TestCompressImageData_KeepsSmaller(t *testing.T) {
-	img := image.NewRGBA(image.Rect(0, 0, 2000, 1000))
-	// zero value is opaque black, uniformly — PNG paradise, JPEG nightmare.
+	// OCTO-FORK: use opaque grayscale; RGBA's transparent zero value can
+	// encode larger than JPEG, violating this fixture's size premise.
+	img := image.NewGray(image.Rect(0, 0, 2000, 1000))
 	var buf bytes.Buffer
 	if err := png.Encode(&buf, img); err != nil {
 		t.Fatalf("png.Encode: %v", err)

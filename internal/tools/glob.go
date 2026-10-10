@@ -78,7 +78,8 @@ func (GlobTool) Execute(ctx context.Context, _ string, input map[string]any) (ag
 	}
 
 	var absRoot string
-	matchPattern := pattern
+	// OCTO-FORK: prefix extraction and trimming must use the same separators.
+	matchPattern := filepath.ToSlash(pattern)
 	if filepath.IsAbs(pattern) {
 		// When the pattern is an absolute path, use its literal directory
 		// prefix as the search root instead of the current working directory.
@@ -97,7 +98,7 @@ func (GlobTool) Execute(ctx context.Context, _ string, input map[string]any) (ag
 				"total":   0,
 			}}, nil
 		}
-		matchPattern = strings.TrimPrefix(pattern, absRoot)
+		matchPattern = strings.TrimPrefix(matchPattern, absRoot)
 		matchPattern = strings.TrimPrefix(matchPattern, "/")
 		if matchPattern == "" {
 			matchPattern = "."

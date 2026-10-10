@@ -24,8 +24,9 @@
   }
 </script>
 
-<div class="sensitive-toggle">
-  <button class="row" onclick={toggle} role="switch" aria-checked={enabled}>
+<!-- OCTO-FORK: the compact switch shares its parent's control column without extra insets. -->
+<div class="sensitive-toggle" class:compact>
+  <button class="row" onclick={toggle} role="switch" aria-label={$t('sensitive.toggle')} aria-checked={enabled}>
     {#if !compact}<span class="lbl">{$t('sensitive.toggle')}</span>{/if}
     <span class="toggle" class:on={enabled}>
       <span class="toggle-knob"></span>
@@ -51,6 +52,8 @@
     font-family: inherit;
   }
   .row:hover { background: var(--hover-neutral); }
+  .sensitive-toggle.compact { padding: 0; }
+  .compact .row { padding: 0; min-height: 30px; }
   .lbl { font-size: 12px; color: var(--text-secondary); }
   .toggle {
     width: 30px;

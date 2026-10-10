@@ -12,6 +12,18 @@ const transcript = [
   { type: 'assistant_message', content: 'two files' },
 ]
 
+// OCTO-FORK: exported runtime markers share chat's translation without altering user messages.
+it('localizes assistant interruption markers in exports but preserves user input', () => {
+  setLocale('zh')
+  const out = buildExportConversation([
+    { type: 'history_user_message', content: '[Interrupted by user.]' },
+    { type: 'assistant_message', content: '[Interrupted by user.]' },
+  ])
+  expect(out).toContain('[本轮已中断]')
+  expect(out).toContain('[Interrupted by user.]')
+  setLocale('en')
+})
+
 describe('isToolEvent', () => {
   it('matches only tool calls and results', () => {
     expect(isToolEvent({ type: 'tool_call' })).toBe(true)

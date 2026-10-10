@@ -8,7 +8,8 @@
   import { activeSessionId, chatMessages, chatStreaming, sessions, clearMsgs } from '../lib/stores'
   import { ws } from '../lib/ws'
   import { wireMobileSession, loadMobileHistory, sendMobile } from './chatWiring'
-  import { renderMarkdown } from '../lib/markdown'
+  // OCTO-FORK: mobile shares the display-only translation of runtime assistant markers.
+  import { assistantDisplayText, renderMarkdown } from '../lib/markdown'
   import { t } from '../lib/i18n'
 
   let { onBack, onViewApproval, initial = null, onInitialSent }: {
@@ -123,7 +124,7 @@
     {:else if msg.type === 'assistant'}
       <div class="bubble agent">
         {#if msg.thinking}<div class="thoughts">{@html renderMarkdown(msg.thinking)}</div>{/if}
-        <div class="body">{@html renderMarkdown(msg.content)}{#if msg.streaming}<span class="caret">▋</span>{/if}</div>
+        <div class="body">{@html renderMarkdown(assistantDisplayText(msg.content, $t))}{#if msg.streaming}<span class="caret">▋</span>{/if}</div>
       </div>
     {:else if msg.type === 'thinking'}
       <div class="thoughts standalone">{@html renderMarkdown(msg.thinking)}</div>

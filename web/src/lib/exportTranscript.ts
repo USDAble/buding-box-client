@@ -5,7 +5,8 @@
 // applyToolToggle is what that checkbox means: MD, JSON, PNG and HTML all run
 // their events through it, and PDF reaches the same result through the
 // .print-omit-tools rule in app.css because it prints the live DOM.
-import { renderMarkdown, escapeHtml } from './markdown'
+// OCTO-FORK: exported assistant status markers use the same display translation as chat.
+import { assistantDisplayText, renderMarkdown, escapeHtml } from './markdown'
 // OCTO-FORK: the assistant label is the product name, not the literal "Octo".
 // Read from the i18n store rather than getExportLocale() (ChatView's helper),
 // which falls back to navigator.language because nothing sets
@@ -71,7 +72,7 @@ export function buildExportConversation(events: any[]): string {
         const thinking = ev.thinking
           ? `<div class="msg-thinking-wrap"><div class="msg-thinking-label">${escapeHtml(tr('chat.thoughts'))}</div><div class="msg-thinking">${renderMarkdown(ev.thinking, true)}</div></div>`
           : ''
-          return `<article class="msg assistant"><div class="msg-head"><span class="msg-label">${brandShortName(get(locale))}</span></div><div class="msg-body">${renderMarkdown(ev.content ?? '', true)}</div>${thinking}</article>`
+          return `<article class="msg assistant"><div class="msg-head"><span class="msg-label">${brandShortName(get(locale))}</span></div><div class="msg-body">${renderMarkdown(assistantDisplayText(ev.content ?? ''), true)}</div>${thinking}</article>`
       }
       if (type === 'tool_call') {
         const name = escapeHtml(String(ev.tool_name ?? ev.name ?? tr('chat.export_unknown_tool')))

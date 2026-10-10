@@ -335,6 +335,10 @@ describe('safety and privacy controls', () => {
     expect(panel.textContent).toContain('输出与昵称保护')
     expect(panel.textContent).toContain('始终开启')
     expect(panel.querySelectorAll('button.security-row')).toHaveLength(2)
+    // OCTO-FORK: the global switch must use the inset-free compact variant like its siblings.
+    const globalSwitch = panel.querySelector('.global-setting .sensitive-toggle') as HTMLElement
+    expect(globalSwitch.classList.contains('compact')).toBe(true)
+    expect(globalSwitch.querySelector('[role="switch"]')?.getAttribute('aria-label')).toBe('敏感词检测')
   })
 
   it('renders the server lock as disabled session controls', () => {

@@ -79,7 +79,8 @@
   import { turnErrorView } from '../lib/turnError'
   import { refreshCredits } from '../lib/product'
   import { observeArtifact, resetArtifacts } from '../lib/artifacts'
-  import { renderMarkdown, escapeHtml, setupCopyButtons } from '../lib/markdown'
+  // OCTO-FORK: translate only fixed runtime markers for display, never persisted model history.
+  import { assistantDisplayText, renderMarkdown, escapeHtml, setupCopyButtons } from '../lib/markdown'
   import { applyToolToggle, buildExportConversation, exportConversationStyles, hasRenderableTurn, TOOL_RESULT_CHARS } from '../lib/exportTranscript'
   import { t, tr, pickLocalized, locale } from '../lib/i18n'
   // OCTO-FORK: the assistant label is the product name, not a literal — the
@@ -95,7 +96,7 @@
   // OCTO-FORK: browser exports choose a destination before fetching or rendering the transcript.
   import { pickBrowserExport, writeBrowserExport, type ExportSaveHandle } from '../lib/exportSave'
   import { confirmDialog } from '../lib/confirm'
-  import { fmtDur, thinkingTokenSegment, turnSummarySegments } from '../lib/turnSummary'
+  import { fmtDur, fmtTurnElapsed, turnDurations, thinkingTokenSegment, turnSummarySegments } from '../lib/turnSummary'
   import { anchorBgTasks } from '../lib/bgTaskAnchor'
   import DOMPurify from 'dompurify'
   import ToolGroup from '../components/chat/ToolGroup.svelte'
@@ -318,6 +319,11 @@ import QuestionModal from '../components/overlays/QuestionModal.svelte'
   })
   let turnStartAt = $derived($chatTurnStart[$activeSessionId ?? ''] ?? 0)
   let thinkElapsed = $derived(turnStartAt ? Math.max(0, Math.floor((now - turnStartAt) / 1000)) : 0)
+  // OCTO-FORK: reuse the thinking clock for live reply metadata, including silent waits before any assistant block.
+  let liveReplyDuration = $derived(streaming ? thinkElapsed * 1000 : undefined)
+  let replyDurations = $derived(turnDurations(msgs, liveReplyDuration))
+  let waitingForReplyBlock = $derived(streaming && !msgs.slice(msgs.findLastIndex((m: any) => m.type === 'user') + 1)
+    .some((m: any) => m.type === 'assistant' || m.type === 'thinking' || m.type === 'tool_group'))
   // The reply caret is a typewriter cursor: show it only while text is actively
   // arriving. Once deltas stop (the model went silent to generate tool calls /
   // reasoning), it fades within CARET_IDLE_MS even though the bubble stays
@@ -392,7 +398,7 @@ import QuestionModal from '../components/overlays/QuestionModal.svelte'
         type: 'assistant',
         content: ev.content ?? '',
         thinking: ev.thinking ?? '',
-        createdAt: Date.now(),
+        durationMs: ev.duration_ms,
         streaming: false,
         tools: [],
         todos: [],
@@ -598,9 +604,10 @@ import QuestionModal from '../components/overlays/QuestionModal.svelte'
       // Only start/continue are textless by design; an unknown textless kind is
       // a newer server talking to this build, and mislabelling it "continues"
       // would be worse than dropping it.
+      // OCTO-FORK: frontend-generated goal notices belong to the selected-language dictionary.
       const fixed: Record<string, string> = {
-        start: 'Goal starts — /goal pause to stop',
-        continue: 'Goal continues — /goal pause to stop',
+        start: tr('chat.goal_started'),
+        continue: tr('chat.goal_continued'),
       }
       const text = (ev as any).text || fixed[kind]
       if (!text) return
@@ -744,7 +751,8 @@ import QuestionModal from '../components/overlays/QuestionModal.svelte'
       addChatMsg(sid, {
         id: uid('note'),
         type: 'notice',
-        content: `Background \`${command}\` ${status}`,
+        // OCTO-FORK: status enums are data, not English UI copy.
+        content: tr(status === 'success' ? 'chat.background_completed' : status === 'cancelled' ? 'chat.background_cancelled' : 'chat.background_failed').replace('{name}', command),
         level,
         createdAt: Date.now(),
         streaming: false,
@@ -762,7 +770,8 @@ import QuestionModal from '../components/overlays/QuestionModal.svelte'
       addChatMsg(sid, {
         id: uid('note'),
         type: 'notice',
-        content: 'Loop tick',
+        // OCTO-FORK: localize the in-session scheduled wakeup label.
+        content: tr('chat.loop_tick'),
         level: 'info',
         createdAt: Date.now(),
         streaming: false,
@@ -823,21 +832,22 @@ import QuestionModal from '../components/overlays/QuestionModal.svelte'
       const status = (ev as any).status ?? ''
       const description = (ev as any).description ?? ''
       const agentId = (ev as any).agent_id ?? ''
-      const label = description || agentId || 'sub-agent'
+      // OCTO-FORK: frontend-owned outcome text is localized; agent descriptions remain untouched.
+      const label = description || agentId || tr('tools.title.sub_agent')
       let level: 'success' | 'warning' | 'error' = 'error'
-      let text = `Sub-agent \`${label}\` failed`
+      let text = tr('chat.sub_agent_failed').replace('{name}', label)
       let finishedStatus: 'done' | 'error' | 'cancelled' = 'error'
       if (status === 'success') {
         level = 'success'
-        text = `Sub-agent \`${label}\` completed`
+        text = tr('chat.sub_agent_completed').replace('{name}', label)
         finishedStatus = 'done'
       } else if (status === 'warning') {
         level = 'warning'
-        text = `Sub-agent \`${label}\` incomplete`
+        text = tr('chat.sub_agent_incomplete').replace('{name}', label)
         finishedStatus = 'done'
       } else if (status === 'cancelled') {
         level = 'warning'
-        text = `Sub-agent \`${label}\` cancelled`
+        text = tr('chat.sub_agent_cancelled').replace('{name}', label)
         finishedStatus = 'cancelled'
       }
       addChatMsg(sid, {
@@ -874,10 +884,11 @@ import QuestionModal from '../components/overlays/QuestionModal.svelte'
       // so the completion is visible in the message stream.
       if (kind === 'done') {
         const level = status === 'error' ? 'error' : 'success'
-        const label = description || runId || 'workflow'
+        // OCTO-FORK: localize the workflow completion label, not the server-supplied description.
+        const label = description || runId || tr('workflows.title')
         const text = status === 'error'
-          ? `Workflow \`${label}\` failed`
-          : `Workflow \`${label}\` completed`
+          ? tr('chat.workflow_failed').replace('{name}', label)
+          : tr('chat.workflow_completed').replace('{name}', label)
         addChatMsg(sid, {
           id: uid('note'),
           type: 'notice',
@@ -1082,7 +1093,8 @@ import QuestionModal from '../components/overlays/QuestionModal.svelte'
       addChatMsg(sid, {
         id: uid('err'),
         type: 'notice',
-        content: `**Error:** ${msg}`,
+        // OCTO-FORK: keep diagnostic details but localize the frontend's error heading.
+        content: `**${tr('status.error')}:** ${msg}`,
         level: 'error',
         createdAt: Date.now(),
         streaming: false,
@@ -1163,18 +1175,22 @@ import QuestionModal from '../components/overlays/QuestionModal.svelte'
       // branchable one; stamp it onto the bubble the turn just produced so
       // Branch lights up there without waiting for a transcript reload.
       const replyIndex = (ev as any).message_index
+      const replyDuration = (ev as any).duration_ms
       chatMessages.update(m => {
         const msgs = (m[sid] || []).map((x: any) =>
           x.streaming || x.pending ? { ...x, streaming: false, pending: false } : x)
-        if (typeof replyIndex === 'number') {
+        if (typeof replyIndex === 'number' || typeof replyDuration === 'number') {
           for (let k = msgs.length - 1; k >= 0; k--) {
+            if (msgs[k].type === 'user') break
             if (msgs[k].type !== 'assistant') continue
             // Only an unstamped bubble: a turn that ended without producing one
             // (interrupted before any text) must not relabel the previous
             // reply with an index that reaches past it.
-            if (typeof msgs[k].messageIndex !== 'number') {
+            if (typeof replyIndex === 'number' && typeof msgs[k].messageIndex !== 'number') {
               msgs[k] = { ...msgs[k], messageIndex: replyIndex }
             }
+            // OCTO-FORK: complete supplies the same elapsed metric for foreground and background turns.
+            if (typeof replyDuration === 'number') msgs[k] = { ...msgs[k], durationMs: replyDuration }
             break
           }
         }
@@ -1730,6 +1746,8 @@ import QuestionModal from '../components/overlays/QuestionModal.svelte'
   const RENDER_THROTTLE_MS = 80
   const renderCache = new Map<string, { html: string; at: number; content: string }>()
   function throttledMarkdown(cacheKey: string, content: string, streaming: boolean, showReasoning = true): string {
+    // OCTO-FORK: language changes must invalidate cached renderer labels even during streaming.
+    cacheKey += ':' + $locale
     const cached = renderCache.get(cacheKey)
     if (streaming && cached && (content === cached.content || Date.now() - cached.at < RENDER_THROTTLE_MS)) {
       return cached.html
@@ -2041,7 +2059,8 @@ import QuestionModal from '../components/overlays/QuestionModal.svelte'
         if (ev.thinking) {
           lines.push(`<details><summary>${tr('chat.thoughts')}</summary>`, '', ev.thinking, '', '</details>', '')
         }
-        lines.push(ev.content ?? '', '')
+        // OCTO-FORK: only assistant status markers are translated in Markdown exports.
+        lines.push(assistantDisplayText(ev.content ?? ''), '')
       } else if (type === 'thinking' && ev.text) {
         lines.push(`<!-- ${tr('chat.thinking')} -->`, ev.text, '')
       } else if (type === 'tool_call') {
@@ -2804,11 +2823,8 @@ import QuestionModal from '../components/overlays/QuestionModal.svelte'
       <div class="messages" bind:this={messagesEl}>
         <div class="messages-inner" class:no-session={!id} bind:this={innerEl}>
 
-          <!-- Meta row for an assistant turn: rendered on the first assistant
-               chunk after a user message (text/thinking/tools are separate
-               entries, so later chunks of the same turn skip it). Time shows
-               only when the entry carries createdAt — replayed history doesn't. -->
-          {#snippet agentMeta(show: boolean, ts?: number)}
+          <!-- OCTO-FORK: the first assistant block shows the whole turn's elapsed time once. -->
+          {#snippet agentMeta(show: boolean, durationMs?: number)}
             {#if show}
               <div class="msg-meta">
                 {#if boundAgent}
@@ -2828,7 +2844,7 @@ import QuestionModal from '../components/overlays/QuestionModal.svelte'
                   <span class="meta-avatar bot" aria-hidden="true"><OctoLogo size={22} /></span>
                     <span class="meta-name">{brandShortName($locale)}</span>
                 {/if}
-                {#if ts}<span class="meta-time">{fmtTime(ts)}</span>{/if}
+                {#if typeof durationMs === 'number'}<span class="meta-time">{fmtTurnElapsed(durationMs, $t)}</span>{/if}
               </div>
             {/if}
           {/snippet}
@@ -2981,7 +2997,7 @@ import QuestionModal from '../components/overlays/QuestionModal.svelte'
                   </label>
                 {/if}
                 <div class="msg-agent fadein">
-                {@render agentMeta(i === 0 || msgs[i - 1]?.type === 'user', msg.createdAt)}
+                {@render agentMeta(i === 0 || msgs[i - 1]?.type === 'user', replyDurations[i])}
                 <div class="agent-content">
                   <!-- Plan card (todos attached to this message) -->
                   {#if msg.todos && msg.todos.length > 0}
@@ -3036,7 +3052,7 @@ import QuestionModal from '../components/overlays/QuestionModal.svelte'
                     >
                       {#each throttledSegments(msg.id, msg.content, msg.streaming) as seg, segIdx (segIdx)}
                         {#if seg.kind === 'markdown'}
-                          {@html throttledMarkdown(`${msg.id}:${segIdx}`, seg.text, msg.streaming, showReasoning)}
+                          {@html throttledMarkdown(`${msg.id}:${segIdx}`, assistantDisplayText(seg.text, $t), msg.streaming, showReasoning)}
                         {:else if seg.spec && isAnchor(panels, seg.spec, msg.id, segIdx)}
                           <!-- An anonymous panel renders its own spec where it
                                sits. An addressable one renders the newest
@@ -3091,7 +3107,7 @@ import QuestionModal from '../components/overlays/QuestionModal.svelte'
             {:else if msg.type === 'thinking' && showReasoning}
               <!-- Standalone Thoughts segment (reasoning before a tool round) -->
               <div class="msg-agent fadein">
-                {@render agentMeta(i === 0 || msgs[i - 1]?.type === 'user', msg.createdAt)}
+                {@render agentMeta(i === 0 || msgs[i - 1]?.type === 'user', replyDurations[i])}
                 <div class="agent-content">
                   <details class="think-block">
                     <summary class="think-summary">
@@ -3107,7 +3123,7 @@ import QuestionModal from '../components/overlays/QuestionModal.svelte'
             {:else if msg.type === 'tool_group'}
               <!-- Tool group card -->
               <div class="msg-agent fadein">
-                {@render agentMeta(i === 0 || msgs[i - 1]?.type === 'user', msg.createdAt)}
+                {@render agentMeta(i === 0 || msgs[i - 1]?.type === 'user', replyDurations[i])}
                 <div class="agent-content">
                   <ToolGroup tools={msg.tools} streaming={msg.streaming} />
                 </div>
@@ -3134,6 +3150,11 @@ import QuestionModal from '../components/overlays/QuestionModal.svelte'
               </div>
             {/if}
           {/each}
+
+          <!-- OCTO-FORK: show elapsed time immediately, then hand the header to the first reply block. -->
+          {#if waitingForReplyBlock}
+            <div class="msg-agent">{@render agentMeta(true, liveReplyDuration)}</div>
+          {/if}
 
           <!-- Live sub-agents panel (current turn) -->
           {#if subAgents.length > 0}

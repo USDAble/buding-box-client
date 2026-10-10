@@ -1855,7 +1855,8 @@
 .security-menu { min-width: 300px; padding: 6px; }
 .security-heading { padding: 4px 8px 7px; font-size: 12px; font-weight: 700; color: var(--text); }
 .security-row {
-  width: 100%; display: flex; align-items: center; justify-content: space-between; gap: 14px;
+  /* OCTO-FORK: long localized copy must not shift or squeeze the shared switch column. */
+  width: 100%; display: grid; grid-template-columns: minmax(0, 1fr) 30px; align-items: center; gap: 14px;
   border: none; background: transparent; padding: 8px; border-radius: 8px; text-align: left;
   font-family: inherit; cursor: pointer;
 }

@@ -12,6 +12,9 @@ func TestDeveloperBuildAcceptsOnlyPairedLoopbackLinkerOrigins(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	if p.CatalogCacheSource() != DeveloperAPIHost {
+		t.Fatal("explicit developer origin must use its own catalog cache")
+	}
 	if p.APIHost != DeveloperAPIHost || p.GatewayHost != DeveloperGatewayHost {
 		t.Fatal("linker origins were not used")
 	}
@@ -29,6 +32,9 @@ func TestDeveloperBuildAcceptsOnlyPairedLoopbackLinkerOrigins(t *testing.T) {
 	defaults, err := loadProfile(embeddedProfileJSON, embeddedEndpointsJSON)
 	if err != nil {
 		t.Fatal(err)
+	}
+	if p.CatalogCacheSource() != "" || defaults.CatalogCacheSource() != "" {
+		t.Fatal("default deployment must retain its original cache")
 	}
 	if p.APIHost != defaults.APIHost || p.GatewayHost != defaults.GatewayHost {
 		t.Fatal("default deployment changed")

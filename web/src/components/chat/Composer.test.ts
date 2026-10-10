@@ -4,7 +4,7 @@ import { get } from 'svelte/store'
 import { locale } from '../../lib/i18n'
 import { allowEnvironmentModelSource, productState } from '../../lib/product'
 import {
-  activeSessionId, activeAgent, pendingAgent, chatMessages,
+  activeSessionId, activeAgent, pendingAgent, chatMessages, chatModel,
   pendingConfidentialSession,
   pendingModel,
   pendingPersonalInfoProtection,
@@ -16,6 +16,8 @@ import { getEndpoints, getProductModels, transformPersonalInfo, setModelReasonin
 import { parkDraft, takeDraft } from '../../lib/composerDrafts'
 import Composer from './Composer.svelte'
 import { confirmRequest } from '../../lib/confirm'
+// OCTO-FORK: verify persisted per-model levels and invalidation against the shared projection.
+import { selectableModels } from '../../lib/selectableModels'
 
 // V-58 / PR-5d3: the composer must not turn a zero balance into a UI conclusion.
 //
@@ -114,6 +116,7 @@ beforeEach(() => {
   activeSessionId.set('s1')
   sessions.set([])
   chatMessages.set({}); activeAgent.set('default'); pendingAgent.set(''); confirmRequest.set(null)
+  chatModel.set({})
   vi.mocked(updateSessionAgentProfile).mockClear()
   vi.mocked(listAgents).mockResolvedValue([]); vi.mocked(listSkills).mockResolvedValue([])
   pendingModel.set('')
@@ -126,35 +129,111 @@ beforeEach(() => {
   vi.mocked(transformPersonalInfo).mockImplementation(async (text: string) => ({ hit: false, masked: text, matches: [], ruleVersion: 'builtin-1' }))
   vi.mocked(getProductModels).mockResolvedValue({ state: 'absent', catalogVersion: '', vendors: [] })
   vi.mocked(getEndpoints).mockResolvedValue({ endpoints: [] })
-  vi.mocked(setModelReasoning).mockClear()
+  vi.mocked(setModelReasoning).mockReset()
+  vi.mocked(setModelReasoning).mockImplementation(async (modelId, effort) => ({ modelId, effort }))
+  selectableModels.set([])
   target = document.createElement('div')
   document.body.appendChild(target)
 })
 
+// OCTO-FORK: choices follow the catalog; persistence failure and stale levels cannot look successful.
 describe('signed per-model reasoning choices', () => {
-  it('offers only declared levels, remembers each model and keeps visibility independent of off', async () => {
+  function setup(effort = 'high', options = ['default', 'low', 'high']) {
     activeSessionId.set(null); allowEnvironmentModelSource.set(false); setBalance(1)
-    vi.mocked(getProductModels).mockResolvedValue({state:'ready',catalogVersion:'test',defaultModelId:'gateway::known',vendors:[{id:'gateway',displayName:'Gateway',models:[
-      {id:'known',displayName:'Known',compositeId:'gateway::known',confidential:false,reasoningOptions:['default','off','low','high','max'],reasoningEffort:'high'},
-      {id:'unknown',displayName:'Unknown',compositeId:'gateway::unknown',confidential:false},
-    ]}]})
-    render();await settle()
-    const open = (label: string) => { const chip = [...target.querySelectorAll<HTMLButtonElement>('button.meta-chip')].find(node => node.textContent?.trim() === label);expect(chip).toBeTruthy();chip!.click();flushSync() }
-    open('高')
+    const catalog = {state:'ready' as const,catalogVersion:'test',defaultModelId:'gateway::known',vendors:[{id:'gateway',displayName:'Gateway',models:[
+      {id:'known',displayName:'Known',compositeId:'gateway::known',confidential:false,reasoningOptions:options,reasoningEffort:effort},
+      {id:'unknown',displayName:'Unknown',compositeId:'gateway::unknown',confidential:false,reasoningOptions:['default'],reasoningEffort:'default'},
+    ]}]}
+    vi.mocked(getProductModels).mockImplementation(async () => structuredClone(catalog))
+    vi.mocked(setModelReasoning).mockImplementation(async (modelId, value) => {
+      catalog.vendors[0].models.find(row => row.id === modelId)!.reasoningEffort = value
+      return { modelId, effort: value }
+    })
+    return catalog
+  }
+  function open(label: string) {
+    const chip = [...target.querySelectorAll<HTMLButtonElement>('button.meta-chip')].find(node => node.textContent?.trim() === label)
+    expect(chip).toBeTruthy(); chip!.click(); flushSync()
+  }
+  function choose(label: string) {
+    const item = [...target.querySelectorAll<HTMLButtonElement>('button.menu-item')].find(node => node.textContent?.trim() === label)
+    expect(item).toBeTruthy(); item!.click(); flushSync()
+  }
+  function chipHas(label: string) { return [...target.querySelectorAll('button.meta-chip')].some(node => node.textContent?.trim() === label) }
+
+  it('keeps levels when a new chat becomes a gateway session and when returning to it', async () => {
+    setup('high', ['default','low','medium','high']); render(); await settle()
+    expect(chipHas('高')).toBe(true)
+    sessions.set([{id:'s1',model:'gateway::known'}] as never)
+    activeSessionId.set('s1'); await settle()
+    open('高'); await settle()
+    expect([...target.querySelectorAll('button.menu-item .mi-name')].map(node => node.textContent)).toContain('中')
+    choose('低'); await settle()
+    expect(setModelReasoning).toHaveBeenCalledWith('known','low')
+    expect(chipHas('低')).toBe(true)
+    activeSessionId.set(null); await settle()
+    activeSessionId.set('s1'); await settle()
+    expect(chipHas('低')).toBe(true)
+  })
+
+  it('uses explicit binding first and follows live gateway model changes otherwise', async () => {
+    setup(); sessions.set([{id:'s1',model:'gateway::known',model_id:'gateway::unknown'}] as never)
+    activeSessionId.set('s1'); chatModel.set({s1:'known'}); render(); await settle()
+    expect(chipHas('Unknown')).toBe(true); expect(chipHas('模型默认')).toBe(true)
+    sessions.set([{id:'s1',model:'gateway::unknown'}] as never); await settle()
+    expect(chipHas('Known')).toBe(true); expect(chipHas('高')).toBe(true)
+    chatModel.set({s1:'unknown'}); await settle()
+    expect(chipHas('Unknown')).toBe(true); expect(chipHas('模型默认')).toBe(true)
+  })
+
+  it('does not invent default levels for a missing or ambiguous bound model', async () => {
+    const catalog=setup(); sessions.set([{id:'s1',model:'gateway::removed'}] as never)
+    activeSessionId.set('s1'); render(); await settle()
+    expect(chipHas('推理档位暂不可用')).toBe(true)
+    open('推理档位暂不可用'); await settle()
+    expect(target.textContent).toContain('模型信息暂不可用')
+    expect([...target.querySelectorAll('button.menu-item .mi-name')].map(node => node.textContent)).not.toContain('模型默认')
+    open('推理档位暂不可用')
+    catalog.vendors[0].models.push({...catalog.vendors[0].models[0],compositeId:'other::known'})
+    sessions.set([{id:'s1',model:'known'}] as never); await settle()
+    open('高'); await settle()
+    expect(chipHas('推理档位暂不可用')).toBe(true)
+  })
+
+  it('offers the declared four-level subset and recalls each model preference', async () => {
+    setup('high', ['default','off','low','high','max'])
+    render(); await settle(); open('高'); await settle()
     const labels = [...target.querySelectorAll('button.menu-item .mi-name')].map(node => node.textContent)
-    expect(labels).toContain('模型默认');expect(labels).toContain('关闭推理');expect(labels).toContain('最高');expect(labels).not.toContain('中');expect(labels).not.toContain('极高')
-    ;([...target.querySelectorAll<HTMLButtonElement>('button.menu-item')].find(node => node.textContent?.trim() === '关闭推理'))!.click()
-    await settle()
-    expect(setModelReasoning).toHaveBeenCalledWith('known','off')
-    open('关闭推理')
+    expect(labels).toContain('模型默认'); expect(labels).toContain('低'); expect(labels).not.toContain('关闭推理'); expect(labels).not.toContain('最高'); expect(labels).not.toContain('中')
+    choose('低'); await settle(); expect(setModelReasoning).toHaveBeenCalledWith('known','low'); expect(chipHas('低')).toBe(true)
+    pendingModel.set('gateway::unknown'); flushSync(); expect(chipHas('模型默认')).toBe(true)
+    open('模型默认'); await settle(); expect(target.querySelectorAll('button.menu-item .mi-name').length).toBe(2)
     expect((target.querySelector('button.toggle-item') as HTMLButtonElement).disabled).toBe(false)
-    pendingModel.set('gateway::unknown');flushSync()
-    // Close the current menu before reopening for the newly selected model.
-    open('模型默认');open('模型默认')
-    const unknownLabels = [...target.querySelectorAll('button.menu-item .mi-name')].map(node => node.textContent)
-    expect(unknownLabels).toContain('模型默认');expect(unknownLabels).not.toContain('最高');expect(unknownLabels).not.toContain('关闭推理')
-    pendingModel.set('gateway::known');flushSync()
-    expect([...target.querySelectorAll('button.meta-chip')].some(node=>node.textContent?.trim()==='关闭推理')).toBe(true)
+    pendingModel.set('gateway::known'); flushSync(); expect(chipHas('低')).toBe(true)
+  })
+  it('keeps the acknowledged level when saving fails', async () => {
+    setup(); vi.mocked(setModelReasoning).mockRejectedValue(new Error('offline'))
+    render(); await settle(); open('高'); await settle(); choose('低'); await settle()
+    expect(chipHas('高')).toBe(true); expect(get(toasts)).toHaveLength(1)
+    expect(get(selectableModels).find(row => row.modelId === 'known')?.reasoningEffort).toBe('high')
+  })
+  it('requires an explicit new choice after the catalog withdraws the stored level', async () => {
+    const catalog = setup(); const onSend = vi.fn(); render(onSend); await settle()
+    catalog.vendors[0].models[0].reasoningOptions = ['default','low']
+    open('高'); await settle(); expect(chipHas('选择推理强度')).toBe(true)
+    expect(noticeText()).toContain('原档位已不可用')
+    await sendWord('hello'); expect(onSend).not.toHaveBeenCalled()
+    open('选择推理强度'); await settle(); choose('低'); await settle(); expect(noticeText()).not.toContain('原档位已不可用')
+    await sendWord('hello'); expect(onSend).toHaveBeenCalledTimes(1)
+  })
+  it('does not send while saving or assign a late acknowledgement to a different model', async () => {
+    setup(); let finish!: (value: {modelId:string;effort:string}) => void
+    vi.mocked(setModelReasoning).mockImplementation(() => new Promise(resolve => { finish = resolve }))
+    const onSend = vi.fn(); render(onSend); await settle(); open('高'); await settle(); choose('低')
+    await sendWord('hello'); expect(onSend).not.toHaveBeenCalled(); expect(chipHas('高')).toBe(true)
+    pendingModel.set('gateway::unknown'); flushSync(); finish({modelId:'known',effort:'low'}); await settle()
+    expect(chipHas('模型默认')).toBe(true)
+    pendingModel.set('gateway::known'); flushSync(); expect(chipHas('低')).toBe(true)
   })
 })
 

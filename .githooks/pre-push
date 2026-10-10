@@ -10,6 +10,7 @@ if ! git diff-index --quiet HEAD --; then
 fi
 
 echo "Running full gate..."
+. "$(git rev-parse --show-toplevel)/.githooks/make-env.sh"
 if ! make gate; then
     echo "Error: Full gate failed"
     exit 1

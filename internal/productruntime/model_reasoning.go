@@ -2,6 +2,7 @@ package productruntime
 
 import (
 	"encoding/json"
+	"errors"
 	"net/http"
 	"slices"
 	"strings"
@@ -9,38 +10,52 @@ import (
 	"github.com/open-octo/octo-agent/internal/productprofile"
 )
 
+// Only platform effort levels are exposed; the platform owns vendor translation.
 func reasoningOptions(declared []string) []string {
 	out := []string{"default"}
-	for _, choice := range declared {
-		switch choice {
-		case "off", "minimal", "low", "medium", "high", "xhigh", "max":
-			if !slices.Contains(out, choice) {
-				out = append(out, choice)
-			}
+	for _, choice := range []string{"low", "medium", "high"} {
+		if slices.Contains(declared, choice) {
+			out = append(out, choice)
 		}
 	}
 	return out
 }
-func (rt *Runtime) reasoningPreference(model string, options []string) string {
-	if rt.deps.State == nil {
-		return "default"
-	}
-	value := rt.deps.State.State().Prefs.ModelReasoning[model]
-	if value != "" && slices.Contains(options, value) {
-		return value
+func (rt *Runtime) reasoningPreference(model string) string {
+	if rt.deps.State != nil {
+		if value := rt.deps.State.State().Prefs.ModelReasoning[model]; value != "" {
+			return value
+		}
 	}
 	return "default"
 }
 
-// ModelReasoning is the sender's single source of model-specific effort. A
-// missing or changed declaration returns default, never another model's choice.
-func (rt *Runtime) ModelReasoning(model string) string {
+// reasoningSelectionError uses the existing coded turn-error contract for UI copy.
+type reasoningSelectionError struct{}
+
+func (reasoningSelectionError) Error() string {
+	return "selected reasoning level is no longer available; choose a reasoning level before sending"
+}
+func (reasoningSelectionError) ErrorCode() string { return "reasoning_selection_required" }
+
+// ModelReasoning snapshots a model's choice for one user turn. Invalid saved
+// choices stay visible in the catalog until the user explicitly reselects.
+func (rt *Runtime) ModelReasoning(model string) (string, error) {
+	model = strings.TrimPrefix(model, productprofile.GatewayModelPrefix())
+	effort := rt.reasoningPreference(model)
+	return effort, rt.ValidateModelReasoning(model, effort)
+}
+
+// ValidateModelReasoning rechecks the fixed turn choice before each request.
+func (rt *Runtime) ValidateModelReasoning(model, effort string) error {
 	model = strings.TrimPrefix(model, productprofile.GatewayModelPrefix())
 	status, known := rt.CatalogModel(model)
 	if !known || !status.Current || !status.Selectable {
-		return "default"
+		return errors.New("model_unavailable: refresh the model list and choose an available model")
 	}
-	return rt.reasoningPreference(model, status.ReasoningOptions)
+	if !slices.Contains(status.ReasoningOptions, effort) {
+		return reasoningSelectionError{}
+	}
+	return nil
 }
 func (rt *Runtime) handleModelReasoning(w http.ResponseWriter, r *http.Request) {
 	if !rt.financeReady(w) {

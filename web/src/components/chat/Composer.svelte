@@ -25,7 +25,7 @@
   import { allowEnvironmentModelSource, catalogState, catalogRevision, productState, refreshCatalogState } from '../../lib/product'
   import { confirmPendingPermissionChoice } from '../../lib/pendingPermissionGate'
   import { checkSensitive } from '../../lib/sensitive'
-  import { loadSelectableModels, type SelectableModel } from '../../lib/selectableModels'
+  import { loadSelectableModels, saveModelReasoning, selectableModels, type SelectableModel } from '../../lib/selectableModels'
 
   let { onSend }: { onSend?: (text: string, files?: any[], queued?: boolean) => void } = $props()
 
@@ -637,7 +637,8 @@
 
   let isStreaming = $derived($chatStreaming[sid] ?? false)
   let currentSession = $derived($sessions.find(s => s.id === sid) ?? null)
-  let models = $state<SelectableModel[]>([])
+  // OCTO-FORK: catalog reads and saved preferences share the adapter's snapshot.
+  let models = $derived($selectableModels)
 
   // Session meta chips — pull live values from per-session stores, fall back
   // to the session record, then to sensible defaults.
@@ -648,12 +649,21 @@
   // view names it instead of showing a dash.
   let defaultModelName = $state('')
   let defaultModelId = $state('')
+  // OCTO-FORK: gateway sessions persist their binding in model, while local
+  // endpoints use model_id. Resolve once for the name, picker and effort menu.
+  let modelBinding = $derived(currentSession?.model_id || (sid
+    ? ($chatModel[sid] || currentSession?.model || '')
+    : ($pendingModel || defaultModelId)))
+  let activeModel = $derived.by(() => {
+    const exact = models.find(model => model.id === modelBinding)
+    if (exact) return exact
+    const matches = models.filter(model => model.modelId === modelBinding)
+    return matches.length === 1 ? matches[0] : null
+  })
+  let activeModelId = $derived(activeModel?.id ?? modelBinding)
   let modelName = $derived.by(() => {
-    const binding = currentSession?.model_id || (!sid ? $pendingModel : '') || defaultModelId
-    const row = models.find(model => model.id === binding)
-      ?? models.find(model => model.modelId === ($chatModel[sid] || currentSession?.model))
-    return row?.displayName || $chatModel[sid] || currentSession?.model
-      || (binding ? binding.split('::').pop() : '') || defaultModelName || '—'
+    return activeModel?.displayName || $chatModel[sid] || currentSession?.model
+      || (modelBinding ? modelBinding.split('::').pop() : '') || defaultModelName || '—'
   })
   // A pending pick belongs to the blank new-chat view only. Once a session is
   // active (auto-created — which consumed it — or picked/created any other
@@ -669,11 +679,6 @@
   let protectionLocked = $derived(
     sid ? (currentSession?.protection_policy?.locked ?? ((currentSession as any)?.turn_count ?? 0) > 0) : false,
   )
-  // OCTO-FORK: effort belongs to the selected signed model, not a global level.
-  let reasoning = $derived.by(() => {
-    const value = activeModel?.reasoningEffort ?? 'default'
-    return reasoningLevels.includes(value) ? value : 'default'
-  })
   // The project (a session group carrying a working dir) this session belongs
   // to, if any. A project's directory governs every session in it, so the dir
   // chip below goes read-only rather than letting the user edit a value the
@@ -789,15 +794,6 @@
     return out
   })
 
-  let activeModelId = $derived.by(() => {
-    const bound = currentSession?.model_id ?? ''
-    if (bound.includes('::')) return bound
-    if (bound) return ''
-    if (!sid) return $pendingModel || defaultModelId
-    return defaultModelId.split('::').pop() === modelName ? defaultModelId : ''
-  })
-  let activeModel = $derived(models.find(model => model.id === activeModelId) ?? null)
-
   // ── agent assignment ───────────────────────────────────────────────────────
   // agent_profile can be (re)assigned right up until the session's first turn
   // runs — the server 409s a rebind past that point, since a turn may already
@@ -880,7 +876,10 @@
   let dirSaving = $state(false)
   let pickerOpen = $state(false)
   let pickerMode = $state<'folder' | 'file'>('folder')
-  let reasoningLevels = $derived(activeModel?.reasoningOptions?.length ? activeModel.reasoningOptions : ['default'])
+  let reasoningLevels = $derived(activeModel ? (activeModel.reasoningOptions ?? ['default']) : [])
+  // OCTO-FORK: effort belongs to the selected signed model, not a global level.
+  let reasoning = $derived(activeModel?.reasoningEffort ?? 'default')
+  let reasoningInvalid = $derived(!!activeModel && !reasoningLevels.includes(reasoning))
   let savingReasoning = $state(false)
   function reasoningLabel(level: string) { return $t(`chat.reasoning_level_${level}`) }
   const showReasoningIcon = $derived(showReasoning ? 'ant-design:eye-outlined' : 'ant-design:eye-invisible-outlined')
@@ -907,7 +906,6 @@
       const result = await loadSelectableModels(allowLocal)
       if (seq !== modelsFetchSeq) return
       catalogState.set(result.state)
-      models = result.models
       defaultModelId = result.defaultModelId
       defaultModelName = result.models.find(model => model.id === result.defaultModelId)?.displayName
         ?? result.defaultModelId.split('::').pop() ?? ''
@@ -997,10 +995,10 @@
     const model = activeModel
     savingReasoning = true
     try {
-      const result = await api.setModelReasoning(model.modelId,level)
-      models = models.map(row => row.id === model.id ? {...row,reasoningEffort:result.effort} : row)
+      // OCTO-FORK: update only the acknowledged model, never an optimistic selection.
+      await saveModelReasoning(model, level)
     } catch (e: any) {
-      showToast(e.message ?? tr('chat.reasoning_failed'), 'error')
+      showToast(tr(e.message === 'reasoning_selection_required' ? 'chat.reasoning_reselect' : 'chat.reasoning_failed'), 'error')
     } finally { savingReasoning = false }
   }
 
@@ -1181,6 +1179,8 @@
 
   const notices = $derived.by<Notice[]>(() => {
     const list: Notice[] = []
+    // OCTO-FORK: a withdrawn effort must be explicitly reselected, never downgraded.
+    if (reasoningInvalid) list.push({ id: 'reasoning-invalid', level: 'warn', text: $t('chat.reasoning_reselect'), slot: 'above' })
     // 敏感词命中（拦截，warn）。读 $state 的 sensitiveHit 建立响应式依赖，
     // 命中/清除即时反映到通知条。
     if (sensitiveHit) {
@@ -1209,6 +1209,11 @@
   // Ctrl+Q). Idle it makes no difference: the server just starts the turn.
   async function send(queued = false) {
     if (!text.trim() && attachments.length === 0) return
+    // OCTO-FORK: do not race a preference write or send with a withdrawn effort.
+    if (savingReasoning || reasoningInvalid) {
+      showToast($t(savingReasoning ? 'chat.reasoning_saving' : 'chat.reasoning_reselect'), 'error')
+      return
+    }
     // Don't send while an attachment upload is still in flight — the file
     // would be dropped and re-appear on the next message.
     if (attachments.some(a => a.uploading)) {
@@ -1721,15 +1726,17 @@
           {/if}
         </div>
         <div class="picker">
-          <button class="meta-chip" onclick={(e) => { e.stopPropagation(); const open = reasonMenu; closeMenus(); reasonMenu = !open }}>
-            <span>{reasoningLabel(reasoning)}</span>
+          <!-- OCTO-FORK: refresh declared levels through the existing catalog owner. -->
+          <button class="meta-chip" title={$t('chat.reasoning_default_hint')} onclick={(e) => { e.stopPropagation(); const open = reasonMenu; closeMenus(); reasonMenu = !open; if (!open && !savingReasoning) void refreshModels() }}>
+            <span>{!activeModel ? $t('chat.reasoning_unavailable') : reasoningInvalid ? $t('chat.reasoning_choose') : reasoningLabel(reasoning)}</span>
             <iconify-icon icon={showReasoningIcon} width="12" class="reasoning-eye"></iconify-icon>
             <iconify-icon icon="lucide:chevron-down" width="12"></iconify-icon>
           </button>
           {#if reasonMenu}
             <div class="menu" onclick={(e) => e.stopPropagation()}>
+              {#if !activeModel}<div class="menu-empty">{$t('chat.reasoning_model_unavailable')}</div>{/if}
               {#each reasoningLevels as lvl}
-                <button class="menu-item" disabled={savingReasoning} class:active={lvl === reasoning} onclick={() => pickReasoning(lvl)}>
+                <button class="menu-item" disabled={savingReasoning || !activeModel} class:active={!reasoningInvalid && lvl === reasoning} onclick={() => pickReasoning(lvl)}>
                   <span class="mi-name">{reasoningLabel(lvl)}</span>
                 </button>
               {/each}

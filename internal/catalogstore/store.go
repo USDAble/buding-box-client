@@ -15,6 +15,7 @@ package catalogstore
 
 import (
 	"bytes"
+	"crypto/sha256"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -101,8 +102,17 @@ type Store struct {
 // times of its own - the caller passes fetchedAt and expiresAt in the Entry,
 // because it is the caller that knows when the platform answered. A clock here
 // would be a second opinion about the same fact.
-func Open() (*Store, error) {
-	path, err := datapath.Join(cacheFile)
+func Open() (*Store, error) { return OpenForSource("") }
+
+// OpenForSource isolates an explicitly overridden control-plane source from the
+// default deployment. An empty source retains catalog.json and its existing
+// rollback high-water mark. Source-derived file names never contain URL text.
+func OpenForSource(source string) (*Store, error) {
+	filename := cacheFile
+	if source != "" {
+		filename = fmt.Sprintf("catalog-%x.json", sha256.Sum256([]byte(source)))
+	}
+	path, err := datapath.Join(filename)
 	if err != nil {
 		return nil, fmt.Errorf("catalogstore: resolve path: %w", err)
 	}

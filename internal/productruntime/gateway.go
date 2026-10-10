@@ -49,7 +49,9 @@ const gatewayEnsureBudget = 10 * time.Second
 // a restored session lands).
 type GatewayEndpoint struct {
 	// ReasoningForModel resolves product preferences without vendor translation.
-	ReasoningForModel func(string) string
+	ReasoningForModel func(string) (string, error)
+	// ValidateReasoning checks the fixed turn choice against the current catalog.
+	ValidateReasoning func(string, string) error
 	// Host is the gateway's base URL: scheme and authority, optionally with a
 	// /v1 segment.
 	//
@@ -121,7 +123,11 @@ type GatewayEndpoint struct {
 // turn for the same reason it calls this method per turn.
 func (g GatewayEndpoint) Sender(tuning app.ReasoningTuning) (agent.Sender, error) {
 	if g.ReasoningForModel != nil {
-		tuning.ReasoningEffort = g.ReasoningForModel(tuning.ClientModelID)
+		effort, err := g.ReasoningForModel(tuning.ClientModelID)
+		if err != nil {
+			return nil, err
+		}
+		tuning.ReasoningEffort = effort
 	}
 	if strings.TrimSpace(g.Host) == "" {
 		return nil, fmt.Errorf("the built-in gateway has no address in this build; the turn was not started and nothing was sent")
@@ -153,21 +159,17 @@ func (g GatewayEndpoint) Sender(tuning app.ReasoningTuning) (agent.Sender, error
 	// Accept/Authorization headers all come from internal/provider/openai, which
 	// is exactly why C3 forbids writing a second parser.
 	//
-	// ReasoningEffort and ShowReasoning are forwarded verbatim, both halves. The
-	// tuner is the user's, and the two do different jobs: the effort asks the
-	// model to reason at all (and is omitted on the wire when empty — the "off"
-	// level), while ShowReasoning decides whether a trace that comes back reaches
-	// the event stream. Wiring only one of them is a half-fix that looks whole:
-	// show-only never asks a model to think, effort-only receives the trace and
-	// drops it (app.sender.reasoningSink).
-	//
-	// Dialect is deliberately left unset. It selects which of five reasoning
-	// field shapes internal/provider/openai emits, so the empty value means "the
-	// default branch" — a flat reasoning_effort — and that is the shape the
-	// contract now names (中台交付包 §5.2, PQ27); the alternative shapes are what
-	// Bailian, DeepSeek's native API, OpenRouter and Kimi each need. Setting it
-	// here would be guessing a contract fact, and if the real gateway disagrees
-	// this field is the one place that changes.
+	// The gateway receives unified effort unchanged. The platform translates
+	// vendor parameters; ShowReasoning only controls trace display.
+	var validateRequest func(string) error
+	if g.ValidateReasoning != nil {
+		validateRequest = func(model string) error {
+			if model != tuning.ClientModelID {
+				return fmt.Errorf("model_unavailable: the model changed; start a new turn")
+			}
+			return g.ValidateReasoning(model, tuning.ReasoningEffort)
+		}
+	}
 	localSession := tuning.ClientSessionID
 	if localSession == "" {
 		localSession = rand.Text()
@@ -179,6 +181,7 @@ func (g GatewayEndpoint) Sender(tuning app.ReasoningTuning) (agent.Sender, error
 	}
 	return app.NewSender(app.SenderOptions{
 		GatewayReasoningPassthrough: true,
+		ValidateRequest:             validateRequest,
 		Provider:                    app.ProviderCustom,
 		Protocol:                    "openai",
 		APIKey:                      token,

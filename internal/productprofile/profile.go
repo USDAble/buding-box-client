@@ -102,6 +102,9 @@ func GatewayModelPrefix() string {
 // itself, and never come from config.yml, the environment, product-state.json,
 // a cache or WebView input. See P0-01 §「中台请求客户端的实现形态」§1.
 type Profile struct {
+	// catalogCacheSource is set only by the verified developer endpoint override.
+	// It is not a runtime/user configuration field or a production cache migration.
+	catalogCacheSource          string
 	SchemaVersion               int               `json:"schemaVersion"`
 	Name                        string            `json:"name"`
 	AllowDevWebview             bool              `json:"allowDevWebview"`
@@ -130,6 +133,10 @@ func Current() Profile {
 	})
 	return current
 }
+
+// CatalogCacheSource identifies an explicitly overridden development API.
+// Default builds keep the established deployment cache and rollback protection.
+func (p Profile) CatalogCacheSource() string { return p.catalogCacheSource }
 
 // IsProduction reports whether this binary is a standard production package.
 func (p Profile) IsProduction() bool { return p.Name == Production }

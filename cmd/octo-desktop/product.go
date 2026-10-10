@@ -114,7 +114,9 @@ func mountProductAPI() (mount func(api func(pattern string, h http.HandlerFunc))
 	// re-fetchable copy of something the platform hands out again on the next
 	// login. Refusing to serve the product because a cache file would not open
 	// would turn a recoverable condition into an outage.
-	catalog, err := catalogstore.Open()
+	// OCTO-FORK: local acceptance catalogs must not overwrite the deployment high-water mark.
+	profile := productprofile.Current()
+	catalog, err := catalogstore.OpenForSource(profile.CatalogCacheSource())
 	if err != nil {
 		slog.Warn("product: catalog cache unavailable; the picker will have nothing to show until the next fetch", "err", err)
 	} else if catalog.Corrupt() {
@@ -129,7 +131,6 @@ func mountProductAPI() (mount func(api func(pattern string, h http.HandlerFunc))
 	// the process and the judgement belongs to internal/productprofile - the
 	// runtime forwards it rather than re-deciding what "configured" means
 	// (本地API契约 §2.13).
-	profile := productprofile.Current()
 
 	// A restarted process has no access token and no refresh token in memory -
 	// the holder starts empty by design (令牌只驻内存，E6 规则 2). Without the
@@ -212,7 +213,7 @@ func mountProductAPI() (mount func(api func(pattern string, h http.HandlerFunc))
 	// token; one built with the exchange but without the store hands the next
 	// launch a token the platform has already rotated away.
 	// OCTO-FORK: resolve the selected model's preference at turn time.
-	gateway := productruntime.GatewayEndpoint{Host: profile.GatewayHost, Tokens: tokens, Ensure: renew.Ensure, ReasoningForModel: rt.ModelReasoning}
+	gateway := productruntime.GatewayEndpoint{Host: profile.GatewayHost, Tokens: tokens, Ensure: renew.Ensure, ReasoningForModel: rt.ModelReasoning, ValidateReasoning: rt.ValidateModelReasoning}
 
 	catalogModel = func(id string) (server.CatalogModelStatus, bool) {
 		// OCTO-FORK: renew the short-lived signed catalog before judging a turn.

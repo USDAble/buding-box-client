@@ -23,6 +23,7 @@ if git diff --cached --name-only | xargs grep -l '^<<<<<<<' 2>/dev/null; then
 fi
 
 echo "Running quick checks..."
+. "$(git rev-parse --show-toplevel)/.githooks/make-env.sh"
 if ! make quick-check; then
     echo "Error: Quick checks failed"
     exit 1

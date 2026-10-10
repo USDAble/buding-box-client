@@ -54,7 +54,7 @@
 import fs from 'node:fs/promises'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { isAllowed, loadAllowlist } from './datapath-guard.mjs'
+import { isAllowed, loadAllowlist, toPosixPath } from './datapath-guard.mjs'
 
 export const BRAND_SOURCE_REL = 'branding/brand.json'
 export const ALLOWLIST_REL = 'scripts/brand-allowlist.txt'
@@ -243,7 +243,8 @@ export async function collectFiles(root) {
       if (!entry.isFile()) continue
       if (isMarkdown(entry.name) || isTestFile(entry.name)) continue
       if (SKIP_EXT.has(path.extname(entry.name).toLowerCase())) continue
-      const rel = path.relative(root, abs)
+      // OCTO-FORK: generated-file exclusions use repository paths on every OS.
+      const rel = toPosixPath(path.relative(root, abs))
       if (generated.has(rel)) continue
       files.push(rel)
     }

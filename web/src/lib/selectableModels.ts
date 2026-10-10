@@ -1,7 +1,7 @@
 // OCTO-FORK: one adapter owns the signed-catalog + developer-local model view.
 // Composer and future model consumers must not merge these sources themselves.
 import * as api from './api'
-import { writable } from 'svelte/store'
+import { get, writable } from 'svelte/store'
 
 export type SelectableModel = {
   reasoningOptions?: string[]
@@ -32,6 +32,23 @@ export const selectableModels = writable<SelectableModel[]>([])
 export const defaultSelectableModel = writable<string>('')
 let modelRequestSequence = 0
 
+// OCTO-FORK: project the declared public levels without inventing native effort aliases.
+export function modelReasoningOptions(options?: string[]): string[] {
+  if (!options?.length) return ['default']
+  return ['default', ...['low', 'medium', 'high'].filter(level => options.includes(level))]
+}
+
+// OCTO-FORK: keep persisted preferences in the same snapshot as catalog availability.
+export async function saveModelReasoning(model: SelectableModel, effort: string): Promise<void> {
+  const result = await api.setModelReasoning(model.modelId, effort)
+  if (result.modelId !== model.modelId || result.effort !== effort) throw new Error('reasoning_save_mismatch')
+  // Ignore reads that started before the successful write.
+  ++modelRequestSequence
+  selectableModels.update(rows => rows.map(row => row.id === model.id ? { ...row, reasoningEffort: effort } : row))
+  const current = get(selectableModels).find(row => row.id === model.id)
+  if (current && !modelReasoningOptions(current.reasoningOptions).includes(effort)) throw new Error('reasoning_selection_required')
+}
+
 export async function loadSelectableModels(allowLocal: boolean): Promise<SelectableModelResult> {
   const requestSequence = ++modelRequestSequence
   let catalog: api.ProductModelsResponse = { state: 'absent', catalogVersion: '', vendors: [] }
@@ -45,7 +62,7 @@ export async function loadSelectableModels(allowLocal: boolean): Promise<Selecta
   for (const vendor of catalog.vendors ?? []) {
     for (const model of vendor.models ?? []) {
       models.push({
-        reasoningOptions: model.reasoningOptions?.length ? model.reasoningOptions : ['default'],
+        reasoningOptions: modelReasoningOptions(model.reasoningOptions),
         reasoningEffort: model.reasoningEffort ?? 'default',
         eligible: model.eligible !== false,
         availabilityReason: model.availabilityReason,

@@ -9,7 +9,7 @@
 #   make vet        go vet ./...
 #   make fmt        gofmt -w on all .go files
 #   make fmt-check  fail if anything would be reformatted
-#   make quick-check fast local checks run by the commit hook
+#   make quick-check explicitly run the project-wide local guards
 #   make gate       everything a change must pass before landing on v1 (see below)
 #   make hooks-install enable the repository's commit and push hooks
 #   make tidy       go mod tidy
@@ -414,7 +414,7 @@ quick-check: node-check fmt-check docs-ref-check norms-check agents-check \
 # activate a versioned hooks directory automatically; each clone opts in once.
 hooks-install:
 	git config core.hooksPath .githooks
-	@echo "Git hooks installed from .githooks (commit: quick-check; push: gate)."
+	@echo "Git hooks installed from .githooks (commit: staged diff check; push: no local test suite)."
 
 # gate is the single command a change must pass before it lands on v1. It is
 # the current implementation plan's local gate, which until now

@@ -42,14 +42,13 @@ import { tr } from './i18n'
 //   - `upstream_unavailable` → `product.tier.upstream_unavailable`: the control plane's
 //     own 5xx tier sentence, unchanged by the fact that the gateway also returns it.
 //
-// DELIBERATELY ABSENT: `unauthorized` / `token_expired`. On this path their correct
-// answer is not a sentence but a refresh-and-replay, and then clearing the credential
-// and returning to the interception page when the refresh is refused — none of which
-// exists for the gateway (the provider holds a token per turn and has no exchange; see
-// V-92 and 中台接口清单 §3.9). A sentence here would tell the user to retry a turn that
-// cannot succeed, so the honest state is that this path has no copy until it has the
-// behaviour.
+// OCTO-FORK: gateway authentication now refreshes and replays before surfacing a failure.
+// A remaining refusal must tell the user to sign in, not expose HTTP/token details.
 export const TURN_ERROR_KEYS: Record<string, string> = {
+  unauthorized: 'platform.error.unauthorized',
+  token_expired: 'platform.error.unauthorized',
+  CLIENT_TOKEN_INVALID: 'platform.error.CLIENT_TOKEN_INVALID',
+  network_unavailable: 'product.tier.network_unavailable',
 	confidential_model_required: 'privacy.private_model_required',
 	confidential_model_unavailable: 'turn_error.confidential_model_unavailable',
   insufficient_credits: 'turn_error.insufficient_credits',

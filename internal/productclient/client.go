@@ -34,6 +34,8 @@ type Credentials struct {
 type CredentialHolder struct {
 	mu    sync.RWMutex
 	creds Credentials
+	// OCTO-FORK: rotation retains a session, while login/logout invalidate running senders.
+	generation uint64
 }
 
 // Set replaces the held credentials.
@@ -41,6 +43,7 @@ func (h *CredentialHolder) Set(c Credentials) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 	h.creds = c
+	h.generation++
 }
 
 // Get returns a copy of the held credentials.
@@ -62,7 +65,44 @@ func (h *CredentialHolder) Clear() {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 	h.creds = Credentials{}
+	h.generation++
 }
+
+// SessionGeneration changes on login/logout, but not on token rotation.
+func (h *CredentialHolder) SessionGeneration() uint64 {
+	h.mu.RLock()
+	defer h.mu.RUnlock()
+	return h.generation
+}
+
+// AccessTokenForSession never hands an old task the credentials of a new login.
+func (h *CredentialHolder) AccessTokenForSession(generation uint64) (string, bool) {
+	h.mu.RLock()
+	defer h.mu.RUnlock()
+	return h.creds.AccessToken, h.generation == generation
+}
+
+func (h *CredentialHolder) snapshot() (Credentials, uint64) {
+	h.mu.RLock()
+	defer h.mu.RUnlock()
+	return h.creds, h.generation
+}
+
+func (h *CredentialHolder) replaceForSession(generation uint64, creds Credentials, end bool) bool {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	if h.generation != generation {
+		return false
+	}
+	h.creds = creds
+	if end {
+		h.generation++
+	}
+	return true
+}
+
+// ErrSessionChanged prevents a pending refresh from restoring a logged-out account.
+var ErrSessionChanged = errors.New("productclient: session changed during request")
 
 // ClientMeta is the per-install identity every request carries (§3.1). InstallID
 // is a random UUID generated once per installation - never a hardware serial.
@@ -82,9 +122,10 @@ type Client struct {
 
 	now func() time.Time
 
-	// refreshMu makes concurrent refreshes collapse into one call instead of a
+	// refreshGate makes concurrent refreshes collapse into one call instead of a
 	// storm (§C2 规则 4).
-	refreshMu sync.Mutex
+	// OCTO-FORK: cancellation must also interrupt waiting behind another task's renewal.
+	refreshGate chan struct{}
 }
 
 // Option customises a Client.
@@ -105,11 +146,12 @@ func WithClock(now func() time.Time) Option {
 // creds is required: the client holds tokens for exactly one account.
 func New(baseURL string, meta ClientMeta, creds *CredentialHolder, opts ...Option) *Client {
 	c := &Client{
-		baseURL: baseURL,
-		http:    &http.Client{Timeout: 30 * time.Second},
-		meta:    meta,
-		creds:   creds,
-		now:     time.Now,
+		refreshGate: make(chan struct{}, 1),
+		baseURL:     baseURL,
+		http:        &http.Client{Timeout: 30 * time.Second},
+		meta:        meta,
+		creds:       creds,
+		now:         time.Now,
 	}
 	for _, opt := range opts {
 		opt(c)
@@ -309,7 +351,7 @@ func (c *Client) SensitiveDictionary(ctx context.Context, knownVersion string) (
 }
 
 // EnsureToken makes sure an access token is held, exchanging the held refresh
-// token for one when memory has none.
+// token for one when memory has none or its advertised expiry is near.
 //
 // WHY IT EXISTS. A process that has just started holds a refresh token and
 // nothing else (需求基线 E6 规则 2: the access token is never written down), and
@@ -339,9 +381,18 @@ func (c *Client) EnsureToken(ctx context.Context) error {
 	if current.AccessToken != "" && (current.ExpiresAt.IsZero() || current.ExpiresAt.After(c.now().Add(30*time.Second))) {
 		return nil
 	}
-	err := c.refreshSingleFlight(ctx, current.AccessToken)
-	if err != nil && errors.Is(err, ErrSessionExpired) {
-		c.creds.Clear()
+	return c.RenewToken(ctx, current.AccessToken)
+}
+
+// RenewToken repairs the token rejected by a gateway using the existing single-flight.
+// Unlike EnsureToken, a rejected token must refresh even before its advertised expiry.
+func (c *Client) RenewToken(ctx context.Context, stale string) error {
+	generation := c.creds.SessionGeneration()
+	err := c.refreshSingleFlight(ctx, stale)
+	if errors.Is(err, ErrSessionExpired) {
+		if !c.creds.replaceForSession(generation, Credentials{}, true) {
+			return ErrSessionChanged
+		}
 	}
 	return err
 }
@@ -362,7 +413,7 @@ func (c *Client) doAuthorizedWithKey(ctx context.Context, method, path string, b
 		return err
 	}
 
-	if rerr := c.refreshSingleFlight(ctx, stale); rerr != nil {
+	if rerr := c.RenewToken(ctx, stale); rerr != nil {
 		// A refresh token the platform refuses does not heal by retrying: the
 		// session is over, the credential goes with it, and the caller lands on
 		// the blocked screen (C12/L-A6).
@@ -372,9 +423,6 @@ func (c *Client) doAuthorizedWithKey(ctx context.Context, method, path string, b
 		// clearing on one would turn a flaky network into a forced SMS login
 		// (V-43: this used to be what happened, because refreshSingleFlight
 		// reported every failure as an expired session).
-		if errors.Is(rerr, ErrSessionExpired) {
-			c.creds.Clear()
-		}
 		return rerr
 	}
 
@@ -391,17 +439,28 @@ func (c *Client) doAuthorizedWithKey(ctx context.Context, method, path string, b
 // access token the caller's failed request used: if the holder has already moved
 // past it, another caller refreshed and there is nothing left to do.
 func (c *Client) refreshSingleFlight(ctx context.Context, stale string) error {
-	c.refreshMu.Lock()
-	defer c.refreshMu.Unlock()
+	select {
+	case c.refreshGate <- struct{}{}:
+		defer func() { <-c.refreshGate }()
+	case <-ctx.Done():
+		return ctx.Err()
+	}
 
-	if cur := c.creds.AccessToken(); cur != "" && cur != stale {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	current, generation := c.creds.snapshot()
+	if cur := current.AccessToken; cur != "" && cur != stale {
 		return nil
 	}
-	token := c.creds.Get().RefreshToken
+	token := current.RefreshToken
 	if token == "" {
 		return ErrSessionExpired
 	}
 	data, err := c.Refresh(ctx, token)
+	if c.creds.SessionGeneration() != generation {
+		return ErrSessionChanged
+	}
 	if err != nil {
 		if isUnauthorized(err) {
 			return fmt.Errorf("%w: %w", ErrSessionExpired, err)
@@ -414,11 +473,13 @@ func (c *Client) refreshSingleFlight(ctx context.Context, stale string) error {
 		// to be made here or it cannot be made later.
 		return err
 	}
-	c.creds.Set(Credentials{
+	if !c.creds.replaceForSession(generation, Credentials{
 		AccessToken:  data.AccessToken,
 		RefreshToken: data.RefreshToken,
 		ExpiresAt:    c.now().Add(time.Duration(data.AccessTokenExpiresInSec) * time.Second),
-	})
+	}, false) {
+		return ErrSessionChanged
+	}
 	return nil
 }
 

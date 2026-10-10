@@ -120,6 +120,7 @@ beforeEach(() => {
   vi.mocked(updateSessionAgentProfile).mockClear()
   vi.mocked(listAgents).mockResolvedValue([]); vi.mocked(listSkills).mockResolvedValue([])
   pendingModel.set('')
+  chatModel.set({})
   pendingPersonalInfoProtection.set(true)
   pendingConfidentialSession.set(false)
   allowEnvironmentModelSource.set(true)
@@ -134,6 +135,47 @@ beforeEach(() => {
   selectableModels.set([])
   target = document.createElement('div')
   document.body.appendChild(target)
+})
+
+// OCTO-FORK: a new chat's chosen model survives the transition to a session,
+// including developer gateway records without a separate model_id binding.
+describe('session model selection', () => {
+  it.each([
+    { model: 'gateway::chosen' },
+    { model: 'chosen' },
+    { model: 'chosen', model_id: 'gateway::chosen' },
+  ])('keeps the selected model when the session returns $model / $model_id', async (binding) => {
+    activeSessionId.set(null)
+    allowEnvironmentModelSource.set(false)
+    setBalance(1)
+    vi.mocked(getProductModels).mockResolvedValue({ state: 'ready', catalogVersion: 'test', defaultModelId: 'gateway::first', vendors: [{ id: 'gateway', displayName: 'Gateway', models: [
+      { id: 'first', displayName: 'First model', compositeId: 'gateway::first', confidential: false },
+      { id: 'chosen', displayName: 'Chosen model', compositeId: 'gateway::chosen', confidential: false },
+    ] }] })
+    render()
+    await settle()
+    const modelChip = () => [...target.querySelectorAll<HTMLButtonElement>('button.meta-chip')].find(node => node.querySelector('.mono'))!
+    modelChip().click()
+    await settle()
+    ;([...target.querySelectorAll<HTMLButtonElement>('button.menu-item')].find(node => node.textContent?.trim() === 'Chosen model'))!.click()
+    flushSync()
+    expect(get(pendingModel)).toBe('gateway::chosen')
+    expect(modelChip().textContent).toContain('Chosen model')
+
+    sessions.set([{ id: 'new-session', ...binding } as never])
+    pendingModel.set('')
+    activeSessionId.set('new-session')
+    await settle()
+    expect(modelChip().textContent).toContain('Chosen model')
+    modelChip().click()
+    await settle()
+    expect(target.querySelector('button.menu-item.active')?.textContent?.trim()).toBe('Chosen model')
+
+    // A temporarily missing list record must not substitute the default either.
+    sessions.set([])
+    flushSync()
+    expect(modelChip().textContent).not.toContain('First model')
+  })
 })
 
 // OCTO-FORK: choices follow the catalog; persistence failure and stale levels cannot look successful.

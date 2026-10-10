@@ -649,11 +649,12 @@
   // view names it instead of showing a dash.
   let defaultModelName = $state('')
   let defaultModelId = $state('')
+  // OCTO-FORK: legacy gateway sessions carry the composite identity in model,
+  // not model_id; an existing session must never display the new-chat default.
+  let sessionModel = $derived($chatModel[sid] || currentSession?.model || '')
+  let modelBinding = $derived(currentSession?.model_id || (sid ? sessionModel : ($pendingModel || defaultModelId)))
   // OCTO-FORK: gateway sessions persist their binding in model, while local
   // endpoints use model_id. Resolve once for the name, picker and effort menu.
-  let modelBinding = $derived(currentSession?.model_id || (sid
-    ? ($chatModel[sid] || currentSession?.model || '')
-    : ($pendingModel || defaultModelId)))
   let activeModel = $derived.by(() => {
     const exact = models.find(model => model.id === modelBinding)
     if (exact) return exact
@@ -662,8 +663,9 @@
   })
   let activeModelId = $derived(activeModel?.id ?? modelBinding)
   let modelName = $derived.by(() => {
-    return activeModel?.displayName || $chatModel[sid] || currentSession?.model
-      || (modelBinding ? modelBinding.split('::').pop() : '') || defaultModelName || '—'
+    return activeModel?.displayName || (sessionModel ? sessionModel.split('::').pop() : '')
+      || (modelBinding ? modelBinding.split('::').pop() : '')
+      || (!sid ? defaultModelName : '') || '—'
   })
   // A pending pick belongs to the blank new-chat view only. Once a session is
   // active (auto-created — which consumed it — or picked/created any other

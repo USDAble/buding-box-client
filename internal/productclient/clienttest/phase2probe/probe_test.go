@@ -36,7 +36,8 @@ func runProbe() {
 	check(login.Account.ID != "", "missing account")
 	ledger, err := client.CreditsLedger(ctx)
 	must(err)
-	check(ledger.BalanceMicroCredits != nil && *ledger.BalanceMicroCredits == 12345600, "wallet precision/envelope mismatch")
+	// First activation adds 100 gift points to the fixture's 12.3456 available points.
+	check(ledger.BalanceMicroCredits != nil && *ledger.BalanceMicroCredits == 112345600, "wallet precision/activation gift mismatch")
 	walletRaw, err := client.FinanceRead(ctx, "wallet", nil)
 	must(err)
 	var wallet struct {
@@ -44,7 +45,7 @@ func runProbe() {
 		Reserved  string `json:"reserved_points"`
 	}
 	must(json.Unmarshal(walletRaw, &wallet))
-	check(wallet.Available == "12.3456" && wallet.Reserved == "1.0000", "finance direct DTO does not match real wallet")
+	check(wallet.Available == "112.3456" && wallet.Reserved == "1.0000", "finance direct DTO does not match real wallet")
 	box, err := client.Box(ctx)
 	must(err)
 	check(box.ID == os.Args[6], "wrong box identity")

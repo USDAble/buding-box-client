@@ -123,7 +123,7 @@ var (
 func Current() Profile {
 	currentOnce.Do(func() {
 		var err error
-		current, err = loadProfile(embeddedProfileJSON, embeddedEndpointsJSON)
+		current, err = loadBuildProfile(embeddedProfileJSON, embeddedEndpointsJSON)
 		if err != nil {
 			panic(fmt.Sprintf("product profile: invalid embedded configuration: %v", err))
 		}

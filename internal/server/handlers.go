@@ -1847,7 +1847,8 @@ func (s *Server) handleUpdateSessionAgentProfile(w http.ResponseWriter, r *http.
 		return
 	}
 	if len(sess.Messages) > 0 {
-		writeError(w, http.StatusConflict, "agent_profile can only be changed before the session's first turn")
+		// OCTO-FORK: let the client offer a new ordinary chat without reusing pinned expert state.
+		writeJSON(w, http.StatusConflict, map[string]string{"code": "agent_profile_locked", "error": "agent profile is pinned to this conversation"})
 		return
 	}
 	if err := sess.SetAgentID(agentProfile); err != nil {

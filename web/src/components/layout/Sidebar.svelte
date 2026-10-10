@@ -145,6 +145,8 @@
   const topNav = [
     { icon: 'ant-design:clock-circle-outlined', label: 'nav.tasks', v: 'tasks' },
     { icon: 'ant-design:appstore-outlined', label: 'nav.light_apps', v: 'lightapps' },
+    // OCTO-FORK: keep published experts reachable when the More entry is hidden.
+    { icon: 'ant-design:robot-outlined', label: 'nav.agents', v: 'agents' },
     // OCTO-FORK: promote Skills to the slot previously occupied by More.
     { icon: 'ant-design:thunderbolt-outlined', label: 'nav.skills', v: 'skills' },
   ]

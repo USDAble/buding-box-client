@@ -33,6 +33,8 @@ export interface TaskResponse {
 export async function readErrorMessage(res: Response, fallback: string): Promise<string> {
   try {
     const body = await res.json()
+    // OCTO-FORK: blob/upload callers also render the localized window-gate error.
+    if (res.status === 403 && body?.error === 'product_gate') return platformErrorText('product_gate')
     if (typeof body?.code === 'string' && body.code) return platformErrorText(body.code)
     if (typeof body?.error === 'string' && body.error) return body.error
     if (typeof body?.message === 'string' && body.message) return body.message
@@ -68,9 +70,8 @@ export async function request<T>(path: string, init?: RequestInit): Promise<T> {
   // the product access-control boundary.
   const res = await fetch(path, { ...init, headers: withWindowToken(init?.headers) })
   if (!res.ok) {
-    // Read the error body once. A 403 with error "product_gate" means the
-    // window is no longer logged in — flip the phase so App.svelte shows the
-    // login gate instead of leaving a dead UI on screen.
+    // Read the error body once. A product_gate refusal names the local window
+    // identity, not an expired account session; retain the existing blocked route.
     let message = `${res.status} ${res.statusText}`
     let code: string | null = null
     let field: string | null = null
@@ -80,6 +81,8 @@ export async function request<T>(path: string, init?: RequestInit): Promise<T> {
       const body = await res.json()
       if (res.status === 403 && body?.error === 'product_gate') {
         productPhase.set('blocked')
+        // OCTO-FORK: settings/model/skill calls must not display a raw gate identifier.
+        code = 'product_gate'
       }
       if (typeof body?.error === 'string' && body.error) serverMessage = body.error
       else if (typeof body?.message === 'string' && body.message) serverMessage = body.message

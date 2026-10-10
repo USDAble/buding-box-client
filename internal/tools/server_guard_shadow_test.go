@@ -89,7 +89,11 @@ func TestKillGuardShadow_AllowsUnrelatedTargets(t *testing.T) {
 		"git commit -m \"fix pkill regression\"", // kill-word inside an argument
 	}
 	for _, c := range allowed {
-		out, _ := runGuardedCommand(t, c)
+		out, err := runGuardedCommand(t, c)
+		// OCTO-FORK: a permitted Git command must still stay outside the real checkout.
+		if strings.HasPrefix(c, "git commit ") && err == nil {
+			t.Fatalf("%q unexpectedly created a commit from a shell-test fixture", c)
+		}
 		if strings.Contains(out, "refusing to kill the octo server process") {
 			t.Errorf("%q: must not be refused, got %q", c, out)
 		}

@@ -1,6 +1,4 @@
 import DOMPurify from 'dompurify'
-import mammoth from 'mammoth'
-import * as XLSX from 'xlsx'
 import { unzipSync } from 'fflate'
 
 type OfficeKind = 'word' | 'excel' | 'powerpoint'
@@ -26,6 +24,8 @@ export async function renderOfficePreview(
   let body: string
   switch (kind) {
     case 'word': {
+      // OCTO-FORK: document parsers must not delay the login screen on a cold start.
+      const { default: mammoth } = await import('mammoth')
       const result = await mammoth.convertToHtml({ arrayBuffer: bytes }, {
         includeDefaultStyleMap: true,
         styleMap: [
@@ -41,6 +41,7 @@ export async function renderOfficePreview(
       break
     }
     case 'excel': {
+      const XLSX = await import('xlsx')
       const workbook = XLSX.read(bytes, { type: 'array' })
       body = workbook.SheetNames.map((sheetName) => {
         const sheet = workbook.Sheets[sheetName]

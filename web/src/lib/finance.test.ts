@@ -1,5 +1,5 @@
 import {get} from 'svelte/store'
-import {productPhase,productState} from './product'
+import {productPhase,productState,adoptWindowToken,WINDOW_TOKEN_HEADER} from './product'
 import { expect,it,vi } from 'vitest'
 import {paymentAction,money,points,createOrder,getWallet,FinanceError,type Order} from './finance'
 const pending={status:'pending',payment_method:'wechat',payment_url:'weixin://wxpay/bizpayurl?pr=test',expires_at:'2099-01-01T00:00:00Z',needs_review:false} as Order
@@ -23,4 +23,16 @@ it('keeps wallet machine code and raw platform message for localized display and
  expect(error.code).toBe('WALLET_PROTECTED')
  expect(error.serverMessage).toBe('钱包正在核查')
  vi.unstubAllGlobals()
+})
+
+// OCTO-FORK: wallet reads share the new window identity and name gate failures accurately.
+it('uses the adopted process token and distinguishes a wallet gate refusal from a platform fault',async()=>{
+ sessionStorage.setItem('octo_window_token','old-process')
+ window.history.replaceState({},'','/?window_token=new-process');adoptWindowToken()
+ const fetchMock=vi.fn().mockResolvedValue(new Response(JSON.stringify({error:'product_gate'}),{status:403}))
+ vi.stubGlobal('fetch',fetchMock)
+ const error=await getWallet().catch(error=>error)
+ expect(error).toBeInstanceOf(FinanceError);expect(error.code).toBe('product_gate')
+ expect(new Headers(fetchMock.mock.calls[0][1].headers).get(WINDOW_TOKEN_HEADER)).toBe('new-process')
+ sessionStorage.clear();window.history.replaceState({},'','/');vi.unstubAllGlobals()
 })

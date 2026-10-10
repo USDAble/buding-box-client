@@ -127,8 +127,18 @@ export function noteSessionLost(status: number): boolean {
  */
 async function productFetch(path: string, init?: RequestInit): Promise<Response> {
   const res = await fetch(path, init);
-  if (!init?.signal?.aborted) noteSessionLost(res.status);
+  if (!init?.signal?.aborted) {
+    noteSessionLost(res.status);
+    await rejectWindowGate(res);
+  }
   return res;
+}
+
+// OCTO-FORK: a window-gate refusal cannot become a field error in sibling calls.
+async function rejectWindowGate(res: Response): Promise<void> {
+  if (res.status !== 403) return;
+  const body = await res.clone().json().catch(() => null);
+  if (body?.error === 'product_gate') throw new ProductError(res.status, {}, 'product_gate');
 }
 
 // ─── blocked-page selection (L-B2) ──────────────────────────────────────────
@@ -533,7 +543,10 @@ export async function sendCode(phone: string, regionCode?: string): Promise<numb
     if (res.status === 429) {
       throw new ProductError(res.status, {}, typeof body.code === 'string' ? body.code : 'rate_limited', body.retryAfterSec as number | null, null, typeof body.message === 'string' ? body.message : null);
     }
-    const code = (body.code as string) ?? "invalid_phone";
+    // OCTO-FORK: an unstructured failure is not a phone-format refusal.
+    const code = typeof body.code === 'string' && body.code
+      ? body.code
+      : 'internal_error';
     // A control-plane tier is not a phone problem. Filing a 503 under the phone
     // field told the user their number was wrong, and the field-error switch has
     // no case for it, so the message rendered as an empty paragraph (L-B3). It
@@ -619,6 +632,8 @@ export async function initializeWorkspace(signal?: AbortSignal): Promise<Workspa
   });
   if (signal?.aborted || sequence !== initializationSequence || get(productPhase) !== 'ready') throw new Error('initialization cancelled');
   noteSessionLost(res.status);
+  // OCTO-FORK: the cancellable initialization path shares product identity errors.
+  await rejectWindowGate(res);
   if (!res.ok) throw new ProductError(res.status);
   const data = await res.json() as WorkspaceInitialization;
   if (signal?.aborted || sequence !== initializationSequence || get(productPhase) !== 'ready') throw new Error('initialization cancelled');

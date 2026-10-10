@@ -197,6 +197,8 @@ func ensureValidTempDir() {
 }
 
 func main() {
+	// OCTO-FORK: retain entry timing even before the crash log can be opened.
+	mainEnteredAt := time.Now()
 	// macOS's postinstall script launches the app with `open` from inside
 	// installd's ephemeral PKInstallSandbox.*; the launched process can inherit
 	// that sandbox's $TMPDIR. The desktop app then runs for days as a tray
@@ -206,34 +208,39 @@ func main() {
 	// the updater helper below) can use it.
 	ensureValidTempDir()
 
-	// Point stderr at the data-root crash.log before anything that can die runs. This
+	// OCTO-FORK: updater helpers must finish without creating startup UI.
+	updater.HandleHelperMode()
+	// Data-root reads and probes must not delay the first visible window on
+	// cold or removable storage. Localize the message once settings are read.
+	bridge := &nativeBridge{}
+	setStartupMessage, nativeStartupErr := bridge.startNativeStartup()
+	nativeVisibleAt := time.Now()
+	defer bridge.stopNativeStartup()
+
+	// Point stderr at the data-root crash.log before backend assembly. This
 	// process has no usable stderr of its own (Windows: built with -H windowsgui,
 	// so no console; macOS: launched from Finder), and the runtime writes panic
 	// traces straight to the descriptor — below the slog/log redirection
 	// setupHubLog installs later. Without this, an unrecovered panic in any
-	// goroutine closes the window and leaves nothing behind to report. Ahead of
-	// the helper mode below on purpose: swapping a staged update over a running
-	// install is exactly the kind of file work whose failures need a record.
+	// goroutine closes the window and leaves nothing behind to report. Updater
+	// helper mode uses its own swap log before the normal UI startup path.
 	setupCrashLog()
-
-	// When spawned as the updater's helper child (sentinel env vars set), swap
-	// the staged update over the installed app and exit — before any of the
-	// launch side effects below (chdir, CLI/uv seeding, settings) run in a
-	// process that only exists to copy files. No-op on a normal launch;
-	// application.New would also catch it, just later.
-	updater.HandleHelperMode()
+	logDesktopStartupAt("main_entered", mainEnteredAt)
+	if nativeStartupErr != nil {
+		// OCTO-FORK: report optional native failures after stderr is persistent.
+		slog.Warn("native startup feedback unavailable", "error", nativeStartupErr)
+	}
+	if bridge.startupClose.Load() != nil {
+		logDesktopStartupAt("native_loading_visible", nativeVisibleAt)
+	}
+	logDesktopStartup("crash_log_ready")
+	// OCTO-FORK: pre-main module loading must not disappear from cold-start traces.
+	logDesktopProcessTiming(mainEnteredAt, nativeVisibleAt, bridge.startupClose.Load() != nil)
 
 	// A GUI launch inherits "/" as the working directory; move to the user's
 	// home before anything reads it (the in-process server records its launch
 	// dir as the skill-discovery and project-memory root).
 	ensureWorkingDir()
-
-	// A GUI launch also inherits a minimal PATH (macOS: no ~/.local/bin,
-	// /opt/homebrew/bin; Linux: a .desktop/systemd launch may skip the login
-	// profile entirely). The server runs in-process here, so stdio MCP children
-	// and shell tools inherit this process's PATH directly — sync it to the login
-	// shell's before server.New below, mirroring the `octo serve` binary.
-	shellpath.SyncToLoginShell()
 
 	// Load the data-root serve.env for variables a GUI launch can't inherit from a
 	// login shell (e.g. TAVILY_API_KEY, provider keys). Best-effort — missing
@@ -250,23 +257,18 @@ func main() {
 		log.Fatalf("octo-desktop: %v", err)
 	}
 
-	// Pick the language for native dialogs/tray from the system UI language.
-
-	// Pick the language for native dialogs/tray from the system UI language.
+	// OCTO-FORK: native startup feedback follows the persisted app language.
 	applyLang()
+	if setStartupMessage != nil {
+		setStartupMessage(L().trayStarting)
+	}
 
 	settings := loadDesktopSettings()
 
-	// Seed the data-root bin/uv from the app's bundled copy on first run so skills
-	// that need Python work even for a standalone download (no installer).
-	ensureBundledUv()
-
-	// Seed the octo CLI to ~/.local/bin (macOS + Linux) so a terminal has `octo`,
-	// and on macOS put that dir on PATH. May update settings.SeededOctoVersion, so
-	// it runs before the bridge takes its copy of settings below.
-	ensureBundledOcto(&settings)
-
-	bridge := &nativeBridge{settings: settings, url: desktopWebviewURL()}
+	// OCTO-FORK: first-run file copies must overlap WebView initialization.
+	bridge.settings = settings
+	bridge.url = desktopWebviewURL()
+	bridge.backendReady = make(chan struct{})
 	// On Windows/Linux a window close would otherwise quit the app; start with
 	// quit allowed only when the user opted out of keep-running-in-background.
 	bridge.allowQuit.Store(!settings.KeepRunningInBackground)
@@ -293,10 +295,14 @@ func main() {
 	// what lets this product run beside an installed Octo rather than being
 	// brought to its window.
 	cfg := brand.Load()
+	// OCTO-FORK: distinguish framework setup from native-window paint time.
+	logDesktopStartup("framework_init_started")
 	app := application.New(application.Options{
 		Name:        cfg.Name(brand.DefaultLocale),
 		Description: cfg.Tagline(brand.DefaultLocale),
 		Services:    services,
+		// OCTO-FORK: the loading page must be available before the hub exists.
+		Assets: application.AssetOptions{Handler: http.HandlerFunc(serveDesktopStartup)},
 		SingleInstance: &application.SingleInstanceOptions{
 			UniqueID: cfg.Identifier(brand.IdentifierSingleInstanceID),
 			// OCTO-FORK: publish the launching copy's own program directory, so a
@@ -365,7 +371,11 @@ func main() {
 			DisabledFeatures: []string{"CalculateNativeWinOcclusion"},
 		},
 	})
+	// OCTO-FORK: keep cold framework initialization visible in startup traces.
+	logDesktopStartup("framework_init_finished")
 	bridge.app = app
+	// OCTO-FORK: quitting during cold startup must also close the native loader.
+	app.OnShutdown(bridge.stopNativeStartup)
 
 	// OCTO-FORK: 便携交付物不做更新：原地写回整块不装配，于是 inplaceUpdate 恒为 false，
 	// 即便有路径调到 startUpdateFlow 也只会打开下载页、不会自我替换（需求 §5.1.2 第 13 条；
@@ -436,6 +446,8 @@ func main() {
 	// prompt (a modal dialog) can run. Doing it here rather than before Run lets
 	// us ask the user before stopping someone else's backend.
 	app.Event.OnApplicationEvent(events.Common.ApplicationStarted, func(*application.ApplicationEvent) {
+		// OCTO-FORK: the native loader is already visible before framework startup.
+		logDesktopStartup("event_loop_started")
 		// Register the update-toast action category once the notification
 		// service has started (Windows/Linux drop the action buttons if a
 		// notification is sent before its category is registered).
@@ -443,7 +455,7 @@ func main() {
 		// Prompt for notification permission (macOS blocks until answered, so
 		// off the UI thread) — without it every toast silently no-ops.
 		go bridge.requestNotificationAuthorization()
-		startHub(app, bridge, settings)
+		startHub(app, bridge)
 		// OCTO-FORK: 便携交付物不做更新：定时自动检查整块不启动（需求 §5.1.2 第 13 条；
 		// 理由见 update.go 的 productUpdatesEnabled）。上游这个 goroutine 留在原地，只是
 		// 永远不被启动 —— 没有它就没有"新版本"通知，托盘的更新项也随之没有来源。
@@ -548,7 +560,8 @@ func hubLogLevel() slog.Level {
 // startHub takes ownership of the loopback port (offering to take over a running
 // daemon), starts the in-process server, and opens the window. It runs inside
 // the ApplicationStarted hook so its dialogs have a live event loop.
-func startHub(app *application.App, bridge *nativeBridge, settings desktopSettings) {
+// OCTO-FORK: bridge.settings owns settings changed by first-run tool seeding.
+func startHub(app *application.App, bridge *nativeBridge) {
 	// L-E3: an unusable data root means there is nothing this process can
 	// safely do. Every path it writes goes through internal/datapath, which
 	// refuses rather than falling back to a host directory (P1 §3.2) — so the
@@ -632,6 +645,19 @@ func startHub(app *application.App, bridge *nativeBridge, settings desktopSettin
 	if closeLog := setupHubLog(); closeLog != nil {
 		bridge.closeLog.Store(&closeLog)
 	}
+	// OCTO-FORK: retain process-to-backend timing in the existing local startup log.
+	logDesktopStartup("backend_assembly_started")
+	// OCTO-FORK: warm up the WebView while first-run resources are prepared.
+	bridge.showWindow()
+	logDesktopStartup("window_created")
+	shellpath.SyncToLoginShell()
+	logDesktopStartup("shell_path_ready")
+	ensureBundledUv()
+	// Keep settings mutations under their existing owner during startup.
+	bridge.settingsMu.Lock()
+	ensureBundledOcto(&bridge.settings)
+	bridge.settingsMu.Unlock()
+	logDesktopStartup("bundled_tools_ready")
 
 	// Also now-we're-the-sole-backend: age out old upload/attachment files
 	// (#2004). The desktop hub never goes through cmd/octo's runServe, so
@@ -721,10 +747,7 @@ func startHub(app *application.App, bridge *nativeBridge, settings desktopSettin
 		MountAPI: mountProductAndUpdate,
 		// OCTO-FORK: share the authenticated runtime for fixed-version platform skills.
 		PlatformSkillLoader: platformSkillLoader,
-		// OCTO-FORK: the product gate's window identity — see
-		// the current implementation plan §PR-2b2b. Generated here
-		// because this runs before the first window is shown, which is what lets
-		// shellURL carry the token into that window's very first URL.
+		// OCTO-FORK: reuse the identity already attached to the early window URL.
 		WindowToken: windowToken(),
 		// OCTO-FORK: gateway-bound models are served by the built-in gateway —
 		// see the current implementation plan §PR-5a. The prefix is
@@ -775,6 +798,8 @@ func startHub(app *application.App, bridge *nativeBridge, settings desktopSettin
 		return
 	}
 	bridge.srv.Store(srv)
+	// OCTO-FORK: distinguish assembly work from waiting for HTTP service readiness.
+	logDesktopStartup("backend_initialized")
 	mobileTunnel.bind(srv)
 	bridge.tunnel.Store(mobileTunnel)
 	go func() {
@@ -783,7 +808,18 @@ func startHub(app *application.App, bridge *nativeBridge, settings desktopSettin
 		}
 	}()
 
-	bridge.showWindow()
+	// OCTO-FORK: a bound listener can still be waiting on scheduler/registry startup.
+	readyCtx, cancelReady := context.WithTimeout(context.Background(), 10*time.Second)
+	readyErr := waitBackendReady(readyCtx, "http://"+hubAddr)
+	cancelReady()
+	if readyErr != nil {
+		bridge.showError(L().errTitle, fmt.Sprintf(L().errStartFmt, readyErr))
+		app.Quit()
+		return
+	}
+	logDesktopStartup("backend_ready")
+	// OCTO-FORK: the initial loading page owns the handoff to the ready hub.
+	close(bridge.backendReady)
 
 	// L-E3: arm the data-root watchdog. A portable product lives on media that
 	// can be pulled out mid-session, and while the root is gone every write must

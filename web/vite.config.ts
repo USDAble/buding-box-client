@@ -2,6 +2,8 @@ import { defineConfig } from 'vite'
 import { svelte } from '@sveltejs/vite-plugin-svelte'
 import { createHash } from 'node:crypto'
 import { readFileSync } from 'node:fs'
+// OCTO-FORK: startup copy is embedded at build time so the first screen needs no app imports.
+import { en, zh } from './src/lib/i18n'
 
 // OCTO-FORK: fingerprint the configured logo so an upgraded WebView bypasses
 // an older package's year-long cache for the fixed public asset URL.
@@ -10,7 +12,16 @@ const logo = readFileSync(new URL(`./public/${brand.visual.logo.mark}`, import.m
 const logoHash = createHash('sha256').update(logo).digest('hex').slice(0, 12)
 
 export default defineConfig({
-  plugins: [svelte()],
+  plugins: [svelte(), {
+    name: 'startup-copy',
+    transformIndexHtml(html) {
+      const keys = ['common.loading', 'startup.failed', 'startup.slow', 'startup.retry']
+      const copy = Object.fromEntries(Object.entries({ en, zh }).map(([locale, dict]) =>
+        [locale, Object.fromEntries(keys.map(key => [key, dict[key]]))],
+      ))
+      return html.replace('__STARTUP_COPY__', JSON.stringify(copy).replaceAll('<', '\\u003c'))
+    },
+  }],
   define: { 'import.meta.env.VITE_BRAND_LOGO_HASH': JSON.stringify(logoHash) },
   build: {
     outDir: '../internal/server/webdist',
@@ -28,7 +39,7 @@ export default defineConfig({
     // which empties the dir except .gitkeep. This setting still must not become
     // true: that script is what preserves the sentinel, and vite would not.
     emptyOutDir: false,
-    // The UI ships as one embedded bundle served from localhost; code-splitting buys nothing here.
+    // OCTO-FORK: keep document parsers in deferred chunks to reduce cold-start work.
     chunkSizeWarningLimit: 1000,
   },
   server: {

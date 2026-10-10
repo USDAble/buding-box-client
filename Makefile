@@ -403,11 +403,13 @@ docs-ref-check: node-check
 	node scripts/docs-ref-guard.mjs
 	node --test scripts/docs-ref-guard.test.mjs
 
-# Commit-time checks are intentionally quick and deterministic. Full Go race,
-# package and web checks run in gate, which the push hook invokes.
+# OCTO-FORK: project checks run explicitly or in CI, independently of lightweight Git hooks.
+# Full Go race, package and web checks run in gate.
 quick-check: node-check fmt-check docs-ref-check norms-check agents-check \
 	brand-check datapath-check marker-check sensitive-norm-check reuse-check \
 	server-diff-check release-profile-check
+	# OCTO-FORK: keep dependency-free Git hook behavior covered.
+	node --test scripts/hooks-env.test.mjs
 	@echo "quick-check passed: format + documentation + fork guards."
 
 # Hooks live in the repository so their policy is reviewable. Git does not

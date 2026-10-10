@@ -1,0 +1,22 @@
+<!doctype html>
+<!-- OCTO-FORK: this local loading page has no dependency on the hub or app bundle. -->
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <style>
+    html, body { height: 100%; margin: 0; background: #f6f9fc; color: #667085; font: 14px system-ui, sans-serif; }
+    body { display: flex; align-items: center; justify-content: center; }
+    main { display: flex; flex-direction: column; align-items: center; gap: 16px; }
+    .spinner { width: 28px; height: 28px; border: 3px solid #e4e0ff; border-top-color: #635bff; border-radius: 50%; animation: spin .7s linear infinite; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    @media (prefers-reduced-motion: reduce) { .spinner { animation: none; } }
+  </style>
+</head>
+<body>
+  <main role="status" aria-live="polite" aria-busy="true">
+    <div class="spinner" aria-hidden="true"></div>
+    <span>{{.Starting}}</span>
+  </main>
+</body>
+</html>

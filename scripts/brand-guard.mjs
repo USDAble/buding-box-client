@@ -237,6 +237,8 @@ export async function collectFiles(root) {
       const abs = path.join(dir, entry.name)
       if (entry.isDirectory()) {
         if (SKIP_DIRS.has(entry.name)) continue
+        // OCTO-FORK: ignored Capacitor output embeds branding; guard web, mobile/src, mobile/native and the generators instead.
+        if (dir === path.join(root, 'mobile') && ['www', 'ios', 'android'].includes(entry.name)) continue
         await walk(abs)
         continue
       }

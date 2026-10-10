@@ -17,9 +17,59 @@
        is embedded into the binary, so keeping it would ship that mark reachable at
        /favicon.svg. — see the brand-configuration boundary -->
   <link rel="icon" type="image/x-icon" href="/favicon.ico" />
+  <!-- OCTO-FORK: paint startup feedback without waiting for the application CSS or JavaScript. -->
+  <style>
+    #startup-screen { position: fixed; inset: 0; z-index: 10000; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 16px; background: var(--bg-layout, #f6f9fc); color: var(--text-secondary, #667085); font: 14px system-ui, sans-serif; }
+    #startup-screen .startup-spinner { width: 28px; height: 28px; border: 3px solid #e4e0ff; border-top-color: #635bff; border-radius: 50%; animation: startup-spin .7s linear infinite; }
+    #startup-screen button { font: inherit; padding: 8px 20px; border: 1px solid currentColor; border-radius: 8px; color: inherit; background: transparent; cursor: pointer; }
+    #startup-screen [hidden] { display: none; }
+    @keyframes startup-spin { to { transform: rotate(360deg); } }
+    @media (prefers-reduced-motion: reduce) { #startup-screen .startup-spinner { animation: none; } }
+  </style>
 </head>
 <body>
+  <!-- OCTO-FORK: retain a retry path even when the main module cannot be downloaded or evaluated. -->
+  <div id="startup-screen" role="status" aria-live="polite" aria-busy="true">
+    <div class="startup-spinner" aria-hidden="true"></div>
+    <span id="startup-message"></span>
+    <button id="startup-retry" type="button" hidden></button>
+  </div>
   <div id="app"></div>
+  <script>
+    // OCTO-FORK: this small bootstrap runs independently of the application module graph.
+    (() => {
+      const copies = __STARTUP_COPY__;
+      const copy = copies[document.documentElement.lang.startsWith('zh') ? 'zh' : 'en'];
+      const screen = document.getElementById('startup-screen');
+      const message = document.getElementById('startup-message');
+      const retry = document.getElementById('startup-retry');
+      message.textContent = copy['common.loading'];
+      retry.textContent = copy['startup.retry'];
+      retry.onclick = () => location.reload();
+      performance.mark('startup-html-ready');
+      const report = (key) => {
+        screen.setAttribute('aria-busy', key === 'startup.failed' ? 'false' : 'true');
+        screen.querySelector('.startup-spinner').hidden = key === 'startup.failed';
+        message.textContent = copy[key];
+        retry.hidden = false;
+      };
+      const onError = (event) => {
+        if (event instanceof ErrorEvent || event.target instanceof HTMLScriptElement || event.type === 'unhandledrejection') {
+          clearTimeout(timer);
+          report('startup.failed');
+        }
+      };
+      const timer = setTimeout(() => report('startup.slow'), 15000);
+      window.addEventListener('error', onError, true);
+      window.addEventListener('unhandledrejection', onError);
+      window.addEventListener('app:mounted', () => {
+        clearTimeout(timer);
+        window.removeEventListener('error', onError, true);
+        window.removeEventListener('unhandledrejection', onError);
+        screen.remove();
+      }, { once: true });
+    })();
+  </script>
   <script type="module" src="/src/main.ts"></script>
 </body>
 </html>

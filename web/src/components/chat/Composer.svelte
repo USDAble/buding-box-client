@@ -648,12 +648,16 @@
   // view names it instead of showing a dash.
   let defaultModelName = $state('')
   let defaultModelId = $state('')
+  // OCTO-FORK: legacy gateway sessions carry the composite identity in model,
+  // not model_id; an existing session must never display the new-chat default.
+  let sessionModel = $derived($chatModel[sid] || currentSession?.model || '')
+  let modelBinding = $derived(currentSession?.model_id || (sid ? sessionModel : ($pendingModel || defaultModelId)))
   let modelName = $derived.by(() => {
-    const binding = currentSession?.model_id || (!sid ? $pendingModel : '') || defaultModelId
-    const row = models.find(model => model.id === binding)
-      ?? models.find(model => model.modelId === ($chatModel[sid] || currentSession?.model))
-    return row?.displayName || $chatModel[sid] || currentSession?.model
-      || (binding ? binding.split('::').pop() : '') || defaultModelName || '—'
+    const row = models.find(model => model.id === modelBinding)
+      ?? models.find(model => model.modelId === sessionModel)
+    return row?.displayName || (sessionModel ? sessionModel.split('::').pop() : '')
+      || (modelBinding ? modelBinding.split('::').pop() : '')
+      || (!sid ? defaultModelName : '') || '—'
   })
   // A pending pick belongs to the blank new-chat view only. Once a session is
   // active (auto-created — which consumed it — or picked/created any other
@@ -790,11 +794,10 @@
   })
 
   let activeModelId = $derived.by(() => {
-    const bound = currentSession?.model_id ?? ''
-    if (bound.includes('::')) return bound
-    if (bound) return ''
-    if (!sid) return $pendingModel || defaultModelId
-    return defaultModelId.split('::').pop() === modelName ? defaultModelId : ''
+    // OCTO-FORK: the selected row follows the same session identity as its label.
+    if (modelBinding.includes('::')) return modelBinding
+    if (currentSession?.model_id) return ''
+    return models.find(model => model.modelId === modelBinding)?.id ?? ''
   })
   let activeModel = $derived(models.find(model => model.id === activeModelId) ?? null)
 

@@ -2368,7 +2368,8 @@ import QuestionModal from '../components/overlays/QuestionModal.svelte'
           ? { ...g, session_ids: [newSess.id, ...g.session_ids.filter(id => id !== newSess.id)] }
           : g))
       }
-      activeSessionId.set(newSess.id)
+      // OCTO-FORK: successful creation stays inactive until send queues its first
+      // prompt; otherwise a fast subscription ack can arrive during the PATCHes.
       // Reasoning effort has no create-time field of its own (it's a global
       // setting every session inherits — see the PATCH endpoint's own PR5
       // note), so a landing-page pick can only take effect as a follow-up
@@ -2397,6 +2398,8 @@ import QuestionModal from '../components/overlays/QuestionModal.svelte'
           chatPermMode.update(m => ({ ...m, [newSess.id]: permPick }))
         } catch (e: any) {
           pendingPermissionGate.require(newSess.id, permPick)
+          // OCTO-FORK: retain the failed session for an explicit retry, without queuing a turn.
+          activeSessionId.set(newSess.id)
           showToast(e.message ?? tr('chat.permission_failed'), 'error')
           return null
         }
@@ -2485,6 +2488,8 @@ import QuestionModal from '../components/overlays/QuestionModal.svelte'
       // one entry ahead for the rest of the tab's life. Hand the text to the
       // flush-on-subscribe path the panel-opened sessions already use.
       pendingPrompt.set({ sessionId: sid, content: text, files })
+      // OCTO-FORK: the subscription effect must see the first prompt before activation.
+      activeSessionId.set(sid)
       return
     }
     // Steering: a message sent while a turn is already running rides the

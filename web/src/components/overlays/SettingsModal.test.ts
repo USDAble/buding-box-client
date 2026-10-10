@@ -33,8 +33,25 @@ afterEach(async () => {
   app = undefined; target.remove(); settingsModalOpen.set(false); settingsTarget.set(null)
   vi.restoreAllMocks(); vi.unstubAllGlobals(); sessionStorage.clear(); productPhase.set('unknown'); nativeShell.set(false)
 })
-function activePage() { return target.querySelector('.rail [aria-current="page"]')?.textContent?.trim() }
+// OCTO-FORK: navigation renders before asynchronous config; assertions need the loaded page.
+function activePage() { return target.querySelector('.loading-state') ? undefined : target.querySelector('.rail [aria-current="page"]')?.textContent?.trim() }
 function open() { app = mount(SettingsModal, { target }); flushSync() }
+
+// OCTO-FORK: neither mounting Settings nor a delayed config read can revert login's choice.
+it('keeps the active language when mounted closed and opened with stale config', async () => {
+  productState.set({ ...accountState, prefs: { locale: 'en' } } as never)
+  open()
+  expect(get(locale)).toBe('en')
+  flushSync(() => settingsModalOpen.set(true))
+  await vi.waitFor(() => expect(target.querySelector('.setrow select')).not.toBeNull())
+  await vi.waitFor(() => expect(vi.mocked(globalThis.fetch).mock.calls.some(([path]) => String(path).endsWith('/api/config'))).toBe(true))
+  await vi.waitFor(() => expect(target.querySelector('.loading-state')).toBeNull())
+  flushSync()
+  expect(get(locale)).toBe('en')
+  expect(target.querySelector<HTMLSelectElement>('.setrow select')?.value).toBe('en')
+  flushSync(() => locale.set('zh'))
+  expect(target.querySelector<HTMLSelectElement>('.setrow select')?.value).toBe('zh')
+})
 function nicknameEditor() { return target.querySelector<HTMLInputElement>('.account-edit input') }
 function nicknameButton(label: string) {
   return [...target.querySelectorAll<HTMLButtonElement>('.account-edit button')].find(button => button.textContent?.trim() === label)!

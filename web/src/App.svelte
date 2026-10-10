@@ -263,12 +263,13 @@
     // datastore:lost to a connection that arrives while the root is gone.
     wireProductEvents()
 
-    // Restore the persisted UI language from server config so a refresh
-    // keeps the user's locale choice. Also seed globalPermissionMode and
+    // Restore the legacy language only outside the product preference flow.
+    // Also seed globalPermissionMode and
     // globalReasoningEffort, so the Composer's no-active-session fallback
     // shows the real configured defaults instead of a hardcoded guess.
     api.getConfig().then(cfg => {
-      if (cfg.language) setLocale(cfg.language)
+      // OCTO-FORK: legacy config is a fallback only when there is no product preference.
+      if (!get(productState)?.prefs?.locale && cfg.language) setLocale(cfg.language)
       // PR5: permission_mode is global (was per-default-entry before). The
       // Composer reads this to seed its no-active-session fallback.
       if (cfg.permission_mode) globalPermissionMode.set(cfg.permission_mode)

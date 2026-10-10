@@ -116,7 +116,7 @@
 
 `POST /api/product/logout` 成功返回 `{"ok":true,"revoked":<bool>}`。本地凭证与产品登录态无论平台撤销成功与否都要清理；`revoked:false` 明确告诉前端平台会话未被撤销。登出不删除已绑定手机号、昵称或激活信息。
 
-`PUT /api/product/locale` 接收 `{"locale":"zh"|"en"}`，成功返回 `{"ok":true}`。默认语言跟随系统，非中文使用 `en`；非法值返回 `{"field":"locale","code":"invalid_value"}`。
+`PUT /api/product/locale` 接收 `{"locale":"zh"|"en"}`，成功返回 `{"ok":true}`。首次打开默认 `en`，已有语言选择继续保留。登录/注册页、主界面和设置共同读取产品语言偏好；打开设置不会用旧配置覆盖当前语言，语言修改同时镜像至本地配置供桌面托盘使用。非法值返回 `{"field":"locale","code":"invalid_value"}`。
 
 `PUT /api/product/nickname` 接收昵称并返回 `{"state": ProductStateDTO}`。`nickname_format` 与 `nickname_sensitive` 是业务级码，不能错误地包装为 `fieldErrors`。
 

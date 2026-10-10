@@ -220,9 +220,7 @@ func applyLang() {
 	}
 }
 
-// resolveLang prefers the user's in-app language (config.yml `language`, set in
-// onboarding / Settings). Only before that's chosen does it fall back to the
-// OS's preferred UI language.
+// OCTO-FORK: use English on first launch, preserving an explicit in-app choice.
 func resolveLang() string {
 	if cfg, err := config.Load(); err == nil {
 		switch cfg.Language {
@@ -232,7 +230,7 @@ func resolveLang() string {
 			return "en"
 		}
 	}
-	return preferredLang()
+	return "en"
 }
 
 // preferredLang returns "zh" or "en" from the OS's preferred UI language. It

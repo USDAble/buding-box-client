@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeEach, vi } from "vitest";
 import { get } from "svelte/store";
+import { locale } from "./i18n";
 import {
   productPhase,
   productState,
@@ -364,6 +365,24 @@ describe("login", () => {
 });
 
 describe("setProductLocale", () => {
+  // OCTO-FORK: a persisted choice updates both login/settings state and the shared translator.
+  it("restores and updates the shared UI preference", async () => {
+    productState.set({ prefs: { locale: "en", inputSensitiveCheck: false } } as ProductStateDTO);
+    expect(get(locale)).toBe("en");
+    vi.stubGlobal("fetch", fetchReturning(200, { ok: true }));
+    await setProductLocale("zh");
+    expect(get(productState)?.prefs.locale).toBe("zh");
+    expect(get(locale)).toBe("zh");
+  });
+
+  it("does not replace the saved preference when persistence fails", async () => {
+    productState.set({ prefs: { locale: "en", inputSensitiveCheck: false } } as ProductStateDTO);
+    vi.stubGlobal("fetch", fetchReturning(500, {}));
+    await expect(setProductLocale("zh")).rejects.toThrow();
+    expect(get(productState)?.prefs.locale).toBe("en");
+    expect(get(locale)).toBe("en");
+  });
+
   it("PUTs the locale", async () => {
     sessionStorage.setItem("octo_window_token", "tok");
     const fetchMock = fetchReturning(200, { ok: true });

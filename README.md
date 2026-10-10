@@ -24,6 +24,7 @@ If you find octo useful, give it a ⭐ on GitHub!
 
 ## Why octo
 
+
 octo isn't another agent framework you have to "raise." Projects like OpenClaw or Hermes often need environment tuning, rule writing, and skill configuration before the agent runs smoothly. octo sits closer to Codex or WorkBuddy: **download and use, user-friendly**, while keeping model choice, data ownership, and the runtime firmly in your hands.
 
 ```bash

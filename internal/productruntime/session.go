@@ -106,7 +106,7 @@ type SessionRenewer struct {
 }
 
 // Ensure makes sure an access token is held, exchanging the refresh token when
-// there is none, and writes the rotation.
+// there is none or it is near expiry, and writes the rotation.
 //
 // A refusal ends the session locally, through the same function the platform
 // funnel uses, because the turn path does not pass through that funnel: the
@@ -123,7 +123,19 @@ func (r SessionRenewer) Ensure(ctx context.Context) error {
 	if r.Platform == nil {
 		return errors.New("this build names no control plane, so no session token can be obtained")
 	}
-	if err := r.Platform.EnsureToken(ctx); err != nil {
+	return r.finishRenewal(r.Platform.EnsureToken(ctx))
+}
+
+// Renew repairs a rejected gateway bearer and persists the same rotating credential.
+func (r SessionRenewer) Renew(ctx context.Context, stale string) error {
+	if r.Platform == nil {
+		return errors.New("this build names no control plane, so no session token can be obtained")
+	}
+	return r.finishRenewal(r.Platform.RenewToken(ctx, stale))
+}
+
+func (r SessionRenewer) finishRenewal(err error) error {
+	if err != nil {
 		if IsSessionExpired(err) {
 			forgetSession(r.Creds, r.State, err)
 		}

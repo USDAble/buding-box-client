@@ -148,11 +148,10 @@ describe('no code the client can name reaches the server sentence (V-91)', () =>
     }
   })
 
-  it('leaves the 401 pair to the behaviour it needs, not to a sentence', () => {
-    // Pinned as ABSENT, not as an oversight (V-92): this path has no refresh-and-replay
-    // and no clear-the-credential step, so copy would tell the user to retry a turn that
-    // cannot succeed. Delete this test when V-92 lands the behaviour.
-    expect(turnErrorKey('unauthorized')).toBeNull()
-    expect(turnErrorKey('token_expired')).toBeNull()
+  // OCTO-FORK: a refusal after automatic renewal has actionable, localized copy.
+  it('maps final authentication failures after gateway renewal', () => {
+    for (const code of ['unauthorized', 'token_expired']) {
+      expect(turnErrorView({ code, error: 'private auth details' }, 'fallback').text).toBe(tr('platform.error.unauthorized'))
+    }
   })
 })

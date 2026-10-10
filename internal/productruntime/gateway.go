@@ -4,6 +4,8 @@ import (
 	"context"
 	"crypto/rand"
 	"fmt"
+	"net/http"
+	"net/url"
 	"strconv"
 	"strings"
 	"time"
@@ -14,8 +16,7 @@ import (
 	"github.com/open-octo/octo-agent/internal/productclient"
 )
 
-// gatewayEnsureBudget bounds the token exchange Sender may run when the holder
-// has no access token (V-39).
+// gatewayEnsureBudget bounds proactive and rejected-token credential exchanges.
 //
 // A budget rather than a bare call because the turn is waiting on it: an
 // endpoint that accepts the connection and never answers would otherwise hold
@@ -29,11 +30,8 @@ const gatewayEnsureBudget = 10 * time.Second
 // sender factory, and it is the only genuinely new piece of PR-5a.
 //
 // WHY A FACTORY RATHER THAN A SENDER. C2 规则 1 keeps the access token in memory
-// and never on disk, and 规则 2 says the sender is assembled from whatever token
-// is current. So a sender cannot be built once and cached: it would freeze the
-// token it was built with. This type is therefore a value that is cheap to hold
-// and whose Sender method is called per turn — the caller in internal/server
-// treats it as "how to reach the gateway", not as "the gateway connection".
+// and never on disk. Sender is assembled per turn, and its transport reads the
+// current token before each model request so multi-round tasks see rotations.
 //
 // WHY THE TWO HALVES ARE SEPARATE FIELDS. Host is a build fact (it comes from
 // the profile) while Tokens is a run-time fact (it belongs to the signed-in
@@ -66,8 +64,8 @@ type GatewayEndpoint struct {
 	// Tokens is the in-memory credential holder. nil means the caller never
 	// wired one — a wiring mistake, refused rather than panicked on.
 	Tokens *productclient.CredentialHolder
-	// Ensure obtains an access token when the holder has none, and nil means the
-	// old behaviour: no token, no turn.
+	// Ensure obtains an access token when absent or near expiry. With nil, the
+	// caller must provide a token and no proactive renewal occurs.
 	//
 	// WHY IT IS HERE AND NOT SOMEWHERE ELSE (PR-4c1). A relaunched process holds
 	// nothing but a refresh token, and this factory is the first place that
@@ -90,6 +88,8 @@ type GatewayEndpoint struct {
 	// single-flight exchange and then persists the rotation (V-42). This type
 	// neither knows nor decides how a token is obtained.
 	Ensure func(context.Context) error
+	// Renew repairs a rejected bearer through the same credential owner as Ensure.
+	Renew func(context.Context, string) error
 }
 
 // Sender builds the sender for one gateway turn.
@@ -97,14 +97,9 @@ type GatewayEndpoint struct {
 // It reads the token at call time, so a refresh that happened between turns is
 // picked up with no invalidation step.
 //
-// It performs no exchange of its own EXCEPT when the holder has no access token
-// at all (V-39): then, and only then, it asks Ensure for one under the budget
-// above. The two halves of C2 规则 3 are kept apart deliberately — an expired
-// token mid-turn is still the client's business, and the single-flight refresh
-// still belongs to the code that owns the credential; what changed is that "no
-// token has ever been obtained in this process" became a state someone answers
-// for. That is the one scope in which construction touches the network, and it
-// is a state the user cannot fix any other way.
+// Ensure handles missing or near-expiry tokens under the budget above. The
+// transport repeats that check per request and repairs a rejected HTTP
+// handshake once; the credential owner's single-flight handles all exchanges.
 //
 // The errors are what a signed-out or mis-wired build produces instead of a
 // request, and each names which half is missing. They are English like every
@@ -131,19 +126,25 @@ func (g GatewayEndpoint) Sender(tuning app.ReasoningTuning) (agent.Sender, error
 	}
 	// OCTO-FORK: a nonempty token can expire while the portable client is idle.
 	if g.Ensure != nil {
-		ctx, cancel := context.WithTimeout(context.Background(), gatewayEnsureBudget)
-		defer cancel()
-		if err := g.Ensure(ctx); err != nil {
+		if err := gatewayRenewal(context.Background(), g.Ensure); err != nil {
 			// The cause is carried into the message rather than swallowed: "the
 			// turn did not start" is the same sentence for a refused session, a
 			// dead control plane and a timeout, and only one of the three is
 			// fixed by signing in again.
-			return nil, fmt.Errorf("not signed in: the built-in gateway needs a session token and obtaining one failed (%w); the turn was not started and nothing was sent", err)
+			return nil, fmt.Errorf("not signed in: the built-in gateway needs a session token and obtaining one failed (%w); the turn was not started and nothing was sent", gatewayAuthError(err))
 		}
 	}
 	token := g.Tokens.AccessToken()
 	if token == "" {
 		return nil, fmt.Errorf("not signed in: the built-in gateway needs a session token and none is held; the turn was not started and nothing was sent")
+	}
+	endpoint, err := url.Parse(g.Host)
+	if err != nil || endpoint.Host == "" || (endpoint.Scheme != "http" && endpoint.Scheme != "https") {
+		return nil, fmt.Errorf("the built-in gateway address is invalid")
+	}
+	transport := &gatewayAuthTransport{
+		base: http.DefaultTransport, tokens: g.Tokens, ensure: g.Ensure, renew: g.Renew,
+		generation: g.Tokens.SessionGeneration(), origin: endpoint.Scheme + "://" + endpoint.Host,
 	}
 
 	// C1 规则 1: provider = custom, protocol = openai. Both are required — a
@@ -178,6 +179,7 @@ func (g GatewayEndpoint) Sender(tuning app.ReasoningTuning) (agent.Sender, error
 		headers["X-Buding-Expert-Version"] = strconv.FormatUint(uint64(version), 10)
 	}
 	return app.NewSender(app.SenderOptions{
+		GatewayTransport:            transport,
 		GatewayReasoningPassthrough: true,
 		Provider:                    app.ProviderCustom,
 		Protocol:                    "openai",

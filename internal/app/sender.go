@@ -13,6 +13,7 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"net/http"
 	"strings"
 
 	"github.com/open-octo/octo-agent/internal/agent"
@@ -34,6 +35,8 @@ const (
 // Key resolution and any user-facing help text stay with the caller (a CLI
 // prints setup hints; a server returns an error) — this layer only constructs.
 type SenderOptions struct {
+	// OCTO-FORK: product authentication is injected without teaching providers about accounts.
+	GatewayTransport http.RoundTripper
 	// OCTO-FORK: the platform owns provider-specific reasoning translation.
 	GatewayReasoningPassthrough bool
 	Provider                    string // vendor ID, e.g. "kimi", "deepseek", "anthropic", "openai"
@@ -137,6 +140,10 @@ func NewSender(opts SenderOptions) (agent.Sender, error) {
 		if client, ok := p.(*openai.Client); ok {
 			client.Dialect = openai.DialectPlatformGateway
 			client.Retry = retry.Policy{MaxAttempts: 1}
+			// OCTO-FORK: every gateway request, including background rounds, shares renewal.
+			if opts.GatewayTransport != nil {
+				client.HTTPClient.Transport = opts.GatewayTransport
+			}
 		}
 	}
 	// Anthropic-protocol models on the legacy budget path (older Claude,

@@ -340,6 +340,11 @@ export const DEBT_CEILINGS = [
 export const PRODUCT_FILE_PATTERN = /^(product_.*|privacy|chatmode_handlers|sensitive_dict_handlers)(_test)?\.go$/
 
 export const PRODUCT_FILES = [
+  // OCTO-FORK: register the existing billed-gateway title policy beside session ownership.
+  // It stays beside Server until title policy has an upstream injection point;
+  // do not broaden the file pattern or raise any diff ceiling for this helper.
+  { file: 'internal/server/product_session_title.go', convergence: 'P0-01A D: gateway title policy; move when session/title policy has an upstream port' },
+  { file: 'internal/server/product_session_title_test.go', convergence: 'P0-01A D: regression for the gateway title policy above' },
   { file: 'internal/server/product_handlers.go', convergence: 'P0-01A B' },
   { file: 'internal/server/product_handlers_test.go', convergence: 'P0-01A B' },
   { file: 'internal/server/product_login.go', convergence: 'P0-01A B + P0-02' },

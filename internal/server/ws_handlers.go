@@ -1675,6 +1675,8 @@ func (s *Server) doAgentTurn(sess *agent.Session, content string, blocks []agent
 	// retries.
 	if agent.IsAutoNamePlaceholder(sess.Title) {
 		sid := sess.ID
+		// OCTO-FORK: developer builds also route product models through the gateway.
+		gatewayTitle := s.gatewayBound(sess, sess.Model)
 		titleMsgs := append(append([]agent.Message{}, sess.Messages...), userMsg)
 		// No user text to title from at all (e.g. an attachments-only first
 		// message): skip the throwaway call rather than pay for a hallucinated
@@ -1686,7 +1688,8 @@ func (s *Server) doAgentTurn(sess *agent.Session, content string, blocks []agent
 				defer s.releaseTitleGeneration(sid)
 				ctx, cancel := context.WithTimeout(context.Background(), agent.TitleGenerationTimeout)
 				defer cancel()
-				t, terr := a.GenerateTitleOrSnippet(ctx, titleMsgs)
+				// OCTO-FORK: background titles must not compete with the billed gateway turn.
+				t, terr := s.generateSessionTitle(ctx, a, titleMsgs, gatewayTitle)
 				if terr != nil {
 					slog.Warn("session title generation failed, falling back to message snippet", "session_id", sid, "err", terr)
 				}

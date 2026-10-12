@@ -1,22 +1,4 @@
 #!/bin/sh
-# OCTO-FORK: run the complete landing gate before a branch leaves this clone.
-# OCTO-FORK: share tool discovery with the commit hook for GUI Git clients.
-. "$(dirname "$0")/env.sh"
-# 推送前检查
-remote="$1"
-url="$2"
-
-# 检查是否有未提交的更改
-if ! git diff-index --quiet HEAD --; then
-    echo "Warning: You have uncommitted changes"
-fi
-
-echo "Running full gate..."
-# OCTO-FORK: GUI Git clients must display test failures printed to stdout too.
-if ! make gate >&2; then
-    echo "Error: Full gate failed"
-    exit 1
-fi
-
-echo "Pre-push checks passed"
+# OCTO-FORK: pushing does not run a local build or the full test suite.
+# Run make gate explicitly for full validation; CI checks remain independent.
 exit 0

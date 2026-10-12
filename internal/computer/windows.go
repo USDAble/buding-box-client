@@ -39,13 +39,13 @@ var (
 	procAttachThreadInput             = user32.NewProc("AttachThreadInput")
 	procBringWindowToTop              = user32.NewProc("BringWindowToTop")
 
-	procBitBlt                 = gdi32.NewProc("BitBlt")
-	procCreateCompatibleDC     = gdi32.NewProc("CreateCompatibleDC")
-	procCreateCompatibleBitmap = gdi32.NewProc("CreateCompatibleBitmap")
-	procSelectObject           = gdi32.NewProc("SelectObject")
-	procDeleteObject           = gdi32.NewProc("DeleteObject")
-	procDeleteDC               = gdi32.NewProc("DeleteDC")
-	procGetDIBits              = gdi32.NewProc("GetDIBits")
+	procBitBlt             = gdi32.NewProc("BitBlt")
+	procCreateCompatibleDC = gdi32.NewProc("CreateCompatibleDC")
+	procCreateDIBSection   = gdi32.NewProc("CreateDIBSection")
+	procSelectObject       = gdi32.NewProc("SelectObject")
+	procDeleteObject       = gdi32.NewProc("DeleteObject")
+	procDeleteDC           = gdi32.NewProc("DeleteDC")
+	procGdiFlush           = gdi32.NewProc("GdiFlush")
 )
 
 const (
@@ -236,9 +236,11 @@ func screenSize() (float64, float64, error) {
 	return float64(int32(w)), float64(int32(h)), nil
 }
 
-// screenshot captures the primary display through GDI (BitBlt into a
-// compatible bitmap, GetDIBits as top-down 32-bit BGRA) and encodes PNG.
+// screenshot captures the primary display into a top-down 32-bit DIB and encodes PNG.
 func screenshot() ([]byte, error) {
+	// OCTO-FORK: GDI device contexts must be used and released on their owner thread.
+	runtime.LockOSThread()
+	defer runtime.UnlockOSThread()
 	w, h, err := screenSize()
 	if err != nil {
 		return nil, err
@@ -257,23 +259,8 @@ func screenshot() ([]byte, error) {
 	}
 	defer procDeleteDC.Call(mem)
 
-	bmp, _, _ := procCreateCompatibleBitmap.Call(screen, uintptr(width), uintptr(height))
-	if bmp == 0 {
-		return nil, fmt.Errorf("computer: CreateCompatibleBitmap(%dx%d) failed", width, height)
-	}
-	defer procDeleteObject.Call(bmp)
-
-	old, _, _ := procSelectObject.Call(mem, bmp)
-	ok, _, e := procBitBlt.Call(mem, 0, 0, uintptr(width), uintptr(height), screen, 0, 0, srccopy|captureblt)
-	// GetDIBits requires the bitmap NOT to be selected into any DC, so
-	// restore the DC's original bitmap before reading the pixels.
-	procSelectObject.Call(mem, old)
-	if ok == 0 {
-		return nil, fmt.Errorf("computer: BitBlt failed: %v", e)
-	}
-
-	// Negative height requests a top-down DIB so row 0 is the top of the
-	// screen; 32 bpp BI_RGB yields BGRA with no stride padding.
+	// OCTO-FORK: capture directly into a fixed-format DIB. Display-driver
+	// dependent bitmaps can fail GetDIBits conversion on Windows desktops.
 	bi := bitmapInfo{header: bitmapInfoHeader{
 		size:        uint32(unsafe.Sizeof(bitmapInfoHeader{})),
 		width:       width,
@@ -282,11 +269,27 @@ func screenshot() ([]byte, error) {
 		bitCount:    32,
 		compression: biRGB,
 	}}
-	buf := make([]byte, int(width)*int(height)*4)
-	lines, _, e := procGetDIBits.Call(mem, bmp, 0, uintptr(height), uintptr(unsafe.Pointer(&buf[0])), uintptr(unsafe.Pointer(&bi)), dibRGBColors)
-	if int32(lines) == 0 { // int return: only the low 32 bits are defined
-		return nil, fmt.Errorf("computer: GetDIBits failed: %v", e)
+	var pixels unsafe.Pointer
+	bmp, _, e := procCreateDIBSection.Call(screen, uintptr(unsafe.Pointer(&bi)), dibRGBColors, uintptr(unsafe.Pointer(&pixels)), 0, 0)
+	if bmp == 0 {
+		return nil, fmt.Errorf("computer: CreateDIBSection failed: %v", e)
 	}
+	defer procDeleteObject.Call(bmp)
+	if pixels == nil {
+		return nil, fmt.Errorf("computer: CreateDIBSection returned no pixels")
+	}
+	old, _, e := procSelectObject.Call(mem, bmp)
+	if old == 0 || old == ^uintptr(0) {
+		return nil, fmt.Errorf("computer: SelectObject failed: %v", e)
+	}
+	defer procSelectObject.Call(mem, old)
+	if ok, _, e := procBitBlt.Call(mem, 0, 0, uintptr(width), uintptr(height), screen, 0, 0, srccopy|captureblt); ok == 0 {
+		return nil, fmt.Errorf("computer: BitBlt failed: %v", e)
+	}
+	if ok, _, e := procGdiFlush.Call(); ok == 0 {
+		return nil, fmt.Errorf("computer: GdiFlush failed: %v", e)
+	}
+	buf := unsafe.Slice((*byte)(pixels), int(width)*int(height)*4)
 
 	img := image.NewRGBA(image.Rect(0, 0, int(width), int(height)))
 	for i := 0; i+3 < len(buf); i += 4 {

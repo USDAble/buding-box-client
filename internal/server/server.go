@@ -4345,6 +4345,8 @@ func (s *Server) runChannelTurns(ctx context.Context, sess *channel.Session, ad 
 		// Pre-turn snapshot plus the incoming user message — the turn loop
 		// owns History and hasn't appended it yet (web titleMsgs parity).
 		titleMsgs := append(append([]agent.Message{}, st.Messages...), agent.NewUserMessage(content))
+		// OCTO-FORK: developer builds also route product models through the gateway.
+		gatewayTitle := s.gatewayBound(st, st.Model)
 		// No user text to title from at all (e.g. an attachments-only first
 		// message): skip the throwaway call rather than pay for a hallucinated
 		// title — the snippet fallback would come up empty anyway. The next
@@ -4355,7 +4357,8 @@ func (s *Server) runChannelTurns(ctx context.Context, sess *channel.Session, ad 
 				defer s.releaseTitleGeneration(sid)
 				ctx, cancel := context.WithTimeout(context.Background(), agent.TitleGenerationTimeout)
 				defer cancel()
-				t, terr := sess.Agent.GenerateTitleOrSnippet(ctx, titleMsgs)
+				// OCTO-FORK: background titles must not compete with the billed gateway turn.
+				t, terr := s.generateSessionTitle(ctx, sess.Agent, titleMsgs, gatewayTitle)
 				if terr != nil {
 					slog.Warn("channel session title generation failed, falling back to message snippet", "session_id", sid, "err", terr)
 				}

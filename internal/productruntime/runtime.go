@@ -278,7 +278,7 @@ func (rt *Runtime) handleModels(w http.ResponseWriter, r *http.Request) {
 			row.Models = append(row.Models, catalogModelDTO{
 				Eligible:             model.Eligible,
 				ReasoningOptions:     model.ReasoningOptions,
-				ReasoningEffort:      rt.reasoningPreference(model.ID, model.ReasoningOptions),
+				ReasoningEffort:      rt.reasoningPreference(model.ID),
 				AvailabilityReason:   model.AvailabilityReason,
 				ID:                   model.ID,
 				DisplayName:          localizeDisplayName(model.DisplayName, locale),

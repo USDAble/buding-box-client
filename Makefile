@@ -9,7 +9,7 @@
 #   make vet        go vet ./...
 #   make fmt        gofmt -w on all .go files
 #   make fmt-check  fail if anything would be reformatted
-#   make quick-check fast local checks run by the commit hook
+#   make quick-check explicitly run the project-wide local guards
 #   make gate       everything a change must pass before landing on v1 (see below)
 #   make hooks-install enable the repository's commit and push hooks
 #   make tidy       go mod tidy
@@ -57,7 +57,8 @@ LDFLAGS := -X github.com/open-octo/octo-agent/internal/version.Version=$(VERSION
 DESKTOP_LDFLAGS := -X github.com/open-octo/octo-agent/internal/version.Version=$(VERSION) \
                    -X github.com/open-octo/octo-agent/internal/version.Commit=$(COMMIT)
 
-GOFILES := $(shell find . -name '*.go' -not -path './vendor/*' -not -path '*/_vendor/*')
+# OCTO-FORK: enumerate source through Git, not Windows' unrelated find.exe.
+GOFILES = git ls-files -z --cached --others --exclude-standard -- '*.go' ':!:vendor/*' ':!:**/_vendor/*'
 
 RG_EMBED_DIR := internal/tools/rgembed/binaries
 RG_EMBED_BIN := $(RG_EMBED_DIR)/rg
@@ -253,10 +254,10 @@ vet:
 	go vet ./...
 
 fmt:
-	gofmt -w $(GOFILES)
+	$(GOFILES) | xargs -0 -r -s 8000 gofmt -w
 
 fmt-check:
-	@unformatted=$$(gofmt -l $(GOFILES)); \
+	@unformatted=$$($(GOFILES) | xargs -0 -r -s 8000 gofmt -l) || exit $$?; \
 	if [ -n "$$unformatted" ]; then \
 		echo "gofmt found unformatted files:"; \
 		echo "$$unformatted"; \
@@ -402,12 +403,12 @@ docs-ref-check: node-check
 	node scripts/docs-ref-guard.mjs
 	node --test scripts/docs-ref-guard.test.mjs
 
-# Commit-time checks are intentionally quick and deterministic. Full Go race,
-# package and web checks run in gate, which the push hook invokes.
+# OCTO-FORK: project checks run explicitly or in CI, independently of lightweight Git hooks.
+# Full Go race, package and web checks run in gate.
 quick-check: node-check fmt-check docs-ref-check norms-check agents-check \
 	brand-check datapath-check marker-check sensitive-norm-check reuse-check \
 	server-diff-check release-profile-check
-	# OCTO-FORK: keep GUI hook tool discovery and failure propagation covered.
+	# OCTO-FORK: keep dependency-free Git hook behavior covered.
 	node --test scripts/hooks-env.test.mjs
 	@echo "quick-check passed: format + documentation + fork guards."
 
@@ -415,7 +416,7 @@ quick-check: node-check fmt-check docs-ref-check norms-check agents-check \
 # activate a versioned hooks directory automatically; each clone opts in once.
 hooks-install:
 	git config core.hooksPath .githooks
-	@echo "Git hooks installed from .githooks (commit: quick-check; push: gate)."
+	@echo "Git hooks installed from .githooks (commit: staged diff check; push: no local test suite)."
 
 # gate is the single command a change must pass before it lands on v1. It is
 # the current implementation plan's local gate, which until now

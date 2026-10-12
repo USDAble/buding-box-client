@@ -38,5 +38,6 @@ func loadBuildProfile(profileJSON, endpointsJSON string) (Profile, error) {
 		}
 	}
 	p.APIHost, p.GatewayHost = api, gateway
+	p.catalogCacheSource = api
 	return p, p.Validate()
 }

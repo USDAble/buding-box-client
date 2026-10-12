@@ -39,9 +39,11 @@ type SenderOptions struct {
 	GatewayTransport http.RoundTripper
 	// OCTO-FORK: the platform owns provider-specific reasoning translation.
 	GatewayReasoningPassthrough bool
-	Provider                    string // vendor ID, e.g. "kimi", "deepseek", "anthropic", "openai"
-	APIKey                      string
-	BaseURL                     string // optional endpoint override; empty uses the vendor default
+	// OCTO-FORK: product catalog preflight; direct provider callers leave nil.
+	ValidateRequest func(model string) error
+	Provider        string // vendor ID, e.g. "kimi", "deepseek", "anthropic", "openai"
+	APIKey          string
+	BaseURL         string // optional endpoint override; empty uses the vendor default
 	// Protocol ("anthropic" | "openai") is required only for the Custom vendor,
 	// which has no registry-pinned wire format; named vendors ignore it.
 	Protocol string
@@ -157,12 +159,20 @@ func NewSender(opts SenderOptions) (agent.Sender, error) {
 	if thinkingBudget == 0 {
 		thinkingBudget = AnthropicThinkingBudget(opts.ReasoningEffort)
 	}
+	// OCTO-FORK: hold callbacks behind a pointer so sender values remain comparable.
+	var validation *requestValidation
+	if opts.ValidateRequest != nil {
+		validation = &requestValidation{check: opts.ValidateRequest}
+	}
 	return sender{
-		p:               p,
-		cacheKey:        opts.CacheKey,
-		thinkingBudget:  thinkingBudget,
-		reasoningEffort: opts.ReasoningEffort,
-		showReasoning:   opts.ShowReasoning,
+		p: p,
+		// OCTO-FORK: keep a gateway turn at its selected effort and recheck availability.
+		validateRequest:             validation,
+		gatewayReasoningPassthrough: opts.GatewayReasoningPassthrough,
+		cacheKey:                    opts.CacheKey,
+		thinkingBudget:              thinkingBudget,
+		reasoningEffort:             opts.ReasoningEffort,
+		showReasoning:               opts.ShowReasoning,
 	}, nil
 }
 
@@ -300,12 +310,18 @@ func buildClient(name, apiKey, baseURL, protocol string, headers map[string]stri
 // sender adapts a provider.Provider into agent.Sender. Keeping the adapter here
 // means the agent package never imports provider — a one-directional dep graph
 // that pays off as more provider implementations land.
+// OCTO-FORK: callbacks are indirect to preserve existing sender identity comparisons.
+type requestValidation struct{ check func(string) error }
+
 type sender struct {
-	p               provider.Provider
-	cacheKey        string
-	thinkingBudget  int
-	reasoningEffort string
-	showReasoning   bool
+	// OCTO-FORK: product-only catalog validation and immutable turn effort.
+	validateRequest             *requestValidation
+	gatewayReasoningPassthrough bool
+	p                           provider.Provider
+	cacheKey                    string
+	thinkingBudget              int
+	reasoningEffort             string
+	showReasoning               bool
 }
 
 // LowEffort implements agent.LowEffortSender: it returns a copy of s with
@@ -318,6 +334,10 @@ type sender struct {
 // safer choice across every Anthropic-protocol-compatible backend, tested
 // or not, and it fully solves the latency/cost problem this exists for).
 func (s sender) LowEffort() agent.Sender {
+	// OCTO-FORK: gateway helpers must not silently change the selected effort.
+	if s.gatewayReasoningPassthrough {
+		return s
+	}
 	s.reasoningEffort = "low"
 	s.thinkingBudget = AnthropicThinkingBudget("low")
 	return s
@@ -328,6 +348,10 @@ func (s sender) LowEffort() agent.Sender {
 // GenerateTitle because a 6-word title needs no reasoning and even "low"
 // reasoning can consume the tight title token budget or time out.
 func (s sender) NoReasoning() agent.Sender {
+	// OCTO-FORK: gateway helpers must not silently change the selected effort.
+	if s.gatewayReasoningPassthrough {
+		return s
+	}
 	s.reasoningEffort = ""
 	s.thinkingBudget = 0
 	return s
@@ -346,6 +370,12 @@ func (s sender) reasoningSink(onThinking func(string)) func(string) {
 func (s sender) SendMessages(ctx context.Context, model, system string, msgs []agent.Message, maxTokens int) (agent.Reply, error) {
 	if s.p == nil {
 		return agent.Reply{}, errors.New("app: provider is nil")
+	}
+	// OCTO-FORK: reject unavailable product choices before sending.
+	if s.validateRequest != nil {
+		if err := s.validateRequest.check(model); err != nil {
+			return agent.Reply{}, err
+		}
 	}
 	resp, err := s.p.Send(ctx, provider.Request{
 		Model:           model,
@@ -399,6 +429,12 @@ func (s sender) StreamMessages(
 	if s.p == nil {
 		return agent.Reply{}, errors.New("app: provider is nil")
 	}
+	// OCTO-FORK: reject unavailable product choices before sending.
+	if s.validateRequest != nil {
+		if err := s.validateRequest.check(model); err != nil {
+			return agent.Reply{}, err
+		}
+	}
 	req := provider.Request{
 		Model:           model,
 		SystemPrompt:    system,
@@ -441,6 +477,12 @@ func (s sender) SendMessagesWithTools(
 	if s.p == nil {
 		return agent.Reply{}, errors.New("app: provider is nil")
 	}
+	// OCTO-FORK: reject unavailable product choices before sending.
+	if s.validateRequest != nil {
+		if err := s.validateRequest.check(model); err != nil {
+			return agent.Reply{}, err
+		}
+	}
 	resp, err := s.p.Send(ctx, provider.Request{
 		Model:           model,
 		SystemPrompt:    system,
@@ -470,6 +512,12 @@ func (s sender) StreamMessagesWithTools(
 ) (agent.Reply, error) {
 	if s.p == nil {
 		return agent.Reply{}, errors.New("app: provider is nil")
+	}
+	// OCTO-FORK: reject unavailable product choices before sending.
+	if s.validateRequest != nil {
+		if err := s.validateRequest.check(model); err != nil {
+			return agent.Reply{}, err
+		}
 	}
 	req := provider.Request{
 		Model:           model,

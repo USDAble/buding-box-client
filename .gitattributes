@@ -19,3 +19,6 @@ packaging/windows/brand.iss           linguist-generated=true
 # Collapse it in diffs and keep it out of language stats — reviewing it by eye
 # is neither possible nor useful; icons.generated.test.ts is what checks it.
 web/src/lib/icons.generated.ts linguist-generated=true
+
+# OCTO-FORK: gofmt requires LF even when Windows uses core.autocrlf=true.
+*.go text eol=lf

@@ -1,22 +1,6 @@
-// Frameless-window drag + edge-resize for the desktop shell, all platforms.
-//
-// Wails removes the native frame of a frameless window, which also removes
-// the OS's own edge-resize handling; both title-bar dragging
-// (--wails-draggable regions) and edge resizing are instead detected by the
-// Wails JS runtime, which asks the Go side to start the gesture. But octo's
-// page is served by octo's own server, not Wails' asset server, so that
-// runtime never loads here — only a tiny stub (window._wails.invoke) is
-// injected into the webview. Without this module the window can't be moved or
-// resized with the mouse at all, on any platform — including macOS: a
-// Frameless Wails v3 window has no free native drag there either (Frameless
-// only toggles NSWindowStyleMaskFullSizeContentView; nothing reads
-// --wails-draggable natively), a prior version of this comment claimed
-// otherwise and that was never actually true.
-//
-// This module replicates the runtime's gesture detection (adapted from
-// @wailsio/runtime drag.ts) and drives the window through the injected stub:
-// Go handles "wails:drag" / "wails:resize:<edge>" messages natively, no
-// runtime required.
+// OCTO-FORK: the hub-served page has no Wails JS runtime to interpret
+// --wails-draggable. Use its injected invoke stub for native drag gestures.
+// Windows/Linux also need edge resizing; macOS retains its native frame.
 
 import { isDesktopShell } from './stores'
 
@@ -45,6 +29,7 @@ let defaultCursor = 'auto'
 let buttons = 0
 
 const isWindows = /Win/.test(navigator.platform)
+const isMac = /Mac/.test(navigator.platform)
 
 // The stub is injected by Wails after navigation completes, i.e. after this
 // module initialises — look it up lazily at gesture time, never at init.
@@ -103,6 +88,14 @@ function primaryDown(event: MouseEvent): void {
     style.getPropertyValue('--wails-draggable').trim() === 'drag' &&
     event.offsetX - parseFloat(style.paddingLeft) < target.clientWidth &&
     event.offsetY - parseFloat(style.paddingTop) < target.clientHeight
+
+  // OCTO-FORK: AppKit needs the retained mouse-down while the button is still
+  // held; do not wait for WebKit to deliver a later mousemove across processes.
+  if (isMac && canDrag && event.type === 'mousedown') {
+    canDrag = false
+    dragging = true
+    invoke('wails:drag')
+  }
 }
 
 function primaryUp(): void {
@@ -124,6 +117,10 @@ function onMouseMove(event: MouseEvent): void {
     canDrag = canResize = false
     return
   }
+
+  // OCTO-FORK: macOS has a native frame; its Wails startResize is a no-op.
+  // Arming a JS resize here steals presses from the titlebar drag region.
+  if (isMac) return
 
   // A document-level scrollbar at the window edge consumes mouse events in
   // that strip; shift the effective content edge inward so the resize zone
@@ -161,7 +158,13 @@ function update(event: MouseEvent): void {
   // Once a native drag/resize starts, the OS swallows the matching mouseup, so
   // gesture end can't be observed directly. Diff event.buttons against the last
   // seen state on every event to detect the release instead.
-  const eventButtons = event.buttons
+  // OCTO-FORK: WebKit can report buttons=0 on mousedown. Record that explicit
+  // press so the next move cannot re-arm (or cancel) an active native gesture.
+  let eventButtons = event.buttons
+  if (event.button === 0) {
+    if (event.type === 'mousedown') eventButtons |= 1
+    if (event.type === 'mouseup') eventButtons &= ~1
+  }
   let released = buttons & ~eventButtons
   let pressed = eventButtons & ~buttons
   buttons = eventButtons

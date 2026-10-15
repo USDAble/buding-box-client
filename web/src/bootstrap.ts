@@ -45,7 +45,7 @@ applyTitlebarLift()
 // Rebuild baked-theme artifact previews whenever the resolved theme changes.
 installArtifactThemeRefresh()
 
-// Desktop shell on Windows/Linux: window drag + edge resize (no-op elsewhere).
+// OCTO-FORK: all desktop shells need drag handling; macOS owns edge resizing.
 initFramelessDrag()
 
 // The window/tab title is product copy, so it is rendered from

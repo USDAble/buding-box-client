@@ -3,7 +3,7 @@ import { flushSync, mount, unmount } from 'svelte'
 import { get } from 'svelte/store'
 import { locale } from '../lib/i18n'
 import { blockedPage, productPhase, productState } from '../lib/product'
-import { toasts } from '../lib/stores'
+import { nativeShell, toasts } from '../lib/stores'
 import BlockedView from './BlockedView.svelte'
 
 // The activation form now carries two credentials, not one (需求基线 E1): the
@@ -33,6 +33,7 @@ function firstActivationState() {
 }
 
 beforeEach(() => {
+  nativeShell.set(false)
   locale.set('zh')
   productState.set(firstActivationState() as never)
   productPhase.set('blocked')
@@ -42,6 +43,7 @@ beforeEach(() => {
 })
 
 afterEach(() => {
+  nativeShell.set(false)
   if (app) unmount(app)
   app = null
   target.remove()
@@ -115,6 +117,57 @@ async function switchTo() {
   link.click()
   flushSync()
 }
+
+// OCTO-FORK: both auth forms keep native controls clickable and browser mode stays inert.
+describe('BlockedView desktop window controls', () => {
+  it.each([false, true])('uses native minimise and close on the auth form (activated=%s)', async activated => {
+    vi.stubGlobal('navigator', { platform: 'Win32' })
+    nativeShell.set(true)
+    productState.set({ ...firstActivationState(), activated } as never)
+    const fetchMock = vi.fn(async (_url: RequestInfo | URL, _init?: RequestInit) => new Response(JSON.stringify({ ok: true }), { status: 200 }))
+    vi.stubGlobal('fetch', fetchMock)
+    render()
+    expect(target.querySelector('header')?.style.getPropertyValue('--wails-draggable')).toBe('drag')
+    expect(target.querySelector<HTMLElement>('.lang-switch')?.style.getPropertyValue('--wails-draggable')).toBe('no-drag')
+    expect(target.querySelector<HTMLElement>('.window-controls')?.style.getPropertyValue('--wails-draggable')).toBe('no-drag')
+    expect(input_('phone')).not.toBeNull()
+    const buttons = target.querySelectorAll<HTMLButtonElement>('.window-controls button')
+    expect(buttons).toHaveLength(2)
+    expect(buttons[0].getAttribute('aria-label')).toBe('最小化')
+    expect(buttons[1].getAttribute('aria-label')).toBe('关闭')
+    buttons[0].click()
+    buttons[1].click()
+    await vi.waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(2))
+    expect(fetchMock.mock.calls.map(([url]) => url)).toEqual(['/api/native/window/minimise', '/api/native/window/close'])
+    expect(fetchMock.mock.calls.every(([, init]) => init?.method === 'POST')).toBe(true)
+  })
+
+  it('preserves macOS native controls and a draggable top strip', () => {
+    vi.stubGlobal('navigator', { platform: 'MacIntel' })
+    nativeShell.set(true)
+    render()
+    expect(target.querySelector<HTMLElement>('header.mac')?.style.getPropertyValue('--wails-draggable')).toBe('drag')
+    expect(target.querySelector<HTMLElement>('header.mac')?.className).toContain('mac')
+    expect(target.querySelector('.window-controls')).toBeNull()
+  })
+
+  it('does not expose native window actions in a browser', () => {
+    render()
+    expect(target.querySelector('header')?.style.getPropertyValue('--wails-draggable')).toBe('no-drag')
+    expect(target.querySelector('.window-controls')).toBeNull()
+  })
+
+  it('reports a failed native action without submitting the form', async () => {
+    vi.stubGlobal('navigator', { platform: 'Win32' })
+    nativeShell.set(true)
+    toasts.set([])
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({ error: 'window unavailable' }), { status: 503 })))
+    render()
+    target.querySelector<HTMLButtonElement>('.window-btn')!.click()
+    await vi.waitFor(() => expect(get(toasts).some(toast => toast.msg === 'window unavailable')).toBe(true))
+    expect(input_('phone')).not.toBeNull()
+  })
+})
 
 describe('BlockedView first activation', () => {
   // OCTO-FORK: both auth shapes retain window identity and submit one calling code.

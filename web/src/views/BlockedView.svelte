@@ -8,10 +8,22 @@
   import { getCountryCallingCode, type CountryCode } from 'libphonenumber-js/min'
   import { randomNickname, validateNickname } from '../lib/nickname'
   import { brandName, brandTagline, brandTermsTitle, brandPrivacyTitle } from '../lib/brand'
-  import { showToast } from '../lib/stores'
+  // OCTO-FORK: the login wall must expose window chrome before entering the workspace.
+  import { nativeShell, showToast } from '../lib/stores'
   import * as api from '../lib/api'
   import BrandMark from '../components/BrandMark.svelte'
   import LegalModal from '../components/overlays/LegalModal.svelte'
+
+  const isMac = typeof navigator !== 'undefined' && /Mac|iPod|iPhone|iPad/.test(navigator.platform)
+
+  async function windowAction(action: 'minimise' | 'close') {
+    try {
+      if (action === 'minimise') await api.nativeMinimise()
+      else await api.nativeClose()
+    } catch (error) {
+      showToast(error instanceof Error ? error.message : $t('platform.error.generic'), 'error')
+    }
+  }
 
   // The product gate's login page (P4). Two shapes share this one form: first
   // activation (with an activation-code field) and second login (nickname
@@ -333,12 +345,21 @@
   if (dialOpen && dialPickerElement && !dialPickerElement.contains(event.target as Node)) dialOpen = false
 }} />
 
-<div class="blocked">
-  <div class="lang-switch">
-    <button class:on={$locale === 'zh'} onclick={() => pickLang('zh')}>中文</button>
-    <span class="sep">|</span>
-    <button class:on={$locale === 'en'} onclick={() => pickLang('en')}>EN</button>
-  </div>
+<div class="blocked" class:desktop={$nativeShell}>
+  <!-- OCTO-FORK: reuse the shell's drag contract and native window actions on both auth forms. -->
+  <header class="blocked-topbar" class:desktop={$nativeShell} class:mac={$nativeShell && isMac} style="--wails-draggable:{$nativeShell ? 'drag' : 'no-drag'}">
+    <div class="lang-switch" style="--wails-draggable:no-drag">
+      <button class:on={$locale === 'zh'} onclick={() => pickLang('zh')}>中文</button>
+      <span class="sep">|</span>
+      <button class:on={$locale === 'en'} onclick={() => pickLang('en')}>EN</button>
+    </div>
+    {#if $nativeShell && !isMac}
+      <div class="window-controls" style="--wails-draggable:no-drag">
+        <button type="button" class="window-btn" aria-label={$t('header.minimise')} title={$t('header.minimise')} onclick={() => windowAction('minimise')}>−</button>
+        <button type="button" class="window-btn close" aria-label={$t('common.close')} title={$t('common.close')} onclick={() => windowAction('close')}>×</button>
+      </div>
+    {/if}
+  </header>
 
   <div class="card">
     <div class="brand">
@@ -491,9 +512,31 @@
   display: flex; align-items: center; justify-content: center;
   background: var(--bg-layout); padding: 24px; overflow-y: auto;
 }
+/* OCTO-FORK: reserve the drag strip above the auth card, including on short windows. */
+.blocked.desktop { padding-top: 68px; }
+.blocked.desktop .card { margin-block: auto; }
+.blocked-topbar {
+  position: fixed; inset: 0 0 auto; height: 56px; z-index: 1001;
+  display: flex; align-items: center; justify-content: flex-end; gap: 12px;
+  padding: 0 22px; user-select: none;
+}
+.blocked-topbar.desktop { height: 44px; padding: 0; }
+.blocked-topbar.desktop:not(.mac) .lang-switch { margin-right: 12px; }
+.blocked-topbar.mac {
+  box-sizing: border-box; padding-left: 82px; padding-right: 22px;
+  padding-top: var(--titlebar-pad-top, 0px); padding-bottom: var(--titlebar-pad-bottom, 4px);
+}
+.window-controls { display: flex; align-self: stretch; }
+.window-btn {
+  width: 46px; border: none; border-radius: 0; background: transparent;
+  display: grid; place-items: center; cursor: pointer;
+  color: var(--text-secondary); font: inherit; font-size: 16px;
+}
+.window-btn:hover { background: var(--hover-neutral); color: var(--text); }
+.window-btn.close:hover { background: #e81123; color: #fff; }
+.window-btn:focus-visible { outline: 2px solid var(--blue-6); outline-offset: -2px; }
 .lang-switch {
-  position: fixed; top: 18px; right: 22px;
-  display: flex; align-items: center; gap: 8px; z-index: 1001;
+  display: flex; align-items: center; gap: 8px;
 }
 .lang-switch button {
   border: none; background: transparent; font-family: inherit;

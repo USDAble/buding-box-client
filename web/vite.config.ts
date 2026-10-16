@@ -3,7 +3,7 @@ import { svelte } from '@sveltejs/vite-plugin-svelte'
 import { createHash } from 'node:crypto'
 import { readFileSync } from 'node:fs'
 // OCTO-FORK: startup copy is embedded at build time so the first screen needs no app imports.
-import { en, zh } from './src/lib/i18n'
+import { en, zh, zhHant } from './src/lib/i18n'
 
 // OCTO-FORK: fingerprint the configured logo so an upgraded WebView bypasses
 // an older package's year-long cache for the fixed public asset URL.
@@ -16,7 +16,7 @@ export default defineConfig({
     name: 'startup-copy',
     transformIndexHtml(html) {
       const keys = ['common.loading', 'startup.failed', 'startup.slow', 'startup.retry']
-      const copy = Object.fromEntries(Object.entries({ en, zh }).map(([locale, dict]) =>
+      const copy = Object.fromEntries(Object.entries({ en, zh, 'zh-Hant': zhHant }).map(([locale, dict]) =>
         [locale, Object.fromEntries(keys.map(key => [key, dict[key]]))],
       ))
       return html.replace('__STARTUP_COPY__', JSON.stringify(copy).replaceAll('<', '\\u003c'))

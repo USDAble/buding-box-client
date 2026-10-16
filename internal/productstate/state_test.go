@@ -455,6 +455,17 @@ func TestLocaleIsChangeableWhileLoggedOut(t *testing.T) {
 	if got := store.PublicState().Prefs.Locale; got != "zh" {
 		t.Errorf("locale = %q, want zh", got)
 	}
+	// OCTO-FORK: reopening the data root must retain the selected script.
+	if err := store.SetLocale("zh-Hant"); err != nil {
+		t.Fatal(err)
+	}
+	reopened, err := productstate.Open(productstate.Options{Locale: "en"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := reopened.PublicState().Prefs.Locale; got != "zh-Hant" {
+		t.Fatalf("reopened locale = %q, want zh-Hant", got)
+	}
 }
 
 // A logged-in installation is always activated, which is the one normalisation

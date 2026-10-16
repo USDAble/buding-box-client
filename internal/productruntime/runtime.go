@@ -646,10 +646,11 @@ func validCode(code string) bool {
 	return true
 }
 
-// validLocale accepts only the two shipped languages. Anything else is a
+// validLocale accepts only the shipped languages. Anything else is a
 // field-level error; the frontend renders its own wording (本地API契约 §2.5).
 func validLocale(locale string) bool {
-	return locale == "zh" || locale == "en"
+	// OCTO-FORK: preserve existing locale values while adding Traditional Chinese.
+	return locale == "zh" || locale == "en" || locale == "zh-Hant"
 }
 
 // errSessionExpired is re-exported for callers that need to tell a lost session

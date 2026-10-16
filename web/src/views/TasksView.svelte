@@ -22,7 +22,8 @@
   function fmtDate(iso: string): string {
     if (!iso || iso === '0001-01-01T00:00:00Z') return '—'
     try {
-      return new Intl.DateTimeFormat(get(locale) === 'zh' ? 'zh-CN' : 'en-US', {
+      // OCTO-FORK: preserve the chosen script when formatting task dates.
+      return new Intl.DateTimeFormat(get(locale), {
         month: 'short', day: 'numeric',
         hour: '2-digit', minute: '2-digit',
       }).format(new Date(iso))

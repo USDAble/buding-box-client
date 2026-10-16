@@ -577,22 +577,24 @@ func TestLogoutDeletesCredentialAndKeepsActivation(t *testing.T) {
 // login screen itself has to be readable.
 func TestLocaleIsAcceptedWhileLoggedOut(t *testing.T) {
 	h := newHarness(t)
+	// OCTO-FORK: every selectable language must round-trip before login.
+	for _, language := range []string{"zh", "en", "zh-Hant"} {
+		status, body := h.do(http.MethodPut, "/api/product/locale", map[string]any{"locale": language})
+		if status != http.StatusOK {
+			t.Fatalf("status = %d body = %v, want 200", status, body)
+		}
+		if got, ok := body["ok"]; !ok || got != true {
+			t.Errorf("locale body = %v, want {\"ok\":true}", body)
+		}
 
-	status, body := h.do(http.MethodPut, "/api/product/locale", map[string]any{"locale": "zh"})
-	if status != http.StatusOK {
-		t.Fatalf("status = %d body = %v, want 200", status, body)
-	}
-	if got, ok := body["ok"]; !ok || got != true {
-		t.Errorf("locale body = %v, want {\"ok\":true}", body)
-	}
-
-	_, state := h.do(http.MethodGet, "/api/product/state", nil)
-	prefs, ok := state["prefs"].(map[string]any)
-	if !ok {
-		t.Fatalf("state has no prefs object: %v", state)
-	}
-	if got := prefs["locale"]; got != "zh" {
-		t.Errorf("prefs.locale = %v, want zh", got)
+		_, state := h.do(http.MethodGet, "/api/product/state", nil)
+		prefs, ok := state["prefs"].(map[string]any)
+		if !ok {
+			t.Fatalf("state has no prefs object: %v", state)
+		}
+		if got := prefs["locale"]; got != language {
+			t.Errorf("prefs.locale = %v, want %s", got, language)
+		}
 	}
 }
 

@@ -9,7 +9,7 @@
 // inert and the phase stays "ready".
 
 import { get, writable } from "svelte/store";
-import { setLocale } from "./i18n";
+import { setLocale, isLocale, type Locale } from "./i18n";
 
 // The product gate distinguishes three frontend states: still deciding,
 // not logged in (show the login gate — the UI lands in P4), and logged in.
@@ -22,7 +22,7 @@ export const productState = writable<ProductStateDTO | null>(null);
 let savedLocale: string | undefined;
 productState.subscribe(state => {
   const next = state?.prefs?.locale;
-  if ((next === "zh" || next === "en") && next !== savedLocale) setLocale(next);
+  if (isLocale(next) && next !== savedLocale) setLocale(next);
   savedLocale = next;
 });
 
@@ -681,7 +681,7 @@ export async function login(input: LoginInput): Promise<LoginResult> {
 }
 
 /** Persists the UI language before login (PUT /api/product/locale). */
-export async function setProductLocale(locale: "zh" | "en"): Promise<void> {
+export async function setProductLocale(locale: Locale): Promise<void> {
   const res = await productFetch("/api/product/locale", {
     method: "PUT",
     headers: jsonHeaders(),
@@ -699,7 +699,7 @@ export async function setProductLocale(locale: "zh" | "en"): Promise<void> {
 // the bottom-left corner change on the same round-trip the panel's form makes.
 
 export interface AccountPrefs {
-  locale?: "zh" | "en";
+  locale?: Locale;
   /** Input sensitive-word check toggle (P8); omitted means "leave unchanged". */
   inputSensitiveCheck?: boolean;
 }

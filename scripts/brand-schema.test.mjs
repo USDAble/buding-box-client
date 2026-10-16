@@ -138,8 +138,9 @@ test('English short name stays short so the tray and notifications do not trunca
   assert.equal(fixture.product.names['en-US'], 'Pudding Box')
 })
 
-test('this phase ships exactly the two proofread locales', () => {
-  assert.deepEqual(Object.keys(fixture.product.names).sort(), ['en-US', 'zh-CN'])
+// OCTO-FORK: brand copy must cover every selectable interface language.
+test('ships English, Simplified and Traditional Chinese brand copy', () => {
+  assert.deepEqual(Object.keys(fixture.product.names).sort(), ['en-US', 'zh-CN', 'zh-Hant'])
 })
 
 test('no external link carries an unresolved placeholder', () => {

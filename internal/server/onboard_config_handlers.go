@@ -549,8 +549,9 @@ func (s *Server) handlePutLanguage(w http.ResponseWriter, r *http.Request) {
 		writeInvalidJSONBody(w, err)
 		return
 	}
-	if req.Language != "en" && req.Language != "zh" {
-		writeError(w, http.StatusBadRequest, "language must be 'en' or 'zh'")
+	// OCTO-FORK: the native config mirror accepts every language offered by login.
+	if req.Language != "en" && req.Language != "zh" && req.Language != "zh-Hant" {
+		writeError(w, http.StatusBadRequest, "language must be 'en', 'zh' or 'zh-Hant'")
 		return
 	}
 

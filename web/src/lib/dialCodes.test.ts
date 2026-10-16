@@ -2,6 +2,9 @@ import { describe, expect, it } from 'vitest'
 import { dialCodeOptions } from './dialCodes'
 
 describe('dialCodeOptions', () => {
+  it('uses Traditional Chinese country names', () => {
+    expect(dialCodeOptions('zh-Hant', '英國').some(option => option.region === 'GB')).toBe(true)
+  })
   it('provides a searchable global dialing-code picker with mainland first', () => {
     const options = dialCodeOptions('zh')
     expect(options.length).toBeGreaterThan(200)

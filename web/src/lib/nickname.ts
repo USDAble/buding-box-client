@@ -6,9 +6,10 @@
 // of anything while this file required 2–16 of Han/letters/digits/underscore).
 
 /** A fresh default nickname in the current UI language (需求 §5.3.3). */
-export function randomNickname(locale: 'zh' | 'en'): string {
+// OCTO-FORK: an untouched registration nickname follows all shipped scripts.
+export function randomNickname(locale: 'zh' | 'zh-Hant' | 'en'): string {
   const n = Math.floor(Math.random() * 10000).toString().padStart(4, '0')
-  return (locale === 'zh' ? '用户' : 'User') + n
+  return (locale === 'zh' ? '用户' : locale === 'zh-Hant' ? '用戶' : 'User') + n
 }
 
 // nicknameChars matches the allowed set: Han ideographs, letters, digits and

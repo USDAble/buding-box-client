@@ -13,18 +13,24 @@ import (
 
 // OCTO-FORK: first-launch language must not depend on the machine's locale.
 func TestResolveLangDefaultsToEnglishAndPreservesChoice(t *testing.T) {
+	t.Cleanup(func() { active.Store(nil) })
 	t.Setenv("OCTO_DATA_ROOT", t.TempDir())
 	t.Setenv("LANG", "zh_CN.UTF-8")
 	if got := resolveLang(); got != "en" {
 		t.Fatalf("first-launch language = %q, want en", got)
 	}
-	for _, lang := range []string{"zh", "en"} {
+	// OCTO-FORK: persist and reload every shipped locale, including its script.
+	for _, lang := range []string{"zh", "en", "zh-Hant"} {
 		cfg := config.Config{Language: lang}
 		if err := cfg.Save(); err != nil {
 			t.Fatal(err)
 		}
 		if got := resolveLang(); got != lang {
 			t.Fatalf("saved language = %q, want %q", got, lang)
+		}
+		applyLang()
+		if lang == "zh-Hant" && L().traySettings != "設置…" {
+			t.Fatalf("Traditional Chinese menu = %q", L().traySettings)
 		}
 	}
 }
@@ -228,7 +234,8 @@ func TestNativeStringsLeakNoPlaceholder(t *testing.T) {
 	// The Go tables concatenate rather than interpolate, so a "{brand}" here
 	// would mean someone copied the web dictionary style into a surface that
 	// never substitutes it.
-	for setName, set := range map[string]uiStrings{"en": enStrings, "zh": zhStrings} {
+	// OCTO-FORK: all shipped native tables must preserve interpolation contracts.
+	for setName, set := range map[string]uiStrings{"en": enStrings, "zh": zhStrings, "zh-Hant": zhHantStrings} {
 		for field, value := range fields(t, set) {
 			if strings.Contains(value, "{brand") {
 				t.Errorf("%s.%s carries an unsubstituted placeholder: %q", setName, field, value)
@@ -256,7 +263,8 @@ func TestNativeFormatVerbsPreserved(t *testing.T) {
 		"updLatestFmt":       "%s",
 		"updAvailableFmt":    "%s",
 	}
-	for setName, set := range map[string]uiStrings{"en": enStrings, "zh": zhStrings} {
+	// OCTO-FORK: include the Traditional Chinese native dialogs in format checks.
+	for setName, set := range map[string]uiStrings{"en": enStrings, "zh": zhStrings, "zh-Hant": zhHantStrings} {
 		values := fields(t, set)
 		for field, expected := range want {
 			got := strings.Join(verb.FindAllString(values[field], -1), "")

@@ -39,7 +39,9 @@
     // OCTO-FORK: this small bootstrap runs independently of the application module graph.
     (() => {
       const copies = __STARTUP_COPY__;
-      const copy = copies[document.documentElement.lang.startsWith('zh') ? 'zh' : 'en'];
+      // OCTO-FORK: preserve the selected script in pre-app startup feedback.
+      const lang = document.documentElement.lang;
+      const copy = copies[lang] || copies[lang.startsWith('zh') ? 'zh' : 'en'];
       const screen = document.getElementById('startup-screen');
       const message = document.getElementById('startup-message');
       const retry = document.getElementById('startup-retry');

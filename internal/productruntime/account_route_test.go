@@ -260,6 +260,8 @@ func TestPreferencesAreStoredFieldByField(t *testing.T) {
 		want func(p prefs) bool
 		desc string
 	}{
+		// OCTO-FORK: the account preference route accepts the same third locale as login.
+		{map[string]any{"locale": "zh-Hant"}, func(p prefs) bool { return p.Locale == "zh-Hant" }, "Traditional locale"},
 		{map[string]any{"locale": "en"}, func(p prefs) bool { return p.Locale == "en" }, "locale"},
 		{map[string]any{"inputSensitiveCheck": false}, func(p prefs) bool { return !p.InputSensitiveCheck }, "inputSensitiveCheck"},
 	}

@@ -17,7 +17,8 @@ import { fileURLToPath } from 'node:url'
 export const SUPPORTED_SCHEMA_VERSION = 2
 
 // Every A-class entry must carry these; a missing one ships a half-translated UI.
-export const REQUIRED_LOCALES = ['zh-CN', 'en-US']
+// OCTO-FORK: avoid Simplified brand copy leaking into the Traditional interface.
+export const REQUIRED_LOCALES = ['zh-CN', 'en-US', 'zh-Hant']
 
 const LOCALIZED_SECTIONS = ['product', 'about', 'copy']
 const FIXED_DISPLAY_SECTIONS = ['display']

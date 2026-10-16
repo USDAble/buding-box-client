@@ -4,111 +4,137 @@
   "product": {
     "names": {
       "zh-CN": "布丁盒子",
-      "en-US": "Pudding Box"
+      "en-US": "Pudding Box",
+      "zh-Hant": "布丁盒子"
     },
     "shortName": {
       "zh-CN": "布丁盒子",
-      "en-US": "Pudding"
+      "en-US": "Pudding",
+      "zh-Hant": "布丁盒子"
     },
     "tagline": {
       "zh-CN": "让本地工具、任务与智能代理，在一个工作台里协作。",
-      "en-US": "One workspace for local tools, tasks, and agents."
+      "en-US": "One workspace for local tools, tasks, and agents.",
+      "zh-Hant": "讓本地工具、任務與智能代理，在一個工作台裡協作。"
     },
     "description": {
       "zh-CN": "布丁盒子是一套面向个人和团队的智能代理工作台，用于连接本地工具、管理任务，并在 Web、桌面和移动端之间保持连续的工作体验。",
-      "en-US": "Pudding Box is an agent workspace for individuals and teams to connect local tools, manage tasks, and keep work connected across web, desktop, and mobile."
+      "en-US": "Pudding Box is an agent workspace for individuals and teams to connect local tools, manage tasks, and keep work connected across web, desktop, and mobile.",
+      "zh-Hant": "布丁盒子是一套面向個人和團隊的智能代理工作台，用於連接本地工具、管理任務，並在 Web、桌面和移動端之間保持連續的工作體驗。"
     }
   },
   "about": {
     "teamName": {
       "zh-CN": "布丁盒子工作室",
-      "en-US": "Pudding Box Studio"
+      "en-US": "Pudding Box Studio",
+      "zh-Hant": "布丁盒子工作室"
     },
     "copyright": {
       "zh-CN": "© {year} 布丁盒子工作室",
-      "en-US": "© {year} Pudding Box Studio"
+      "en-US": "© {year} Pudding Box Studio",
+      "zh-Hant": "© {year} 布丁盒子工作室"
     },
     "termsTitle": {
       "zh-CN": "布丁盒子用户协议",
-      "en-US": "Pudding Box Terms of Use"
+      "en-US": "Pudding Box Terms of Use",
+      "zh-Hant": "布丁盒子用戶協議"
     },
     "privacyTitle": {
       "zh-CN": "布丁盒子隐私政策",
-      "en-US": "Pudding Box Privacy Policy"
+      "en-US": "Pudding Box Privacy Policy",
+      "zh-Hant": "布丁盒子隱私政策"
     }
   },
   "copy": {
     "sessionDefaultTitle": {
       "zh-CN": "Puddingbox agent",
-      "en-US": "Puddingbox agent"
+      "en-US": "Puddingbox agent",
+      "zh-Hant": "Puddingbox agent"
     },
     "termsBody": {
       "zh-CN": "本页为开发占位，非正式协议。",
-      "en-US": "Placeholder for development. Not a legal agreement."
+      "en-US": "Placeholder for development. Not a legal agreement.",
+      "zh-Hant": "本頁為開發佔位，非正式協議。"
     },
     "privacyBody": {
       "zh-CN": "本页为开发占位，非正式协议。",
-      "en-US": "Placeholder for development. Not a legal agreement."
+      "en-US": "Placeholder for development. Not a legal agreement.",
+      "zh-Hant": "本頁為開發佔位，非正式協議。"
     },
     "helpTitle": {
       "zh-CN": "帮助与反馈",
-      "en-US": "Help & feedback"
+      "en-US": "Help & feedback",
+      "zh-Hant": "幫助與反饋"
     },
     "helpSubtitle": {
       "zh-CN": "查找常见问题的答案，或把你的使用体验告诉我们。",
-      "en-US": "Find quick answers or tell us about your experience."
+      "en-US": "Find quick answers or tell us about your experience.",
+      "zh-Hant": "查找常見問題的答案，或把你的使用體驗告訴我們。"
     },
     "helpCenterTitle": {
       "zh-CN": "官网帮助中心",
-      "en-US": "Official help center"
+      "en-US": "Official help center",
+      "zh-Hant": "官網幫助中心"
     },
     "helpCenterDescription": {
       "zh-CN": "前往官网查看完整的产品指南、使用教程和问题排查说明。",
-      "en-US": "Visit the website for complete guides, tutorials, and troubleshooting."
+      "en-US": "Visit the website for complete guides, tutorials, and troubleshooting.",
+      "zh-Hant": "前往官網查看完整的產品指南、使用教程和問題排查說明。"
     },
     "helpFeedbackNotice": {
       "zh-CN": "只会发送你主动填写的内容，不会附带聊天记录或诊断信息。",
-      "en-US": "Only what you enter is sent. Chats and diagnostics are never attached."
+      "en-US": "Only what you enter is sent. Chats and diagnostics are never attached.",
+      "zh-Hant": "只會發送你主動填寫的內容，不會附帶聊天記錄或診斷信息。"
     },
     "helpModelsQuestion": {
       "zh-CN": "如何选择或切换模型？",
-      "en-US": "How do I choose or change a model?"
+      "en-US": "How do I choose or change a model?",
+      "zh-Hant": "如何選擇或切換模型？"
     },
     "helpModelsAnswer": {
       "zh-CN": "在发送消息前，使用聊天输入区的模型选择器。私密会话只能使用已标记为私密的模型。",
-      "en-US": "Use the model picker in the chat composer before sending a message. A private session can only use a model marked private."
+      "en-US": "Use the model picker in the chat composer before sending a message. A private session can only use a model marked private.",
+      "zh-Hant": "在發送消息前，使用聊天輸入區的模型選擇器。私密會話只能使用已標記為私密的模型。"
     },
     "helpPersonalQuestion": {
       "zh-CN": "个人信息保护会做什么？",
-      "en-US": "What does personal-information protection do?"
+      "en-US": "What does personal-information protection do?",
+      "zh-Hant": "個人信息保護會做什麼？"
     },
     "helpPersonalAnswer": {
       "zh-CN": "在新会话中开启后，支持识别的个人信息会在消息发送前被替换，聊天界面会提示已受到保护。",
-      "en-US": "When enabled for a new chat, supported personal information is replaced before the message is sent and the chat shows that it was protected."
+      "en-US": "When enabled for a new chat, supported personal information is replaced before the message is sent and the chat shows that it was protected.",
+      "zh-Hant": "在新會話中開啟後，支持識別的個人信息會在消息發送前被替換，聊天界面會提示已受到保護。"
     },
     "helpPrivateQuestion": {
       "zh-CN": "什么是私密会话？",
-      "en-US": "What is a private session?"
+      "en-US": "What is a private session?",
+      "zh-Hant": "什麼是私密會話？"
     },
     "helpPrivateAnswer": {
       "zh-CN": "私密会话必须使用私密模型。没有可用的合格模型时，需要先选择一个才能发送消息。",
-      "en-US": "A private session requires a private model. If no eligible model is available, select one before sending a message."
+      "en-US": "A private session requires a private model. If no eligible model is available, select one before sending a message.",
+      "zh-Hant": "私密會話必須使用私密模型。沒有可用的合格模型時，需要先選擇一個才能發送消息。"
     },
     "helpUnavailableQuestion": {
       "zh-CN": "模型或网络不可用时怎么办？",
-      "en-US": "What should I do when a model or the network is unavailable?"
+      "en-US": "What should I do when a model or the network is unavailable?",
+      "zh-Hant": "模型或網絡不可用時怎麼辦？"
     },
     "helpUnavailableAnswer": {
       "zh-CN": "请检查网络后重试，或选择另一个可用模型。未发送的消息会保留在输入区。",
-      "en-US": "Check your connection, then retry or choose another available model. Your unsent message remains in the composer."
+      "en-US": "Check your connection, then retry or choose another available model. Your unsent message remains in the composer.",
+      "zh-Hant": "請檢查網絡後重試，或選擇另一個可用模型。未發送的消息會保留在輸入區。"
     },
     "helpBoxQuestion": {
       "zh-CN": "我的盒子可以做什么？",
-      "en-US": "What can my box do?"
+      "en-US": "What can my box do?",
+      "zh-Hant": "我的盒子可以做什麼？"
     },
     "helpBoxAnswer": {
       "zh-CN": "已绑定的盒子可以提供私有模型。其他私有能力只有在服务端授权后才会显示在这里。",
-      "en-US": "A bound box can make private models available. Other private capabilities appear only after the service authorises them."
+      "en-US": "A bound box can make private models available. Other private capabilities appear only after the service authorises them.",
+      "zh-Hant": "已綁定的盒子可以提供私有模型。其他私有能力只有在服務端授權後才會顯示在這裡。"
     }
   },
   "display": {

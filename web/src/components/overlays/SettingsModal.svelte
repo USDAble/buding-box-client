@@ -13,7 +13,9 @@
   import { get } from 'svelte/store'
   import { showToast, nativeShell, settingsModalOpen, settingsTarget, onboardPhase, sessions, sessionGroups, collapsedSessions, activeSessionId, view, clearPendingSessionOpts } from '../../lib/stores'
   import type { Session, SessionGroup } from '../../lib/types'
-  import { locale, setLocale, t, tr } from '../../lib/i18n'
+  import { locale, isLocale, languageOptions, t, tr } from '../../lib/i18n'
+  // OCTO-FORK: Settings uses the same language choices and persistence as login.
+  import { languageSaving, saveLanguagePreference } from '../../lib/language'
   import { getMode, setMode, type ThemeMode } from '../../lib/theme'
   import { notificationsEnabled, setNotificationsEnabled } from '../../lib/notifications'
   import { openUrl } from '../../lib/externalLinks'
@@ -22,7 +24,7 @@
   import { confirmDialog } from '../../lib/confirm'
   import { ago, clockTick } from '../../lib/relTime'
   import * as api from '../../lib/api'
-  import { allowEnvironmentModelSource, productState, updateNickname, ProductError, logout, submitFeedback, getBox, setProductLocale, type BoxDTO } from '../../lib/product'
+  import { allowEnvironmentModelSource, productState, updateNickname, ProductError, logout, submitFeedback, getBox, type BoxDTO } from '../../lib/product'
   // OCTO-FORK: account and safety controls are product-owned settings, kept
   // out of the compact account popup so it stays single-level.
   import { validateNickname } from '../../lib/nickname'
@@ -63,7 +65,7 @@
 
   // --- local state ---
   // OCTO-FORK: opening Settings must reflect, not replace, the active app language.
-  let language      = $derived($locale === 'zh' ? 'zh' : 'en')
+  let language      = $derived(isLocale($locale) ? $locale : 'en')
   let fontSize      = $state(storedFontSize())
   let theme         = $state(modeToThemeLabel[getMode()] ?? 'Light')
   let autostart     = $state(false) // desktop shell only
@@ -299,11 +301,6 @@
   // expanded server-side) — shown as the input's placeholder instead of a
   // bare "auto" that's easy to mistake for an actually-saved value.
   let workspaceDirDefault = $state('')
-
-  const langOptions = [
-    { value: 'en', label: 'English' },
-    { value: 'zh', label: '简体中文' },
-  ]
 
   const categories: { key: typeof cat, icon: string, label: string, brandLabel?: string }[] = $derived([
     { key: 'general',   icon: 'ant-design:sliders-outlined',       label: 'settings.general' },
@@ -593,12 +590,11 @@
 
   // OCTO-FORK: the active locale is shared with login; config mirrors it for the native shell.
   async function saveLanguage(v: string) {
-    setLocale(v)
+    if (!isLocale(v)) return
     try {
-      if (get(productState)) await setProductLocale(v === 'zh' ? 'zh' : 'en')
-      await api.updateLanguage(v)
-    } catch (e: any) {
-      showToast(e.message ?? tr('settings.language_failed'), 'error')
+      await saveLanguagePreference(v)
+    } catch {
+      showToast(tr('settings.language_failed'), 'error')
     }
   }
 
@@ -742,7 +738,7 @@
     if (!value) return '—'
     const parsed = new Date(value)
     if (Number.isNaN(parsed.getTime())) return '—'
-    return parsed.toLocaleString(language === 'zh' ? 'zh-CN' : 'en-US')
+    return parsed.toLocaleString(language === 'zh' ? 'zh-CN' : language === 'zh-Hant' ? 'zh-TW' : 'en-US')
   }
 
   function close() {
@@ -810,8 +806,8 @@
               <span class="setl">{$t('settings.language')}</span>
               <span class="setd">{$t('settings.language_desc')}</span>
             </div>
-            <select class="sinput" value={language} onchange={(event) => saveLanguage(event.currentTarget.value)}>
-              {#each langOptions as o}
+            <select class="sinput" aria-label={$t('settings.language')} value={language} disabled={$languageSaving} onchange={(event) => saveLanguage(event.currentTarget.value)}>
+              {#each languageOptions as o}
                 <option value={o.value}>{o.label}</option>
               {/each}
             </select>

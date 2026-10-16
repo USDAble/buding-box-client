@@ -234,14 +234,28 @@ describe('BlockedView first activation', () => {
     vi.stubGlobal('fetch', fetchMock)
     render()
 
-    const english = [...target.querySelectorAll<HTMLButtonElement>('.lang-switch button')]
-      .find(button => button.textContent?.trim() === 'EN')
-    english?.click()
+    const language = target.querySelector<HTMLSelectElement>('.lang-switch select')!
+    language.value = 'en'
+    language.dispatchEvent(new Event('change', { bubbles: true }))
     flushSync()
 
     await vi.waitFor(() => expect(fetchMock.mock.calls.some(([url]) => url === '/api/config/language')).toBe(true))
     const call = fetchMock.mock.calls.find(([url]) => url === '/api/config/language')
     expect(JSON.parse(String(call?.[1]?.body))).toEqual({ language: 'en' })
+  })
+
+  // OCTO-FORK: registration and sign-in share a persistent, accessible script picker.
+  it.each([false, true])('restores Traditional Chinese on the auth form (activated=%s)', async activated => {
+    productState.set({ ...firstActivationState(), activated, prefs: { locale: 'zh-Hant' } } as never)
+    render()
+    const select = target.querySelector<HTMLSelectElement>('.lang-switch select')!
+    expect(select.value).toBe('zh-Hant')
+    expect([...select.options].map(option => [option.value, option.label])).toEqual([
+      ['en', 'English'], ['zh', '简体中文'], ['zh-Hant', '繁體中文'],
+    ])
+    expect(select.getAttribute('aria-label')).toBe('語言')
+    expect(target.textContent).toContain('驗證碼')
+    if (!activated) expect(input('nickname').value).toMatch(/^用戶\d{4}$/)
   })
 
   it('orders the five fields as the requirement pins them', () => {

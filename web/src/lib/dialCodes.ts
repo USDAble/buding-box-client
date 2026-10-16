@@ -6,7 +6,8 @@ export type DialCodeOption = { region: CountryCode; code: string; name: string }
 // activation picker. Sending remains subject to the server's configured
 // destination allowlist and the provider's current country coverage.
 export function dialCodeOptions(locale: string, query = ''): DialCodeOption[] {
-  const language = locale === 'zh' ? 'zh-CN' : 'en'
+  // OCTO-FORK: country names must retain the selected Chinese script.
+  const language = locale === 'zh' ? 'zh-CN' : locale === 'zh-Hant' ? 'zh-Hant' : 'en'
   const names = new Intl.DisplayNames([language], { type: 'region' })
   const search = query.trim().toLocaleLowerCase(language)
   const options = getCountries().map((region) => ({

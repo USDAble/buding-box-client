@@ -1,8 +1,10 @@
 <script lang="ts">
   import { onMount } from 'svelte'
   import { get } from 'svelte/store'
-  import { t, locale, setLocale, platformErrorKey } from '../lib/i18n'
-  import { productState, blockedPage, sendCode, login, setProductLocale, ProductError, failureTier, tierRetryable, refreshProductState, type DictionaryNotice } from '../lib/product'
+  import { t, locale, setLocale, isLocale, languageOptions, platformErrorKey } from '../lib/i18n'
+  // OCTO-FORK: login and Settings share supported languages and save ordering.
+  import { languageSaving, saveLanguagePreference } from '../lib/language'
+  import { productState, blockedPage, sendCode, login, ProductError, failureTier, tierRetryable, refreshProductState, type DictionaryNotice } from '../lib/product'
   import { normalizePhoneParts } from '../lib/phone'
   import { dialCodeOptions } from '../lib/dialCodes'
   import { getCountryCallingCode, type CountryCode } from 'libphonenumber-js/min'
@@ -110,20 +112,22 @@
   onMount(() => {
     // OCTO-FORK: the persisted product preference wins; new installs start in English.
     const loc = $productState?.prefs?.locale
-    if (loc === 'zh' || loc === 'en') setLocale(loc)
+    if (isLocale(loc)) setLocale(loc)
     // OCTO-FORK: a retained account nickname belongs to the old login, not
     // to a new activation. Seed once per wall; form switching keeps this value.
-    nickname = randomNickname($locale === 'zh' ? 'zh' : 'en')
+    nickname = randomNickname(isLocale($locale) ? $locale : 'en')
     return () => { if (timer) clearInterval(timer) }
   })
 
-  function pickLang(l: 'zh' | 'en') {
-    setLocale(l)
-    // OCTO-FORK: persist the shared preference and its native-shell mirror; report failed saves.
-    Promise.all([setProductLocale(l), api.updateLanguage(l)])
-      .catch(() => showToast($t('settings.language_failed'), 'error'))
+  async function pickLang(l: string) {
+    if (!isLocale(l)) return
+    try {
+      await saveLanguagePreference(l)
+    } catch {
+      showToast($t('settings.language_failed'), 'error')
+    }
     // OCTO-FORK: only an unedited value follows an explicit language switch.
-    if (!nicknameEdited) nickname = randomNickname(l)
+    if (!nicknameEdited) nickname = randomNickname(isLocale($locale) ? $locale : 'en')
   }
 
   function startCountdown(secs: number) {
@@ -349,9 +353,11 @@
   <!-- OCTO-FORK: reuse the shell's drag contract and native window actions on both auth forms. -->
   <header class="blocked-topbar" class:desktop={$nativeShell} class:mac={$nativeShell && isMac} style="--wails-draggable:{$nativeShell ? 'drag' : 'no-drag'}">
     <div class="lang-switch" style="--wails-draggable:no-drag">
-      <button class:on={$locale === 'zh'} onclick={() => pickLang('zh')}>中文</button>
-      <span class="sep">|</span>
-      <button class:on={$locale === 'en'} onclick={() => pickLang('en')}>EN</button>
+      <select aria-label={$t('settings.language')} value={$locale} disabled={$languageSaving} onchange={event => pickLang(event.currentTarget.value)}>
+        {#each languageOptions as option}
+          <option value={option.value}>{option.label}</option>
+        {/each}
+      </select>
     </div>
     {#if $nativeShell && !isMac}
       <div class="window-controls" style="--wails-draggable:no-drag">
@@ -538,14 +544,13 @@
 .lang-switch {
   display: flex; align-items: center; gap: 8px;
 }
-.lang-switch button {
-  border: none; background: transparent; font-family: inherit;
+.lang-switch select {
+  border: 1px solid var(--border); background: var(--bg-container); font-family: inherit;
   font-size: 13px; color: var(--text-secondary); cursor: pointer; padding: 4px 8px;
-  border-radius: 6px;
+  border-radius: 6px; max-width: 160px; min-height: 30px;
 }
-.lang-switch button:hover { color: var(--text); }
-.lang-switch button.on { color: var(--blue-6); font-weight: 600; background: var(--active-blue-bg); }
-.lang-switch .sep { color: var(--text-quaternary); font-size: 12px; }
+.lang-switch select:focus-visible { outline: 2px solid var(--blue-6); outline-offset: 2px; }
+.lang-switch select:disabled { cursor: wait; opacity: .65; }
 
 .card {
   width: 100%; max-width: 440px;

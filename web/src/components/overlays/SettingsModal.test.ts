@@ -84,6 +84,21 @@ it('persists the console language for the next login wall', async () => {
   })
 })
 
+// OCTO-FORK: a stored Traditional Chinese choice must survive stale config reads.
+it('keeps Traditional Chinese selected and switches back to Simplified through the shared preference', async () => {
+  productState.set({ ...accountState, prefs: { locale: 'zh-Hant' } } as never)
+  settingsModalOpen.set(true); open()
+  await vi.waitFor(() => expect(target.querySelector('.loading-state')).toBeNull())
+  const select = target.querySelector<HTMLSelectElement>('.setrow select')!
+  expect(select.value).toBe('zh-Hant')
+  expect([...select.options].map(option => option.value)).toEqual(['en', 'zh', 'zh-Hant'])
+  expect(target.textContent).toContain('語言')
+  select.value = 'zh'
+  select.dispatchEvent(new Event('change', { bubbles: true }))
+  await vi.waitFor(() => expect(get(productState)?.prefs.locale).toBe('zh'))
+  await vi.waitFor(() => expect(vi.mocked(fetch).mock.calls.some(([path, init]) => String(path).endsWith('/api/config/language') && init?.body === '{"language":"zh"}')).toBe(true))
+})
+
 it('keeps About information while hiding first-run and removing the license entry', async () => {
   openSettingsAt('about'); open()
   await vi.waitFor(() => expect(activePage()).toBe('关于'))

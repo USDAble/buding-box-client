@@ -187,6 +187,8 @@ func zhStringsFor(name, short string) uiStrings {
 var (
 	enStrings = brandedStrings(enStringsFor, "en-US")
 	zhStrings = brandedStrings(zhStringsFor, "zh-CN")
+	// OCTO-FORK: the native shell mirrors the UI's Traditional Chinese choice.
+	zhHantStrings = brandedStrings(zhHantStringsFor, "zh-Hant")
 )
 
 func brandedStrings(build func(name, short string) uiStrings, locale string) uiStrings {
@@ -213,9 +215,13 @@ func L() *uiStrings {
 // within a few seconds — the desktop shell follows the in-app language choice,
 // not the OS.
 func applyLang() {
-	if resolveLang() == "zh" {
+	// OCTO-FORK: keep the selected Chinese script in native window chrome.
+	switch resolveLang() {
+	case "zh-Hant":
+		active.Store(&zhHantStrings)
+	case "zh":
 		active.Store(&zhStrings)
-	} else {
+	default:
 		active.Store(&enStrings)
 	}
 }
@@ -224,10 +230,8 @@ func applyLang() {
 func resolveLang() string {
 	if cfg, err := config.Load(); err == nil {
 		switch cfg.Language {
-		case "zh":
-			return "zh"
-		case "en":
-			return "en"
+		case "zh", "en", "zh-Hant":
+			return cfg.Language
 		}
 	}
 	return "en"

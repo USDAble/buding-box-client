@@ -82,6 +82,8 @@ func TestConfigValidate_GlobalScalars(t *testing.T) {
 		{"fallback_context_window written in k", Config{FallbackContextWindow: 32}, "fallback_context_window"},
 		{"empty language is fine", Config{}, ""},
 		{"valid language zh", Config{Language: "zh"}, ""},
+		// OCTO-FORK: Traditional Chinese must remain valid after a config reload.
+		{"valid language zh-Hant", Config{Language: "zh-Hant"}, ""},
 		{"bad language", Config{Language: "fr"}, "language"},
 		{"valid tool_search enabled off", Config{Tools: ToolsConfig{ToolSearch: ToolSearchConfig{Enabled: "off"}}}, ""},
 		{"bad tool_search enabled", Config{Tools: ToolsConfig{ToolSearch: ToolSearchConfig{Enabled: "yes"}}}, "tool_search.enabled"},

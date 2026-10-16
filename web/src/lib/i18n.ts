@@ -1,5 +1,17 @@
 import { writable, derived, get } from "svelte/store";
 import { brandIdentifier, brandName, brandShortName, IDENTIFIER } from "./brand";
+// OCTO-FORK: ship a dedicated Traditional Chinese table without a runtime converter.
+import zhHantCopy from "./zh-Hant.json";
+
+export const languageOptions = [
+  { value: 'en', label: 'English' },
+  { value: 'zh', label: '简体中文' },
+  { value: 'zh-Hant', label: '繁體中文' },
+] as const;
+export type Locale = typeof languageOptions[number]['value'];
+export function isLocale(value: unknown): value is Locale {
+  return languageOptions.some(option => option.value === value);
+}
 
 export const en: Record<string, string> = {
   // OCTO-FORK: the pre-app startup screen uses the same localized copy as the UI.
@@ -3221,13 +3233,18 @@ export const zh: Record<string, string> = {
   "source.user": "用户",
 };
 
-const dictionaries: Record<string, Record<string, string>> = { en, zh };
+export const zhHant: Record<string, string> = zhHantCopy;
+const dictionaries: Record<string, Record<string, string>> = { en, zh, 'zh-Hant': zhHant };
 
 export const locale = writable("en");
+// OCTO-FORK: assistive technology and exports follow the selected script too.
+locale.subscribe(value => {
+  if (typeof document !== 'undefined') document.documentElement.lang = value === 'zh' ? 'zh-Hans' : value;
+});
 
 function dictFor(l: string): Record<string, string> {
-  // zh-TW (and any other zh-*) fall back to Simplified until a dedicated
-  // dictionary exists; everything falls back to en per-key in the lookup.
+  // OCTO-FORK: preserve the Traditional script for region-tagged consumers.
+  if (/^zh-(Hant|TW|HK|MO)(-|$)/i.test(l)) return zhHant;
   return dictionaries[l] ?? (l && l.startsWith("zh") ? zh : en);
 }
 

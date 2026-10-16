@@ -249,7 +249,7 @@ type Config struct {
 	// affect CLI/TUI sessions or the server's own cwd, and composes with the
 	// per-session working_dir override.
 	WorkspaceDir string `yaml:"workspace_dir,omitempty"`
-	// Language persists the user's UI language preference ("en" | "zh").
+	// OCTO-FORK: Language also preserves the Traditional Chinese script ("zh-Hant").
 	// Empty means the default (English).
 	Language string `yaml:"language,omitempty"`
 	// Trash configures the file recycle bin (agent-issued deletes and
@@ -725,8 +725,9 @@ func (c Config) Validate() []string {
 	} else if c.FallbackContextWindow > 0 && c.FallbackContextWindow < MinFallbackContextWindow {
 		problems = append(problems, fmt.Sprintf("fallback_context_window %d is below the %d-token floor — the value is in tokens, so 32k is 32000, not 32", c.FallbackContextWindow, MinFallbackContextWindow))
 	}
-	if lang := strings.ToLower(strings.TrimSpace(c.Language)); lang != "" && lang != "en" && lang != "zh" {
-		problems = append(problems, fmt.Sprintf("language %q is not one of en, zh", c.Language))
+	// OCTO-FORK: keep the persisted Traditional Chinese choice valid on restart.
+	if lang := strings.ToLower(strings.TrimSpace(c.Language)); lang != "" && lang != "en" && lang != "zh" && lang != "zh-hant" {
+		problems = append(problems, fmt.Sprintf("language %q is not one of en, zh, zh-Hant", c.Language))
 	}
 	if ts := strings.ToLower(strings.TrimSpace(c.Tools.ToolSearch.Enabled)); ts != "" && ts != "auto" && ts != "on" && ts != "off" {
 		problems = append(problems, fmt.Sprintf("tools.tool_search.enabled %q is not one of auto, on, off", c.Tools.ToolSearch.Enabled))

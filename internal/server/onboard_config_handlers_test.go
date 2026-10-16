@@ -22,6 +22,26 @@ func setTestHome(t *testing.T) string {
 	return tmp
 }
 
+// OCTO-FORK: the native mirror must preserve all languages offered in the UI.
+func TestLanguageChoiceRoundTrip(t *testing.T) {
+	setTestHome(t)
+	srv := mustServer(t, Config{Addr: "127.0.0.1:0"})
+	for _, language := range []string{"zh", "en", "zh-Hant"} {
+		response := doJSON(t, srv, http.MethodPut, "/api/config/language", `{"language":"`+language+`"}`)
+		if response.Code != http.StatusOK {
+			t.Fatalf("save %s: %d %s", language, response.Code, response.Body.String())
+		}
+		cfg, err := config.Load()
+		if err != nil || cfg.Language != language {
+			t.Fatalf("reload %s: cfg=%+v err=%v", language, cfg, err)
+		}
+	}
+	response := doJSON(t, srv, http.MethodPut, "/api/config/language", `{"language":"fr"}`)
+	if response.Code != http.StatusBadRequest {
+		t.Fatalf("unsupported language = %d", response.Code)
+	}
+}
+
 func TestEndpointModelConfidentialCRUDRoundTrip(t *testing.T) {
 	setTestHome(t)
 	srv := mustServer(t, Config{Addr: "127.0.0.1:0"})

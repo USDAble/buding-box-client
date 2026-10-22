@@ -1,6 +1,4 @@
 <script lang="ts">
-  // OCTO-FORK: preserve the selected permission boundary when first-turn PATCH fails.
-  import { createPendingPermissionGate } from '../lib/pendingPermissionGate'
   // OCTO-FORK: session creation uses the same resolved default displayed by the picker.
   import { defaultSelectableModel } from '../lib/selectableModels'
   import { onMount, onDestroy } from 'svelte'
@@ -53,6 +51,7 @@
     commitThinking,
     stopTrailingCaret,
     updateToolResult,
+    updateToolPhase,
     setToolError,
     appendToolStdout,
     finishAllTools,
@@ -99,6 +98,7 @@
   import { fmtDur, fmtTurnElapsed, turnDurations, thinkingTokenSegment, turnSummarySegments } from '../lib/turnSummary'
   import { anchorBgTasks } from '../lib/bgTaskAnchor'
   import DOMPurify from 'dompurify'
+  import PermissionCard from '../components/chat/PermissionCard.svelte'
   import ToolGroup from '../components/chat/ToolGroup.svelte'
   import SubAgentsCard from '../components/chat/SubAgentsCard.svelte'
   import WorkflowsCard from '../components/chat/WorkflowsCard.svelte'
@@ -1057,6 +1057,11 @@ import QuestionModal from '../components/overlays/QuestionModal.svelte'
       })
     }))
 
+    cleanups.push(ws.on('tool_phase', (ev) => {
+      if ((ev as any).session_id !== sid) return
+      updateToolPhase(sid, ev)
+    }))
+
     cleanups.push(ws.on('tool_result', (ev) => {
       if ((ev as any).session_id && (ev as any).session_id !== sid) return
       updateToolResult(sid, (ev as any).tool_id, (ev as any).result, (ev as any).ui_payload, (ev as any).ts)
@@ -1744,13 +1749,25 @@ import QuestionModal from '../components/overlays/QuestionModal.svelte'
   // content is never stale. This only throttles the *view*, not the
   // underlying store, so it can't reorder anything else that reads chatMessages.
   const RENDER_THROTTLE_MS = 80
+  let renderRevision = $state(0)
+  let renderTimer: ReturnType<typeof setTimeout> | undefined
+  function scheduleRenderTail(delay: number) {
+    if (renderTimer !== undefined) return
+    renderTimer = setTimeout(() => {
+      renderTimer = undefined
+      renderRevision += 1
+    }, Math.max(1, delay))
+  }
   const renderCache = new Map<string, { html: string; at: number; content: string }>()
   function throttledMarkdown(cacheKey: string, content: string, streaming: boolean, showReasoning = true): string {
     // OCTO-FORK: language changes must invalidate cached renderer labels even during streaming.
-    cacheKey += ':' + $locale
+    void renderRevision
+    cacheKey += ':' + $locale + ':' + showReasoning
     const cached = renderCache.get(cacheKey)
-    if (streaming && cached && (content === cached.content || Date.now() - cached.at < RENDER_THROTTLE_MS)) {
-      return cached.html
+    if (streaming && cached) {
+      if (content === cached.content) return cached.html
+      const remaining = RENDER_THROTTLE_MS - (Date.now() - cached.at)
+      if (remaining > 0) { scheduleRenderTail(remaining); return cached.html }
     }
     const html = renderMarkdown(content, showReasoning)
     renderCache.set(cacheKey, { html, at: Date.now(), content })
@@ -1768,14 +1785,28 @@ import QuestionModal from '../components/overlays/QuestionModal.svelte'
   // reuse, same "always fresh once streaming stops" guarantee.
   const segmentCache = new Map<string, { segments: GenuiSegment[]; at: number; content: string }>()
   function throttledSegments(cacheKey: string, content: string, streaming: boolean): GenuiSegment[] {
+    void renderRevision
     const cached = segmentCache.get(cacheKey)
-    if (streaming && cached && (content === cached.content || Date.now() - cached.at < RENDER_THROTTLE_MS)) {
-      return cached.segments
+    if (streaming && cached) {
+      if (content === cached.content) return cached.segments
+      const remaining = RENDER_THROTTLE_MS - (Date.now() - cached.at)
+      if (remaining > 0) { scheduleRenderTail(remaining); return cached.segments }
     }
     const segments = splitOctoUiFences(content)
     segmentCache.set(cacheKey, { segments, at: Date.now(), content })
     return segments
   }
+
+  // OCTO-FORK: no previous-chat render cache or pending tail survives a switch/unmount.
+  $effect(() => {
+    void $activeSessionId
+    renderCache.clear(); segmentCache.clear()
+    return () => {
+      if (renderTimer !== undefined) clearTimeout(renderTimer)
+      renderTimer = undefined
+      renderCache.clear(); segmentCache.clear()
+    }
+  })
 
   // ── octo-ui inline action feedback → synthetic user turn ───────────────────
   // Builds the "[octo-ui-action] {...}" convention message and sends it
@@ -2306,16 +2337,9 @@ import QuestionModal from '../components/overlays/QuestionModal.svelte'
   // resolveProjectForDir from building the same project twice.
   let creating: Promise<{ id: string; created: boolean } | null> | null = null
 
-  const pendingPermissionGate = createPendingPermissionGate(async (id, mode) => {
-    await api.updateSessionPermissionMode(id, mode)
-    chatPermMode.update(m => ({ ...m, [id]: mode }))
-  })
-
   async function ensureActiveSession(): Promise<{ id: string; created: boolean } | null> {
     const existing = get(activeSessionId)
     if (existing) {
-      try { await pendingPermissionGate.ensure(existing) }
-      catch (e: any) { showToast(e.message ?? tr('chat.permission_failed'), 'error'); return null }
       return { id: existing, created: false }
     }
     if (creating) return creating
@@ -2324,6 +2348,7 @@ import QuestionModal from '../components/overlays/QuestionModal.svelte'
   }
 
   async function createSessionForFirstMessage(): Promise<{ id: string; created: boolean } | null> {
+    const originSession = get(activeSessionId)
     try {
       // A model picked in the composer before any session existed rides the
       // pendingModel store (composite "<endpoint>::<model>" id — the create
@@ -2334,6 +2359,7 @@ import QuestionModal from '../components/overlays/QuestionModal.svelte'
       const model = get(pendingModel) || get(defaultSelectableModel)
       const opts: api.CreateSessionOpts = {
         source: 'manual',
+        permission_mode: get(pendingPermissionMode) || api.DEFAULT_WEB_PERMISSION_MODE,
         agent_profile: get(pendingAgent) || get(activeAgent),
         ...(model ? { model } : {}),
         personal_info_protection: get(pendingPersonalInfoProtection),
@@ -2365,6 +2391,11 @@ import QuestionModal from '../components/overlays/QuestionModal.svelte'
         if (createdProject) await discardProject(createdProject)
         throw e
       }
+      if (get(activeSessionId) !== originSession) {
+        const createdSession = created.session ?? created
+        prependSession(createdSession)
+        return { id: createdSession.id, created: true }
+      }
       pendingModel.set('')
       pendingAgent.set('')
       pendingGroupId.set('')
@@ -2373,7 +2404,6 @@ import QuestionModal from '../components/overlays/QuestionModal.svelte'
       pendingConfidentialSession.set(false)
       const reasoningPick = get(pendingReasoningEffort)
       pendingReasoningEffort.set('')
-      const permPick = get(pendingPermissionMode)
       pendingPermissionMode.set('')
       const showReasoningPick = get(pendingShowReasoning)
       pendingShowReasoning.set(null)
@@ -2407,22 +2437,8 @@ import QuestionModal from '../components/overlays/QuestionModal.svelte'
           showToast(e.message ?? tr('chat.reasoning_failed'), 'error')
         }
       }
-      // Same story as reasoning effort above: permission mode and the
-      // show-reasoning toggle have no create-time field either, so a
-      // landing-page pick only takes effect as a follow-up PATCH once the
-      // session is real.
-      if (permPick) {
-        try {
-          await api.updateSessionPermissionMode(newSess.id, permPick)
-          chatPermMode.update(m => ({ ...m, [newSess.id]: permPick }))
-        } catch (e: any) {
-          pendingPermissionGate.require(newSess.id, permPick)
-          // OCTO-FORK: retain the failed session for an explicit retry, without queuing a turn.
-          activeSessionId.set(newSess.id)
-          showToast(e.message ?? tr('chat.permission_failed'), 'error')
-          return null
-        }
-      }
+      // Permission is persisted atomically with creation, before any user turn.
+      chatPermMode.update(m => ({ ...m, [newSess.id]: opts.permission_mode! }))
       // Reasoning effort 'off' already forced show_reasoning off locally
       // above; skip so a stale pending toggle doesn't fight that.
       if (showReasoningPick !== null && reasoningPick !== 'off') {
@@ -2483,17 +2499,18 @@ import QuestionModal from '../components/overlays/QuestionModal.svelte'
     // never describe a state the gate did not check (PR-5e).
     const currentSid = get(activeSessionId)
     if (!canStartTurn(currentSid)) {
-      composer?.restore(text, files)
+      if (get(activeSessionId) === currentSid && composer?.isEmpty()) composer.restore(text, files)
       showToast(tr(catalogNoticeKey(currentSid)), 'error')
       return
     }
     const active = await ensureActiveSession()
+    if (get(activeSessionId) !== currentSid) throw new Error(tr('chat.session_changed_before_send'))
     if (!active) {
       // The composer cleared its input before calling us, so without this the
       // user's first message is simply gone — and this path now runs for EVERY
       // new session's first message, across two requests that can each fail,
       // not just the rare post-delete case it started as.
-      composer?.restore(text, files)
+      if (get(activeSessionId) === currentSid && composer?.isEmpty()) composer.restore(text, files)
       return
     }
     const sid = active.id
@@ -3184,6 +3201,8 @@ import QuestionModal from '../components/overlays/QuestionModal.svelte'
               </div>
             </div>
           {/if}
+
+          <PermissionCard />
 
           <!-- Live thinking indicator while streaming -->
           {#if streaming && progress}

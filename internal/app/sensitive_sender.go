@@ -39,6 +39,11 @@ type filteringSender struct {
 	engine *sensitive.Engine
 }
 
+// OCTO-FORK: masking must preserve the sender's signed input qualification.
+func (f filteringSender) ImageInputStatus(ctx context.Context, model string, withTools bool) agent.ImageInputStatus {
+	return agent.SenderImageInputStatus(ctx, f.inner, model, withTools)
+}
+
 // filterReply masks the visible text in a reply. Blocks are copied so the
 // caller's slice is never mutated in place.
 func (f filteringSender) filterReply(r agent.Reply) agent.Reply {

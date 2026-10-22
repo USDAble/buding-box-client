@@ -10,6 +10,8 @@ import (
 	"io"
 	"net/http"
 	"strings"
+	"sync/atomic"
+	"time"
 
 	"github.com/open-octo/octo-agent/internal/agent"
 	"github.com/open-octo/octo-agent/internal/provider"
@@ -102,7 +104,8 @@ func (c *Client) SendStream(ctx context.Context, req provider.Request, cb provid
 			httpReq.Header.Set(k, v)
 		}
 
-		resp, err := c.streamingHTTPClient().Do(httpReq)
+		// OCTO-FORK: the header deadline ends once headers arrive, not mid-generation.
+		resp, err := c.openStream(httpReq)
 		if err != nil {
 			return nil, retry.Decision{Retry: retry.RetryableErr(ctx, err)}, fmt.Errorf("openai: send stream: %w", err)
 		}
@@ -119,6 +122,14 @@ func (c *Client) SendStream(ctx context.Context, req provider.Request, cb provid
 		return provider.Response{}, err
 	}
 	defer resp.Body.Close()
+	// OCTO-FORK: finish_reason is not a completed transport; usage and DONE may follow.
+	var tailTimer *time.Timer
+	var tailExpired atomic.Bool
+	defer func() {
+		if tailTimer != nil {
+			tailTimer.Stop()
+		}
+	}()
 
 	var (
 		contentB    strings.Builder
@@ -245,6 +256,11 @@ func (c *Client) SendStream(ctx context.Context, req provider.Request, cb provid
 			}
 		}
 		if choice.FinishReason != "" {
+			if tailTimer == nil {
+				if d := streamPhaseTimeout(c.StreamTailTimeout, 5*time.Second); d > 0 {
+					tailTimer = time.AfterFunc(d, func() { tailExpired.Store(true); cancelStream() })
+				}
+			}
 			stopReason := choice.FinishReason
 			switch stopReason {
 			case "tool_calls":
@@ -258,6 +274,14 @@ func (c *Client) SendStream(ctx context.Context, req provider.Request, cb provid
 			result.StopReason = stopReason
 			sawTerminal = true
 		}
+	}
+	// OCTO-FORK: missing terminal framing after completion is explicit and not retryable;
+	// replaying a completed paid generation can duplicate work and hide missing usage.
+	if ctx.Err() != nil {
+		return result, ctx.Err()
+	}
+	if tailExpired.Load() {
+		return result, errors.New("openai: stream completion tail timed out before DONE or EOF; final usage may be incomplete")
 	}
 	if err := scanner.Err(); err != nil {
 		// A mid-stream transport failure (HTTP/2 reset, connection drop) is

@@ -1,6 +1,7 @@
 // OCTO-FORK: one adapter owns the signed-catalog + developer-local model view.
 // Composer and future model consumers must not merge these sources themselves.
 import * as api from './api'
+import { productPhase, productSessionGeneration } from './product'
 import { get, writable } from 'svelte/store'
 
 export type SelectableModel = {
@@ -31,6 +32,14 @@ export type SelectableModelResult = {
 export const selectableModels = writable<SelectableModel[]>([])
 export const defaultSelectableModel = writable<string>('')
 let modelRequestSequence = 0
+// OCTO-FORK: a late projection from the previous account cannot repopulate the
+// picker or the send gate after logout. The product phase remains the owner.
+productPhase.subscribe(phase => {
+  if (phase === 'ready') return
+  modelRequestSequence++
+  selectableModels.set([])
+  defaultSelectableModel.set('')
+})
 
 // OCTO-FORK: project the declared public levels without inventing native effort aliases.
 export function modelReasoningOptions(options?: string[]): string[] {
@@ -50,6 +59,7 @@ export async function saveModelReasoning(model: SelectableModel, effort: string)
 }
 
 export async function loadSelectableModels(allowLocal: boolean): Promise<SelectableModelResult> {
+  const session = productSessionGeneration()
   const requestSequence = ++modelRequestSequence
   let catalog: api.ProductModelsResponse = { state: 'absent', catalogVersion: '', vendors: [] }
   try {
@@ -103,6 +113,7 @@ export async function loadSelectableModels(allowLocal: boolean): Promise<Selecta
   }
 
   const sorted = stableConfidentialSort(models)
+  if (session !== productSessionGeneration()) throw new Error('model request superseded by account change')
   const available = sorted.filter(model => model.eligible !== false)
   if (!available.some(model => model.id === defaultModelId)) defaultModelId = available[0]?.id ?? ''
   if (requestSequence === modelRequestSequence) {

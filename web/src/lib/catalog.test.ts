@@ -13,6 +13,7 @@ import {
   isCatalogState,
   refreshCatalogState,
   windowToken,
+  productPhase,
 } from "./product";
 import { canStartTurn, catalogNoticeKey } from "./modelAvailability";
 import { selectableModels, type SelectableModel } from "./selectableModels";
@@ -47,6 +48,7 @@ function inTheShell() {
 }
 
 beforeEach(() => {
+  productPhase.set('unknown');
   sessionStorage.clear();
   catalogState.set("ready");
   allowEnvironmentModelSource.set(false);
@@ -57,6 +59,66 @@ beforeEach(() => {
 });
 
 describe("catalog availability (L-C2)", () => {
+  // OCTO-FORK: selector checks follow a pending quick read once, and later
+  // callers share that same status check rather than opening another flight.
+  it('upgrades a pending cache read to one shared picker revalidation', async () => {
+    inTheShell();
+    let finish!: (response: Response) => void;
+    const fetchMock = vi.fn().mockImplementationOnce(() => new Promise<Response>(resolve => { finish = resolve; }))
+      .mockResolvedValue(new Response(JSON.stringify({ state: 'ready', retryable: false })));
+    vi.stubGlobal('fetch', fetchMock);
+    const first = refreshCatalogState();
+    const picker = [refreshCatalogState(true), refreshCatalogState(true)];
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    finish(new Response(JSON.stringify({ state: 'ready', retryable: false })));
+    await Promise.all([first, ...picker]);
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(fetchMock.mock.calls[1][0]).toBe('/api/product/catalog?revalidate=1');
+  });
+
+  it('does not revalidate a new account on behalf of an old picker', async () => {
+    inTheShell(); productPhase.set('ready');
+    let finish!: (response: Response) => void;
+    const fetchMock = vi.fn(() => new Promise<Response>(resolve => { finish = resolve; }));
+    vi.stubGlobal('fetch', fetchMock);
+    const reads = [refreshCatalogState(), refreshCatalogState(true)];
+    productPhase.set('blocked'); productPhase.set('ready');
+    finish(new Response(JSON.stringify({ state: 'ready', retryable: false })));
+    await Promise.all(reads);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('shares one pending availability read across mount and menu callers', async () => {
+    inTheShell();
+    let finish!: (response: Response) => void;
+    const fetchMock = vi.fn(() => new Promise<Response>(resolve => { finish = resolve; }));
+    vi.stubGlobal('fetch', fetchMock);
+    const reads = [refreshCatalogState(), refreshCatalogState(), refreshCatalogState()];
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    finish(new Response(JSON.stringify({ state: 'ready', retryable: false })));
+    await Promise.all(reads);
+    expect(get(catalogState)).toBe('ready');
+  });
+
+  it.each([200, 401])('discards the previous account response (%s) after a new login', async status => {
+    inTheShell();
+    productPhase.set('ready');
+    let finish!: (response: Response) => void;
+    const fetchMock = vi.fn().mockImplementationOnce(() => new Promise<Response>(resolve => { finish = resolve; }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({ state: 'ready', retryable: false })));
+    vi.stubGlobal('fetch', fetchMock);
+    const previous = refreshCatalogState();
+    productPhase.set('blocked');
+    productPhase.set('ready');
+    await refreshCatalogState();
+    finish(new Response(JSON.stringify({ state: 'stale', retryable: true }), { status }));
+    await previous;
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(get(productPhase)).toBe('ready');
+    expect(get(catalogState)).toBe('ready');
+    expect(get(catalogRetryable)).toBe(false);
+  });
+
   it("a lapsed catalogue blocks a new turn while leaving reading alone", async () => {
     inTheShell();
     vi.stubGlobal("fetch", fetchReturning(200, { state: "stale", retryable: true }));

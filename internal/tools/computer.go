@@ -429,7 +429,9 @@ func computerScreenshot(ctx context.Context) (agent.ToolResult, error) {
 	sent := png
 	var blk agent.ContentBlock
 	var haveBlock bool
-	if ImagesAllowed(ctx) {
+	// OCTO-FORK: qualify once; metadata remains useful when review is unverified.
+	qualification := imageInputQualification(ctx)
+	if qualification.Allowed {
 		blk, haveBlock = agent.NewImageBlock("image/png", png)
 		if haveBlock && blk.Image != nil {
 			sent = blk.Image.Data
@@ -447,7 +449,10 @@ func computerScreenshot(ctx context.Context) (agent.ToolResult, error) {
 	}
 
 	coords := fmt.Sprintf("the attached image is %dx%d px — express all click/move coordinates in these image pixels, origin top-left", aw, ah)
-	if !ImagesAllowed(ctx) {
+	if !qualification.Allowed && qualification.Known {
+		return agent.ToolResult{Text: "screenshot saved to " + path + "; visual inspection was not performed: " + qualification.Reason + ". Use a verified image/tool combination before visually guided computer actions."}, nil
+	}
+	if !qualification.Allowed {
 		return agent.ToolResult{Text: "screenshot saved to " + path + " (the current model can't view images and no vision_helper is configured — computer-use needs a vision-capable model)"}, nil
 	}
 	res := agent.ToolResult{Text: "screenshot saved to " + path + "; " + coords}

@@ -58,17 +58,21 @@ type SendFileTool struct{}
 func SendFileToolDef() agent.ToolDefinition { return SendFileTool{}.Definition() }
 
 func (SendFileTool) Definition() agent.ToolDefinition {
+	return SendFileTool{}.DefinitionFor(context.Background())
+}
+
+// OCTO-FORK: an IM attachment and a desktop artifact have different recipients.
+// Keep cross-chat delivery available without implying desktop files need an IM upload.
+func (SendFileTool) DefinitionFor(ctx context.Context) agent.ToolDefinition {
+	delivery := "This turn is not bound to an IM chat. For desktop/web delivery use show_artifact for supported generated files, or report their absolute path. Only use send_file when the user requests an IM recipient; provide platform and chat_id, or platform alone to resolve reachable chats."
+	required := []string{"path", "platform"}
+	if channelSenderFrom(ctx) != nil {
+		delivery = "This turn is bound to an IM chat. Omit platform/chat_id to attach the file to the current conversation. To send to another authorized recipient, provide platform and chat_id; platform alone resolves reachable chats."
+		required = []string{"path"}
+	}
 	return agent.ToolDefinition{
-		Name: "send_file",
-		Description: "Send a local file to a user over an IM channel (image, video, document, or any " +
-			"file). Use this whenever the user should receive an actual file — a generated image or " +
-			"chart, a screenshot, a PDF or other document, a data export. A normal reply only carries " +
-			"text, so a file MUST go through this tool. The wire type (image / video / file) is chosen " +
-			"automatically from the extension, so name images .png/.jpg and videos .mp4. The file must " +
-			"already exist on disk; create it first (write_file, a script, a download), then send it.\n\n" +
-			"Recipient: on an IM chat, omit platform/chat_id and it goes to the current chat. To send " +
-			"to a DIFFERENT chat (e.g. from the web UI to the user's WeChat), pass platform + chat_id; " +
-			"if you don't know the chat_id, pass just platform (or nothing) to list reachable chats.",
+		Name:        "send_file",
+		Description: "Send an existing local file as an IM attachment (image, video, document, or other file). The extension determines its wire type. " + delivery,
 		Parameters: map[string]any{
 			"type": "object",
 			"properties": map[string]any{
@@ -82,14 +86,14 @@ func (SendFileTool) Definition() agent.ToolDefinition {
 				},
 				"platform": map[string]any{
 					"type":        "string",
-					"description": "Target IM platform (e.g. \"weixin\", \"telegram\"). Omit to send to the current IM chat; pass it to target another chat.",
+					"description": "Target IM platform (e.g. weixin, telegram). Required outside a bound IM conversation.",
 				},
 				"chat_id": map[string]any{
 					"type":        "string",
 					"description": "Target chat/user ID. Omit to send to the current IM chat, or (with platform) to list reachable chats.",
 				},
 			},
-			"required": []string{"path"},
+			"required": required,
 		},
 	}
 }
@@ -154,9 +158,6 @@ func (SendFileTool) Execute(ctx context.Context, _ string, input map[string]any)
 		}, nil
 	}
 
-	// Web/other server turn with no target: guide the model to pick a chat.
-	if m := activeMessenger; m != nil {
-		return listRecipients(m.KnownChats(), "")
-	}
-	return agent.ToolResult{}, fmt.Errorf("send_file: no chat to send to — specify platform + chat_id, or use this from an IM chat")
+	// OCTO-FORK: a desktop file is not an invitation to discover unrelated chats.
+	return agent.ToolResult{}, fmt.Errorf("send_file: no current IM chat; use show_artifact for supported desktop files, or specify the user's requested IM platform and recipient")
 }

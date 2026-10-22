@@ -435,6 +435,10 @@ type Server struct {
 	pendingTitles map[string]string
 	titleMu       sync.Mutex
 
+	// OCTO-FORK: follow-up suggestions never outlive the foreground turn they describe.
+	suggestionMu sync.Mutex
+	suggestions  map[string]*suggestionTurn
+
 	// WebSocket hub for real-time browser communication.
 	wsHub *wsHub
 
@@ -2052,6 +2056,7 @@ func (s *Server) senderForSession(sess *agent.Session) (agent.Sender, string) {
 		if sess != nil {
 			tuning.ClientSessionID = sess.ID
 			tuning.ClientAgentID = sess.EffectiveAgentID()
+			tuning.ClientHistoryToolCallIDs = historyToolCallIDs(sess.Messages)
 		}
 		gw, err := s.cfg.GatewaySender(tuning)
 		if err != nil {
@@ -4280,6 +4285,8 @@ func (s *Server) runChannelTurns(ctx context.Context, sess *channel.Session, ad 
 			go s.runChannelIdleTurn(context.Background(), sess, ad, ev)
 		})
 		ctx = tools.WithSubAgentManager(ctx, subMgr)
+		// OCTO-FORK: advertise the current-chat attachment schema before building tools.
+		ctx = tools.WithChannelSender(ctx, channelFileSender{ad: ad, chatID: ev.ChatID, replyTo: ev.MessageID})
 
 		toolDefs = tools.DefaultToolsForCtx(ctx, sess.Agent.Model)
 		if !goalsOn {
@@ -4313,7 +4320,6 @@ func (s *Server) runChannelTurns(ctx context.Context, sess *channel.Session, ad 
 		// document reaches this chat by pushing it through the adapter. The
 		// send_file tool itself is advertised via DefaultToolsFor (messenger
 		// registered); here we only pin which chat the no-target case sends to.
-		ctx = tools.WithChannelSender(ctx, channelFileSender{ad: ad, chatID: ev.ChatID, replyTo: ev.MessageID})
 		// Per-chat Waker so schedule_wakeup (the in-session loop) can pace this and
 		// later turns. On wakeup it routes through runChannelIdleTurn, which
 		// delivers via the adapter — including the wakeup-injected turns, which

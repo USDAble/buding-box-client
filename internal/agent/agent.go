@@ -830,6 +830,8 @@ func (a *Agent) Run(ctx context.Context, userInput string, tools []ToolDefinitio
 		return Reply{}, fmt.Errorf("agent: userInput must be non-empty")
 	}
 	a.setToolDefOverhead(tools)
+	// OCTO-FORK: tool image eligibility follows the sender captured for this turn.
+	ctx = withSenderImageInput(ctx, sender, a.Model, len(tools) > 0)
 
 	// Fire Stop once the turn concludes — success or failure. Registered after
 	// validation so config errors (no turn ran) don't emit a spurious Stop. The
@@ -881,6 +883,8 @@ func (a *Agent) RunStream(
 		return Reply{}, fmt.Errorf("agent: userInput must be non-empty")
 	}
 	a.setToolDefOverhead(tools)
+	// OCTO-FORK: streamed and buffered turns use the same image-tool boundary.
+	ctx = withSenderImageInput(ctx, sender, a.Model, len(tools) > 0)
 
 	// Fire Stop once the turn concludes — success or failure. See Run.
 	defer func() { a.fireStop(userInput, reply, err) }()
@@ -1034,6 +1038,8 @@ func (a *Agent) runLoop(
 	// just read gets overwritten by the bookkeeping line. A tool call in
 	// between opens a new block, so it clears the carry.
 	reminderCarry := ""
+	// OCTO-FORK: advise recovery within the existing result after failed rounds.
+	recovery := toolRecovery{}
 	a.turnIterations = 0
 	for i := 0; limit == unlimitedTurns || i < limit; i++ {
 		a.turnIterations = i + 1
@@ -1046,6 +1052,8 @@ func (a *Agent) runLoop(
 		// Done before the LLM call so the model sees mid-turn user input
 		// as a first-class message boundary, not folded into tool output.
 		if steerItems := a.Inbox.Drain(); len(steerItems) > 0 {
+			// OCTO-FORK: new user evidence starts a fresh recovery streak.
+			recovery = toolRecovery{}
 			// History position the first steer item lands at — item k occupies
 			// steerBaseIdx+k, since each is appended as its own message below.
 			steerBaseIdx := a.History.Len()
@@ -1331,6 +1339,8 @@ func (a *Agent) runLoop(
 			if err != nil {
 				return Reply{}, fmt.Errorf("agent: dispatch tools[%d]: %w", i, err)
 			}
+			// OCTO-FORK: no extra round-trip, forced retry or blanket task failure.
+			recovery.annotate(resultBlocks)
 
 			// Record the tool names dispatched this turn for the Stop hook's
 			// tools_used field.
@@ -1931,6 +1941,8 @@ var readOnlyTools = map[string]bool{
 type toolCall struct {
 	block      ContentBlock
 	denyReason string // non-empty → blocked by the gate; don't execute
+	// OCTO-FORK: stage timing belongs to the dispatch which owns approval and execution.
+	clock *toolClock
 }
 
 // dispatchTools runs every tool_use block in blocks and returns the matching
@@ -1956,6 +1968,13 @@ type toolCall struct {
 // inputs — DefaultRegistry is (its only shared state, the read tracker, is
 // mutex-guarded).
 func dispatchTools(ctx context.Context, executor ToolExecutor, blocks []ContentBlock, handler EventHandler, gate PermissionGate) ([]ContentBlock, error) {
+	// OCTO-FORK: serialize timing/progress/result callbacks across parallel tools.
+	batchStart := time.Now()
+	if handler != nil {
+		original := handler
+		var eventMu sync.Mutex
+		handler = func(ev AgentEvent) { eventMu.Lock(); defer eventMu.Unlock(); original(ev) }
+	}
 	// Pass 1 — collect calls and run the gate serially.
 	var calls []toolCall
 	for _, b := range blocks {
@@ -1963,6 +1982,7 @@ func dispatchTools(ctx context.Context, executor ToolExecutor, blocks []ContentB
 			continue
 		}
 		c := toolCall{block: b}
+		c.clock = &toolClock{batchStart: batchStart, block: b, handler: handler}
 		// Malformed arguments never reach the gate or the tool: the call is
 		// answered with the parse failure so the model fixes its JSON instead
 		// of re-sending the same broken call against a "missing parameter"
@@ -1975,13 +1995,17 @@ func dispatchTools(ctx context.Context, executor ToolExecutor, blocks []ContentB
 			continue
 		}
 		if gate != nil {
+			c.clock.emit("approval")
+			approvalStart := time.Now()
 			if allowed, reason := gate.Check(ctx, b.Name, b.Input); !allowed {
 				if reason == "" {
 					reason = "permission denied"
 				}
 				c.denyReason = reason
 			}
+			c.clock.approval = time.Since(approvalStart)
 		}
+		c.clock.emit("queued")
 		calls = append(calls, c)
 	}
 
@@ -2005,6 +2029,7 @@ func dispatchTools(ctx context.Context, executor ToolExecutor, blocks []ContentB
 		resultSlices = make([][]ContentBlock, len(calls))
 		for i := range calls {
 			if calls[i].denyReason != "" {
+				calls[i].clock.emit("finished")
 				resultSlices[i] = []ContentBlock{NewToolResultBlock(calls[i].block.ID, calls[i].denyReason, true)}
 				emit(calls[i].block.Name, resultSlices[i])
 				continue
@@ -2012,6 +2037,7 @@ func dispatchTools(ctx context.Context, executor ToolExecutor, blocks []ContentB
 			wg.Add(1)
 			go func(i int) {
 				defer wg.Done()
+				calls[i].clock.start()
 				// Only the parallel branch needs this: the serial one below runs
 				// on the turn's own goroutine, where the caller's recover (the
 				// server's recoverTurn) still applies. Here a panicking tool
@@ -2025,7 +2051,10 @@ func dispatchTools(ctx context.Context, executor ToolExecutor, blocks []ContentB
 						emit(calls[i].block.Name, resultSlices[i])
 					}
 				}()
-				res, err := executor.Execute(ctx, calls[i].block.Name, calls[i].block.Input)
+				res, err := func() (ToolResult, error) {
+					defer calls[i].clock.emit("finished")
+					return executor.Execute(ctx, calls[i].block.Name, calls[i].block.Input)
+				}()
 				resultSlices[i] = toolResultBlocks(calls[i].block.ID, res, err)
 				emit(calls[i].block.Name, resultSlices[i])
 			}(i)
@@ -2039,6 +2068,7 @@ func dispatchTools(ctx context.Context, executor ToolExecutor, blocks []ContentB
 	for i := range calls {
 		b := calls[i].block
 		if calls[i].denyReason != "" {
+			calls[i].clock.emit("finished")
 			resultSlices[i] = []ContentBlock{NewToolResultBlock(b.ID, calls[i].denyReason, true)}
 			emitToolResultBlocks(handler, b.Name, resultSlices[i])
 			continue
@@ -2047,6 +2077,7 @@ func dispatchTools(ctx context.Context, executor ToolExecutor, blocks []ContentB
 			res     ToolResult
 			execErr error
 		)
+		calls[i].clock.start()
 		if hasStreaming && handler != nil {
 			toolID, toolName := b.ID, b.Name
 			progress := func(chunk string) {
@@ -2059,6 +2090,7 @@ func dispatchTools(ctx context.Context, executor ToolExecutor, blocks []ContentB
 		} else {
 			res, execErr = executor.Execute(ctx, b.Name, b.Input)
 		}
+		calls[i].clock.emit("finished")
 		resultSlices[i] = toolResultBlocks(b.ID, res, execErr)
 		emitToolResultBlocks(handler, b.Name, resultSlices[i])
 	}

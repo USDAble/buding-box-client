@@ -302,7 +302,8 @@ func (s *Server) serveArtifactOrigin(w http.ResponseWriter, r *http.Request) {
 
 	p := path.Clean("/" + r.URL.Path)
 	if p == "/" || p == "/index.html" || p == "/"+filepath.Base(g.entry) {
-		serveArtifactEntry(w, r, g.entry, nil)
+		// OCTO-FORK: fixed canvases report their dimensions to the isolated preview.
+		serveArtifactEntry(w, r, g.entry, artifactPreviewBridge)
 		return
 	}
 	serveArtifactAsset(w, r, g.root, strings.TrimPrefix(p, "/"))

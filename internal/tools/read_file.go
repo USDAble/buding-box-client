@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"image"
 	"io"
 	"os"
 	"path/filepath"
@@ -61,8 +62,9 @@ func (ReadFileTool) Definition() agent.ToolDefinition {
 			"PDFs, DBs), files whose content is binary or UTF-16 (use the terminal " +
 			"tool for those), and blocking device files (/dev/random, /dev/tty etc). " +
 			"Image files (.png, .jpg, .jpeg, .gif, .webp, .bmp, .tiff, .heic, .ico) " +
-			"are returned as image content for multimodal model consumption, or a " +
-			"refusal if the active model does not accept image input.",
+			// OCTO-FORK: a capability-limited metadata result is not visual review.
+			"are returned as image content when the active request supports them. " +
+			"Otherwise the result explains the limit; available file metadata does not constitute visual inspection.",
 		Parameters: map[string]any{
 			"type": "object",
 			"properties": map[string]any{
@@ -113,6 +115,14 @@ func (ReadFileTool) Execute(ctx context.Context, _ string, input map[string]any)
 	// refuse: the provider silently drops image blocks, and a model that
 	// believes it "read" an image it cannot see hallucinates the contents.
 	if mimeType := imageMIMEType(abs); mimeType != "" {
+		// OCTO-FORK: report the verified combination limit before injecting any
+		// image, keeping a generated file deliverable without claiming review.
+		if status := agent.ImageInputForContext(ctx); status.Known {
+			if !status.Allowed {
+				return imageInspectionUnavailable(abs, path, mimeType, status.Reason)
+			}
+			return readImageFile(abs, path, mimeType)
+		}
 		if !ImagesAllowed(ctx) {
 			return agent.ToolResult{
 				Text: fmt.Sprintf("%s is an image file (%s) and the active model does not accept image input — the contents cannot be read or described. Do not guess what the image shows; tell the user to switch to a vision-capable model, or to set `vision_helper` in their config so a vision model can describe images for this one.", path, mimeType),
@@ -233,6 +243,27 @@ func (ReadFileTool) Execute(ctx context.Context, _ string, input map[string]any)
 		result.Text = fmt.Sprintf("Recalled %d %s from %s\n\n%s", memCount, pluralize(memCount, "memory", "memories"), filepath.Base(abs), out.String())
 	}
 	return result, nil
+}
+
+// OCTO-FORK: header-only checks avoid extra shell calls and do not pretend to
+// inspect visual content when the active request combination is unverified.
+func imageInspectionUnavailable(abs, displayPath, mimeType, reason string) (agent.ToolResult, error) {
+	file, err := os.Open(abs)
+	if err != nil {
+		return agent.ToolResult{}, fmt.Errorf("read_file: %w", err)
+	}
+	defer file.Close()
+	info, err := file.Stat()
+	if err != nil {
+		return agent.ToolResult{}, fmt.Errorf("read_file: %w", err)
+	}
+	summary := fmt.Sprintf("File exists: %s (%s, %s).", displayPath, mimeType, formatBytes(info.Size()))
+	if dimensions, format, decodeErr := image.DecodeConfig(io.LimitReader(file, 512*1024)); decodeErr == nil {
+		summary += fmt.Sprintf(" Image header: %s, %dx%d pixels.", format, dimensions.Width, dimensions.Height)
+	}
+	return agent.ToolResult{Text: summary + " Visual inspection was NOT performed (" + reason + "): no verified image+tool combination is available at this turn's selected reasoning level. " +
+		"The file is unchanged and no image content was sent. If the requested deliverable is complete, present it and state this review limit; do not regenerate or convert it merely to retry this check. " +
+		"If understanding the image is essential to the user's request, explain the missing capability and ask for a qualified model; do not guess image contents or silently switch models."}, nil
 }
 
 // imageMIMEType returns the MIME type for known image extensions, or "".

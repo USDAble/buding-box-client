@@ -1,10 +1,14 @@
 package productruntime
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
+	"net/http"
 	"reflect"
+	"strings"
 	"testing"
+	"time"
 
 	"github.com/open-octo/octo-agent/internal/agent"
 	"github.com/open-octo/octo-agent/internal/productclient"
@@ -64,6 +68,56 @@ func TestReasoningMetadataAndPerModelPreferences(t *testing.T) {
 	}
 }
 
+// A tool can take longer than the signed lease. The next paid request must
+// refresh that lease, not misreport the unchanged model as withdrawn.
+func TestReasoningValidationRenewsExpiredCatalogWithoutChangingChoice(t *testing.T) {
+	for _, failure := range []string{"", "network", "signature", "withdrawn"} {
+		t.Run(failure, func(t *testing.T) {
+			f := newCatalogFixture(t)
+			f.signIn()
+			f.prime()
+			entry, _ := f.store.Load()
+			policy, _ := entry.Envelope.DecodePolicy()
+			model := policy.Catalog.Models[1].ID
+			if err := f.rt.ValidateModelReasoning(context.Background(), model, "default"); err != nil {
+				t.Fatal(err)
+			}
+			entry.CatalogVersion = "2026-09-13.9"
+			entry.ExpiresAt = time.Now().Add(-time.Second)
+			if err := f.store.Put(entry); err != nil {
+				t.Fatal(err)
+			}
+			f.platform.SetCatalogVersion("2026-09-13.10")
+			switch failure {
+			case "network":
+				f.platform.FailCatalog(http.StatusBadGateway, productclient.CodeUpstreamUnavailable)
+			case "signature":
+				f.platform.TamperPolicy()
+			case "withdrawn":
+				f.platform.SetModelIneligible(model)
+			}
+			err := f.rt.ValidateModelReasoning(context.Background(), model, "default")
+			switch failure {
+			case "":
+				if err != nil {
+					t.Fatalf("renewed continuation: %v", err)
+				}
+			case "withdrawn":
+				if err == nil || !strings.Contains(err.Error(), "model_unavailable") {
+					t.Fatalf("withdrawal: %v", err)
+				}
+			default:
+				if agent.ErrorCodeOf(err) != "catalog_unavailable" {
+					t.Fatalf("renewal failure mislabeled: %v", err)
+				}
+			}
+			if f.rt.reasoningPreference(model) != "default" {
+				t.Fatal("renewal changed the user's effort")
+			}
+		})
+	}
+}
+
 func TestReasoningCatalogChangeRequiresExplicitReselection(t *testing.T) {
 	f := newCatalogFixture(t)
 	f.signIn()
@@ -112,7 +166,7 @@ func TestReasoningCatalogChangeRequiresExplicitReselection(t *testing.T) {
 	if effort, err := f.rt.ModelReasoning(model); effort != "high" || agent.ErrorCodeOf(err) != "reasoning_selection_required" {
 		t.Fatalf("removed choice silently changed: %s, %v", effort, err)
 	}
-	if err := f.rt.ValidateModelReasoning(model, "high"); agent.ErrorCodeOf(err) != "reasoning_selection_required" {
+	if err := f.rt.ValidateModelReasoning(context.Background(), model, "high"); agent.ErrorCodeOf(err) != "reasoning_selection_required" {
 		t.Fatal(err)
 	}
 	if err := f.rt.deps.State.SetModelReasoning(model, "low"); err != nil {

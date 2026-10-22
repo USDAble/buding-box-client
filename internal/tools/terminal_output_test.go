@@ -15,8 +15,10 @@ func TestTerminalOutputTool_LinesSnapshot(t *testing.T) {
 	ctx := context.Background()
 
 	// Print 5 lines then exit; wait for completion.
+	// OCTO-FORK: echo and semicolon work in both POSIX shells and PowerShell;
+	// printf is not a PowerShell builtin and tests must not require Git Bash.
 	if _, err := (TerminalTool{mgr: m}).Execute(ctx, "terminal", map[string]any{
-		"command":           "printf 'l1\\nl2\\nl3\\nl4\\nl5\\n'",
+		"command":           "echo l1; echo l2; echo l3; echo l4; echo l5",
 		"run_in_background": "interactive",
 	}); err != nil {
 		t.Fatalf("launch: %v", err)

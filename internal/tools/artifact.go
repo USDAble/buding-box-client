@@ -122,18 +122,10 @@ func (ShowArtifactTool) Definition() agent.ToolDefinition {
 	return agent.ToolDefinition{
 		Name: "show_artifact",
 		// OCTO-FORK: Tell the model to surface generated Office files for download, without claiming they can be previewed.
-		Description: "Present an artifact (HTML page, Markdown document, image, or downloadable Word, Excel, or PowerPoint file) " +
-			"to the user as an artifact. ALWAYS call this right after you " +
-			"produce a supported file the user would want to look at or download — a generated HTML page or " +
-			"slide deck, a Markdown report, a chart or image — whenever " +
-			"it was created by some means other than write_file (a terminal " +
-			"heredoc/redirect like `cat > x.html`, a script, a build step, or a download). Files you " +
-			"create with write_file/edit_file are surfaced automatically and do NOT need this. In the " +
-			"web UI the file opens in the Artifacts panel (HTML renders in a sandboxed preview); in " +
-			"the TUI the path renders as a click-to-open link; elsewhere the path is simply " +
-			"reported. The file must already exist. Before authoring an HTML artifact's content, " +
-			"check the artifact-design skill for the panel's " +
-			"constraints — self-contained only, sandboxed iframe, narrow default width.",
+		Description: "Present an existing deliverable in the desktop/web Artifacts panel: HTML, Markdown and images can be previewed; Word, Excel and PowerPoint files are available for download. " +
+			"Call once for a supported file produced by a script, build or download. write_file/edit_file already surface supported files automatically. " +
+			"This does not send files to an IM chat; use send_file for requested IM delivery. TUI/other transports receive a path. " +
+			"For HTML authoring, consult artifact-design for origin isolation and asset/network constraints. Unsupported extensions are rejected, not converted.",
 		Parameters: map[string]any{
 			"type": "object",
 			"properties": map[string]any{

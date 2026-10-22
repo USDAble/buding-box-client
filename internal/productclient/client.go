@@ -104,6 +104,32 @@ func (h *CredentialHolder) replaceForSession(generation uint64, creds Credential
 // ErrSessionChanged prevents a pending refresh from restoring a logged-out account.
 var ErrSessionChanged = errors.New("productclient: session changed during request")
 
+// OCTO-FORK: cached account responses commit under the existing session owner,
+// so login/logout cannot race between checking a generation and storing bytes.
+func (c *Client) SessionGeneration() uint64 {
+	if c.creds == nil {
+		return 0
+	}
+	return c.creds.SessionGeneration()
+}
+
+// SessionEnded identifies a refused renewal, rather than a newer login.
+func (c *Client) SessionEnded(generation uint64) bool {
+	credentials, current := c.creds.snapshot()
+	return current == generation+1 && credentials.AccessToken == "" && credentials.RefreshToken == ""
+}
+
+// WithSession runs a short local commit only while this session still owns it.
+// The callback must not call the client or perform network I/O.
+func (c *Client) WithSession(generation uint64, commit func() error) error {
+	c.creds.mu.RLock()
+	defer c.creds.mu.RUnlock()
+	if c.creds.generation != generation {
+		return ErrSessionChanged
+	}
+	return commit()
+}
+
 // ClientMeta is the per-install identity every request carries (§3.1). InstallID
 // is a random UUID generated once per installation - never a hardware serial.
 type ClientMeta struct {
@@ -230,19 +256,13 @@ func (c *Client) Bootstrap(ctx context.Context) (*BootstrapData, error) {
 // carries exactly the exchange-and-replay this needs, so there is no second
 // refresh path here (C2 规则 3).
 //
-// WHY THE HOLDER IS CLEARED ONLY ON SUCCESS. A refused session (401) means the
-// session is over, and holding a dead token after it would leave the gateway
-// sender looking authorised - doAuthorized's own rule, reused. A transport
-// failure is NOT that: it has no verdict in it (V-43), and the user's decision to
-// leave is answered by the caller deleting the stored credential either way
-// (PQ29 option 1, decided by a human 2026-09-14). Which of the two happened is
-// reported to the caller through the error, not through a second kind of success.
+// OCTO-FORK: explicit logout forgets the local session even if revocation is
+// offline. This also invalidates pending account responses. Revocation failure
+// still reaches the caller; an unrelated network failure never logs a user out.
 func (c *Client) Logout(ctx context.Context) error {
-	if err := c.doAuthorized(ctx, http.MethodPost, pathLogout, nil, nil); err != nil {
-		return err
-	}
-	c.creds.Clear()
-	return nil
+	generation := c.creds.SessionGeneration()
+	defer c.creds.replaceForSession(generation, Credentials{}, true)
+	return c.doAuthorized(ctx, http.MethodPost, pathLogout, nil, nil)
 }
 
 // CreditsLedger reads the balance from the platform ledger (中台交付包 §5.5).
@@ -388,7 +408,11 @@ func (c *Client) EnsureToken(ctx context.Context) error {
 // Unlike EnsureToken, a rejected token must refresh even before its advertised expiry.
 func (c *Client) RenewToken(ctx context.Context, stale string) error {
 	generation := c.creds.SessionGeneration()
-	err := c.refreshSingleFlight(ctx, stale)
+	return c.renewTokenForSession(ctx, stale, generation)
+}
+
+func (c *Client) renewTokenForSession(ctx context.Context, stale string, generation uint64) error {
+	err := c.refreshSingleFlight(ctx, stale, generation)
 	if errors.Is(err, ErrSessionExpired) {
 		if !c.creds.replaceForSession(generation, Credentials{}, true) {
 			return ErrSessionChanged
@@ -404,8 +428,13 @@ func (c *Client) doAuthorized(ctx context.Context, method, path string, body, ou
 }
 
 func (c *Client) doAuthorizedWithKey(ctx context.Context, method, path string, body, out any, idempotencyKey string) error {
-	stale := c.creds.AccessToken()
+	// OCTO-FORK: a late response must neither renew nor clear the next login.
+	credentials, generation := c.creds.snapshot()
+	stale := credentials.AccessToken
 	err := c.do(ctx, method, path, body, out, stale, idempotencyKey)
+	if c.creds.SessionGeneration() != generation {
+		return ErrSessionChanged
+	}
 	if err == nil {
 		return nil
 	}
@@ -413,7 +442,7 @@ func (c *Client) doAuthorizedWithKey(ctx context.Context, method, path string, b
 		return err
 	}
 
-	if rerr := c.RenewToken(ctx, stale); rerr != nil {
+	if rerr := c.renewTokenForSession(ctx, stale, generation); rerr != nil {
 		// A refresh token the platform refuses does not heal by retrying: the
 		// session is over, the credential goes with it, and the caller lands on
 		// the blocked screen (C12/L-A6).
@@ -426,9 +455,17 @@ func (c *Client) doAuthorizedWithKey(ctx context.Context, method, path string, b
 		return rerr
 	}
 
-	if rerr := c.do(ctx, method, path, body, out, c.creds.AccessToken(), idempotencyKey); rerr != nil {
+	token, current := c.creds.AccessTokenForSession(generation)
+	if !current {
+		return ErrSessionChanged
+	}
+	rerr := c.do(ctx, method, path, body, out, token, idempotencyKey)
+	if c.creds.SessionGeneration() != generation {
+		return ErrSessionChanged
+	}
+	if rerr != nil {
 		if isUnauthorized(rerr) {
-			c.creds.Clear()
+			c.creds.replaceForSession(generation, Credentials{}, true)
 		}
 		return rerr
 	}
@@ -438,7 +475,7 @@ func (c *Client) doAuthorizedWithKey(ctx context.Context, method, path string, b
 // refreshSingleFlight collapses concurrent refreshes into one. stale is the
 // access token the caller's failed request used: if the holder has already moved
 // past it, another caller refreshed and there is nothing left to do.
-func (c *Client) refreshSingleFlight(ctx context.Context, stale string) error {
+func (c *Client) refreshSingleFlight(ctx context.Context, stale string, expectedGeneration uint64) error {
 	select {
 	case c.refreshGate <- struct{}{}:
 		defer func() { <-c.refreshGate }()
@@ -450,6 +487,9 @@ func (c *Client) refreshSingleFlight(ctx context.Context, stale string) error {
 		return err
 	}
 	current, generation := c.creds.snapshot()
+	if generation != expectedGeneration {
+		return ErrSessionChanged
+	}
 	if cur := current.AccessToken; cur != "" && cur != stale {
 		return nil
 	}

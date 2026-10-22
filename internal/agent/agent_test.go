@@ -784,6 +784,10 @@ func TestAgent_RunStream_ToolUse_EmitsStartedAndDone(t *testing.T) {
 
 	var events []AgentEvent
 	reply, err := a.RunStream(context.Background(), "run echo", defs, exec, func(ev AgentEvent) {
+		// OCTO-FORK: optional timing events must not alter the legacy event ordering.
+		if ev.Kind == EventToolPhase {
+			return
+		}
 		events = append(events, ev)
 	})
 	if err != nil {
@@ -847,6 +851,10 @@ func TestAgent_RunStream_ToolError_EmitsErrorEvent(t *testing.T) {
 
 	var events []AgentEvent
 	_, err := a.RunStream(context.Background(), "run", defs, exec, func(ev AgentEvent) {
+		// OCTO-FORK: optional timing events must not alter the legacy error contract.
+		if ev.Kind == EventToolPhase {
+			return
+		}
 		events = append(events, ev)
 	})
 	if err != nil {

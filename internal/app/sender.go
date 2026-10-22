@@ -35,12 +35,14 @@ const (
 // Key resolution and any user-facing help text stay with the caller (a CLI
 // prints setup hints; a server returns an error) — this layer only constructs.
 type SenderOptions struct {
+	// OCTO-FORK: image tools use the gateway's verified request combination.
+	ImageInputStatus func(context.Context, string, bool) agent.ImageInputStatus
 	// OCTO-FORK: product authentication is injected without teaching providers about accounts.
 	GatewayTransport http.RoundTripper
 	// OCTO-FORK: the platform owns provider-specific reasoning translation.
 	GatewayReasoningPassthrough bool
 	// OCTO-FORK: product catalog preflight; direct provider callers leave nil.
-	ValidateRequest func(model string) error
+	ValidateRequest func(context.Context, string) error
 	Provider        string // vendor ID, e.g. "kimi", "deepseek", "anthropic", "openai"
 	APIKey          string
 	BaseURL         string // optional endpoint override; empty uses the vendor default
@@ -96,6 +98,9 @@ type ReasoningTuning struct {
 	// OCTO-FORK: the middle tier reuses the durable local conversation across turns.
 	ClientSessionID string
 	ClientAgentID   string
+	// OCTO-FORK: immutable IDs from before this user turn, never inferred from
+	// user-role messages (which also carry tool images and steering input).
+	ClientHistoryToolCallIDs []string
 	// ReasoningEffort mirrors SenderOptions.ReasoningEffort: "" (off) or
 	// "low"|"medium"|"high"|"xhigh"|"max". Empty is meaningful and must stay
 	// empty — the provider omits the field on the wire in that case, and the UI's
@@ -161,8 +166,8 @@ func NewSender(opts SenderOptions) (agent.Sender, error) {
 	}
 	// OCTO-FORK: hold callbacks behind a pointer so sender values remain comparable.
 	var validation *requestValidation
-	if opts.ValidateRequest != nil {
-		validation = &requestValidation{check: opts.ValidateRequest}
+	if opts.ValidateRequest != nil || opts.ImageInputStatus != nil {
+		validation = &requestValidation{check: opts.ValidateRequest, imageInput: opts.ImageInputStatus}
 	}
 	return sender{
 		p: p,
@@ -311,7 +316,18 @@ func buildClient(name, apiKey, baseURL, protocol string, headers map[string]stri
 // means the agent package never imports provider — a one-directional dep graph
 // that pays off as more provider implementations land.
 // OCTO-FORK: callbacks are indirect to preserve existing sender identity comparisons.
-type requestValidation struct{ check func(string) error }
+type requestValidation struct {
+	check      func(context.Context, string) error
+	imageInput func(context.Context, string, bool) agent.ImageInputStatus
+}
+
+// OCTO-FORK: qualify images using the exact sender/effort used by this turn.
+func (s sender) ImageInputStatus(ctx context.Context, model string, withTools bool) agent.ImageInputStatus {
+	if s.validateRequest != nil && s.validateRequest.imageInput != nil {
+		return s.validateRequest.imageInput(ctx, model, withTools)
+	}
+	return agent.ImageInputStatus{}
+}
 
 type sender struct {
 	// OCTO-FORK: product-only catalog validation and immutable turn effort.
@@ -372,8 +388,8 @@ func (s sender) SendMessages(ctx context.Context, model, system string, msgs []a
 		return agent.Reply{}, errors.New("app: provider is nil")
 	}
 	// OCTO-FORK: reject unavailable product choices before sending.
-	if s.validateRequest != nil {
-		if err := s.validateRequest.check(model); err != nil {
+	if s.validateRequest != nil && s.validateRequest.check != nil {
+		if err := s.validateRequest.check(ctx, model); err != nil {
 			return agent.Reply{}, err
 		}
 	}
@@ -430,8 +446,8 @@ func (s sender) StreamMessages(
 		return agent.Reply{}, errors.New("app: provider is nil")
 	}
 	// OCTO-FORK: reject unavailable product choices before sending.
-	if s.validateRequest != nil {
-		if err := s.validateRequest.check(model); err != nil {
+	if s.validateRequest != nil && s.validateRequest.check != nil {
+		if err := s.validateRequest.check(ctx, model); err != nil {
 			return agent.Reply{}, err
 		}
 	}
@@ -478,8 +494,8 @@ func (s sender) SendMessagesWithTools(
 		return agent.Reply{}, errors.New("app: provider is nil")
 	}
 	// OCTO-FORK: reject unavailable product choices before sending.
-	if s.validateRequest != nil {
-		if err := s.validateRequest.check(model); err != nil {
+	if s.validateRequest != nil && s.validateRequest.check != nil {
+		if err := s.validateRequest.check(ctx, model); err != nil {
 			return agent.Reply{}, err
 		}
 	}
@@ -514,8 +530,8 @@ func (s sender) StreamMessagesWithTools(
 		return agent.Reply{}, errors.New("app: provider is nil")
 	}
 	// OCTO-FORK: reject unavailable product choices before sending.
-	if s.validateRequest != nil {
-		if err := s.validateRequest.check(model); err != nil {
+	if s.validateRequest != nil && s.validateRequest.check != nil {
+		if err := s.validateRequest.check(ctx, model); err != nil {
 			return agent.Reply{}, err
 		}
 	}

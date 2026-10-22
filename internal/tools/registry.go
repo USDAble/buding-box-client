@@ -864,10 +864,12 @@ func defaultToolsFor(ctx context.Context, model string) []agent.ToolDefinition {
 	}
 	defs := make([]agent.ToolDefinition, 0, len(allTools))
 	for _, t := range allTools {
-		if _, isSendFile := t.(SendFileTool); isSendFile && !messengerOn {
-			// Needs a chat to push to, which only the server has (live adapters).
-			// Advertised alongside send_message when a messenger is registered
-			// (covers both web and IM turns); hidden in CLI/TUI.
+		if sendFile, isSendFile := t.(SendFileTool); isSendFile {
+			// OCTO-FORK: the current IM chat can deliver without cross-chat discovery;
+			// desktop retains explicit IM delivery with recipient-aware guidance.
+			if messengerOn || channelSenderFrom(ctx) != nil {
+				defs = append(defs, sendFile.DefinitionFor(ctx))
+			}
 			continue
 		}
 		if _, isSkill := t.(SkillTool); isSkill && !skillsOn {

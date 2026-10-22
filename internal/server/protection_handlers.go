@@ -20,6 +20,46 @@ func writeProtectionError(w http.ResponseWriter, code, message string) {
 	writeJSON(w, http.StatusConflict, map[string]string{"code": code, "error": message})
 }
 
+// OCTO-FORK: fail before user-message broadcast, persistence or provider selection;
+// losing confidential eligibility never falls back to a public model.
+func (s *Server) acceptConfidentialTurn(sess *agent.Session) bool {
+	if err := s.validateConfidentialSession(sess); err != nil {
+		s.wsHub.broadcast(sess.ID, map[string]any{
+			"type":       "send_rejected",
+			"session_id": sess.ID,
+			"message":    err.Error(),
+			"code":       agent.ErrorCodeOf(err),
+		})
+		return false
+	}
+	return true
+}
+
+// OCTO-FORK: accept a protected turn only after its message and policy are saved.
+// The caller appended the pending user message; a failed save rolls it back.
+func (s *Server) persistProtectedTurn(sess *agent.Session, userEvent map[string]any, policyLockedNow bool) bool {
+	if err := sess.Save(); err != nil {
+		sess.Messages = sess.Messages[:len(sess.Messages)-1]
+		s.wsHub.broadcast(sess.ID, map[string]any{
+			"type":       "send_rejected",
+			"session_id": sess.ID,
+			"message":    fmt.Sprintf("save user message: %v", err),
+		})
+		return false
+	}
+	if userEvent != nil {
+		s.wsHub.broadcast(sess.ID, userEvent)
+	}
+	if policyLockedNow {
+		s.wsHub.broadcast(sess.ID, map[string]any{
+			"type":              "session_update",
+			"session_id":        sess.ID,
+			"protection_policy": sess.ProtectionPolicy,
+		})
+	}
+	return true
+}
+
 type updateProtectionRequest struct {
 	PersonalInfoProtection *bool   `json:"personal_info_protection"`
 	ConfidentialSession    *bool   `json:"confidential_session"`

@@ -11,7 +11,7 @@ import (
 func TestGatewayReasoningGuardCoversEverySendPath(t *testing.T) {
 	blocked := errors.New("choose a supported reasoning level")
 	fake := &streamingMockProvider{}
-	s := sender{p: fake, reasoningEffort: "high", gatewayReasoningPassthrough: true, validateRequest: &requestValidation{check: func(model string) error {
+	s := sender{p: fake, reasoningEffort: "high", gatewayReasoningPassthrough: true, validateRequest: &requestValidation{check: func(_ context.Context, model string) error {
 		if model != "model-a" {
 			t.Fatal(model)
 		}
@@ -42,7 +42,7 @@ func TestGatewayReasoningGuardCoversEverySendPath(t *testing.T) {
 // The server compares agent.Sender interfaces when checking cache/fallback identity.
 // Both a plain sender and a product sender must remain comparable.
 func TestSenderIdentityRemainsComparableWithRequestValidation(t *testing.T) {
-	for _, validate := range []func(string) error{nil, func(string) error { return nil }} {
+	for _, validate := range []func(context.Context, string) error{nil, func(context.Context, string) error { return nil }} {
 		original, err := NewSender(SenderOptions{Provider: ProviderOpenAI, APIKey: "fixture", ValidateRequest: validate})
 		if err != nil {
 			t.Fatal(err)

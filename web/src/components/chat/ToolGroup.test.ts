@@ -172,3 +172,10 @@ describe('terminal command copy button', () => {
     expect(get(toasts)[0].type).toBe('error')
   })
 })
+
+// OCTO-FORK: distinguish approval waits from actual tool execution.
+it('separates approval, queue and execution time from wall-clock group elapsed', () => {
+  const el = render([tool({ phase: 'finished', approvalMs: 3000, queueMs: 2000, executionMs: 500, startedAt: 1000, elapsed: 5.5 })])
+  expect(el.textContent).toContain('Approval 3.0s · Queue 2.0s · Execution 0.5s')
+  expect(el.querySelector('.hdr-time')?.textContent).toBe('5.5s')
+})

@@ -21,6 +21,8 @@ import (
 // this and act on it", which invites the platform to implement a field that
 // changes nothing on this side (that is what 中台交付包 §4.4 was deleted for).
 // If the matrix is ever reopened, the type comes back with its consumer.
+// OCTO-FORK: per-model capabilityCombinations below is separate from that
+// application feature matrix; it qualifies model inputs, not tool permissions.
 
 // DisplayName is a model's name in each UI language. The platform owns the
 // values; the client renders the entry matching the current UI language and
@@ -42,19 +44,27 @@ type CatalogVendor struct {
 // CatalogModel is one selectable model. ID is the stable technical key used in
 // gateway requests, sessions and ledgers; it is ASCII and never localised.
 type CatalogModel struct {
-	ReasoningOptions     []string        `json:"reasoningOptions,omitempty"`
-	AvailabilityReason   string          `json:"availabilityReason,omitempty"`
-	ID                   string          `json:"id"`
-	VendorID             string          `json:"vendorId"`
-	DisplayName          DisplayName     `json:"displayName"`
-	Transport            string          `json:"transport"`
-	Capabilities         map[string]bool `json:"capabilities"`
-	MaxContextTokens     int             `json:"maxContextTokens"`
-	MaxOutputTokens      int             `json:"maxOutputTokens"`
-	Eligible             bool            `json:"eligible"`
-	Confidential         bool            `json:"confidential"`
-	ConfidentialPriority *int            `json:"confidentialPriority,omitempty"`
-	PricingVersion       string          `json:"pricingVersion"`
+	// OCTO-FORK: consume the signed per-request evidence at the image-tool boundary.
+	CapabilityCombinations []CapabilityCombination `json:"capabilityCombinations,omitempty"`
+	ReasoningOptions       []string                `json:"reasoningOptions,omitempty"`
+	AvailabilityReason     string                  `json:"availabilityReason,omitempty"`
+	ID                     string                  `json:"id"`
+	VendorID               string                  `json:"vendorId"`
+	DisplayName            DisplayName             `json:"displayName"`
+	Transport              string                  `json:"transport"`
+	Capabilities           map[string]bool         `json:"capabilities"`
+	MaxContextTokens       int                     `json:"maxContextTokens"`
+	MaxOutputTokens        int                     `json:"maxOutputTokens"`
+	Eligible               bool                    `json:"eligible"`
+	Confidential           bool                    `json:"confidential"`
+	ConfidentialPriority   *int                    `json:"confidentialPriority,omitempty"`
+	PricingVersion         string                  `json:"pricingVersion"`
+}
+
+type CapabilityCombination struct {
+	ReasoningEffort string `json:"reasoningEffort"`
+	Tools           bool   `json:"tools"`
+	Vision          bool   `json:"vision"`
 }
 
 // Catalog is the vendor hierarchy plus its model rows. Version is the catalog's

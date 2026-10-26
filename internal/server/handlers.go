@@ -89,10 +89,11 @@ type sessionListResponse struct {
 
 // sessionCreateRequest matches POST /api/sessions bodies from the Web UI.
 type sessionCreateRequest struct {
-	Name         string `json:"name"`
-	AgentProfile string `json:"agent_profile"`
-	Source       string `json:"source"`
-	Model        string `json:"model,omitempty"`
+	PermissionMode string `json:"permission_mode,omitempty"`
+	Name           string `json:"name"`
+	AgentProfile   string `json:"agent_profile"`
+	Source         string `json:"source"`
+	Model          string `json:"model,omitempty"`
 	// OCTO-FORK: new-session policy and model arrive in the same create request,
 	// avoiding a default-session-then-PATCH race before the first message.
 	PersonalInfoProtection *bool `json:"personal_info_protection,omitempty"`
@@ -531,6 +532,13 @@ func (s *Server) handleCreateSession(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// OCTO-FORK: persist the Web choice with creation, retaining other entry defaults.
+	mode, modeErr := webCreationPermission(req.PermissionMode)
+	if modeErr != nil {
+		writeError(w, http.StatusBadRequest, modeErr.Error())
+		return
+	}
+
 	model := s.model
 	modelConfig := ""
 	if req.Model != "" {
@@ -603,7 +611,7 @@ func (s *Server) handleCreateSession(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	sess.AgentID = agentProfile
-	_ = sess.SetPermissionMode(string(resolvePermissionMode()))
+	sess.SetPermissionModeValue(mode)
 	sess.Bind(agent.EntryWeb, false)
 	if req.Name != "" {
 		sess.Title = req.Name
@@ -1473,7 +1481,8 @@ func (s *Server) handleUpdateSessionModel(w http.ResponseWriter, r *http.Request
 	turnMu.Lock()
 	defer turnMu.Unlock()
 	if s.turnRunning[id] {
-		writeError(w, http.StatusConflict, "cannot change model while a turn is running")
+		// OCTO-FORK: reuse the existing localized busy message instead of raw English.
+		writeJSON(w, http.StatusConflict, map[string]string{"code": "SESSION_BUSY", "error": "cannot change model while a turn is running"})
 		return
 	}
 
@@ -1662,18 +1671,8 @@ func (s *Server) handleUpdateSessionPermissionMode(w http.ResponseWriter, r *htt
 		return
 	}
 
-	// OCTO-FORK: update the live session and gate as well as the persisted copy;
-	// otherwise a running turn keeps the old mode and may save it back at turn end.
-	s.sessionAgentsMu.Lock()
-	if live := s.liveSessions[id]; live != nil {
-		live.SetPermissionModeValue(mode)
-	}
-	if liveAgent := s.sessionAgents[id]; liveAgent != nil && liveAgent.Gate != nil {
-		if setter, ok := liveAgent.Gate.(interface{ SetMode(permission.Mode) }); ok {
-			setter.SetMode(permission.Mode(mode))
-		}
-	}
-	s.sessionAgentsMu.Unlock()
+	// OCTO-FORK: update the active gate and release this session's pending approval.
+	s.updateLivePermission(id, mode)
 
 	// Push the new mode so this session's composer pill refreshes without
 	// waiting for the next turn's session_update. Only this session — it's

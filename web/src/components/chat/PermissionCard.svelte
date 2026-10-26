@@ -1,74 +1,33 @@
 <script lang="ts">
   import { confirmModals, activeSessionId } from '../../lib/stores'
+  import { get } from 'svelte/store'
   import { ws } from '../../lib/ws'
   import { t } from '../../lib/i18n'
   import StatusTag from '../ui/StatusTag.svelte'
 
-  let modalEl = $state<HTMLDivElement | null>(null)
-
-  // Only the ACTIVE session's confirmation renders as a modal. Non-active
-  // session confirmations are stored in confirmModals but don't interrupt —
-  // the sidebar's pending_confirmation badge (via session_activity) alerts
-  // the user instead.
+  // OCTO-FORK: approval belongs to the active chat flow; it never steals focus.
   const current = $derived($activeSessionId ? $confirmModals[$activeSessionId] : undefined)
 
-  // Focus the modal whenever it (re)opens, same as AuthGate/CommandPalette —
-  // review caught that a window-level keydown listener without stealing
-  // focus leaves the chat composer's textarea focused underneath the
-  // backdrop. Enter there both sends the composer's draft AND (via bubbling)
-  // approved the pending tool call — approving blind again, just via
-  // keyboard instead of the backdrop click this fix closed off.
-  $effect(() => {
-    if (current && modalEl) modalEl.focus()
-  })
-
-  function clearCurrent() {
-    const sid = current?.sessionId
-    if (!sid) return
+  function isCurrent(request: NonNullable<typeof current>, element: HTMLElement) {
+    if (!request) return false
+    if (element.closest<HTMLElement>('[data-confirm-id]')?.dataset.confirmId !== request.id) return false
+    return get(activeSessionId) === request.sessionId && get(confirmModals)[request.sessionId]?.id === request.id
+  }
+  function clearCurrent(request: NonNullable<typeof current>) {
     confirmModals.update(m => {
-      const n = { ...m }
-      delete n[sid]
-      return n
+      if (m[request.sessionId]?.id !== request.id) return m
+      const next = { ...m }; delete next[request.sessionId]; return next
     })
   }
-
-  function deny() {
-    if (!current) return
-    ws.answerConfirmation(current.id, 'deny')
-    clearCurrent()
+  function answer(request: NonNullable<typeof current>, result: string, element: HTMLElement) {
+    if (!isCurrent(request, element)) return
+    ws.answerConfirmation(request.id, result)
+    clearCurrent(request)
   }
-
-  function answer(result: string) {
-    if (!current) return
-    ws.answerConfirmation(current.id, result)
-    clearCurrent()
-  }
-
-  // OCTO-FORK: stop the whole turn so queued parallel-agent approvals are
-  // cancelled together instead of forcing the user through them one by one.
-  function stopTask() {
-    if (!current) return
-    ws.interrupt(current.sessionId)
-    // Let the cancelled turn resolve the current confirmation. Sending a
-    // separate deny could race the interrupt and release the next queued ask.
-    clearCurrent()
-  }
-
-  // #1105: Esc / Enter, matching AuthGate / CommandPalette. Bound on the
-  // modal element itself (focused via the $effect above), not on
-  // svelte:window — a window-level listener fires *in addition to*
-  // whatever element already has focus, which was the composer textarea.
-  // Enter maps to the primary action — for a permission ask that's now
-  // "allow once" (the least-privilege choice), not "allow for session".
-  function onKeydown(e: KeyboardEvent) {
-    if (!current) return
-    if (e.key === 'Escape') {
-      e.preventDefault()
-      current.kind === 'ok' ? answer('ok') : deny()
-    } else if (e.key === 'Enter') {
-      e.preventDefault()
-      answer(current.kind === 'ok' ? 'ok' : 'yes')
-    }
+  function stopTask(request: NonNullable<typeof current>, element: HTMLElement) {
+    if (!isCurrent(request, element)) return
+    ws.interrupt(request.sessionId)
+    clearCurrent(request)
   }
 
   // #1105: diff line classification, same rule ToolGroup.svelte uses for
@@ -83,11 +42,8 @@
 </script>
 
 {#if current}
-<!-- #1105: backdrop no longer denies on click — a stray click used to
-     silently cancel the pending tool call mid-turn. Dismissal now requires
-     an explicit button or Esc. -->
-<div class="backdrop" role="presentation">
-  <div class="modal" role="dialog" aria-modal="true" tabindex="-1" bind:this={modalEl} onkeydown={onKeydown}>
+{@const request = current}
+<section data-confirm-id={request.id} class="approval-card" aria-label={$t('perm.title')}>
     <div class="modal-header">
       <iconify-icon icon="ant-design:safety-outlined" width="16" style="color:var(--warning);flex-shrink:0"></iconify-icon>
       <span class="modal-title">{$t('perm.title')}</span>
@@ -117,59 +73,42 @@
 
     <div class="modal-footer">
       {#if current.kind === 'ok'}
-        <button class="btn-stop" onclick={stopTask}>{$t('perm.stop_task')}</button>
+        <button class="btn-stop" onclick={(event) => stopTask(request, event.currentTarget)}>{$t('perm.stop_task')}</button>
         <span class="spacer"></span>
-        <button class="btn-primary" onclick={() => answer('ok')}>{$t('common.ok')}</button>
+        <button class="btn-primary" onclick={(event) => answer(request, 'ok', event.currentTarget)}>{$t('common.ok')}</button>
       {:else}
-        <button class="btn-deny" onclick={deny}>
+        <button class="btn-deny" onclick={(event) => answer(request, 'deny', event.currentTarget)}>
           <iconify-icon icon="ant-design:close-outlined" width="12"></iconify-icon>
           {$t('perm.deny')}
         </button>
-        <button class="btn-stop" onclick={stopTask}>{$t('perm.stop_task')}</button>
+        <button class="btn-stop" onclick={(event) => stopTask(request, event.currentTarget)}>{$t('perm.stop_task')}</button>
         <span class="spacer"></span>
         <!-- Result strings are the wire contract with the server's mapConfirmResult:
-             'yes' = allow once, 'always' = allow + remember for the session.
+             'yes' = allow once, 'always' = allow + remember this command/file signature for the session.
              Anything else (incl. 'deny') denies. Don't rename without updating the server.
              #1105: "allow once" is now the primary (blue) button — the most
              prominent action should be the least permissive one, not
              "allow for session". -->
-        <button class="btn-primary" onclick={() => answer('yes')}>
+        <button class="btn-primary" onclick={(event) => answer(request, 'yes', event.currentTarget)}>
           <iconify-icon icon="ant-design:check-outlined" width="12"></iconify-icon>
           {$t('perm.allow_once')}
         </button>
-        <button class="btn-secondary" onclick={() => answer('always')}>{$t('perm.allow_session')}</button>
+        <button class="btn-secondary" onclick={(event) => answer(request, 'always', event.currentTarget)}>{$t('perm.allow_session')}</button>
       {/if}
     </div>
-  </div>
-</div>
+</section>
 {/if}
 
 <style>
-.backdrop {
-  position: fixed; inset: 0; z-index: 1100;
-  background: var(--scrim);
-  display: flex; align-items: center; justify-content: center;
-  padding: 24px;
-}
-.modal {
-  width: 100%; max-width: 480px;
-  /* #2103: --warning-bg is a translucent tint meant for badges and notices
-     that already sit on an opaque surface. As a floating panel's background
-     it left the whole dialog at 16% opacity, so the chat behind it bled
-     through the very content being approved. Layer the tint over an opaque
-     surface instead — same warm colour, nothing shows through. */
+.approval-card {
+  margin: 12px 0;
   background: linear-gradient(var(--warning-bg), var(--warning-bg)), var(--bg-container);
   border: 1px solid var(--warning-border);
   border-radius: 12px;
   overflow: hidden;
-  box-shadow: 0 16px 48px rgba(0,0,0,0.18);
-  animation: octo-fadein 0.16s ease;
 }
-/* The modal itself is the focus target (see the $effect above) so Enter/Esc
-   don't leak to whatever was focused underneath (e.g. the chat composer). */
-.modal:focus { outline: none; }
 .modal-header {
-  display: flex; align-items: center; gap: 8px;
+  display: flex; flex-wrap: wrap; align-items: center; gap: 8px;
   padding: 12px 18px;
   border-bottom: 1px solid var(--warning-border);
 }
@@ -221,7 +160,7 @@
 .modal-footer {
   padding: 12px 18px;
   border-top: 1px solid var(--warning-border);
-  display: flex; align-items: center; gap: 8px;
+  display: flex; flex-wrap: wrap; align-items: center; gap: 8px;
 }
 .spacer { flex: 1; }
 .btn-deny {

@@ -3,6 +3,8 @@ package tools
 import (
 	"context"
 	"sync/atomic"
+
+	"github.com/open-octo/octo-agent/internal/agent"
 )
 
 // modelVision gates whether tools hand the model image content when no
@@ -77,5 +79,13 @@ func ImageDescriberActive(ctx context.Context) bool {
 // ImagesAllowed reports whether a tool may return an image block: either the
 // model reads images itself, or a vision helper will translate them.
 func ImagesAllowed(ctx context.Context) bool {
-	return ModelVisionEnabled(ctx) || ImageDescriberActive(ctx)
+	return imageInputQualification(ctx).Allowed
+}
+
+func imageInputQualification(ctx context.Context) agent.ImageInputStatus {
+	// OCTO-FORK: a signed request combination overrides local name heuristics.
+	if status := agent.ImageInputForContext(ctx); status.Known {
+		return status
+	}
+	return agent.ImageInputStatus{Allowed: ModelVisionEnabled(ctx) || ImageDescriberActive(ctx)}
 }

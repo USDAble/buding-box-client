@@ -1,5 +1,5 @@
 import type { Session, SessionGroup, Skill, Workflow, ScheduledTask, McpServer, McpServerDetail, Channel, Memory, RecallFile, TagStatus, GitDiffResponse, GitDiffSummaryResponse, GitDiffFile, ProtectionPolicy } from './types'
-import { windowToken, WINDOW_TOKEN_HEADER, productPhase, noteSessionLost } from './product'
+import { windowToken, WINDOW_TOKEN_HEADER, productPhase, noteSessionLost, productSessionGeneration } from './product'
 import { platformErrorText, tr } from './i18n'
 
 // TaskResponse matches the Go server task struct.
@@ -64,11 +64,14 @@ export class RequestError extends Error {
 }
 
 export async function request<T>(path: string, init?: RequestInit): Promise<T> {
+	// OCTO-FORK: stale account responses must not overwrite or log out a new login.
+	const session = productSessionGeneration()
   // OCTO-FORK: stamp every call with the adopted window token so the server's
   // product gate can tell this window from other loopback peers. A plain
   // browser has no token, so this is a no-op under `octo serve` — see
   // the product access-control boundary.
   const res = await fetch(path, { ...init, headers: withWindowToken(init?.headers) })
+  if (session !== productSessionGeneration()) throw new Error('request superseded by account change')
   if (!res.ok) {
     // Read the error body once. A product_gate refusal names the local window
     // identity, not an expired account session; retain the existing blocked route.
@@ -79,8 +82,8 @@ export async function request<T>(path: string, init?: RequestInit): Promise<T> {
     let serverMessage: string | null = null
     try {
       const body = await res.json()
+      if (session !== productSessionGeneration()) throw new Error('request superseded by account change')
       if (res.status === 403 && body?.error === 'product_gate') {
-        productPhase.set('blocked')
         // OCTO-FORK: settings/model/skill calls must not display a raw gate identifier.
         code = 'product_gate'
       }
@@ -100,12 +103,16 @@ export async function request<T>(path: string, init?: RequestInit): Promise<T> {
     // session is gone, so the UI goes back to the login page rather than
     // reporting an error the user cannot act on (需求基线 E12, P4-拦截页 §4).
     // Same rule as the product calls; noteSessionLost owns it (V-21).
+    if (session !== productSessionGeneration()) throw new Error('request superseded by account change')
+    if (code === 'product_gate') productPhase.set('blocked')
     noteSessionLost(res.status)
     // OCTO-FORK: the translated code is user-facing; keep raw server copy for diagnostics.
     if (code) message = platformErrorText(code)
     throw new RequestError(message, code, field, word, serverMessage)
   }
-  return res.json() as Promise<T>
+  const data = await res.json() as T
+  if (session !== productSessionGeneration()) throw new Error('request superseded by account change')
+  return data
 }
 
 // OCTO-FORK: withWindowToken returns the given headers with the window token
@@ -158,7 +165,11 @@ export async function listSessions(): Promise<SessionsResponse> {
   return request<SessionsResponse>('/api/sessions')
 }
 
+// OCTO-FORK: only new Web/Desktop chats default to auto; other entrypoints keep their defaults.
+export const DEFAULT_WEB_PERMISSION_MODE = 'auto'
+
 export interface CreateSessionOpts {
+  permission_mode?: string
   name?: string
   model?: string
   source?: string
@@ -176,7 +187,7 @@ export interface CreateSessionOpts {
 export async function createSession(opts: CreateSessionOpts): Promise<Session> {
   // The create endpoint wraps the record as { session: {...} }; unwrap so
   // callers get a Session with a usable .id (sidebar push + activeSessionId).
-  const d = await request<{ session?: Session } & Session>('/api/sessions', { method: 'POST', ...json(opts) })
+  const d = await request<{ session?: Session } & Session>('/api/sessions', { method: 'POST', ...json({ ...opts, permission_mode: opts.permission_mode || DEFAULT_WEB_PERMISSION_MODE }) })
   return (d.session ?? d) as Session
 }
 

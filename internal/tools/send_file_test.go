@@ -9,6 +9,7 @@ import (
 	"testing"
 )
 
+// OCTO-FORK: verify file delivery honors the bound chat and explicit desktop target.
 // fakeSender records the last SendFile call and can be made to fail.
 type fakeSender struct {
 	gotPath string
@@ -219,8 +220,8 @@ func TestSendFileTool_CrossChatAmbiguousLists(t *testing.T) {
 	}
 }
 
-// Web turn (messenger, no ctx sender) with no target → lists reachable chats.
-func TestSendFileTool_WebNoTargetLists(t *testing.T) {
+// A desktop deliverable must not trigger recipient discovery or an IM upload.
+func TestSendFileTool_WebNoTargetRequiresExplicitIMRecipient(t *testing.T) {
 	dir := t.TempDir()
 	p := filepath.Join(dir, "a.png")
 	if err := os.WriteFile(p, []byte("x"), 0o600); err != nil {
@@ -231,14 +232,39 @@ func TestSendFileTool_WebNoTargetLists(t *testing.T) {
 	defer SetMessenger(nil)
 
 	out, err := SendFileTool{}.Execute(context.Background(), "send_file", map[string]any{"path": p})
-	if err != nil {
-		t.Fatalf("unexpected err: %v", err)
+	if err == nil || !strings.Contains(err.Error(), "show_artifact") {
+		t.Fatalf("expected desktop delivery guidance, got %v", err)
 	}
 	if len(fm.sentFiles) != 0 {
 		t.Fatal("must not send without a target")
 	}
-	if !strings.Contains(out.Text, "telegram") || !strings.Contains(out.Text, "42") {
-		t.Fatalf("expected discovery listing, got %q", out.Text)
+	if strings.Contains(out.Text, "telegram") || strings.Contains(out.Text, "42") {
+		t.Fatalf("desktop delivery unexpectedly disclosed recipient choices: %q", out.Text)
+	}
+}
+
+func TestSendFileTool_DefinitionUsesActualTurnRecipient(t *testing.T) {
+	SetMessenger(nil)
+	t.Cleanup(func() { SetMessenger(nil) })
+	find := func(ctx context.Context) ([]string, bool) {
+		for _, def := range DefaultToolsForCtx(ctx, "") {
+			if def.Name == "send_file" {
+				return def.Parameters["required"].([]string), true
+			}
+		}
+		return nil, false
+	}
+	if _, found := find(context.Background()); found {
+		t.Fatal("no IM delivery transport should advertise send_file")
+	}
+	required, found := find(WithChannelSender(context.Background(), &fakeSender{}))
+	if !found || len(required) != 1 || required[0] != "path" {
+		t.Fatalf("bound IM must permit current-chat attachment without global messenger: %v %v", required, found)
+	}
+	SetMessenger(&fakeMessenger{})
+	required, found = find(context.Background())
+	if !found || len(required) != 2 || required[1] != "platform" {
+		t.Fatalf("desktop must retain explicit cross-chat delivery and require a platform: %v %v", required, found)
 	}
 }
 

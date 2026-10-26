@@ -494,6 +494,9 @@
               {/if}
             </div>
             {#if meta && !fErr && !tErr}<div class="tool-submeta">{meta}</div>{/if}
+            {#if tool.phase === 'finished' && typeof tool.executionMs === 'number'}
+              <div class="tool-submeta">{$t('tools.phase_times').replace('{approval}', ((tool.approvalMs ?? 0) / 1000).toFixed(1)).replace('{queue}', ((tool.queueMs ?? 0) / 1000).toFixed(1)).replace('{execution}', (tool.executionMs / 1000).toFixed(1))}</div>
+            {/if}
           </div>
           <span class="tool-status">
             {#if tool.error}
@@ -519,7 +522,7 @@
             {:else}
               <span class="st run">
                 <iconify-icon icon="ant-design:loading-outlined" width="13" style="animation:octo-spin 0.8s linear infinite"></iconify-icon>
-                {$t('tools.running')}
+                {$t(tool.phase === 'approval' ? 'perm.awaiting' : tool.phase === 'queued' ? 'tools.queued' : 'tools.running')}
                 {#if tool.name === 'terminal' || tool.name === 'bash'}
                   <button class="promote-btn" onclick={(e) => { e.preventDefault(); e.stopPropagation(); promoteTerminal() }}>
                     {$t('tools.background')}

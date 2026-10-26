@@ -118,6 +118,12 @@ type Runtime struct {
 	// atomic because the field is read and written by request handlers, and the
 	// critical section has no I/O in it.
 	catalogMu sync.Mutex
+	// OCTO-FORK: catalog refreshes share work, never credentials across sessions.
+	catalogFlight          *catalogRefresh
+	catalogSession         uint64
+	catalogSessionVerified bool
+	catalogOutcomeSession  uint64
+	catalogRetryAfter      time.Time
 	// lastCatalogOutcome is the verdict of the most recent refresh. It has to
 	// live in memory: the cache records what was ACCEPTED and never what was
 	// refused, so "the platform offered us something we could not verify" is
@@ -134,6 +140,8 @@ func New(deps Deps) *Runtime {
 	if deps.SendCodeCooldownSec <= 0 {
 		deps.SendCodeCooldownSec = defaultCooldownSec
 	}
+	// Disk snapshots have no account binding. Only a verified response fetched
+	// for this process's current login can make the catalog usable.
 	return &Runtime{deps: deps}
 }
 
@@ -340,7 +348,13 @@ type controlPlaneDTO struct {
 // The read performs B3's on-demand refresh, so opening the picker is what renews
 // a lapsed catalog; refreshCatalogOnDemand owns how often that can happen.
 func (rt *Runtime) handleCatalog(w http.ResponseWriter, r *http.Request) {
-	availability, err := rt.refreshCatalogOnDemand(r.Context())
+	// OCTO-FORK: picker revalidation shares the catalog owner and never blocks
+	// the separately served, already verified model projection.
+	refresh := rt.refreshCatalogOnDemand
+	if r.URL.Query().Get("revalidate") == "1" {
+		refresh = rt.refreshCatalogForPicker
+	}
+	availability, err := refresh(r.Context())
 	if IsSessionExpired(err) {
 		// OCTO-FORK: a refused refresh token is not a stale catalog. Returning
 		// the normal authorization result lets productFetch move the UI back to

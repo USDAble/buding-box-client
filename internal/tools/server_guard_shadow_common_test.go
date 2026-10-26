@@ -11,7 +11,8 @@ import (
 // command failure). Shared by the POSIX and Windows shadow tests.
 func runGuardedCommand(t *testing.T, command string) (string, error) {
 	t.Helper()
-	cmd, err := shellCommand(context.Background(), command)
+	// OCTO-FORK: shell tests must never commit staged files from the contributor's checkout.
+	cmd, err := shellCommand(WithWorkingDir(context.Background(), t.TempDir()), command)
 	if err != nil {
 		t.Fatalf("shellCommand(%q) failed to build: %v", command, err)
 	}

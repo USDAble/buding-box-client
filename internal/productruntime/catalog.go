@@ -2,6 +2,7 @@
 package productruntime
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
@@ -154,9 +155,11 @@ func catalogProjectionFailureState() string { return string(catalogStateUnverifi
 
 // recordCatalogOutcome remembers the last refresh verdict.
 func (rt *Runtime) recordCatalogOutcome(outcome catalogOutcome) {
+	generation := rt.catalogGeneration()
 	rt.catalogMu.Lock()
 	defer rt.catalogMu.Unlock()
 	rt.lastCatalogOutcome = outcome
+	rt.catalogOutcomeSession = generation
 }
 
 // lastOutcome reads the most recent verdict.
@@ -170,6 +173,18 @@ func (rt *Runtime) lastOutcome() catalogOutcome {
 // the last refresh verdict. It is a read: no network, no disk, no lock held
 // across the load beyond the store's own.
 func (rt *Runtime) currentCatalogAvailability() catalogAvailability {
+	// OCTO-FORK: a box-filtered directory must be revalidated after login/logout.
+	generation := rt.catalogGeneration()
+	rt.catalogMu.Lock()
+	currentSession := rt.catalogSessionVerified && rt.catalogSession == generation
+	verificationFailed := rt.catalogOutcomeSession == generation && rt.lastCatalogOutcome == catalogVerification
+	rt.catalogMu.Unlock()
+	if !currentSession && verificationFailed {
+		return catalogAvailability{State: catalogStateUnverifiable, Retryable: false}
+	}
+	if !currentSession {
+		return catalogAvailability{State: catalogStateAbsent, Retryable: true}
+	}
 	var entry catalogstore.Entry
 	have := false
 	if rt.deps.Catalog != nil {
@@ -195,11 +210,20 @@ func (rt *Runtime) currentCatalogAvailability() catalogAvailability {
 // two rules that matter are both visible here: opening the picker cannot become a
 // retry loop, and a failed verification cannot be retried by looking at it.
 func (rt *Runtime) refreshCatalogOnDemand(ctx context.Context) (catalogAvailability, error) {
+	if err := ctx.Err(); err != nil {
+		return rt.currentCatalogAvailability(), err
+	}
 	before := rt.currentCatalogAvailability()
+	if before.ready() {
+		// A usable verified cache never waits for renewal. Request a new signed
+		// lease shortly before expiry; a 304 cannot extend that lease.
+		rt.startCatalogRefresh(false, true, true)
+		return before, nil
+	}
 	if !before.needsRefresh() {
 		return before, nil
 	}
-	if _, err := rt.refreshCatalog(ctx, false); err != nil {
+	if _, err := waitCatalogRefresh(ctx, rt.startCatalogRefresh(false, true, false)); err != nil {
 		// Reported, not returned: the state below is the answer to the question
 		// the caller asked ("can I use a catalog"), and it already carries the
 		// refusal. Returning an HTTP error instead would make the frontend
@@ -209,6 +233,16 @@ func (rt *Runtime) refreshCatalogOnDemand(ctx context.Context) (catalogAvailabil
 		return rt.currentCatalogAvailability(), err
 	}
 	return rt.currentCatalogAvailability(), nil
+}
+
+func (rt *Runtime) refreshCatalogForInitialization(ctx context.Context) (catalogAvailability, error) {
+	// Explicit initialization can recover after the platform fixes signing;
+	// opening the picker must not automatically retry a verification failure.
+	if rt.currentCatalogAvailability().State == catalogStateUnverifiable {
+		_, err := rt.refreshCatalog(ctx, true)
+		return rt.currentCatalogAvailability(), err
+	}
+	return rt.refreshCatalogOnDemand(ctx)
 }
 
 // catalogAvailabilityDTO is the wire shape of 本地API契约 §2.14.
@@ -260,6 +294,10 @@ func (a catalogAvailability) toDTO() catalogAvailabilityDTO {
 // outcome except catalogReady, so a caller that logs only errors still sees a
 // refusal.
 func (rt *Runtime) fetchCatalog(ctx context.Context, knownVersion string) (catalogOutcome, error) {
+	return rt.fetchCatalogForSession(ctx, knownVersion, rt.catalogGeneration())
+}
+
+func (rt *Runtime) fetchCatalogForSession(ctx context.Context, knownVersion string, generation uint64) (catalogOutcome, error) {
 	store := rt.deps.Catalog
 	if store == nil {
 		// Nowhere to keep it. Fetching anyway would be a network call whose
@@ -280,6 +318,9 @@ func (rt *Runtime) fetchCatalog(ctx context.Context, knownVersion string) (catal
 		return catalogTransport, err
 	}
 	if unchanged {
+		if knownVersion == "" {
+			return catalogVerification, errors.New("productruntime: initial catalog request returned no verified snapshot")
+		}
 		// B3's acceptance ("同一份缓存收到 304 后文件 mtime 不变") is a disk
 		// assertion, so the skip has to happen here rather than in the store: a
 		// Put of an identical version is already a no-op, but reaching it would
@@ -318,13 +359,45 @@ func (rt *Runtime) fetchCatalog(ctx context.Context, knownVersion string) (catal
 		return catalogVerification, err
 	}
 
-	err = store.Put(catalogstore.Entry{
-		CatalogVersion: policy.Catalog.Version,
-		FetchedAt:      time.Now().UTC(),
-		ExpiresAt:      expiresAt,
-		KeyID:          envelope.Signature.KeyID,
-		Audience:       policy.Audience,
-		Envelope:       envelope,
+	err = rt.deps.Platform.WithSession(generation, func() error {
+		if err := store.Put(catalogstore.Entry{
+			CatalogVersion: policy.Catalog.Version,
+			FetchedAt:      time.Now().UTC(),
+			ExpiresAt:      expiresAt,
+			KeyID:          envelope.Signature.KeyID,
+			Audience:       policy.Audience,
+			Envelope:       envelope,
+		}); err != nil {
+			return err
+		}
+		rt.catalogMu.Lock()
+		changed := !rt.catalogSessionVerified || rt.catalogSession != generation
+		rt.catalogMu.Unlock()
+		stored, err := store.Load()
+		if err != nil {
+			return err
+		}
+		storedPolicy, err := stored.Envelope.Verify(productclient.VerifyOptions{TrustedKeys: trust.TrustedKeys, Audience: trust.Audience, Now: time.Now(), Skew: trust.Skew})
+		if err != nil {
+			return err
+		}
+		limit, err := catalogExpiry(storedPolicy, time.Now())
+		if err != nil {
+			return err
+		}
+		// Equal-version Put can be a no-op. Never trust disk metadata that gives
+		// those retained signed bytes a longer lifetime than the signer allowed.
+		if stored.ExpiresAt.IsZero() || stored.ExpiresAt.After(limit) || stored.CatalogVersion != storedPolicy.Catalog.Version {
+			return errors.New("productruntime: cached catalog metadata exceeds its signed lease")
+		}
+		if changed {
+			// The store's same-version no-op must not approve another account's
+			// old snapshot. Preserve rollback protection and require a new version.
+			if !bytes.Equal(stored.Envelope.Policy, envelope.Policy) {
+				return errors.New("productruntime: new session catalog did not replace the previous signed snapshot")
+			}
+		}
+		return nil
 	})
 	switch {
 	case err == nil:
@@ -374,26 +447,10 @@ func (rt *Runtime) obtainCatalogEnvelope(ctx context.Context, knownVersion strin
 // most recent verdict and no store can answer it: the cache records what was
 // ACCEPTED, never what was refused (PR-4c 缺口 ①).
 func (rt *Runtime) refreshCatalog(ctx context.Context, force bool) (catalogOutcome, error) {
-	known := ""
-	if !force {
-		// A cache that will not load has no version to offer, which is the same
-		// request as having none at all. A nil store is that case too: this
-		// method is also reached from the endpoint, which must answer with the
-		// absent state rather than panic when the build has nowhere to keep a
-		// catalog.
-		// OCTO-FORK: an expired local lease has no safe knownVersion. Asking
-		// conditionally would accept a 304 with no replacement signature and
-		// leave the picker unable to recover from its own stale cache.
-		if rt.deps.Catalog != nil {
-			if entry, err := rt.deps.Catalog.Load(); err == nil &&
-				(entry.ExpiresAt.IsZero() || time.Now().Before(entry.ExpiresAt)) {
-				known = entry.CatalogVersion
-			}
-		}
+	if err := ctx.Err(); err != nil {
+		return catalogTransport, err
 	}
-	outcome, err := rt.fetchCatalog(ctx, known)
-	rt.recordCatalogOutcome(outcome)
-	return outcome, err
+	return waitCatalogRefresh(ctx, rt.startCatalogRefresh(force, false, false))
 }
 
 // catalogExpiry takes the earlier of the two clocks a catalog has to satisfy
@@ -470,14 +527,15 @@ type catalogVendor struct {
 // boundary. Current is false when the signed cache is expired or a later
 // verification failed; Selectable and Confidential describe this exact model.
 type CatalogModelEligibility struct {
-	AvailabilityReason   string
-	ReasoningOptions     []string
-	Selectable           bool
-	Confidential         bool
-	ConfidentialPriority *int
-	CatalogVersion       string
-	Current              bool
-	SourceOrder          int
+	CapabilityCombinations []productclient.CapabilityCombination
+	AvailabilityReason     string
+	ReasoningOptions       []string
+	Selectable             bool
+	Confidential           bool
+	ConfidentialPriority   *int
+	CatalogVersion         string
+	Current                bool
+	SourceOrder            int
 }
 
 // projectCatalog is the sole projection of the signed vendor/model contract.
@@ -531,13 +589,14 @@ func catalogEligibility(policy productclient.Policy, id string) (CatalogModelEli
 			continue
 		}
 		return CatalogModelEligibility{
-			AvailabilityReason:   catalogIneligibleReason(model.Eligible, model.AvailabilityReason),
-			ReasoningOptions:     reasoningOptions(model.ReasoningOptions),
-			Selectable:           model.Eligible,
-			Confidential:         model.Eligible && model.Confidential,
-			ConfidentialPriority: model.ConfidentialPriority,
-			CatalogVersion:       policy.Catalog.Version,
-			SourceOrder:          sourceOrder,
+			CapabilityCombinations: append([]productclient.CapabilityCombination(nil), model.CapabilityCombinations...),
+			AvailabilityReason:     catalogIneligibleReason(model.Eligible, model.AvailabilityReason),
+			ReasoningOptions:       reasoningOptions(model.ReasoningOptions),
+			Selectable:             model.Eligible,
+			Confidential:           model.Eligible && model.Confidential,
+			ConfidentialPriority:   model.ConfidentialPriority,
+			CatalogVersion:         policy.Catalog.Version,
+			SourceOrder:            sourceOrder,
 		}, true
 	}
 	return CatalogModelEligibility{CatalogVersion: policy.Catalog.Version}, true

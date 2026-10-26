@@ -6,6 +6,33 @@ import { allowEnvironmentModelSource, catalogState } from './product'
 import { selectableModels } from './selectableModels'
 import { chatModel, sessions } from './stores'
 
+// OCTO-FORK: signed reason codes carry operational meaning, while the client
+// owns concise localized wording and never infers a supplier from model names.
+export function modelUnavailableKeys(reason?: string): [string, string] {
+  switch (reason) {
+    case 'pricing_not_configured':
+    case 'price_missing': return ['model.pricing_not_configured', 'model.check_pricing']
+    case 'supplier_disabled': return ['model.supplier_disabled', 'model.check_supply']
+    case 'channel_disabled': return ['model.channel_disabled', 'model.check_supply']
+    case 'route_disabled':
+    case 'weight_zero': return ['model.route_disabled', 'model.check_supply']
+    case 'account_disabled':
+    case 'missing_key':
+    case 'account_unhealthy':
+    case 'account_cooldown': return ['model.account_unavailable', 'model.check_account']
+    case 'test_required': return ['model.verification_required', 'model.check_verification']
+    case 'capability_not_verified':
+    case 'capability_unverified': return ['model.capability_unverified', 'model.check_verification']
+    case 'capability_unsupported': return ['model.capability_unsupported', 'model.check_capability']
+    case 'model_unpublished': return ['model.unpublished', 'model.choose_other']
+    case 'capacity_full': return ['model.busy', 'model.retry_later']
+    case 'upstream_missing':
+    case 'endpoint_missing':
+    case 'no_available_source': return ['model.no_available_source', 'model.check_supply']
+    default: return ['model.unavailable', 'model.check_supply']
+  }
+}
+
 export function canStartTurn(sid?: string | null): boolean {
   const catalogModels = get(selectableModels).filter(model => model.source === 'catalog')
   if (get(allowEnvironmentModelSource) === false) {

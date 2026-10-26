@@ -1,7 +1,8 @@
 import { beforeEach, describe, expect, it } from 'vitest'
 import { get } from 'svelte/store'
 import { allowEnvironmentModelSource, catalogState } from './product'
-import { canStartTurn, catalogNoticeKey, sessionCatalogModelWithdrawn } from './modelAvailability'
+import { canStartTurn, catalogNoticeKey, sessionCatalogModelWithdrawn, modelUnavailableKeys } from './modelAvailability'
+import { locale, tr } from './i18n'
 import { selectableModels, type SelectableModel } from './selectableModels'
 import { chatModel, sessions } from './stores'
 import type { Session } from './types'
@@ -82,5 +83,42 @@ describe('developer model availability', () => {
     catalogState.set('absent')
     selectableModels.set([])
     expect(canStartTurn()).toBe(true)
+  })
+})
+
+// OCTO-FORK: a signed operational reason must be understandable and actionable,
+// including older reason codes and future codes from newer platform versions.
+describe('model unavailability wording', () => {
+  it.each([
+    ['supplier_disabled', 'model.supplier_disabled'],
+    ['channel_disabled', 'model.channel_disabled'],
+    ['account_disabled', 'model.account_unavailable'],
+    ['missing_key', 'model.account_unavailable'],
+    ['account_unhealthy', 'model.account_unavailable'],
+    ['account_cooldown', 'model.account_unavailable'],
+    ['route_disabled', 'model.route_disabled'],
+    ['weight_zero', 'model.route_disabled'],
+    ['test_required', 'model.verification_required'],
+    ['capability_not_verified', 'model.capability_unverified'],
+    ['capability_unverified', 'model.capability_unverified'],
+    ['capability_unsupported', 'model.capability_unsupported'],
+    ['model_unpublished', 'model.unpublished'],
+    ['upstream_missing', 'model.no_available_source'],
+    ['endpoint_missing', 'model.no_available_source'],
+    ['no_available_source', 'model.no_available_source'],
+    ['pricing_not_configured', 'model.pricing_not_configured'],
+    ['price_missing', 'model.pricing_not_configured'],
+    ['capacity_full', 'model.busy'],
+    ['new_reason_from_platform', 'model.unavailable'],
+  ])('localizes %s with a next step', (reason, expected) => {
+    const keys = modelUnavailableKeys(reason)
+    expect(keys[0]).toBe(expected)
+    for (const language of ['en', 'zh', 'zh-Hant'] as const) {
+      locale.set(language)
+      for (const key of keys) {
+        expect(tr(key)).not.toBe(key)
+        expect(tr(key)).not.toBe('')
+      }
+    }
   })
 })

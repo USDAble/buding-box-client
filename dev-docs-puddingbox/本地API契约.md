@@ -162,7 +162,7 @@
 {"state":"ready|absent|stale|unverifiable","retryable":<bool>,"catalogVersion":"...","expiresAt":"<RFC3339 或空串>"}
 ```
 
-目录状态由本地运行时单点判定：`ready` 为有效缓存，`absent` 为没有缓存，`stale` 为缓存过期且刷新失败，`unverifiable` 为验签失败。模型选择器首次挂载和每次打开前调用本接口；`ready` 只返回已有状态，`absent` 与 `stale` 可触发一次条件刷新，随后选择器再读取缓存投影 `/api/product/models`。`unverifiable` 不可由用户重试恢复，因此 `retryable:false`；前端只映射状态到文案，不能重新推断状态或自行请求中台。
+目录状态由本地运行时单点判定：`ready` 为有效缓存，`absent` 为没有缓存，`stale` 为缓存过期且刷新失败，`unverifiable` 为验签失败。首次挂载通过本接口处理缺失或过期目录，再读取缓存投影 `/api/product/models`。打开选择器时先展示仍有效的投影，再调用 `GET /api/product/catalog?revalidate=1` 有界检查后台状态，完成后重读投影。该可选参数复用现有 Runtime 刷新任务与 5 秒间隔，缓存仍有效且不临近到期时使用条件请求；304 不延长签名租期。缺失或过期目录等待新签名，`unverifiable` 不自动重试且 `retryable:false`；前端只映射状态到文案，不能重新推断状态或自行请求中台。
 
 `GET /api/product/credits` 从中台账本刷新余额、写入状态投影并返回 `{"state": ProductStateDTO}`。登录和 WebSocket 只可触发这条刷新路径，不能成为余额的第二个写入来源。会话失效清凭证并回产品门；其他平台失败不覆盖已有余额。
 

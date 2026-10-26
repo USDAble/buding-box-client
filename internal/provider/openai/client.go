@@ -119,6 +119,10 @@ type Client struct {
 	// uses the default; a negative value disables the idle guard entirely.
 	StreamIdleTimeout time.Duration
 
+	// OCTO-FORK: bound handshake and terminal-tail waits separately from generation.
+	StreamHeaderTimeout time.Duration // zero uses 60s; negative disables
+	StreamTailTimeout   time.Duration // zero uses 5s; negative disables
+
 	// Dialect selects vendor-specific request quirks within the OpenAI protocol.
 	// Empty (the default) is generic OpenAI-compatible. See applyReasoning for
 	// what each DialectXxx constant changes. Set at construction (see

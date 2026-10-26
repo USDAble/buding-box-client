@@ -714,7 +714,12 @@ func (BrowserTool) Execute(ctx context.Context, _ string, input map[string]any) 
 			return agent.ToolResult{}, err
 		}
 		path := saveScreenshot(shot)
-		if !ImagesAllowed(ctx) {
+		// OCTO-FORK: preserve the screenshot, distinguishing unverified combinations.
+		qualification := imageInputQualification(ctx)
+		if !qualification.Allowed && qualification.Known {
+			return agent.ToolResult{Text: "screenshot saved to " + path + "; visual inspection was not performed: " + qualification.Reason + ". The image/tool combination is not verified at the selected reasoning level; do not claim the screenshot was viewed."}, nil
+		}
+		if !qualification.Allowed {
 			// Text-only model with no vision helper: handing it an image block
 			// would be rejected by the endpoint. Return the path and steer the
 			// model to the text channels.

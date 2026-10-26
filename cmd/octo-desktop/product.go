@@ -211,7 +211,8 @@ func mountProductAPI() (mount func(api func(pattern string, h http.HandlerFunc))
 	// launch a token the platform has already rotated away.
 	// OCTO-FORK: resolve the selected model's preference at turn time.
 	// OCTO-FORK: background and scheduled model requests renew rejected tokens without a UI retry.
-	gateway := productruntime.GatewayEndpoint{Host: profile.GatewayHost, Tokens: tokens, Ensure: renew.Ensure, Renew: renew.Renew, ReasoningForModel: rt.ModelReasoning, ValidateReasoning: rt.ValidateModelReasoning}
+	// OCTO-FORK: image tools and paid requests share signed combination evidence.
+	gateway := productruntime.GatewayEndpoint{Host: profile.GatewayHost, Tokens: tokens, Ensure: renew.Ensure, Renew: renew.Renew, ReasoningForModel: rt.ModelReasoning, ValidateReasoning: rt.ValidateModelReasoning, ImageInputStatus: rt.ModelImageInputStatus}
 
 	catalogModel = func(id string) (server.CatalogModelStatus, bool) {
 		// OCTO-FORK: renew the short-lived signed catalog before judging a turn.

@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { flushSync, mount, unmount } from 'svelte'
 import { get } from 'svelte/store'
 import { locale } from '../../lib/i18n'
-import { allowEnvironmentModelSource, productState } from '../../lib/product'
+import { allowEnvironmentModelSource, productState, catalogState, adoptWindowToken, productPhase } from '../../lib/product'
 import {
   activeSessionId, activeAgent, pendingAgent, chatMessages, chatModel,
   pendingConfidentialSession,
@@ -34,6 +34,8 @@ import { selectableModels } from '../../lib/selectableModels'
 // production code.
 
 vi.mock('../../lib/api', () => ({
+  DEFAULT_WEB_PERMISSION_MODE: 'auto',
+  updateSessionPermissionMode: vi.fn(async () => ({})),
   listEndpoints: vi.fn(async () => ({ endpoints: [] })),
   listSkills: vi.fn(async () => []),
   listAgents: vi.fn(async () => []),
@@ -135,6 +137,114 @@ beforeEach(() => {
   selectableModels.set([])
   target = document.createElement('div')
   document.body.appendChild(target)
+})
+
+// OCTO-FORK: the open picker follows signed eligibility without exposing
+// unavailable choices or accepting a late response from a previous account.
+describe('picker supply status revalidation', () => {
+  it.each([false, true])('shows cached choices before checking supply, guarding account changes: %s', async accountChanged => {
+    activeSessionId.set(null); allowEnvironmentModelSource.set(false); setBalance(1)
+    catalogState.set('ready')
+    const catalog = { state: 'ready' as const, catalogVersion: 'old', defaultModelId: 'gateway::model', vendors: [{ id: 'gateway', displayName: 'Gateway', models: [
+      { id: 'model', displayName: 'Model', compositeId: 'gateway::model', confidential: false, eligible: false, availabilityReason: 'capability_not_verified' },
+    ] }] }
+    vi.mocked(getProductModels).mockImplementation(async () => structuredClone(catalog))
+    let finishCheck!: (response: Response) => void
+    vi.stubGlobal('fetch', vi.fn(async (url: string) => {
+      if (url.includes('revalidate=1')) return new Promise<Response>(resolve => { finishCheck = resolve })
+      return new Response(JSON.stringify({ state: 'ready', retryable: false }))
+    }))
+    window.history.replaceState({}, '', '/?window_token=picker-status'); adoptWindowToken()
+    try {
+      render(); await settle()
+      const modelChip = [...target.querySelectorAll<HTMLButtonElement>('button.meta-chip')].find(node => node.querySelector('.mono'))!
+      modelChip.click(); await settle()
+      const modelItem = () => [...target.querySelectorAll<HTMLButtonElement>('button.menu-item')].find(node => node.querySelector('.mi-name')?.textContent === 'Model')
+      expect(modelItem()).toBeUndefined()
+      expect(target.querySelector('.menu-empty')?.textContent).toBe('当前暂无可用模型')
+      expect(target.querySelector('.menu-label')).toBeNull()
+      expect(finishCheck).toBeTypeOf('function')
+      const projectionReads = vi.mocked(getProductModels).mock.calls.length
+      if (accountChanged) { productPhase.set('blocked'); productPhase.set('ready') }
+      catalog.catalogVersion = 'new'; catalog.vendors[0].models[0].eligible = true
+      catalog.vendors[0].models[0].availabilityReason = ''
+      finishCheck(new Response(JSON.stringify({ state: 'ready', retryable: false })))
+      await settle()
+      if (accountChanged) {
+        expect(getProductModels).toHaveBeenCalledTimes(projectionReads)
+        expect(get(selectableModels)).toEqual([])
+        return
+      }
+      expect(modelItem()?.disabled).toBe(false)
+      expect(modelItem()?.textContent).not.toContain('能力待验证')
+      expect(get(pendingModel)).toBe('')
+    } finally {
+      window.history.replaceState({}, '', '/'); sessionStorage.clear(); adoptWindowToken()
+    }
+  })
+})
+
+// OCTO-FORK: filter choices, not the catalog evidence needed to stop invalid sends.
+describe('unavailable model choices', () => {
+  function modelChip() {
+    return [...target.querySelectorAll<HTMLButtonElement>('button.meta-chip')].find(node => node.querySelector('.mono'))!
+  }
+  function modelItems() {
+    return [...target.querySelectorAll<HTMLButtonElement>('button.menu-item')].filter(node => node.querySelector('.mi-name.mono'))
+  }
+  it('hides unavailable rows and empty vendors while retaining usable partial, busy and local models', async () => {
+    activeSessionId.set(null); setBalance(1)
+    vi.mocked(getProductModels).mockResolvedValue({ state: 'ready', catalogVersion: 'choices', vendors: [
+      { id: 'stopped', displayName: 'Stopped vendor', models: [
+        { id: 'stopped', displayName: 'Stopped', compositeId: 'gateway::stopped', confidential: false, eligible: false, availabilityReason: 'supplier_disabled' },
+      ] },
+      { id: 'working', displayName: 'Working vendor', models: [
+        { id: 'partial', displayName: 'Partial', compositeId: 'gateway::partial', confidential: false, eligible: true },
+        { id: 'busy', displayName: 'Busy', compositeId: 'gateway::busy', confidential: false, eligible: true, availabilityReason: 'capacity_full' },
+        ...['channel_disabled', 'model_unpublished', 'no_available_source', 'pricing_not_configured', 'test_required'].map(reason => ({
+          id: reason, displayName: reason, compositeId: `gateway::${reason}`, confidential: false, eligible: false, availabilityReason: reason,
+        })),
+      ] },
+    ] })
+    vi.mocked(getEndpoints).mockResolvedValue({ endpoints: [{ id: 'local', name: 'Local vendor', models: [{ model: 'Local model' }] }] } as never)
+    render(); await settle(); modelChip().click(); await settle()
+    expect(modelItems().map(node => node.querySelector('.mi-name')?.textContent)).toEqual(['Partial', 'Busy', 'Local model'])
+    expect([...target.querySelectorAll('.menu-label')].map(node => node.textContent)).toEqual(['Working vendor', 'Local vendor'])
+    expect(modelItems().every(node => !node.disabled)).toBe(true)
+    expect(get(selectableModels).some(row => row.modelId === 'stopped')).toBe(true)
+  })
+
+  it.each([false, true])('keeps an invalid %s session binding and draft until explicit reselection', async existingSession => {
+    activeSessionId.set(existingSession ? 's1' : null); allowEnvironmentModelSource.set(false); setBalance(1)
+    if (existingSession) sessions.set([{ id: 's1', model: 'gateway::chosen' }] as never)
+    else pendingModel.set('gateway::chosen')
+    const catalog = { state: 'ready' as const, catalogVersion: 'before', defaultModelId: 'gateway::other', vendors: [{ id: 'gateway', displayName: 'Gateway', models: [
+      { id: 'chosen', displayName: 'Chosen', compositeId: 'gateway::chosen', confidential: false, eligible: true, availabilityReason: '' },
+      { id: 'other', displayName: 'Other', compositeId: 'gateway::other', confidential: false, eligible: true, availabilityReason: '' },
+    ] }] }
+    vi.mocked(getProductModels).mockImplementation(async () => structuredClone(catalog))
+    const onSend = vi.fn(); render(onSend); await settle()
+    expect(modelChip().textContent).toContain('Chosen')
+    catalog.vendors[0].models[0].eligible = false
+    catalog.vendors[0].models[0].availabilityReason = 'supplier_disabled'
+    modelChip().click(); await settle()
+    expect(modelItems().map(node => node.textContent?.trim())).toEqual(['Other'])
+    expect(modelChip().textContent).toContain('Chosen')
+    expect(noticeText()).toContain('供应商已停用')
+    expect(noticeText()).toContain('请选择其他可用模型')
+    await sendWord('Keep this draft')
+    expect(onSend).not.toHaveBeenCalled()
+    expect((target.querySelector('textarea') as HTMLTextAreaElement).value).toBe('Keep this draft')
+    if (existingSession) expect(get(sessions)[0].model).toBe('gateway::chosen')
+    else {
+      expect(get(pendingModel)).toBe('gateway::chosen')
+      modelChip().click(); await settle()
+      modelItems()[0].click(); await settle()
+      expect(get(pendingModel)).toBe('gateway::other')
+      expect(noticeText()).not.toContain('供应商已停用')
+      await sendWord('Keep this draft'); expect(onSend).toHaveBeenCalledTimes(1)
+    }
+  })
 })
 
 // OCTO-FORK: a new chat's chosen model survives the transition to a session,

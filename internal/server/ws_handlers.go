@@ -1064,16 +1064,13 @@ func (s *Server) handleWSRunTask(conn *wsConn, sessionID string) {
 // its modal for the same confirmation — not just subscribers of the session,
 // mirroring request_user_question/reach.
 func (s *Server) handleWSConfirmation(confID, result string) {
-	s.confirmMu.Lock()
-	if ch, ok := s.confirmations[confID]; ok {
-		ch <- result
-	}
-	s.confirmMu.Unlock()
-
 	s.pendingPromptMu.Lock()
 	defer s.pendingPromptMu.Unlock()
 	for sessionID, pending := range s.pendingConfirms {
 		if pending.ConfID == confID {
+			if !s.deliverConfirmationOnce(confID, result) {
+				return
+			}
 			// Global broadcast (not session-scoped) so every connected client —
 			// desktop or mobile, any session — closes its modal. Mirrors
 			// dismiss_user_question: a session-scoped broadcast would leave other
@@ -1398,16 +1395,10 @@ func (s *Server) handleWSRetractSteer(sessionID, pendingID, text string) {
 const crashRecoveryReminder = `<system-reminder>The previous turn in this session ended abnormally (the server stopped mid-turn). Tool calls from that turn may have executed and changed state even if their results are missing from this conversation. Verify the current state before repeating or continuing potentially destructive actions.</system-reminder>`
 
 func (s *Server) doAgentTurn(sess *agent.Session, content string, blocks []agent.ContentBlock, images []string) {
-	// OCTO-FORK: confidential qualification is re-read before every chained or
-	// ordinary Web turn. Losing eligibility stops before broadcast, persistence,
-	// or provider selection; it never falls back to a public model.
-	if err := s.validateConfidentialSession(sess); err != nil {
-		s.wsHub.broadcast(sess.ID, map[string]any{
-			"type":       "send_rejected",
-			"session_id": sess.ID,
-			"message":    err.Error(),
-			"code":       agent.ErrorCodeOf(err),
-		})
+	// OCTO-FORK: starting foreground work cancels the previous optional suggestion.
+	suggestionTurn := s.beginSuggestionTurn(sess.ID)
+	// OCTO-FORK: confidential qualification is re-read before every Web turn.
+	if !s.acceptConfidentialTurn(sess) {
 		return
 	}
 	// A transcript that still ends mid-turn here means the previous turn died
@@ -1477,24 +1468,9 @@ func (s *Server) doAgentTurn(sess *agent.Session, content string, blocks []agent
 	// the turn's history watermark: while the turn runs, the history endpoint
 	// serves only messages below it and the WS replay buffer owns the rest.
 	sess.Messages = append(sess.Messages, userMsg)
-	if err := sess.Save(); err != nil {
-		sess.Messages = sess.Messages[:len(sess.Messages)-1]
-		s.wsHub.broadcast(sess.ID, map[string]any{
-			"type":       "send_rejected",
-			"session_id": sess.ID,
-			"message":    fmt.Sprintf("save user message: %v", err),
-		})
+	// OCTO-FORK: protection owner keeps persistence before both acceptance events.
+	if !s.persistProtectedTurn(sess, userEvent, policyLockedNow) {
 		return
-	}
-	if userEvent != nil {
-		s.wsHub.broadcast(sess.ID, userEvent)
-	}
-	if policyLockedNow {
-		s.wsHub.broadcast(sess.ID, map[string]any{
-			"type":              "session_update",
-			"session_id":        sess.ID,
-			"protection_policy": sess.ProtectionPolicy,
-		})
 	}
 	historyWatermark := len(sess.Messages)
 	sess.Messages = sess.Messages[:len(sess.Messages)-1]
@@ -1946,9 +1922,18 @@ func (s *Server) doAgentTurn(sess *agent.Session, content string, blocks []agent
 	if err == nil {
 		go func() {
 			defer s.recoverBg("suggestion generation")
-			ctx, cancel := context.WithTimeout(context.Background(), throwawayGenerationTimeout)
+			// OCTO-FORK: optional work and publication belong to this foreground turn.
+			ctx, cancel, current := s.claimSuggestion(sess.ID, suggestionTurn)
+			if !current {
+				return
+			}
 			defer cancel()
 			text, serr := a.Suggest(ctx, toolDefs)
+			release := s.claimSuggestionPublication(sess.ID, suggestionTurn, ctx)
+			if release == nil {
+				return
+			}
+			defer release()
 			if serr != nil {
 				s.wsHub.broadcast(sess.ID, map[string]any{
 					"type":       "next_message_suggestion",
@@ -2233,6 +2218,9 @@ func (w *wsStreamWriter) handleEvent(ev agent.AgentEvent) {
 	defer w.mu.Unlock()
 
 	switch ev.Kind {
+	case agent.EventToolPhase:
+		// OCTO-FORK: stage clocks explain waits without redefining legacy elapsed time.
+		w.handleToolPhase(ev)
 	case agent.EventTextDelta:
 		w.hub.broadcast(w.sessionID, map[string]string{
 			"type":       "text_delta",
@@ -2673,6 +2661,9 @@ func (s *Server) requestConfirmation(ctx context.Context, sessionID, message, ki
 		Kind:      "confirm_pending",
 	})
 
+	// OCTO-FORK: also handles mode changes while this ask waited for its slot.
+	s.resolvePendingPermissionOnAuto(sessionID)
+
 	// Wait for the user's response or turn cancellation — no timeout. A
 	// permission ask only reaches this function in an interactive session
 	// (permission.Mode's applyMode resolves Ask→Deny in strict mode and
@@ -2684,7 +2675,7 @@ func (s *Server) requestConfirmation(ctx context.Context, sessionID, message, ki
 	select {
 	case result := <-ch:
 		cleanup()
-		return result, nil
+		return confirmationResult(ctx, result, dismiss)
 	case <-ctx.Done():
 		cleanup()
 		dismiss()

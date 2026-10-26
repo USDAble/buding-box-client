@@ -143,6 +143,8 @@ const EventToolOutputCap = 8 * 1024
 // JSON tags are included so the WS transport (M8 web server) can marshal
 // events directly without an intermediate type.
 type AgentEvent struct {
+	// OCTO-FORK: optional stage timing leaves existing tool start/end events unchanged.
+	Timing     *ToolTiming    `json:"timing,omitempty"`
 	Kind       EventKind      `json:"kind"`
 	Text       string         `json:"text,omitempty"`
 	ToolID     string         `json:"tool_id,omitempty"`

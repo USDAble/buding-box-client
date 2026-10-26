@@ -30,11 +30,10 @@ func (rt *Runtime) handleInitialize(w http.ResponseWriter, r *http.Request) {
 	defer cancel()
 	results := make(chan initializationResult, 4)
 	go func() {
-		outcome, err := rt.refreshCatalog(ctx, true)
-		if err != nil {
-			rt.logCatalogOutcome(outcome, err)
-		}
-		results <- initializationResult{"catalog", rt.currentCatalogAvailability().toDTO(), err}
+		// OCTO-FORK: restoration, picker and pre-send checks share the catalog
+		// owner. A valid current-session cache is immediately available.
+		availability, err := rt.refreshCatalogForInitialization(ctx)
+		results <- initializationResult{"catalog", availability.toDTO(), err}
 	}()
 	go func() {
 		value, err := rt.refreshCredits(ctx)

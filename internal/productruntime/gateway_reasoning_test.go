@@ -10,6 +10,7 @@ import (
 	"reflect"
 	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/open-octo/octo-agent/internal/agent"
 	"github.com/open-octo/octo-agent/internal/app"
@@ -51,6 +52,47 @@ func TestGatewayReasoningPreservesEveryChoice(t *testing.T) {
 	}
 }
 
+type expiryToolExecutor func() (agent.ToolResult, error)
+
+func (run expiryToolExecutor) Execute(context.Context, string, map[string]any) (agent.ToolResult, error) {
+	return run()
+}
+
+func TestGatewayToolContinuationRenewsCatalogAfterLongTool(t *testing.T) {
+	f := newCatalogFixture(t)
+	f.signIn()
+	f.prime()
+	entry, _ := f.store.Load()
+	policy, _ := entry.Envelope.DecodePolicy()
+	model := policy.Catalog.Models[1].ID
+	f.platform.RequestToolCall("read_file", `{"path":"notes.txt"}`)
+	gateway := GatewayEndpoint{Host: f.baseURL, Tokens: signedIn(f.login.AccessToken), ReasoningForModel: f.rt.ModelReasoning, ValidateReasoning: f.rt.ValidateModelReasoning}
+	sender, err := gateway.Sender(app.ReasoningTuning{ClientModelID: model})
+	if err != nil {
+		t.Fatal(err)
+	}
+	executions := 0
+	executor := expiryToolExecutor(func() (agent.ToolResult, error) {
+		executions++
+		// Advance the cached lease as if this tool outlasted its TTL, without
+		// sleeping in a test or changing the model/effort captured by the turn.
+		entry.CatalogVersion = "2026-09-13.9"
+		entry.ExpiresAt = time.Now().Add(-time.Second)
+		if err := f.store.Put(entry); err != nil {
+			return agent.ToolResult{}, err
+		}
+		f.platform.SetCatalogVersion("2026-09-13.10")
+		return agent.ToolResult{Text: "file result"}, nil
+	})
+	a := agent.New(sender, model)
+	if _, err := a.RunStream(context.Background(), "read it", toolDefs(), executor, nil); err != nil {
+		t.Fatalf("continuation after TTL: %v", err)
+	}
+	if executions != 1 || f.platform.CatalogInitialCount() != 2 {
+		t.Fatalf("tools=%d catalog requests=%d", executions, f.platform.CatalogInitialCount())
+	}
+}
+
 func TestGatewayToolLoopKeepsChoiceAndNextTurnReadsNewPreference(t *testing.T) {
 	standin := clienttest.New()
 	var selected atomic.Value
@@ -72,7 +114,7 @@ func TestGatewayToolLoopKeepsChoiceAndNextTurnReadsNewPreference(t *testing.T) {
 	defer endpoint.Close()
 	token := signInAgainstStandIn(t, endpoint.URL)
 	standin.RequestToolCall("read_file", `{"path":"notes.txt"}`)
-	gateway := GatewayEndpoint{Host: endpoint.URL, Tokens: signedIn(token), ReasoningForModel: func(string) (string, error) { return selected.Load().(string), nil }, ValidateReasoning: func(model, effort string) error {
+	gateway := GatewayEndpoint{Host: endpoint.URL, Tokens: signedIn(token), ReasoningForModel: func(string) (string, error) { return selected.Load().(string), nil }, ValidateReasoning: func(_ context.Context, model, effort string) error {
 		if model != nailsModel || (effort != "high" && effort != "low") {
 			t.Errorf("invalid snapshot %s %s", model, effort)
 		}
@@ -100,7 +142,7 @@ func TestGatewayToolLoopKeepsChoiceAndNextTurnReadsNewPreference(t *testing.T) {
 	if !reflect.DeepEqual(received, []string{"high", "high", "low"}) {
 		t.Fatal(received)
 	}
-	gateway.ValidateReasoning = func(string, string) error { return reasoningSelectionError{} }
+	gateway.ValidateReasoning = func(context.Context, string, string) error { return reasoningSelectionError{} }
 	blocked, err := gateway.Sender(app.ReasoningTuning{ClientModelID: nailsModel})
 	if err != nil {
 		t.Fatal(err)

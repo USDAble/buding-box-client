@@ -3,6 +3,7 @@ package productruntime
 import (
 	"context"
 	"crypto/rand"
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"net/url"
@@ -46,10 +47,12 @@ const gatewayEnsureBudget = 10 * time.Second
 // without any extra plumbing (V-32 established that the holder is the one place
 // a restored session lands).
 type GatewayEndpoint struct {
+	// OCTO-FORK: qualify tool images against the same fixed turn effort.
+	ImageInputStatus func(context.Context, string, string, bool) agent.ImageInputStatus
 	// ReasoningForModel resolves product preferences without vendor translation.
 	ReasoningForModel func(string) (string, error)
 	// ValidateReasoning checks the fixed turn choice against the current catalog.
-	ValidateReasoning func(string, string) error
+	ValidateReasoning func(context.Context, string, string) error
 	// Host is the gateway's base URL: scheme and authority, optionally with a
 	// /v1 segment.
 	//
@@ -117,6 +120,12 @@ type GatewayEndpoint struct {
 // handle would be a second reader (开发规范 §3.8). The caller resolves them per
 // turn for the same reason it calls this method per turn.
 func (g GatewayEndpoint) Sender(tuning app.ReasoningTuning) (agent.Sender, error) {
+	// OCTO-FORK: encode the turn boundary once. Subsequent tool/image/steer
+	// requests keep this exact snapshot, including an explicit empty array.
+	historyToolCalls, err := gatewayHistoryToolCalls(tuning.ClientHistoryToolCallIDs)
+	if err != nil {
+		return nil, err
+	}
 	if g.ReasoningForModel != nil {
 		effort, err := g.ReasoningForModel(tuning.ClientModelID)
 		if err != nil {
@@ -162,25 +171,33 @@ func (g GatewayEndpoint) Sender(tuning app.ReasoningTuning) (agent.Sender, error
 	//
 	// The gateway receives unified effort unchanged. The platform translates
 	// vendor parameters; ShowReasoning only controls trace display.
-	var validateRequest func(string) error
+	var validateRequest func(context.Context, string) error
 	if g.ValidateReasoning != nil {
-		validateRequest = func(model string) error {
+		validateRequest = func(ctx context.Context, model string) error {
 			if model != tuning.ClientModelID {
 				return fmt.Errorf("model_unavailable: the model changed; start a new turn")
 			}
-			return g.ValidateReasoning(model, tuning.ReasoningEffort)
+			return g.ValidateReasoning(ctx, model, tuning.ReasoningEffort)
 		}
 	}
 	localSession := tuning.ClientSessionID
 	if localSession == "" {
 		localSession = rand.Text()
 	}
-	headers := map[string]string{"X-Buding-Local-Session": localSession, "X-Buding-Turn": rand.Text()}
+	headers := map[string]string{"X-Buding-Local-Session": localSession, "X-Buding-Turn": rand.Text(), "X-Buding-History-Tool-Calls": historyToolCalls}
 	if id, version, ok := agentprofile.PlatformReference(tuning.ClientAgentID); ok {
 		headers["X-Buding-Expert-ID"] = id
 		headers["X-Buding-Expert-Version"] = strconv.FormatUint(uint64(version), 10)
 	}
+	// OCTO-FORK: keep this optional for callers outside the product catalog.
+	var imageInputStatus func(context.Context, string, bool) agent.ImageInputStatus
+	if g.ImageInputStatus != nil {
+		imageInputStatus = func(ctx context.Context, model string, withTools bool) agent.ImageInputStatus {
+			return g.ImageInputStatus(ctx, model, tuning.ReasoningEffort, withTools)
+		}
+	}
 	return app.NewSender(app.SenderOptions{
+		ImageInputStatus:            imageInputStatus,
 		GatewayTransport:            transport,
 		GatewayReasoningPassthrough: true,
 		ValidateRequest:             validateRequest,
@@ -192,4 +209,21 @@ func (g GatewayEndpoint) Sender(tuning app.ReasoningTuning) (agent.Sender, error
 		ReasoningEffort:             tuning.ReasoningEffort,
 		ShowReasoning:               tuning.ShowReasoning,
 	})
+}
+
+func gatewayHistoryToolCalls(ids []string) (string, error) {
+	if len(ids) > 1024 {
+		return "", fmt.Errorf("gateway tool history exceeds 1024 call IDs; the request was not sent")
+	}
+	if ids == nil {
+		ids = []string{}
+	}
+	encoded, err := json.Marshal(ids)
+	if err != nil {
+		return "", err
+	}
+	if len(encoded) > 64*1024 {
+		return "", fmt.Errorf("gateway tool history exceeds the 64 KiB header limit; the request was not sent")
+	}
+	return string(encoded), nil
 }

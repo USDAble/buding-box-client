@@ -15,19 +15,20 @@
   import { confirmDialog } from '../../lib/confirm'
   import { submitIntent } from '../../lib/composerKeys'
   import { composeSlashCommand } from '../../lib/slashCompose'
-  import { parkDraft, takeDraft, patchParkedAttachments, type Attachment } from '../../lib/composerDrafts'
+  import { parkDraft, parkDraftIfAbsent, takeDraft, patchParkedAttachments, type Attachment } from '../../lib/composerDrafts'
   import FolderPickerModal from '../overlays/FolderPickerModal.svelte'
   import ProjectModal from '../overlays/ProjectModal.svelte'
   import type { McpServerDetail, McpTool, SessionGroup } from '../../lib/types'
   import { getMcpServer } from '../../lib/api'
   import ComposerNotices, { type Notice } from './ComposerNotices.svelte'
   import SensitiveToggle from './SensitiveToggle.svelte'
-  import { allowEnvironmentModelSource, catalogState, catalogRevision, productState, refreshCatalogState } from '../../lib/product'
-  import { confirmPendingPermissionChoice } from '../../lib/pendingPermissionGate'
+  import { allowEnvironmentModelSource, catalogState, catalogRevision, productState, refreshCatalogState, productSessionGeneration } from '../../lib/product'
   import { checkSensitive } from '../../lib/sensitive'
   import { loadSelectableModels, saveModelReasoning, selectableModels, type SelectableModel } from '../../lib/selectableModels'
+  // OCTO-FORK: display signed availability reasons without exposing supply credentials.
+  import { modelUnavailableKeys } from '../../lib/modelAvailability'
 
-  let { onSend }: { onSend?: (text: string, files?: any[], queued?: boolean) => void } = $props()
+  let { onSend }: { onSend?: (text: string, files?: any[], queued?: boolean) => void | Promise<void> } = $props()
 
   // Reject oversized attachments client-side with a clear message rather than
   // letting them fail late. Images keep a conservative cap: they are canvas-
@@ -613,7 +614,7 @@
     const nextSid = sid
     if (nextSid === draftSid) return
     untrack(() => {
-      if (draftSid) parkDraft(draftSid, text, attachments)
+      parkDraft(draftSid, text, attachments)
       const draft = takeDraft(nextSid)
       text = draft.text
       attachments = draft.attachments
@@ -740,7 +741,7 @@
   // (pendingPermissionMode, consumed by ChatView.ensureActiveSession at
   // session creation — mirrors pendingReasoningEffort), else the configured
   // global default.
-  let permMode = $derived($chatPermMode[sid] || currentSession?.permission_mode || (sid ? '' : $pendingPermissionMode) || $globalPermissionMode)
+  let permMode = $derived($chatPermMode[sid] || currentSession?.permission_mode || (sid ? $globalPermissionMode : ($pendingPermissionMode || api.DEFAULT_WEB_PERMISSION_MODE)))
   // Effective show-reasoning for this session: live store > session record >
   // (landing page only) pendingShowReasoning > default true.
   let showReasoning = $derived($chatShowReasoning[sid] ?? currentSession?.show_reasoning ?? (sid ? true : ($pendingShowReasoning ?? true)))
@@ -767,8 +768,9 @@
   }
 
   // ── model + reasoning pickers ──────────────────────────────────────────────
-  // Show every configured endpoint/model entry. The composite id keeps models
-  // with the same name on different endpoints independently selectable.
+  // OCTO-FORK: unavailable catalog rows stay in the shared snapshot for binding
+  // validation, but only eligible rows enter the picker and its vendor groups.
+  // Composite identities keep same-name models independently selectable.
   let modelMenu = $state(false)
   let securityMenu = $state(false)
   let reasonMenu = $state(false)
@@ -786,6 +788,7 @@
   let modelGroups = $derived.by(() => {
     const out: { vendorId: string; vendorName: string; items: SelectableModel[] }[] = []
     for (const m of models) {
+      if (m.eligible === false) continue
       let group = out.find(item => item.vendorId === m.vendorId)
       if (!group) {
         group = { vendorId: m.vendorId, vendorName: m.vendorName, items: [] }
@@ -893,25 +896,32 @@
   $effect(() => {
     if ($catalogRevision > 0) void refreshModels()
   })
-  async function refreshModels() {
+  async function refreshModels(revalidate = false) {
     const seq = ++modelsFetchSeq
+    const requestSession = productSessionGeneration()
+    const stillCurrent = () => seq === modelsFetchSeq && !destroyed && requestSession === productSessionGeneration()
     try {
-      // OCTO-FORK: refresh the signed catalog through its single runtime owner
-      // before the picker projects the cached model rows.
-      // /models is deliberately a cache-only projection. Ask the separate
-      // availability owner first so a missing or expired catalog gets its one
-      // permitted conditional refresh before the picker reads that projection.
-      // A ready cache adds no platform request, and an unverifiable catalog is
-      // not retried by merely reopening the menu.
-      await refreshCatalogState()
-      const allowLocal = get(allowEnvironmentModelSource) !== false
-      const result = await loadSelectableModels(allowLocal)
-      if (seq !== modelsFetchSeq) return
+      // OCTO-FORK: show the accepted cache first, then check operational changes
+      // through the one runtime owner. Missing leases still load before use;
+      // verification failures never gain an automatic retry or a fallback.
+      const hadReadyCache = get(catalogState) === 'ready'
+      if (!revalidate || !hadReadyCache) await refreshCatalogState()
+      await projectModels()
+      if (!revalidate || !hadReadyCache || get(catalogState) !== 'ready' || !stillCurrent()) return
+      await refreshCatalogState(true)
+      if (!stillCurrent()) return
+      await projectModels()
+    } catch { /* keep the previous list */ }
+
+    async function projectModels() {
+      if (!stillCurrent()) return
+      const result = await loadSelectableModels(get(allowEnvironmentModelSource) !== false)
+      if (!stillCurrent()) return
       catalogState.set(result.state)
       defaultModelId = result.defaultModelId
       defaultModelName = result.models.find(model => model.id === result.defaultModelId)?.displayName
         ?? result.defaultModelId.split('::').pop() ?? ''
-    } catch { /* keep the previous list */ }
+    }
   }
 
   onMount(async () => {
@@ -927,8 +937,12 @@
     } catch { /* leave empty */ }
   })
 
+  // OCTO-FORK: serialize settings with submission and bind responses to their session.
+  let modelSaving = $state(false)
+  let sendBusy = $state(false)
+  let visibilitySaving = $state(false)
   async function pickModel(model: SelectableModel) {
-    if (model.eligible === false) return
+    if (model.eligible === false || modelSaving || protectionBusy || savingReasoning || sendBusy) return
     modelMenu = false
     if (confidentialSession && !model.confidential) {
       showToast($t('privacy.private_model_required'), 'error')
@@ -940,52 +954,57 @@
       queueMicrotask(() => textareaEl?.focus())
       return
     }
+    const requestSid = sid
+    modelSaving = true
     try {
-      const result = await api.updateSessionModel(sid, model.id)
-      sessions.update(list => list.map((session: any) => session.id === sid
+      const result = await api.updateSessionModel(requestSid, model.id)
+      sessions.update(list => list.map((session: any) => session.id === requestSid
         ? { ...session, model: result.model, model_id: result.model_id }
         : session))
-      chatModel.update(values => ({ ...values, [sid]: result.model }))
+      chatModel.update(values => ({ ...values, [requestSid]: result.model }))
     } catch (e: any) {
-      showToast(e.message ?? tr('m.model_fail'), 'error')
-    }
+      if (sid === requestSid) showToast(e.message ?? tr('m.model_fail'), 'error')
+    } finally { modelSaving = false }
   }
 
   let protectionBusy = $state(false)
   async function updateProtection(personal: boolean, confidential: boolean) {
-    if (protectionLocked || protectionBusy) return
-    if (!sid) {
-      if (confidential) {
-        await refreshModels()
-        const preferred = models.find(model => model.confidential && model.eligible !== false)
-        if (!preferred) {
-          showToast($t('privacy.no_private_model'), 'error')
-          return
-        }
-        if (activeModelId !== preferred.id) {
-          pendingModel.set(preferred.id)
-          showToast($t('privacy.auto_switched').replace('{model}', preferred.displayName), 'info')
-        }
-      }
-      pendingPersonalInfoProtection.set(personal)
-      pendingConfidentialSession.set(confidential)
-      return
-    }
+    if (protectionLocked || protectionBusy || modelSaving || savingReasoning || sendBusy) return
+    const requestSid = sid
+    const previousModel = modelName
     protectionBusy = true
     try {
-      const result = await api.setSessionProtection(sid, {
+      if (!requestSid) {
+        if (confidential) {
+          await refreshModels()
+          if (destroyed || sid !== requestSid) return
+          const preferred = models.find(model => model.confidential && model.eligible !== false)
+          if (!preferred) {
+            showToast($t('privacy.no_private_model'), 'error')
+            return
+          }
+          if (activeModelId !== preferred.id) {
+            pendingModel.set(preferred.id)
+            showToast($t('privacy.auto_switched').replace('{model}', preferred.displayName), 'info')
+          }
+        }
+        pendingPersonalInfoProtection.set(personal)
+        pendingConfidentialSession.set(confidential)
+        return
+      }
+      const result = await api.setSessionProtection(requestSid, {
         personal_info_protection: personal,
         confidential_session: confidential,
       })
-      sessions.update(list => list.map((session: any) => session.id === sid
+      sessions.update(list => list.map((session: any) => session.id === requestSid
         ? { ...session, ...result.session, model: result.model, model_id: result.model_id }
         : session))
-      chatModel.update(values => ({ ...values, [sid]: result.model }))
-      if (confidential && result.model !== modelName) {
+      chatModel.update(values => ({ ...values, [requestSid]: result.model }))
+      if (sid === requestSid && confidential && result.model !== previousModel) {
         showToast($t('privacy.auto_switched').replace('{model}', result.model), 'info')
       }
     } catch (error: any) {
-      showToast(error?.message ?? $t('product.send_failed'), 'error')
+      if (sid === requestSid) showToast(error?.message ?? $t('product.send_failed'), 'error')
     } finally {
       protectionBusy = false
     }
@@ -993,7 +1012,7 @@
 
   async function pickReasoning(level: string) {
     reasonMenu = false
-    if (!activeModel || savingReasoning || !reasoningLevels.includes(level)) return
+    if (!activeModel || savingReasoning || modelSaving || protectionBusy || sendBusy || !reasoningLevels.includes(level)) return
     const model = activeModel
     savingReasoning = true
     try {
@@ -1005,6 +1024,7 @@
   }
 
   async function toggleShowReasoning() {
+    if (visibilitySaving) return
     const next = !showReasoning
     if (!sid) {
       // Landing page: park the flip, exactly like pickReasoning does with
@@ -1012,12 +1032,14 @@
       pendingShowReasoning.set(next)
       return
     }
+    const requestSid = sid
+    visibilitySaving = true
     try {
-      await api.updateSessionShowReasoning(sid, next)
-      chatShowReasoning.update(r => ({ ...r, [sid]: next }))
+      await api.updateSessionShowReasoning(requestSid, next)
+      chatShowReasoning.update(r => ({ ...r, [requestSid]: next }))
     } catch (e: any) {
-      showToast(e.message ?? tr('chat.reasoning_visibility_failed'), 'error')
-    }
+      if (sid === requestSid) showToast(e.message ?? tr('chat.reasoning_visibility_failed'), 'error')
+    } finally { visibilitySaving = false }
   }
 
   // Explicit dropdown for the three engine modes (the old chip cycled on
@@ -1031,7 +1053,7 @@
   let permissionSaving = $state(false)
   async function pickPermMode(next: string) {
     permMenu = false
-    if (permissionSaving || next === permMode) return
+    if (permissionSaving || sendBusy || modelSaving || protectionBusy || savingReasoning || next === permMode) return
     if (!sid) {
       // Landing page: park the pick, exactly like pickReasoning does with
       // pendingReasoningEffort — consumed once ChatView.ensureActiveSession
@@ -1043,7 +1065,6 @@
     permissionSaving = true
     try {
       await api.updateSessionPermissionMode(id, next)
-      confirmPendingPermissionChoice(id)
       chatPermMode.update(m => ({ ...m, [id]: next }))
     } catch (e: any) {
       showToast(e.message ?? tr('chat.permission_failed'), 'error')
@@ -1181,6 +1202,8 @@
 
   const notices = $derived.by<Notice[]>(() => {
     const list: Notice[] = []
+    // OCTO-FORK: hiding a choice must not hide an invalid binding or replace it.
+    if (activeModel?.eligible === false) list.push({ id: 'model-unavailable', level: 'warn', text: `${$t(modelUnavailableKeys(activeModel.availabilityReason)[0])} · ${$t('model.choose_other')}`, slot: 'above' })
     // OCTO-FORK: a withdrawn effort must be explicitly reselected, never downgraded.
     if (reasoningInvalid) list.push({ id: 'reasoning-invalid', level: 'warn', text: $t('chat.reasoning_reselect'), slot: 'above' })
     // 敏感词命中（拦截，warn）。读 $state 的 sensitiveHit 建立响应式依赖，
@@ -1210,7 +1233,13 @@
   // the turn in flight (Cmd/Ctrl+Enter — the web counterpart of the TUI's
   // Ctrl+Q). Idle it makes no difference: the server just starts the turn.
   async function send(queued = false) {
+    if (sendBusy || modelSaving || protectionBusy || permissionSaving) return
     if (!text.trim() && attachments.length === 0) return
+    // OCTO-FORK: retain the draft until the user replaces an unavailable binding.
+    if (activeModel?.eligible === false) {
+      showToast(`${$t(modelUnavailableKeys(activeModel.availabilityReason)[0])} · ${$t('model.choose_other')}`, 'error')
+      return
+    }
     // OCTO-FORK: do not race a preference write or send with a withdrawn effort.
     if (savingReasoning || reasoningInvalid) {
       showToast($t(savingReasoning ? 'chat.reasoning_saving' : 'chat.reasoning_reselect'), 'error')
@@ -1233,62 +1262,85 @@
       showToast($t('chat.attach_batch_too_big'), 'error')
       return
     }
-    const v = text.trim()
+    const requestSid = sid
+    const draftText = text
+    const draftFiles = [...attachments]
+    const v = draftText.trim()
+    // A preflight belongs to one draft. Editing or switching while it awaits
+    // cancels that send; it must never clear or send another session's input.
+    const stillCurrent = () => !destroyed && sid === requestSid && draftSid === requestSid
+      && text === draftText && attachments.length === draftFiles.length
+      && attachments.every((file, index) => file === draftFiles[index])
+    sendBusy = true
+    try {
 
-    // P8: 输入敏感词检测（默认开启，开关关闭则跳过）。命中即回填输入框 +
-    // 下方提示 + 不发送；未命中清除提示继续。这是即时回填的体验层——服务端
-    // 在扣分前还会再查一次（checkInputSensitive），所以这里失败不阻塞。
-    // OCTO-FORK: P8 敏感词接入 — see
-    // the content-safety boundary §3.5.
-    if ($productState?.prefs.inputSensitiveCheck !== false) {
-      try {
-        const res = await checkSensitive(v)
-        if (res.hit) {
-          text = res.masked
-          sensitiveHit = true
+      // P8: 输入敏感词检测（默认开启，开关关闭则跳过）。命中即回填输入框 +
+      // 下方提示 + 不发送；未命中清除提示继续。这是即时回填的体验层——服务端
+      // 在扣分前还会再查一次（checkInputSensitive），所以这里失败不阻塞。
+      // OCTO-FORK: P8 敏感词接入 — see
+      // the content-safety boundary §3.5.
+      if ($productState?.prefs.inputSensitiveCheck !== false) {
+        try {
+          const res = await checkSensitive(v)
+          if (!stillCurrent()) return
+          if (res.hit) {
+            text = res.masked
+            sensitiveHit = true
+            return
+          }
+        } catch {
+          // check 接口失败不阻塞发送 —— 服务端会再查。
+        }
+      }
+      sensitiveHit = false
+
+      // OCTO-FORK: product windows replace the draft with the irreversible local
+      // transform before history, optimistic UI or WebSocket code can see it.
+      // Plain `octo serve` has no product route; its server-side preprocessing
+      // remains the authoritative boundary.
+      let outgoing = v
+      if ($productState && personalInfoProtection && v) {
+        try {
+          const result = await api.transformPersonalInfo(v)
+          if (!stillCurrent()) return
+          outgoing = result.masked
+          if (result.hit) {
+            privacyApplied = {
+              count: result.matches.reduce((sum, match) => sum + match.count, 0),
+              categories: result.matches.map(match => match.category),
+            }
+          } else {
+            privacyApplied = null
+          }
+        } catch (error: any) {
+          showToast(error?.message ?? $t('privacy.transform_failed'), 'error')
           return
         }
-      } catch {
-        // check 接口失败不阻塞发送 —— 服务端会再查。
       }
-    }
-    sensitiveHit = false
 
-    // OCTO-FORK: product windows replace the draft with the irreversible local
-    // transform before history, optimistic UI or WebSocket code can see it.
-    // Plain `octo serve` has no product route; its server-side preprocessing
-    // remains the authoritative boundary.
-    let outgoing = v
-    if ($productState && personalInfoProtection && v) {
-      try {
-        const result = await api.transformPersonalInfo(v)
-        outgoing = result.masked
-        if (result.hit) {
-          privacyApplied = {
-            count: result.matches.reduce((sum, match) => sum + match.count, 0),
-            categories: result.matches.map(match => match.category),
-          }
-        } else {
-          privacyApplied = null
-        }
-      } catch (error: any) {
-        showToast(error?.message ?? $t('privacy.transform_failed'), 'error')
-        return
+      if (!stillCurrent()) return
+      const files = draftFiles.length ? draftFiles : undefined
+      pushHistory(requestSid, outgoing)
+      // Enter sends whenever no menu row is highlighted, so the menu can outlive
+      // the message it was opened over. Close it with the text it belongs to.
+      hideSlashMenu()
+      text = ''
+      attachments = []
+      if (onSend) {
+        await onSend(outgoing, files, queued)
+      } else {
+        running.set(true)
       }
-    }
-
-    const files = attachments.length ? [...attachments] : undefined
-    pushHistory(sid, outgoing)
-    // Enter sends whenever no menu row is highlighted, so the menu can outlive
-    // the message it was opened over. Close it with the text it belongs to.
-    hideSlashMenu()
-    text = ''
-    attachments = []
-    if (onSend) {
-      onSend(outgoing, files, queued)
-    } else {
-      running.set(true)
-    }
+    } catch (error: any) {
+      // The parent normally handles refusals. Unexpected transport errors must
+      // still leave the original input editable without replacing a newer draft.
+      if (!destroyed && sid === requestSid) {
+        if (isEmpty()) restore(draftText, draftFiles)
+      } else {
+        parkDraftIfAbsent(requestSid, draftText, draftFiles)
+      }
+      showToast(error?.message ?? $t('product.send_failed'), 'error')
+    } finally { sendBusy = false }
   }
 
   function stop() {
@@ -1571,7 +1623,7 @@
         {/if}
         <!-- Arrow-wrapped: a bare `onclick={send}` would hand the MouseEvent to
              the `queued` parameter and queue every click. -->
-        <button class="send-btn" title={isStreaming || $running ? $t('chat.send_or_queue_hint') : $t('chat.send')} aria-label={$t('chat.send')} onclick={() => send()}>
+        <button class="send-btn" disabled={sendBusy || modelSaving || protectionBusy || permissionSaving || savingReasoning} title={isStreaming || $running ? $t('chat.send_or_queue_hint') : $t('chat.send')} aria-label={$t('chat.send')} onclick={() => send()}>
           <iconify-icon icon="lucide:send" width="16"></iconify-icon>
         </button>
       </div>
@@ -1654,14 +1706,14 @@
                 </div>
                 <SensitiveToggle compact />
               </div>
-              <button class="security-row" disabled={protectionLocked || protectionBusy} onclick={() => updateProtection(!personalInfoProtection, confidentialSession)}>
+              <button class="security-row" disabled={protectionLocked || protectionBusy || modelSaving || savingReasoning || sendBusy} onclick={() => updateProtection(!personalInfoProtection, confidentialSession)}>
                 <div>
                   <div class="security-name">{$t('privacy.personal_info')}</div>
                   <div class="security-desc">{protectionLocked ? $t('privacy.locked_after_start') : $t('privacy.personal_info_desc')}</div>
                 </div>
                 <span class="toggle" class:on={personalInfoProtection}><span class="toggle-knob"></span></span>
               </button>
-              <button class="security-row" disabled={protectionLocked || protectionBusy} onclick={() => updateProtection(personalInfoProtection, !confidentialSession)}>
+              <button class="security-row" disabled={protectionLocked || protectionBusy || modelSaving || savingReasoning || sendBusy} onclick={() => updateProtection(personalInfoProtection, !confidentialSession)}>
                 <div>
                   <div class="security-name">{$t('privacy.private_session')}</div>
                   <div class="security-desc">{protectionLocked ? $t('privacy.locked_after_start') : $t('privacy.private_session_desc')}</div>
@@ -1678,7 +1730,7 @@
           {/if}
         </div>
         <div class="picker">
-          <button class="meta-chip" onclick={(e) => { e.stopPropagation(); const open = modelMenu; closeMenus(); modelMenu = !open; if (!open) void refreshModels() }}>
+          <button class="meta-chip" onclick={(e) => { e.stopPropagation(); const open = modelMenu; closeMenus(); modelMenu = !open; if (!open) void refreshModels(true) }}>
             <iconify-icon icon="ant-design:robot-outlined" width="13"></iconify-icon>
             {#if activeModel?.confidential}
               <span class="confidential-badge" title={$t('model.confidential')}>
@@ -1691,8 +1743,8 @@
           </button>
           {#if modelMenu}
             <div class="menu" onclick={(e) => e.stopPropagation()}>
-              {#if models.length === 0}
-                <div class="menu-empty">{$t('chat.no_models')}</div>
+              {#if modelGroups.length === 0}
+                <div class="menu-empty">{$t('catalog.no_models')}</div>
               {:else}
                 {#each modelGroups as group (group.vendorId)}
                   <div class="menu-label">{group.vendorName}</div>
@@ -1700,8 +1752,8 @@
                     <button
                       class="menu-item"
                       class:active={activeModelId ? model.id === activeModelId : model.modelId === modelName}
-                      disabled={model.eligible === false || (confidentialSession && !model.confidential)}
-                      title={model.eligible === false ? $t(model.availabilityReason === 'pricing_not_configured' ? 'model.pricing_not_configured' : 'model.unavailable') : confidentialSession && !model.confidential ? $t('privacy.private_model_required') : undefined}
+                      disabled={modelSaving || protectionBusy || savingReasoning || sendBusy || (confidentialSession && !model.confidential)}
+                      title={confidentialSession && !model.confidential ? $t('privacy.private_model_required') : undefined}
                       onclick={() => pickModel(model)}
                     >
                       {#if model.confidential}
@@ -1711,9 +1763,6 @@
                         </span>
                       {/if}
                       <span class="mi-name mono">{model.displayName}</span>
-                      {#if model.eligible === false}
-                        <span>{$t(model.availabilityReason === 'pricing_not_configured' ? 'model.pricing_not_configured' : 'model.unavailable')}</span>
-                      {/if}
                     </button>
                   {/each}
                 {/each}
@@ -1729,7 +1778,7 @@
         </div>
         <div class="picker">
           <!-- OCTO-FORK: refresh declared levels through the existing catalog owner. -->
-          <button class="meta-chip" title={$t('chat.reasoning_default_hint')} onclick={(e) => { e.stopPropagation(); const open = reasonMenu; closeMenus(); reasonMenu = !open; if (!open && !savingReasoning) void refreshModels() }}>
+          <button class="meta-chip" title={$t('chat.reasoning_default_hint')} onclick={(e) => { e.stopPropagation(); const open = reasonMenu; closeMenus(); reasonMenu = !open; if (!open && !savingReasoning) void refreshModels(true) }}>
             <span>{!activeModel ? $t('chat.reasoning_unavailable') : reasoningInvalid ? $t('chat.reasoning_choose') : reasoningLabel(reasoning)}</span>
             <iconify-icon icon={showReasoningIcon} width="12" class="reasoning-eye"></iconify-icon>
             <iconify-icon icon="lucide:chevron-down" width="12"></iconify-icon>
@@ -1738,13 +1787,14 @@
             <div class="menu" onclick={(e) => e.stopPropagation()}>
               {#if !activeModel}<div class="menu-empty">{$t('chat.reasoning_model_unavailable')}</div>{/if}
               {#each reasoningLevels as lvl}
-                <button class="menu-item" disabled={savingReasoning || !activeModel} class:active={!reasoningInvalid && lvl === reasoning} onclick={() => pickReasoning(lvl)}>
+                <button class="menu-item" disabled={savingReasoning || modelSaving || protectionBusy || sendBusy || !activeModel} class:active={!reasoningInvalid && lvl === reasoning} onclick={() => pickReasoning(lvl)}>
                   <span class="mi-name">{reasoningLabel(lvl)}</span>
                 </button>
               {/each}
               <div class="menu-divider"></div>
               <button
                 class="menu-item toggle-item"
+                disabled={visibilitySaving}
                 onclick={() => toggleShowReasoning()}
               >
                 <span class="mi-name">{$t('chat.show_reasoning')}</span>
@@ -1797,9 +1847,9 @@
           {#if permMenu}
             <div class="menu perm-menu" onclick={(e) => e.stopPropagation()}>
               {#each PERM_MODES as mode}
-                <button class="menu-item" class:active={mode === permMode} onclick={() => pickPermMode(mode)}>
+                <button class="menu-item" disabled={permissionSaving} class:active={mode === permMode} onclick={() => pickPermMode(mode)}>
                   <span class="perm-dot" data-mode={mode}></span>
-                  <span class="mi-name">{$t(PERM_LABEL_KEY[mode])}</span>
+                  <span class="mi-name">{$t(PERM_LABEL_KEY[mode])}<small class="perm-description">{$t(`chat.perm_${mode}_description`)}</small></span>
                 </button>
               {/each}
             </div>
@@ -1977,7 +2027,8 @@ textarea {
 }
 .menu-item.manage { flex-direction: row; align-items: center; gap: 6px; }
 .menu-item.manage .mi-name { color: var(--blue-6); }
-.perm-menu { left: auto; right: 0; min-width: 140px; }
+.perm-menu { left: auto; right: 0; width: 300px; max-width: 85vw; }
+.perm-description { display: block; margin-top: 3px; color: var(--text-tertiary); font-size: 11px; line-height: 1.5; white-space: normal; }
 .perm-menu .menu-item { flex-direction: row; align-items: center; gap: 8px; }
 .perm-dot { width: 7px; height: 7px; border-radius: 50%; flex: 0 0 auto; background: var(--text-quaternary); }
 .perm-dot[data-mode="auto"] { background: var(--success); }

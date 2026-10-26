@@ -57,7 +57,7 @@ it('renders the first message without leaving and reopening the new session', as
   input.value = 'hello'; input.dispatchEvent(new Event('input', { bubbles: true })); flushSync()
   target.querySelector<HTMLButtonElement>('button.send-btn')!.click()
   await settle(); await settle()
-  expect(api.createSession).toHaveBeenCalledWith(expect.objectContaining({ model: 'local::chosen' }))
+  expect(api.createSession).toHaveBeenCalledWith(expect.objectContaining({ model: 'local::chosen', permission_mode: 'auto' }))
   expect(get(activeSessionId)).toBe('new-session')
   emit('subscribed', { session_id: 'new-session' }); await settle()
   expect(ws.sendMessage).toHaveBeenCalledWith('new-session', 'hello', undefined, false, false)
@@ -67,34 +67,27 @@ it('renders the first message without leaving and reopening the new session', as
   expect(target.textContent).toContain('hello')
 })
 
-it('queues the first message before subscribing even when permission persistence is slow', async () => {
-  let finishPermission!: () => void
-  vi.mocked(api.updateSessionPermissionMode).mockImplementationOnce(() => new Promise(resolve => {
-    finishPermission = () => resolve({} as never)
-  }))
-  pendingPermissionMode.set('auto')
+it('persists the explicit permission with creation before sending the first message', async () => {
+  pendingPermissionMode.set('strict')
   vi.mocked(ws.subscribe).mockImplementationOnce((sid) => queueMicrotask(() => emit('subscribed', { session_id: sid })))
   app = mount(ChatView, { target }); flushSync(); await settle()
   const input = target.querySelector('textarea')!
   input.value = 'first message'; input.dispatchEvent(new Event('input', { bubbles: true })); flushSync()
   target.querySelector<HTMLButtonElement>('button.send-btn')!.click()
   await settle(); await settle()
-  finishPermission()
-  await settle(); await settle()
+  expect(api.createSession).toHaveBeenCalledWith(expect.objectContaining({ permission_mode: 'strict' }))
+  expect(api.updateSessionPermissionMode).not.toHaveBeenCalled()
   expect(ws.sendMessage).toHaveBeenCalledWith('new-session', 'first message', undefined, false, false)
-  expect(target.textContent).toContain('first message')
 })
 
-it('retains the input and the created session without sending when permission persistence fails', async () => {
-  vi.mocked(api.updateSessionPermissionMode).mockRejectedValueOnce(new Error('permission failed'))
-  pendingPermissionMode.set('auto')
+it('retains the draft and does not send when atomic session creation fails', async () => {
+  vi.mocked(api.createSession).mockRejectedValueOnce(new Error('permission persistence failed'))
   app = mount(ChatView, { target }); flushSync(); await settle()
   const input = target.querySelector('textarea')!
   input.value = 'keep this draft'; input.dispatchEvent(new Event('input', { bubbles: true })); flushSync()
   target.querySelector<HTMLButtonElement>('button.send-btn')!.click()
   await settle(); await settle()
-  expect(get(activeSessionId)).toBe('new-session')
-  expect(get(pendingPrompt)).toBeNull()
+  expect(get(activeSessionId)).toBeNull()
   expect(ws.sendMessage).not.toHaveBeenCalled()
   expect(input.value).toBe('keep this draft')
 })
@@ -200,4 +193,18 @@ it('localizes frontend-generated task outcomes and error headings', async () => 
   expect(target.textContent).toContain('目标任务继续')
   expect(target.textContent).not.toContain('Error:')
   expect(target.querySelector('.notice-line strong')?.textContent).toBe('错误:')
+})
+
+// A sparse final delta must render even when no later stream event arrives.
+it('flushes a sparse text tail and clears pending render work on chat switch', async () => {
+  activeSessionId.set('live');vi.useFakeTimers();vi.setSystemTime(10000)
+  app=mount(ChatView,{target});flushSync();await vi.advanceTimersByTimeAsync(0);flushSync()
+  emit('text_delta',{session_id:'live',text:'first'});flushSync()
+  await vi.advanceTimersByTimeAsync(10)
+  emit('text_delta',{session_id:'live',text:' tail'});flushSync()
+  await vi.advanceTimersByTimeAsync(81);flushSync()
+  expect(target.textContent).toContain('first tail')
+  emit('text_delta',{session_id:'live',text:' stale'});flushSync()
+  activeSessionId.set('other');flushSync();await vi.advanceTimersByTimeAsync(100);flushSync()
+  expect(target.textContent).not.toContain('first tail stale')
 })

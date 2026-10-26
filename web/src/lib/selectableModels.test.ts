@@ -44,11 +44,26 @@ describe('stableConfidentialSort', () => {
 // OCTO-FORK: persisted reasoning must outlive stale reads and failed writes.
 import * as api from './api'
 import { get } from 'svelte/store'
+import { productPhase } from './product'
 
 afterEach(() => { vi.restoreAllMocks(); selectableModels.set([]) })
 
 describe('reasoning snapshot persistence', () => {
   const catalog = {state: 'ready' as const,catalogVersion:'test',vendors:[{id:'v',displayName:'V',models:[{id:'m',compositeId:'v::m',displayName:'M',confidential:false,reasoningOptions:['default','low','high'],reasoningEffort:'high'}]}]}
+  it('clears the old projection and rejects late rows when the account changes', async () => {
+    productPhase.set('ready')
+    const readModels = vi.spyOn(api, 'getProductModels').mockResolvedValue(catalog)
+    await loadSelectableModels(false)
+    let complete!: (value: typeof catalog) => void
+    readModels.mockImplementationOnce(() => new Promise(resolve => { complete = resolve }))
+    const pending = loadSelectableModels(false)
+    productPhase.set('blocked')
+    productPhase.set('ready')
+    expect(get(selectableModels)).toEqual([])
+    complete(catalog)
+    await expect(pending).rejects.toThrow('account change')
+    expect(get(selectableModels)).toEqual([])
+  })
   it('projects only supported public choices and always retains model default', () => {
     expect(modelReasoningOptions(['max','off','high','low','low'])).toEqual(['default','low','high'])
     expect(modelReasoningOptions(['off'])).toEqual(['default'])

@@ -38,7 +38,6 @@
   import CommandPalette from './components/overlays/CommandPalette.svelte'
   import McpModal from './components/overlays/McpModal.svelte'
   import SettingsModal from './components/overlays/SettingsModal.svelte'
-  import ConfirmModal from './components/overlays/ConfirmModal.svelte'
   import ConfirmDialog from './components/overlays/ConfirmDialog.svelte'
   import ArtifactModal from './components/ArtifactModal.svelte'
   import ArtifactsPanel from './components/ArtifactsPanel.svelte'
@@ -654,9 +653,6 @@
 <CommandPalette />
 <McpModal />
 <SettingsModal />
-<!-- Mobile approves via its own ApprovalDetail (web/src/mobile); suppress the
-     desktop confirmation overlay there so it doesn't double up. -->
-{#if !mobileShell}<ConfirmModal />{/if}
 <ConfirmDialog />
 <ArtifactModal />
 <FeedbackModal />

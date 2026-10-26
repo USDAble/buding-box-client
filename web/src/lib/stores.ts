@@ -688,6 +688,20 @@ function pickToolIndex(tools: any[], toolId: string | undefined): number {
   return tools.length - 1
 }
 
+// OCTO-FORK: keep approval/queue/execution facts separate from total wall time.
+export function updateToolPhase(sessionId: string, event: any) {
+  if (!event.tool_id) return
+  chatMessages.update(m => {
+    const msgs = (m[sessionId] || []).map(msg => msg.type !== 'tool_group' ? msg : {
+      ...msg, tools: msg.tools.map((tool: any) => tool.toolId !== event.tool_id ? tool : {
+        ...tool, phase: event.phase, approvalMs: event.approval_ms,
+        queueMs: event.queue_ms, executionMs: event.execution_ms,
+      }),
+    })
+    return { ...m, [sessionId]: msgs }
+  })
+}
+
 export function updateToolResult(sessionId: string, toolId: string | undefined, result: any, uiPayload: any, endedAt?: number) {
   chatMessages.update(m => {
     const msgs = [...(m[sessionId] || [])]

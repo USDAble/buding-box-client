@@ -16,6 +16,9 @@ import { setLocale, isLocale, type Locale } from "./i18n";
 export type ProductPhase = "unknown" | "blocked" | "ready";
 
 export const productPhase = writable<ProductPhase>("unknown");
+// OCTO-FORK: pending product/model responses belong to one login lifecycle.
+let sessionGeneration = 0;
+export function productSessionGeneration(): number { return sessionGeneration; }
 export const productState = writable<ProductStateDTO | null>(null);
 
 // OCTO-FORK: product preferences own the UI language across login and settings.
@@ -274,7 +277,28 @@ export const catalogRevision = writable<number>(0);
  * response we never got; keeping the last known answer is the only option that
  * claims nothing new (开发规范 §3.9).
  */
-export async function refreshCatalogState(): Promise<void> {
+// OCTO-FORK: menu/mount readers share one local availability request. The
+// runtime independently shares its upstream refresh with initialization/senders.
+let catalogStateRequest: { pending: Promise<void>; revalidate: boolean } | undefined;
+export async function refreshCatalogState(revalidate = false): Promise<void> {
+  if (catalogStateRequest) {
+    const existing = catalogStateRequest;
+    if (!revalidate || existing.revalidate) return existing.pending;
+    // OCTO-FORK: a picker opening during a quick cache read must still get its
+    // bounded status check, without starting a competing catalog writer.
+    const session = productSessionGeneration();
+    await existing.pending;
+    if (session !== productSessionGeneration()) return;
+    return refreshCatalogState(true);
+  }
+  const pending = readCatalogState(revalidate);
+  const request = { pending, revalidate };
+  catalogStateRequest = request;
+  try { await pending; }
+  finally { if (catalogStateRequest === request) catalogStateRequest = undefined; }
+}
+
+async function readCatalogState(revalidate: boolean): Promise<void> {
   const requestVersion = ++moduleVersions.catalog;
   if (!windowToken()) {
     // No shell, no product layer: nothing decides a turn here.
@@ -282,10 +306,14 @@ export async function refreshCatalogState(): Promise<void> {
     return;
   }
   try {
-    const res = await productFetch("/api/product/catalog", {
+    const res = await fetch(revalidate ? "/api/product/catalog?revalidate=1" : "/api/product/catalog", {
       cache: "no-store",
       headers: windowTokenHeaders(),
     });
+    // Ignore the entire response (including 401) if logout/new login retired it.
+    if (requestVersion !== moduleVersions.catalog) return;
+    noteSessionLost(res.status);
+    await rejectWindowGate(res);
     // A non-200 (including 404 from a build without this endpoint) keeps the
     // previous answer, for the reason above.
     if (!res.ok) return;
@@ -613,7 +641,9 @@ const moduleVersions: Record<WorkspaceModule, number> = { catalog: 0, credits: 0
 let initializationSequence = 0;
 productPhase.subscribe(phase => {
   if (phase === 'ready') return;
+  sessionGeneration++;
   initializationSequence++;
+  catalogStateRequest = undefined;
   workspaceModules.set({});
   workspaceDictionaryFallback.set(false);
   for (const name of Object.keys(moduleVersions) as WorkspaceModule[]) moduleVersions[name]++;
@@ -675,6 +705,9 @@ export async function login(input: LoginInput): Promise<LoginResult> {
     );
   }
   const state = body.state as ProductStateDTO;
+  sessionGeneration++;
+  moduleVersions.catalog++;
+  catalogStateRequest = undefined;
   productState.set(state);
   productPhase.set(state.loggedIn ? "ready" : "blocked");
   return { state, dictionaryNotice: body.dictionaryNotice as DictionaryNotice | undefined };

@@ -30,6 +30,11 @@ export function parkDraft(sid: string, text: string, attachments: Attachment[]):
   else parked.set(sid, { text, attachments })
 }
 
+// OCTO-FORK: failed sends may finish after navigation. Preserve a newer draft.
+export function parkDraftIfAbsent(sid: string, text: string, attachments: Attachment[]): void {
+  if (!parked.has(sid)) parkDraft(sid, text, attachments)
+}
+
 // Read-and-remove: whoever takes a draft owns it from then on. A copy left
 // behind would resurface later — a message typed in a not-yet-created chat and
 // then sent would reappear in the NEXT new chat, attachments and all.

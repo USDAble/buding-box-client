@@ -938,9 +938,10 @@ func (a *Agent) RunStream(
 			return
 		}
 		handler(AgentEvent{
-			Kind:       EventToolInputDelta,
-			ToolID:     toolID,
-			ToolName:   toolName,
+			Kind:   EventToolInputDelta,
+			ToolID: toolID,
+			// OCTO-FORK: streamed arguments use the same identity as execution.
+			ToolName:   canonicalToolName(toolName, tools),
 			InputDelta: partialJSON,
 		})
 	}
@@ -1289,6 +1290,8 @@ func (a *Agent) runLoop(
 		}
 
 		if toolUseRound {
+			// OCTO-FORK: canonical names must reach hooks and policy before dispatch.
+			reply.Blocks = canonicalizeToolCallNames(reply.Blocks, tools)
 			// Pre-dispatch checkpoint. accrueUsage above just learned what the
 			// prompt really cost, and this batch may run for many minutes —
 			// leaving the next checkpoint (the pre-send one, a full batch away)

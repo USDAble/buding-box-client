@@ -279,6 +279,8 @@ export const en: Record<string, string> = {
   "agents.gallery_refresh_failed": "Update failed; cached directory retained",
   "agents.gallery_retry": "Reload",
   // OCTO-FORK: Expert and published-skill feedback follows the selected UI language.
+  // OCTO-FORK: expert setup failures explain the blocked action and how to retry.
+  "agents.setup_failed": "Could not start expert setup: {error} Check model availability and your connection, then try again.",
   "agents.deleted": "Expert deleted",
   "agents.delete_failed": "Could not delete expert: {error}",
   "agents.update_failed": "Could not update expert: {error}",
@@ -1639,6 +1641,8 @@ export const en: Record<string, string> = {
   "settings.computer_use_failed": "Could not update computer use",
   "settings.workspace_dir_failed": "Could not update default working directory",
   "settings.language_failed": "Could not update language",
+  // OCTO-FORK: automatic setup commands carry the UI language into the model conversation.
+  "chat.action_language_instruction": "Use English for replies, follow-up questions, and newly created user-facing names, descriptions, and instructions in this conversation, unless I explicitly request another language. Keep command names, identifiers, code, paths, and API field names unchanged.",
   "chat.session_bound_elsewhere": "This session is bound to another entry.",
   "chat.export_unknown_tool": "unknown",
   "chat.export_tool_call": "Tool call",
@@ -1934,6 +1938,8 @@ export const zh: Record<string, string> = {
   "agents.gallery_refresh_failed": "更新失败，保留缓存目录",
   "agents.gallery_retry": "重新加载",
   // OCTO-FORK: 专家与已发布技能的反馈随用户所选语言切换。
+  // OCTO-FORK: expert setup failures explain the blocked action and how to retry.
+  "agents.setup_failed": "无法启动专家创建或编辑：{error} 请检查模型可用性和网络连接后重试。",
   "agents.deleted": "专家已删除",
   "agents.delete_failed": "删除专家失败：{error}",
   "agents.update_failed": "更新专家失败：{error}",
@@ -3260,6 +3266,8 @@ export const zh: Record<string, string> = {
   "settings.computer_use_failed": "更新计算机操作设置失败",
   "settings.workspace_dir_failed": "更新默认工作目录失败",
   "settings.language_failed": "更新语言失败",
+  // OCTO-FORK: automatic setup commands explicitly request the Simplified Chinese script.
+  "chat.action_language_instruction": "本次对话请使用简体中文回复、追问，并编写新生成的用户可见名称、描述和说明，除非我明确要求其他语言。命令名、标识符、代码、路径和 API 字段名保持原样。",
   "chat.session_bound_elsewhere": "此会话已绑定到另一入口。",
   "chat.export_unknown_tool": "未知工具",
   "chat.export_tool_call": "工具调用",

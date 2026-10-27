@@ -13,6 +13,9 @@
   let cached = $state(false)
   let refreshing = $state(false)
   let usingAgent = $state('')
+  // OCTO-FORK: failed model/session setup must leave visible feedback and allow retry.
+  let openingSetup = $state(false)
+  let setupError = $state('')
   let query = $state('')
   let activeCategory = $state('all')
   let selectedAgent: api.Agent | null = $state(null)
@@ -80,13 +83,30 @@
   // Agentic-first: create and edit through conversation with the
   // expert-agent-manager skill. Curated experts are read-only, so only the
   // user's own agents offer this.
+  // OCTO-FORK: create and edit share one awaited launch so failures cannot go unhandled.
+  async function openExpertSetup(content: string, name: string) {
+    if (openingSetup) return
+    openingSetup = true
+    setupError = ''
+    try {
+      await openAgentSession(content, name)
+    } catch (err) {
+      const reason = err instanceof TypeError ? tr('product.tier.network_unavailable')
+        : err instanceof Error ? err.message : tr('turn_error.unknown')
+      setupError = tr('agents.setup_failed').replace('{error}', reason)
+      showToast(setupError, 'error')
+    } finally {
+      openingSetup = false
+    }
+  }
+
   function handleCreateWithAgent() {
-    openAgentSession('/expert-agent-manager', tr('agents.session_new'))
+    return openExpertSetup('/expert-agent-manager', tr('agents.session_new'))
   }
 
   function handleEditWithAgent(agent: api.Agent, e: MouseEvent) {
     e.stopPropagation()
-    openAgentSession(`/expert-agent-manager edit ${agent.id}`, tr('agents.session_edit').replace('{name}', agentName(agent)))
+    return openExpertSetup(`/expert-agent-manager edit ${agent.id}`, tr('agents.session_edit').replace('{name}', agentName(agent)))
   }
 
   function agentName(agent: api.Agent): string {
@@ -142,12 +162,18 @@
         <p>{$t('agents.desc')}</p>
       </div>
       <div class="header-actions">
-        <button class="btn-primary" onclick={handleCreateWithAgent}>
+        <!-- OCTO-FORK: acknowledge setup immediately and prevent duplicate sessions. -->
+        <button class="btn-primary" disabled={openingSetup} aria-busy={openingSetup} onclick={handleCreateWithAgent}>
           <iconify-icon icon="ant-design:message-outlined" width="14"></iconify-icon>
-          {$t('agents.create_with_agent')}
+          {openingSetup ? $t('common.loading') : $t('agents.create_with_agent')}
         </button>
       </div>
     </div>
+
+    <!-- OCTO-FORK: keep setup failures visible after the toast disappears. -->
+    {#if setupError}
+      <div class="directory-status has-error" role="alert">{setupError}</div>
+    {/if}
 
     {#if !loading && agents.length > 0}
       <div class="toolbar">
@@ -193,7 +219,8 @@
       <div class="empty-state">
         <iconify-icon icon="ant-design:robot-outlined" width="32"></iconify-icon>
         <span>{$t('agents.empty')}</span>
-        <button class="btn-primary" onclick={handleCreateWithAgent}>{$t('agents.create_with_agent')}</button>
+        <!-- OCTO-FORK: the empty gallery shares the same setup loading state. -->
+        <button class="btn-primary" disabled={openingSetup} aria-busy={openingSetup} onclick={handleCreateWithAgent}>{openingSetup ? $t('common.loading') : $t('agents.create_with_agent')}</button>
       </div>
     {:else if filtered.length === 0}
       <div class="empty-state">
@@ -224,7 +251,8 @@
                     <iconify-icon icon={isHidden(agent) ? 'ant-design:eye-outlined' : 'ant-design:eye-invisible-outlined'} width="13"></iconify-icon>
                   </button>
                 {:else if agent.source !== 'platform'}
-                  <button class="act-btn" title={$t('agents.edit_with_agent')} onclick={(e) => handleEditWithAgent(agent, e)}>
+                  <!-- OCTO-FORK: an in-flight setup cannot launch another editing session. -->
+                  <button class="act-btn" disabled={openingSetup} aria-busy={openingSetup} title={$t('agents.edit_with_agent')} onclick={(e) => handleEditWithAgent(agent, e)}>
                     <iconify-icon icon="ant-design:message-outlined" width="13"></iconify-icon>
                   </button>
                   <button class="act-btn del" title={$t('common.delete')} onclick={(e) => { e.stopPropagation(); handleDelete(agent) }}>

@@ -2,14 +2,14 @@
   import { get } from 'svelte/store'
   import * as api from '../../lib/api'
   import { t, tr } from '../../lib/i18n'
-  import { sessionGroups, nativeShell, showToast, normalizeDir } from '../../lib/stores'
+  import { sessionGroups, sessions, nativeShell, showToast, normalizeDir } from '../../lib/stores'
   import FolderPickerModal from './FolderPickerModal.svelte'
   import type { SessionGroup } from '../../lib/types'
 
   // One modal, two modes: group == null creates a project (name + source
   // folders, zero folders is a legitimate shape), otherwise it edits one
-  // (rename, mount/unmount folders). The workspace is the server's business —
-  // it never appears as an input here.
+  // (rename, mount/unmount folders).
+  // OCTO-FORK: existing projects may choose their cwd before the first message.
   let { group = null, onClose, onSaved }: {
     group?: SessionGroup | null
     onClose: () => void
@@ -23,8 +23,19 @@
   let name = $state(group?.name ?? '')
   // svelte-ignore state_referenced_locally
   let sourceDirs = $state<string[]>([...(group?.source_dirs ?? [])])
+  // svelte-ignore state_referenced_locally
+  let workingDir = $state(group?.working_dir ?? '')
+  let currentGroup = $derived(group ? $sessionGroups.find(g => g.id === group.id) ?? group : null)
+  let directoryLocked = $derived(
+    currentGroup?.working_dir_locked !== false ||
+    $sessions.some(s => currentGroup?.session_ids.includes(s.id) && (s.protection_policy?.locked || s.status === 'running')),
+  )
+  $effect(() => {
+    if (directoryLocked && currentGroup) workingDir = currentGroup.working_dir ?? ''
+  })
   let saving = $state(false)
   let pickerOpen = $state(false)
+  let pickingWorkingDir = $state(false)
   let modalEl = $state<HTMLDivElement | null>(null)
 
   // No modal-level focus steal: the name input autofocuses, and Escape still
@@ -35,11 +46,21 @@
     pickerOpen = false
   }
 
-  async function openFolderPicker() {
+  function selectFolder(path: string) {
+    if (pickingWorkingDir) {
+      if (!directoryLocked) workingDir = path
+      pickerOpen = false
+    } else {
+      addFolder(path)
+    }
+  }
+
+  async function openFolderPicker(forWorkingDir = false) {
+    pickingWorkingDir = forWorkingDir
     if (get(nativeShell)) {
       try {
-        const res = await api.nativePickFolder('')
-        if (!res.cancelled && res.path) addFolder(res.path)
+        const res = await api.nativePickFolder(forWorkingDir ? workingDir : '')
+        if (!res.cancelled && res.path) selectFolder(res.path)
       } catch (e: any) {
         // OCTO-FORK: project-dialog fallback feedback follows the selected language.
         showToast(e.message ?? tr('folder_picker.open_failed'), 'error')
@@ -60,7 +81,11 @@
     try {
       let g: SessionGroup
       if (group) {
-        g = await api.updateSessionGroup(group.id, { name: trimmed, source_dirs: sourceDirs })
+        // OCTO-FORK: omit an unchanged/locked cwd so rename and mounts remain editable.
+        g = await api.updateSessionGroup(group.id, {
+          name: trimmed, source_dirs: sourceDirs,
+          ...(!directoryLocked && workingDir !== group.working_dir ? { working_dir: workingDir } : {}),
+        })
         sessionGroups.update(gs => gs.map(x => (x.id === g.id ? g : x)))
       } else {
         g = await api.createSessionGroup(trimmed, { source_dirs: sourceDirs })
@@ -68,7 +93,10 @@
       }
       onSaved?.(g)
     } catch (e: any) {
-      showToast(e.message ?? tr('project.save_failed'), 'error')
+      if (group && e.code === 'project_directory_locked') {
+        sessionGroups.update(gs => gs.map(g => g.id === group.id ? { ...g, working_dir_locked: true } : g))
+      }
+      showToast(e.code === 'project_directory_locked' ? tr('project.directory_locked') : e.message ?? tr('project.save_failed'), 'error')
     } finally {
       saving = false
     }
@@ -95,6 +123,19 @@
       <!-- svelte-ignore a11y_autofocus -->
       <input class="name-input" placeholder={$t('project.name_ph')} bind:value={name} autofocus />
 
+      {#if group}
+        <!-- OCTO-FORK: directory changes are available until the first message. -->
+        <div class="section-label">{$t('project.working_dir')}</div>
+        <div class="folder-row">
+          <iconify-icon icon="ant-design:folder-outlined" width="14"></iconify-icon>
+          <span class="mono folder-path" title={workingDir}>{workingDir}</span>
+          <button class="btn" disabled={directoryLocked || saving} onclick={() => openFolderPicker(true)}>
+            {$t('chat.dir_change')}
+          </button>
+        </div>
+        <div class="section-label">{directoryLocked ? $t('project.directory_locked') : $t('project.directory_editable')}</div>
+      {/if}
+
       <div class="section-label">{$t('project.source_dirs')}</div>
       {#each sourceDirs as dir (dir)}
         <div class="folder-row">
@@ -105,7 +146,7 @@
           </button>
         </div>
       {/each}
-      <button class="add-folder" onclick={openFolderPicker}>
+      <button class="add-folder" onclick={() => openFolderPicker()}>
         <iconify-icon icon="ant-design:folder-add-outlined" width="18"></iconify-icon>
         <span>{$t('project.add_folder')}</span>
       </button>
@@ -121,7 +162,7 @@
 </div>
 
 {#if pickerOpen}
-  <FolderPickerModal initialPath="" mode="folder" onSelect={addFolder} onClose={() => (pickerOpen = false)} />
+  <FolderPickerModal initialPath={pickingWorkingDir ? workingDir : ''} mode="folder" onSelect={selectFolder} onClose={() => (pickerOpen = false)} />
 {/if}
 
 <style>

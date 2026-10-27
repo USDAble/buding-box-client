@@ -230,11 +230,11 @@ export async function createSessionGroup(name: string, project?: { source_dirs?:
   return d.group
 }
 
-// The workspace (working_dir) is fixed at creation and not patchable;
-// source_dirs replaces the mount set wholesale.
+// OCTO-FORK: working_dir is editable before the project's first message;
+// source_dirs still replaces the mount set wholesale.
 export async function updateSessionGroup(
   id: string,
-  patch: { name?: string; collapsed?: boolean; source_dirs?: string[] },
+  patch: { name?: string; collapsed?: boolean; source_dirs?: string[]; working_dir?: string },
 ): Promise<SessionGroup> {
   const d = await request<{ group: SessionGroup }>(`/api/session-groups/${id}`, { method: 'PATCH', ...json(patch) })
   return d.group

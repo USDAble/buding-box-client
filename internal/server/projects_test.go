@@ -260,10 +260,8 @@ func TestProject_DirCannotBeCleared(t *testing.T) {
 	}
 }
 
-// TestProject_RetargetDirIsPickedUp verifies the read cache does not serve a
-// stale directory after a rejected edit — and that the rejection really left
-// the workspace alone.
-func TestProject_RetargetIsRejected(t *testing.T) {
+// OCTO-FORK: creating an empty session must not lock the project's directory.
+func TestProject_RetargetBeforeFirstMessage(t *testing.T) {
 	srv := groupTestServer(t)
 	first := t.TempDir()
 	second := t.TempDir()
@@ -275,11 +273,11 @@ func TestProject_RetargetIsRejected(t *testing.T) {
 		t.Fatalf("before: cwd = %q, want %q", got, ws)
 	}
 
-	if rec, _ := doGroupReq(t, srv, http.MethodPatch, "/api/session-groups/"+gid, map[string]any{"working_dir": second}); rec.Code != http.StatusBadRequest {
-		t.Fatalf("retarget: status %d, want 400 (workspace is fixed at creation)", rec.Code)
+	if rec, _ := doGroupReq(t, srv, http.MethodPatch, "/api/session-groups/"+gid, map[string]any{"working_dir": second}); rec.Code != http.StatusOK {
+		t.Fatalf("retarget: status %d body %s", rec.Code, rec.Body.String())
 	}
-	if got := srv.sessionCwd(sess); got != ws {
-		t.Errorf("after rejected retarget: cwd = %q, want the workspace %q unchanged", got, ws)
+	if got := srv.sessionCwd(sess); got != second {
+		t.Errorf("after retarget: cwd = %q, want %q", got, second)
 	}
 }
 

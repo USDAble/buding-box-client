@@ -16,13 +16,25 @@ type ProjectRef struct {
 	ID           string
 	Name         string
 	WorkspaceDir string
+	// OCTO-FORK: preserve the memory slug independently of a selected cwd.
+	memoryWorkspaceDir string
+}
+
+// OCTO-FORK: CLI and server memory resolution share the same workspace identity.
+func (g sessionGroup) projectRef() ProjectRef {
+	return ProjectRef{ID: g.ID, Name: g.Name, WorkspaceDir: g.WorkingDir, memoryWorkspaceDir: g.WorkspaceDir}
 }
 
 // MemoryDir returns the project's ID-keyed memory directory — the same
 // derivation Server.sessionMemDir uses, so notes written through the CLI land
 // where every other surface reads them.
 func (r ProjectRef) MemoryDir() (string, error) {
-	return memory.DirForProjectID(r.ID, filepath.Base(r.WorkspaceDir))
+	// OCTO-FORK: directory edits must not strand notes under the previous basename.
+	workspace := r.memoryWorkspaceDir
+	if workspace == "" {
+		workspace = r.WorkspaceDir
+	}
+	return memory.DirForProjectID(r.ID, filepath.Base(workspace))
 }
 
 // ProjectsClaimingDir returns every project that owns dir — as its workspace
@@ -60,7 +72,8 @@ func ProjectsClaimingDir(dir string) []ProjectRef {
 			claimed = memory.NormalizeDir(sd) == target
 		}
 		if claimed {
-			out = append(out, ProjectRef{ID: g.ID, Name: g.Name, WorkspaceDir: g.WorkingDir})
+			// OCTO-FORK: retain the original memory identity for CLI callers.
+			out = append(out, g.projectRef())
 		}
 	}
 	return out
@@ -75,7 +88,8 @@ func ProjectMemoryDirForSession(sessionID string) string {
 	if p == nil {
 		return ""
 	}
-	d, err := memory.DirForProjectID(p.ID, filepath.Base(p.WorkingDir))
+	// OCTO-FORK: resume uses the same stable identity as fresh CLI sessions.
+	d, err := p.projectRef().MemoryDir()
 	if err != nil {
 		return ""
 	}
@@ -123,7 +137,8 @@ func EnsureProjectForDirOnly(dir string) (ProjectRef, error) {
 	}
 	for i := range gf.Groups {
 		if gf.Groups[i].ID == gid {
-			return ProjectRef{ID: gid, Name: gf.Groups[i].Name, WorkspaceDir: gf.Groups[i].WorkingDir}, nil
+			// OCTO-FORK: directory edits retain memory identity on find-or-create too.
+			return gf.Groups[i].projectRef(), nil
 		}
 	}
 	return ProjectRef{}, nil

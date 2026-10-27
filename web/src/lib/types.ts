@@ -69,6 +69,8 @@ export interface SessionGroup {
   collapsed?: boolean
   /** Set on a project — its generated workspace, where its sessions run. */
   working_dir?: string
+  // OCTO-FORK: the server checks every member before allowing a cwd edit.
+  working_dir_locked?: boolean
   /** External folders the project references (repos and plain folders alike). */
   source_dirs?: string[]
   /** Set on a scheduled task's run cluster. */

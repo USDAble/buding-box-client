@@ -3,14 +3,14 @@ import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 import { flushSync, mount, unmount } from 'svelte'
 import { get } from 'svelte/store'
 import Composer from './Composer.svelte'
-import { activeSessionId, sessions, chatModel, chatShowReasoning, pendingPersonalInfoProtection } from '../../lib/stores'
+import { activeSessionId, sessions, chatModel, chatShowReasoning, pendingPersonalInfoProtection, nativeShell, sessionGroups, pendingGroupId, pendingWorkingDir } from '../../lib/stores'
 import { productState, allowEnvironmentModelSource } from '../../lib/product'
 import { selectableModels } from '../../lib/selectableModels'
 import { parkDraft, takeDraft } from '../../lib/composerDrafts'
 import { locale, tr } from '../../lib/i18n'
 import { checkSensitive } from '../../lib/sensitive'
-import { getProductModels, updateSessionModel, setSessionProtection, updateSessionShowReasoning } from '../../lib/api'
-import type { Session } from '../../lib/types'
+import { getProductModels, updateSessionModel, setSessionProtection, updateSessionShowReasoning, nativePickFolder, updateSessionGroup, fsList } from '../../lib/api'
+import type { Session, SessionGroup } from '../../lib/types'
 
 vi.mock('../../lib/api', () => ({
   DEFAULT_WEB_PERMISSION_MODE: 'auto',
@@ -21,6 +21,7 @@ vi.mock('../../lib/api', () => ({
   getProductModels: vi.fn(async () => ({ state: 'absent', catalogVersion: '', vendors: [] })),
   updateSessionModel: vi.fn(),
   setSessionProtection: vi.fn(), updateSessionShowReasoning: vi.fn(),
+  nativePickFolder: vi.fn(), updateSessionGroup: vi.fn(), fsList: vi.fn(),
 }))
 vi.mock('../../lib/sensitive', () => ({ checkSensitive: vi.fn() }))
 vi.mock('../../lib/ws', () => ({ ws: { on: vi.fn(() => () => {}), interrupt: vi.fn() } }))
@@ -50,6 +51,8 @@ function send() { (target.querySelector('.send-btn') as HTMLButtonElement).click
 beforeEach(() => {
   locale.set('zh'); activeSessionId.set('async-a'); productState.set(null)
   sessions.set([]); chatModel.set({}); chatShowReasoning.set({}); selectableModels.set([])
+  nativeShell.set(false); sessionGroups.set([]); pendingGroupId.set(''); pendingWorkingDir.set('')
+  vi.mocked(nativePickFolder).mockReset(); vi.mocked(updateSessionGroup).mockReset(); vi.mocked(fsList).mockReset()
   allowEnvironmentModelSource.set(true); pendingPersonalInfoProtection.set(false)
   for (const sid of ['async-a', 'async-b', '']) takeDraft(sid)
   vi.mocked(checkSensitive).mockReset()
@@ -61,6 +64,7 @@ afterEach(async () => {
   if (app) await unmount(app); app = undefined; target.remove()
   for (const sid of ['async-a', 'async-b', '']) takeDraft(sid)
   productState.set(null); activeSessionId.set(null)
+  nativeShell.set(false); sessionGroups.set([]); pendingGroupId.set(''); pendingWorkingDir.set('')
 })
 
 it('keeps the text and attachments of both sessions when navigation interrupts preflight', async () => {
@@ -151,4 +155,117 @@ it('parks a failed send after navigation without overwriting a newer original-se
   pending.reject(new Error('cancelled after session switch')); await settle()
   expect(target.querySelector('textarea')!.value).toBe('')
   expect(takeDraft('async-a').text).toBe('newer A draft')
+})
+
+function project(id = 'project-a'): SessionGroup {
+  return { id, name: id, session_ids: [], working_dir: `/old/${id}`, source_dirs: [], working_dir_locked: false }
+}
+function directoryChip() {
+  return target.querySelector<HTMLButtonElement>(`button[aria-label="${tr('chat.dir_change')}"]`)!
+}
+
+// OCTO-FORK: an unsent draft can leave a project that already has history.
+it.each([true, false, undefined])('reselects the draft directory regardless of project lock %s', async locked => {
+  const group = { ...project(), working_dir_locked: locked, session_ids: ['async-b'] }
+  activeSessionId.set(null); pendingGroupId.set(group.id)
+  sessions.set([{ ...session('async-b'), protection_policy: { ...session('async-b').protection_policy, locked: true } }])
+  sessionGroups.set([group]); nativeShell.set(true)
+  vi.mocked(nativePickFolder).mockResolvedValue({ path: '/chosen', cancelled: false })
+  app = mount(Composer, { target }); flushSync()
+  type('draft stays here')
+  expect(directoryChip().disabled).toBe(false)
+  directoryChip().click(); await settle()
+  expect(nativePickFolder).toHaveBeenCalledWith(group.working_dir)
+  expect(updateSessionGroup).not.toHaveBeenCalled()
+  expect(get(sessionGroups)).toEqual([group])
+  expect(target.querySelector('.dir-bar')?.textContent).toContain('/chosen')
+  expect(target.querySelector('textarea')!.value).toBe('draft stays here')
+  expect(get(pendingGroupId)).toBe('')
+  expect(get(pendingWorkingDir)).toBe('/chosen')
+})
+
+it('uses the browser folder picker from the project directory chip', async () => {
+  const group = project(); activeSessionId.set(null); pendingGroupId.set(group.id); sessionGroups.set([group])
+  vi.mocked(fsList).mockResolvedValue({ path: '/chosen', parent: '/', entries: [], truncated: false, is_this_pc: false })
+  app = mount(Composer, { target }); flushSync()
+  directoryChip().click(); await settle()
+  const select = [...target.querySelectorAll<HTMLButtonElement>('button')].find(b => b.textContent?.trim() === tr('folder.select'))!
+  expect(select.disabled).toBe(false); select.click(); await settle()
+  expect(fsList).toHaveBeenCalledWith(group.working_dir)
+  expect(updateSessionGroup).not.toHaveBeenCalled()
+  expect(target.querySelector('[role="dialog"]')).toBeNull()
+  expect(get(pendingWorkingDir)).toBe('/chosen')
+  expect(get(pendingGroupId)).toBe('')
+})
+
+it('keeps the directory chip read-only for an existing conversation', async () => {
+  const group = project(); group.session_ids = ['async-a']
+  sessions.set([{ ...session('async-a'), protection_policy: { ...session('async-a').protection_policy, locked: true } }])
+  sessionGroups.set([group]); nativeShell.set(true)
+  app = mount(Composer, { target }); flushSync()
+  expect(directoryChip().disabled).toBe(true); directoryChip().click(); await settle()
+  expect(nativePickFolder).not.toHaveBeenCalled()
+})
+
+it('discards a delayed native directory selection after switching the draft project', async () => {
+  const original = project(); const other = project('project-b')
+  activeSessionId.set(null); pendingGroupId.set(original.id); sessionGroups.set([original, other]); nativeShell.set(true)
+  const pending = deferred<Awaited<ReturnType<typeof nativePickFolder>>>()
+  vi.mocked(nativePickFolder).mockReturnValue(pending.promise)
+  app = mount(Composer, { target }); flushSync(); directoryChip().click(); flushSync()
+  pendingGroupId.set(other.id); flushSync()
+  pending.resolve({ path: '/chosen', cancelled: false }); await settle()
+  expect(updateSessionGroup).not.toHaveBeenCalled()
+  expect(get(pendingGroupId)).toBe(other.id)
+  expect(directoryChip().textContent).toContain('project-b')
+  expect(get(sessionGroups).find(g => g.id === other.id)?.working_dir).toBe(other.working_dir)
+})
+
+it('selects an existing project without retargeting either project directory', async () => {
+  const original = project(); const other = { ...project('project-b'), working_dir_locked: true, source_dirs: ['/chosen'] }
+  activeSessionId.set(null); pendingGroupId.set(original.id); sessionGroups.set([original, other]); nativeShell.set(true)
+  vi.mocked(nativePickFolder).mockResolvedValue({ path: '/chosen', cancelled: false })
+  app = mount(Composer, { target }); flushSync(); directoryChip().click(); await settle()
+  expect(get(pendingGroupId)).toBe(other.id)
+  expect(get(pendingWorkingDir)).toBe('')
+  expect(get(sessionGroups)).toEqual([original, other])
+  expect(directoryChip().disabled).toBe(false)
+  expect(directoryChip().textContent).toContain('project-b')
+})
+
+it('shows the project chooser when the new folder is referenced by several projects', async () => {
+  const original = project()
+  const b = { ...project('project-b'), source_dirs: ['/shared'] }
+  const c = { ...project('project-c'), source_dirs: ['/shared'] }
+  activeSessionId.set(null); pendingGroupId.set(original.id); sessionGroups.set([original, b, c]); nativeShell.set(true)
+  vi.mocked(nativePickFolder).mockResolvedValue({ path: '/shared', cancelled: false })
+  app = mount(Composer, { target }); flushSync(); directoryChip().click(); await settle()
+  expect(get(pendingGroupId)).toBe('')
+  expect(get(pendingWorkingDir)).toBe('/shared')
+  expect(target.querySelector('.proj-menu')?.textContent).toContain(tr('chat.project_ambiguous'))
+  expect(target.querySelector('.proj-menu')?.textContent).toContain('project-b')
+  expect(target.querySelector('.proj-menu')?.textContent).toContain('project-c')
+  expect(updateSessionGroup).not.toHaveBeenCalled()
+})
+
+it('blocks sending until the native directory selection completes', async () => {
+  const group = project(); activeSessionId.set(null); pendingGroupId.set(group.id); sessionGroups.set([group]); nativeShell.set(true)
+  const pending = deferred<Awaited<ReturnType<typeof nativePickFolder>>>(); vi.mocked(nativePickFolder).mockReturnValue(pending.promise)
+  const onSend = vi.fn(); app = mount(Composer, { target, props: { onSend } }); flushSync()
+  directoryChip().click(); await settle(); type('hello'); send(); await settle()
+  expect(onSend).not.toHaveBeenCalled(); expect((target.querySelector('.send-btn') as HTMLButtonElement).disabled).toBe(true)
+  pending.resolve({ path: '/chosen', cancelled: false }); await settle(); send(); await settle()
+  expect(onSend).toHaveBeenCalledOnce()
+})
+
+it('leaves the draft destination unchanged when the picker is cancelled or fails', async () => {
+  const group = project(); activeSessionId.set(null); pendingGroupId.set(group.id); sessionGroups.set([group]); nativeShell.set(true)
+  vi.mocked(nativePickFolder).mockResolvedValueOnce({ path: '', cancelled: true }).mockRejectedValueOnce(new Error('dialog failed'))
+  app = mount(Composer, { target }); flushSync(); directoryChip().click(); await settle()
+  expect(updateSessionGroup).not.toHaveBeenCalled(); expect(get(sessionGroups)[0].working_dir).toBe(group.working_dir)
+  directoryChip().click(); await settle()
+  expect(get(sessionGroups)[0].working_dir).toBe(group.working_dir)
+  expect(get(pendingGroupId)).toBe(group.id)
+  expect(get(pendingWorkingDir)).toBe('')
+  expect(directoryChip().disabled).toBe(false)
 })

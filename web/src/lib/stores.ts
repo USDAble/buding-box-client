@@ -5,6 +5,8 @@ import type { AskQuestion } from './askStepper'
 import * as api from './api'
 // OCTO-FORK: expert and skill task creation share the composer's signed model source.
 import { resolveActionModel } from './actionModel'
+// OCTO-FORK: button-launched commands need the selected language without typed user input.
+import { tr } from './i18n'
 
 // First-run gate. 'unknown' until /api/onboard/status resolves (render a splash,
 // never flash the main UI); 'key_setup' blocks on the setup panel; 'soul_setup'
@@ -540,11 +542,13 @@ export async function resolveProjectForDir(dir: string): Promise<string> {
 // auto-send once the WS subscription is confirmed (see pendingPrompt). The
 // relevant skill drives the rest of the flow in conversation — no forms.
 export async function openAgentSession(content: string, name?: string): Promise<void> {
+  // OCTO-FORK: capture the language at click time before model/session requests can delay sending.
+  const localizedContent = `${content}\n\n${tr('chat.action_language_instruction')}`
   const model = await resolveActionModel([get(pendingModel), get(sessions).find(s => s.id === get(activeSessionId))?.model_id ?? ''])
   const sess = await api.createSession({ source: 'manual', model, ...(name ? { name } : {}) })
   agenticSessions.add(sess.id)
   prependSession(sess)
-  pendingPrompt.set({ sessionId: sess.id, content })
+  pendingPrompt.set({ sessionId: sess.id, content: localizedContent })
   activeSessionId.set(sess.id)
   view.set('chat')
 }

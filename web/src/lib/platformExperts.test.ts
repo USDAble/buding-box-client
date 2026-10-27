@@ -1,4 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
+// OCTO-FORK: failed setup preserves the active session and session list.
+import { get } from 'svelte/store'
 import { listAgents, listPlatformSkills } from './api'
 import { summonAgent, openAgentSession, pendingModel, activeSessionId, sessions } from './stores'
 import { selectableModels, defaultSelectableModel, type SelectableModel } from './selectableModels'
@@ -51,6 +53,17 @@ describe('platform expert catalog', () => {
     await openAgentSession('Use selected skill','Skill')
     expect(mocked.mock.calls.map(([path])=>path)).toEqual(['/api/product/models','/api/sessions'])
     expect(JSON.parse(mocked.mock.calls[1][1]?.body as string).model).toBe('gateway::ready')
+  })
+  // OCTO-FORK: unavailable models must reject before expert setup creates or activates a session.
+  it('rejects expert setup without creating a session when no model is usable', async () => {
+    activeSessionId.set('existing')
+    const mocked = vi.fn(async () => new Response(JSON.stringify({ state: 'fresh', vendors: [] }), { status: 200 }))
+    vi.stubGlobal('fetch', mocked)
+    await expect(openAgentSession('/expert-agent-manager', 'Expert')).rejects.toThrow()
+    expect(mocked.mock.calls).toHaveLength(1)
+    expect(mocked).toHaveBeenCalledWith('/api/product/models', expect.anything())
+    expect(get(activeSessionId)).toBe('existing')
+    expect(get(sessions)).toEqual([])
   })
   it('surfaces a platform outage instead of presenting bundled templates as published experts', async () => {
     vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({message:'unavailable'}),{status:503})))

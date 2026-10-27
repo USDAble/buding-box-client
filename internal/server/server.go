@@ -2525,7 +2525,8 @@ func (s *Server) sessionMemDir(proj *sessionGroup) string {
 		return d
 	}
 	dir := s.homeMemDir
-	d, err := memory.DirForProjectID(proj.ID, filepath.Base(proj.WorkingDir))
+	// OCTO-FORK: choosing a cwd before chatting must not change memory identity.
+	d, err := proj.projectRef().MemoryDir()
 	if err != nil || memory.EnsureDir(d) != nil {
 		// Don't cache a failure: a full disk or a transient permission problem
 		// would otherwise pin this project to the shared tier for the rest of

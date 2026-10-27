@@ -352,6 +352,10 @@ export const en: Record<string, string> = {
   "project.modal_settings": "Project settings",
   "project.name_ph": "Project name",
   "project.source_dirs": "Source folders",
+  // OCTO-FORK: explain the project's pre-message directory edit boundary.
+  "project.working_dir": "Working directory",
+  "project.directory_editable": "You can change the working directory before the project's first message.",
+  "project.directory_locked": "The working directory is locked after the project's first message.",
   "project.add_folder": "Add a folder octo can read and edit",
   "project.remove_folder": "Remove this folder",
   "project.create": "Create project",
@@ -2003,6 +2007,10 @@ export const zh: Record<string, string> = {
   "project.modal_settings": "项目设置",
   "project.name_ph": "项目名称",
   "project.source_dirs": "源文件夹",
+  // OCTO-FORK: explain the project's pre-message directory edit boundary.
+  "project.working_dir": "工作目录",
+  "project.directory_editable": "项目首次发送消息前，可以修改工作目录。",
+  "project.directory_locked": "项目已发送过消息，工作目录已锁定。",
   "project.add_folder": "添加 octo 可读取和编辑的文件夹",
   "project.remove_folder": "移除此文件夹",
   "project.create": "创建项目",

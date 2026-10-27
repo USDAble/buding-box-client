@@ -683,9 +683,7 @@
     sid ? (currentSession?.protection_policy?.locked ?? ((currentSession as any)?.turn_count ?? 0) > 0) : false,
   )
   // The project (a session group carrying a working dir) this session belongs
-  // to, if any. A project's directory governs every session in it, so the dir
-  // chip below goes read-only rather than letting the user edit a value the
-  // server would refuse.
+  // to, or the destination selected for a draft that has not been sent yet.
   // On the landing page there is no session to look up membership for, so the
   // project comes from whichever pick is going to decide it. A group docked by
   // the sidebar's per-group "+" wins outright — the same precedence
@@ -881,6 +879,9 @@
   let dirSaving = $state(false)
   let pickerOpen = $state(false)
   let pickerMode = $state<'folder' | 'file'>('folder')
+  // OCTO-FORK: discard delayed folder choices after leaving their draft.
+  let pickerGroupId = $state('')
+  let pickerWorkingDir = $state('')
   let reasoningLevels = $derived(activeModel ? (activeModel.reasoningOptions ?? ['default']) : [])
   // OCTO-FORK: effort belongs to the selected signed model, not a global level.
   let reasoning = $derived(activeModel?.reasoningEffort ?? 'default')
@@ -1089,8 +1090,8 @@
     closeMenus()
   }
 
-  // Shared by the typed input and the folder picker: PATCH the session working
-  // dir and store the canonical path the server resolved (~ expanded, absolute).
+  // Shared by directory pickers: save the project or session working directory
+  // and store the canonical path returned by the server.
   // Returns whether it succeeded so callers can close their own UI.
   async function applyWorkingDir(dir: string): Promise<boolean> {
     // Landing page: the opened folder resolves to a project by the same
@@ -1104,6 +1105,9 @@
         return true
       }
       if (claims.length > 1) {
+        // OCTO-FORK: reveal the chooser when reselecting from a docked project.
+        pendingGroupId.set('')
+        pendingWorkingDir.set(dir)
         claimChoices = claims
         projQuery = ''
         projMenu = true
@@ -1128,16 +1132,29 @@
   }
 
   async function openPicker() {
+    if (dirSaving || sendBusy) return
     // The chip's onclick stops propagation, so the window-level closeMenus
     // never runs — close them here or a dropdown stays open behind the modal.
     closeMenus()
+    const originSid = sid
+    const originGroup = get(pendingGroupId)
+    const originDir = get(pendingWorkingDir)
+    pickerGroupId = originGroup
+    pickerWorkingDir = originDir
     // Desktop shell: use the OS folder dialog. Plain web: open the in-app tree.
     if (get(nativeShell)) {
+      dirSaving = true
       try {
         const res = await api.nativePickFolder(workingDir)
-        if (!res.cancelled && res.path) await applyWorkingDir(res.path)
+        // OCTO-FORK: a folder choice changes this unsent draft's destination,
+        // never the persisted directory or history of the selected project.
+        if (!destroyed && sid === originSid && get(pendingGroupId) === originGroup && get(pendingWorkingDir) === originDir && !res.cancelled && res.path) {
+          await applyWorkingDir(res.path)
+        }
       } catch (e: any) {
         showToast(e.message ?? tr('folder_picker.open_failed'), 'error')
+      } finally {
+        dirSaving = false
       }
       return
     }
@@ -1150,6 +1167,11 @@
   async function onPickerSelect(path: string) {
     if (pickerMode === 'file') {
       attachLocalFile(path)
+      closePicker()
+      return
+    }
+    // OCTO-FORK: a picker left behind by navigation must not retarget another draft.
+    if (sid || get(pendingGroupId) !== pickerGroupId || get(pendingWorkingDir) !== pickerWorkingDir) {
       closePicker()
       return
     }
@@ -1233,7 +1255,8 @@
   // the turn in flight (Cmd/Ctrl+Enter — the web counterpart of the TUI's
   // Ctrl+Q). Idle it makes no difference: the server just starts the turn.
   async function send(queued = false) {
-    if (sendBusy || modelSaving || protectionBusy || permissionSaving) return
+    // OCTO-FORK: the first message must use the directory whose save completed.
+    if (dirSaving || sendBusy || modelSaving || protectionBusy || permissionSaving) return
     if (!text.trim() && attachments.length === 0) return
     // OCTO-FORK: retain the draft until the user replaces an unavailable binding.
     if (activeModel?.eligible === false) {
@@ -1623,7 +1646,7 @@
         {/if}
         <!-- Arrow-wrapped: a bare `onclick={send}` would hand the MouseEvent to
              the `queued` parameter and queue every click. -->
-        <button class="send-btn" disabled={sendBusy || modelSaving || protectionBusy || permissionSaving || savingReasoning} title={isStreaming || $running ? $t('chat.send_or_queue_hint') : $t('chat.send')} aria-label={$t('chat.send')} onclick={() => send()}>
+        <button class="send-btn" disabled={dirSaving || sendBusy || modelSaving || protectionBusy || permissionSaving || savingReasoning} title={isStreaming || $running ? $t('chat.send_or_queue_hint') : $t('chat.send')} aria-label={$t('chat.send')} onclick={() => send()}>
           <iconify-icon icon="lucide:send" width="16"></iconify-icon>
         </button>
       </div>
@@ -1805,26 +1828,28 @@
             </div>
           {/if}
         </div>
-        <!-- Once the session exists the directory is settled and the composer
-             says nothing about it. What's left here is the docked landing page,
-             where the group the session is being filed under already made the
-             choice — dockedGroup is null the moment a session exists, so it
-             gates this row on its own. -->
-        {#if dockedGroup}
-          {#if workingDir && project}
-            <span class="meta-chip static" title={$t('chat.dir_from_project').replace('{name}', project.name) + ` — ${workingDir}`}>
-              <iconify-icon icon="ant-design:folder-outlined" width="13"></iconify-icon>
-              <span class="mono dir-path">{shortDir(workingDir)}</span>
-              <span class="dir-owner">{project.name}</span>
-            </span>
-          {:else}
-            <!-- A plain group: no directory to inherit, but naming it is the only
-                 signal on this page that the session is being filed there. -->
-            <span class="meta-chip static" title={$t('chat.dir_from_project').replace('{name}', dockedGroup.name)}>
-              <iconify-icon icon="ant-design:folder-outlined" width="13"></iconify-icon>
-              <span class="dir-owner">{dockedGroup.name}</span>
-            </span>
-          {/if}
+        <!-- OCTO-FORK: reselect the unsent draft's destination even when the
+             selected project already contains other conversations. -->
+        {#if workingDir && project}
+          <button
+            class="meta-chip"
+            class:static={!!sid}
+            disabled={!!sid || dirSaving || sendBusy}
+            aria-label={$t('chat.dir_change')}
+            title={(sid ? $t('chat.dir_from_project').replace('{name}', project.name) : $t('chat.dir_change')) + ` — ${workingDir}`}
+            onclick={(e) => { e.stopPropagation(); void openPicker() }}
+          >
+            <iconify-icon icon="ant-design:folder-outlined" width="13"></iconify-icon>
+            <span class="mono dir-path">{shortDir(workingDir)}</span>
+            <span class="dir-owner">{project.name}</span>
+          </button>
+        {:else if dockedGroup}
+          <!-- A plain group: no directory to inherit, but naming it is the only
+               signal on this page that the session is being filed there. -->
+          <span class="meta-chip static" title={$t('chat.dir_from_project').replace('{name}', dockedGroup.name)}>
+            <iconify-icon icon="ant-design:folder-outlined" width="13"></iconify-icon>
+            <span class="dir-owner">{dockedGroup.name}</span>
+          </span>
         {/if}
         {#if goalChip}
           <span class="meta-chip static" title={goal?.objective ?? ''}>

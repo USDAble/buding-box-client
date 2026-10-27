@@ -66,13 +66,13 @@ type sessionGroup struct {
 	// the Web UI and the Wails desktop webview, whose local storage may not
 	// persist the same way.
 	Collapsed bool `json:"collapsed,omitempty"`
-	// WorkingDir, when set, makes this group a project (see above). It is the
-	// project's octo-owned workspace, generated under the workspace root at
-	// creation and fixed for the project's life. Stored already expanded and
-	// absolute — the write paths resolve and validate it, so every reader can
-	// use it verbatim. (Registries written before the workspace model may
-	// still carry a user directory here; the startup migration converts them.)
+	// OCTO-FORK: WorkingDir defaults to a generated workspace and may be
+	// changed to an explicit directory before the first message. Write paths
+	// validate and expand it so readers can use it verbatim.
 	WorkingDir string `json:"working_dir,omitempty"`
+	// OCTO-FORK: keep generated workspace identity when a pristine project
+	// chooses an external cwd; memory and legacy migration still need it.
+	WorkspaceDir string `json:"workspace_dir,omitempty"`
 	// SourceDirs are the external directories the project references — code
 	// repositories and plain folders alike, mounted as additional roots for
 	// the tools. A directory may appear in several projects' SourceDirs; it
@@ -652,8 +652,14 @@ func (s *Server) handleListSessionGroups(w http.ResponseWriter, r *http.Request)
 	if gf.CollapsedSessionIDs == nil {
 		gf.CollapsedSessionIDs = []string{}
 	}
+	// OCTO-FORK: directory editability comes from all project transcripts,
+	// including members absent from the client's paginated session list.
+	groups := make([]sessionGroupResponse, 0, len(gf.Groups))
+	for _, g := range gf.Groups {
+		groups = append(groups, s.projectGroupResponse(g))
+	}
 	writeJSON(w, http.StatusOK, map[string]any{
-		"groups":                gf.Groups,
+		"groups":                groups,
 		"pinned_session_ids":    gf.PinnedSessionIDs,
 		"collapsed_session_ids": gf.CollapsedSessionIDs,
 	})
@@ -727,7 +733,8 @@ func (s *Server) handleCreateSessionGroup(w http.ResponseWriter, r *http.Request
 	// The person just mounted these folders — that gesture is the hooks trust
 	// grant, recorded at the current fingerprints.
 	trustMountedHooks(sourceDirs)
-	writeJSON(w, http.StatusOK, map[string]any{"group": g})
+	// OCTO-FORK: creation returns the same directory-edit contract as listing.
+	writeJSON(w, http.StatusOK, map[string]any{"group": s.projectGroupResponse(g)})
 }
 
 // ─── PATCH /api/session-groups/{id} ─────────────────────────────────────────
@@ -738,10 +745,7 @@ func (s *Server) handleCreateSessionGroup(w http.ResponseWriter, r *http.Request
 type updateSessionGroupRequest struct {
 	Name      *string `json:"name,omitempty"`
 	Collapsed *bool   `json:"collapsed,omitempty"`
-	// WorkingDir is rejected outright: the workspace is generated at creation
-	// and fixed for the project's life. It stays in the request type so the
-	// handler can answer an old client with a real explanation instead of
-	// silently ignoring the field.
+	// OCTO-FORK: a project may choose its cwd until its first accepted message.
 	WorkingDir *string `json:"working_dir,omitempty"`
 	// SourceDirs replaces the mount set wholesale (same validation as
 	// creation). The change reaches running sessions on their next turn
@@ -761,7 +765,7 @@ func (s *Server) handleUpdateSessionGroup(w http.ResponseWriter, r *http.Request
 		return
 	}
 	if req.Name == nil && req.Collapsed == nil && req.WorkingDir == nil && req.SourceDirs == nil {
-		writeError(w, http.StatusBadRequest, "name, collapsed or source_dirs is required")
+		writeError(w, http.StatusBadRequest, "name, collapsed, working_dir or source_dirs is required")
 		return
 	}
 	var name string
@@ -772,9 +776,19 @@ func (s *Server) handleUpdateSessionGroup(w http.ResponseWriter, r *http.Request
 			return
 		}
 	}
+	// OCTO-FORK: validate an explicit directory without creating or moving it.
+	var newWorkingDir string
 	if req.WorkingDir != nil {
-		writeError(w, http.StatusBadRequest, "working_dir is fixed at creation: the project's workspace cannot be retargeted or cleared")
-		return
+		var verr error
+		if strings.TrimSpace(*req.WorkingDir) == "" {
+			writeError(w, http.StatusBadRequest, "working_dir cannot be empty")
+			return
+		}
+		newWorkingDir, verr = validateWorkingDir(*req.WorkingDir)
+		if verr != nil {
+			writeError(w, http.StatusBadRequest, verr.Error())
+			return
+		}
 	}
 	// Validate the mounts before touching the registry, so a bad path leaves
 	// the group untouched.
@@ -806,6 +820,34 @@ func (s *Server) handleUpdateSessionGroup(w http.ResponseWriter, r *http.Request
 		writeError(w, http.StatusNotFound, "group not found")
 		return
 	}
+	// OCTO-FORK: hold member turn locks through the registry save so an edit
+	// cannot race the first message into running against two directories.
+	var releaseDirectoryLocks func()
+	if req.WorkingDir != nil && memory.NormalizeDir(newWorkingDir) != memory.NormalizeDir(groups[idx].WorkingDir) {
+		unlock, err := s.lockProjectDirectory(groups[idx])
+		if err != nil {
+			writeJSON(w, http.StatusConflict, map[string]string{"code": "project_directory_locked", "error": err.Error()})
+			return
+		}
+		defer unlock()
+		releaseDirectoryLocks = unlock
+		// Generated workspaces and task directories belong to their existing
+		// owners; a user-selected cwd must not adopt one of them.
+		if _, err := validateSourceDirs(s.curWorkspaceDir(), []string{newWorkingDir}); err != nil {
+			writeError(w, http.StatusBadRequest, err.Error())
+			return
+		}
+		for i := range groups {
+			if i != idx && memory.NormalizeDir(groups[i].WorkingDir) == memory.NormalizeDir(newWorkingDir) {
+				writeError(w, http.StatusBadRequest, "working_dir already belongs to another project")
+				return
+			}
+		}
+		if groups[idx].WorkspaceDir == "" {
+			groups[idx].WorkspaceDir = groups[idx].WorkingDir
+		}
+		groups[idx].WorkingDir = newWorkingDir
+	}
 	if req.Name != nil {
 		groups[idx].Name = name
 	}
@@ -823,7 +865,11 @@ func (s *Server) handleUpdateSessionGroup(w http.ResponseWriter, r *http.Request
 		// The edit gesture is the hooks trust grant, same as creation.
 		trustMountedHooks(newSourceDirs)
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"group": groups[idx]})
+	// OCTO-FORK: do not mistake this edit's own turn locks for a running turn.
+	if releaseDirectoryLocks != nil {
+		releaseDirectoryLocks()
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"group": s.projectGroupResponse(groups[idx])})
 }
 
 // dirInSet reports whether dir names one of dirs, however spelled.

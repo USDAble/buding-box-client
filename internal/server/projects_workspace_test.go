@@ -137,15 +137,20 @@ func TestProject_BuiltinDefaultAlsoReadsAsSeeded(t *testing.T) {
 	}
 }
 
-// The workspace is fixed at creation; PATCH working_dir used to retarget the
-// project and now has nothing legitimate to do.
-func TestProject_WorkspaceIsImmutable(t *testing.T) {
+// OCTO-FORK: the directory becomes immutable at the first accepted message.
+func TestProject_WorkspaceIsImmutableAfterFirstMessage(t *testing.T) {
 	srv := groupTestServer(t)
 	gid := newProjectGroup(t, srv, "Fixed", t.TempDir())
+	sess := saveSessionWithDir(t, "")
+	sess.LockProtectionPolicy()
+	if err := sess.Save(); err != nil {
+		t.Fatal(err)
+	}
+	fileInProject(t, gid, sess.ID)
 	rec, _ := doGroupReq(t, srv, http.MethodPatch, "/api/session-groups/"+gid, map[string]any{
 		"working_dir": t.TempDir(),
 	})
-	if rec.Code != http.StatusBadRequest {
-		t.Fatalf("retarget workspace: expected 400, got %d", rec.Code)
+	if rec.Code != http.StatusConflict {
+		t.Fatalf("retarget workspace after first message: expected 409, got %d", rec.Code)
 	}
 }

@@ -50,7 +50,8 @@ func (s *Server) migrateProjectWorkspaces() {
 	changed := false
 	for i := range gf.Groups {
 		g := &gf.Groups[i]
-		if g.WorkingDir == "" {
+		// OCTO-FORK: an explicitly selected cwd is not a legacy registry shape.
+		if g.WorkingDir == "" || g.WorkspaceDir != "" {
 			continue
 		}
 		old := g.WorkingDir

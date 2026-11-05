@@ -8,6 +8,7 @@ import (
 	// OCTO-FORK: 内置默认工作区从 `~/Octo` 改为数据根下的 `data/workspace/`（便携化） — see the portable packaging design
 	"github.com/open-octo/octo-agent/internal/brand"
 	"github.com/open-octo/octo-agent/internal/config"
+	"github.com/open-octo/octo-agent/internal/productstate"
 )
 
 // uiStrings holds every user-facing native string the desktop shell shows
@@ -279,6 +280,9 @@ func brandedStrings(build func(name, short string) uiStrings, locale string) uiS
 // callbacks read it on the UI thread.
 var active atomic.Pointer[uiStrings]
 
+// OCTO-FORK: native chrome shares the product's preference owner once assembled.
+var languagePreferences atomic.Pointer[productstate.Store]
+
 // L returns the active string set (English until applyLang runs).
 func L() *uiStrings {
 	if s := active.Load(); s != nil {
@@ -289,7 +293,7 @@ func L() *uiStrings {
 
 // applyLang re-resolves the UI language and swaps the active string set. Called
 // at startup and on each tray tick, so switching language in onboarding or
-// Settings (which writes data/config.yml) is reflected in the tray/dialogs
+// Settings is reflected in the tray/dialogs
 // within a few seconds — the desktop shell follows the in-app language choice,
 // not the OS. A changed string set requires republishing the native menus.
 func applyLang() bool {
@@ -309,6 +313,9 @@ func applyLang() bool {
 
 // OCTO-FORK: use English on first launch, preserving an explicit in-app choice.
 func resolveLang() string {
+	if state := languagePreferences.Load(); state != nil {
+		return state.PublicState().Prefs.Locale
+	}
 	if cfg, err := config.Load(); err == nil {
 		switch cfg.Language {
 		case "zh", "en", "zh-Hant":

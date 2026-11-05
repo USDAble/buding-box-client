@@ -99,6 +99,8 @@ func mountProductAPI() (mount func(api func(pattern string, h http.HandlerFunc))
 		// recovery (E6.2 rule 5) — the routes stay mounted.
 		slog.Warn("product: state file is damaged; continuing as logged out, file preserved")
 	}
+	// OCTO-FORK: browser config changes must not override the product's saved language.
+	languagePreferences.Store(state)
 
 	creds, err := credentialstore.Open(credentialstore.Options{})
 	if err != nil {

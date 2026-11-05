@@ -66,6 +66,9 @@ func TestAgent_ToolAliasUsesCanonicalPermission(t *testing.T) {
 				if deny == "" && !reflect.DeepEqual(executor.called, []string{"terminal"}) {
 					t.Fatalf("executor saw %v, want terminal", executor.called)
 				}
+				if got := sender.gotMsgs[1].Blocks[0].Name; got != "Bash" {
+					t.Fatalf("provider continuation renamed Bash to %q", got)
+				}
 			})
 		}
 	}
@@ -136,8 +139,8 @@ func TestAgent_ToolNamesCanonicalBeforeGateAndExecution(t *testing.T) {
 				}
 				for _, msg := range a.History.Snapshot() {
 					for _, block := range msg.Blocks {
-						if block.Type == "tool_use" && (block.Name != "skill" || block.ID != "skill-call" || block.Input["name"] != "cron-task-creator") {
-							t.Fatalf("history lost canonical name, ID or arguments: %+v", block)
+						if block.Type == "tool_use" && (block.Name != "Skill" || block.ID != "skill-call" || block.Input["name"] != "cron-task-creator") {
+							t.Fatalf("history lost provider name, ID or arguments: %+v", block)
 						}
 						if block.Type == "tool_result" && (block.ToolUseID != "skill-call" || block.IsError != (deny != "")) {
 							t.Fatalf("incorrect tool result: %+v", block)

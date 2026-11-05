@@ -192,6 +192,8 @@ func TestEveryLicenceIsVisibleToBrandGuard(t *testing.T) {
 // regression worth catching. These are the surfaces the requirements call out —
 // tray entries, dialog titles, and the two long dialogs.
 var mustNameProduct = []string{
+	// OCTO-FORK: menu labels must interpolate configured branding too.
+	"menuAbout", "menuHide",
 	"trayShow", "trayQuit",
 	"takeoverTitle", "takeoverMsgFmt",
 	"quitTitle", "quitMsg",

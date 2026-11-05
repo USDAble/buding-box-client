@@ -116,7 +116,7 @@
 
 `POST /api/product/logout` 成功返回 `{"ok":true,"revoked":<bool>}`。本地凭证与产品登录态无论平台撤销成功与否都要清理；`revoked:false` 明确告诉前端平台会话未被撤销。登出不删除已绑定手机号、昵称或激活信息。
 
-`PUT /api/product/locale` 接收 `{"locale":"zh"|"zh-Hant"|"en"}`，分别表示简体中文、繁体中文、英文，成功返回 `{"ok":true}`。首次打开默认 `en`，已有语言选择继续保留。登录/注册页、主界面和设置共同读取产品语言偏好；打开设置不会用旧配置覆盖当前语言，语言修改随后镜像至本地配置供桌面托盘使用。`PUT /api/config/language` 的 `language` 字段及 `/api/product/prefs` 的 `locale` 字段接受相同三种值。非法产品语言值返回 `{"field":"locale","code":"invalid_value"}`。
+`PUT /api/product/locale` 接收 `{"locale":"zh"|"zh-Hant"|"en"}`，分别表示简体中文、繁体中文、英文，成功返回 `{"ok":true}`。首次打开默认 `en`，已有语言选择继续保留。登录/注册页、主界面和设置共同读取产品语言偏好；打开设置不会用旧配置覆盖当前语言，语言修改随后镜像至本地配置供桌面原生菜单使用。桌面每 3 秒检查配置，语言变化时同步刷新三平台托盘和 macOS 应用菜单，无需重启；应用菜单保留原有系统动作、快捷键和带退出确认的自定义退出入口。Windows/Linux 主窗口沿用无边框 Web 界面，不新增 macOS 菜单栏。`PUT /api/config/language` 的 `language` 字段及 `/api/product/prefs` 的 `locale` 字段接受相同三种值。非法产品语言值返回 `{"field":"locale","code":"invalid_value"}`。
 
 `PUT /api/product/nickname` 接收昵称并返回 `{"state": ProductStateDTO}`。`nickname_format` 与 `nickname_sensitive` 是业务级码，不能错误地包装为 `fieldErrors`。
 

@@ -900,6 +900,7 @@
   "chat.elapsed_seconds": "耗時 {seconds}秒",
   "chat.elapsed_minutes": "耗時 {minutes}分{seconds}秒",
   "chat.elapsed_hours": "耗時 {hours}時{minutes}分",
+  "chat.summary_cache": "緩存 {percent}%",
   "composer.session_agent": "本會話綁定的專家（第一輪對話後不可更改）",
   "composer.assign_agent": "指派專家 · 本會話開始對話前均可修改",
   "composer.manage_models": "在設置中管理模型…",

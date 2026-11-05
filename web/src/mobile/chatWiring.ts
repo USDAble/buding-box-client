@@ -28,6 +28,8 @@ import {
   chatLastTextAt,
   chatGoal,
   addChatMsg,
+  // OCTO-FORK: both chat surfaces retire turn failures when conversation resumes.
+  clearTurnErrorNotices,
   appendToLastAssistant,
   commitThinking,
   stopTrailingCaret,
@@ -96,6 +98,8 @@ export function loadMobileHistory(sid: string): Promise<void> {
 export function sendMobile(sid: string, text: string, files?: unknown[]) {
   const t = text.trim()
   if (!t) return
+  // OCTO-FORK: clear only turn failures when a new message is actually sent.
+  clearTurnErrorNotices(sid)
   // Server-inline commands never enter history, so no history_user_message
   // comes back to reconcile the echo — it would spin forever. Mobile has no
   // slash menu, so these only arrive typed by hand, but /reload and /goal do
@@ -159,6 +163,8 @@ export function wireMobileSession(sid: string): () => void {
 
   cleanups.push(ws.on('history_user_message', (ev: any) => {
     if (!forSid(ev)) return
+    // OCTO-FORK: a confirmed message from another entry resumes this conversation too.
+    clearTurnErrorNotices(sid)
     const content = ev.content ?? ''
     const createdAt = ev.created_at ?? Date.now()
     const images = ev.images ?? []
@@ -229,6 +235,8 @@ export function wireMobileSession(sid: string): () => void {
     const { text } = turnErrorView(ev, tr('turn_error.unknown'))
     addChatMsg(sid, {
       id: uid('err'), type: 'notice', content: `${tr('m.err_prefix')}: ${text}`,
+      // OCTO-FORK: identify turn failures without deleting unrelated error notices.
+      turnError: true,
       level: 'error', createdAt: Date.now(), streaming: false, tools: [], todos: [],
     })
     chatStreaming.update(s => ({ ...s, [sid]: false }))

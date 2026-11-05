@@ -123,6 +123,24 @@ it('uses live completion duration without replacing the previous turn or waiting
   expect(elapsed).toEqual(['Took 12s', 'Took 1m 20s'])
 })
 
+// OCTO-FORK: a completed summary follows language switches while its measured usage stays unchanged.
+it('localizes completed summaries and keeps tokens in English', async () => {
+  locale.set('zh'); activeSessionId.set('live')
+  app = mount(ChatView, { target }); flushSync(); await settle(); await settle()
+  emit('history_user_message', { session_id: 'live', content: 'question' })
+  emit('assistant_message', { session_id: 'live', content: 'answer' })
+  emit('complete', { session_id: 'live', duration_ms: 23_000, tokens: 1000, cache_pct: 99 })
+  for (const [language, expected] of [
+    ['zh', '⏱ 耗时 23秒, 1.0k tokens, 缓存 99%'],
+    ['zh-Hant', '⏱ 耗時 23秒, 1.0k tokens, 緩存 99%'],
+    ['en', '⏱ Took 23s, 1.0k tokens, cache 99%'],
+  ]) {
+    locale.set(language); flushSync()
+    expect(target.querySelector('.notice-line')?.textContent?.trim()).toBe(expected)
+  }
+  expect(get(chatMessages).live.at(-1).turnSummary).toEqual({ durationMs: 23_000, tokens: 1000, cachePct: 99 })
+})
+
 // OCTO-FORK: the assistant header ticks during silence, text and tools, then freezes on completion.
 it('refreshes live elapsed metadata every second without changing finished turns', async () => {
   locale.set('zh'); activeSessionId.set('live')
@@ -193,6 +211,48 @@ it('localizes frontend-generated task outcomes and error headings', async () => 
   expect(target.textContent).toContain('目标任务继续')
   expect(target.textContent).not.toContain('Error:')
   expect(target.querySelector('.notice-line strong')?.textContent).toBe('错误:')
+})
+
+// OCTO-FORK: resuming a conversation retires both failure surfaces, even before complete arrives.
+it.each([false, true])('clears previous turn errors on a new send, streaming=%s', async streaming => {
+  activeSessionId.set('live')
+  app = mount(ChatView, { target }); flushSync(); await settle(); await settle()
+  emit('history_user_message', { session_id: 'live', content: 'previous question' })
+  emit('assistant_message', { session_id: 'live', content: 'previous answer' })
+  emit('turn_error', { session_id: 'live', error: 'stream error (PROVIDER_CONTEXT_UNAVAILABLE): previous failure' })
+  chatMessages.update(m => ({ ...m,
+    live: [...m.live, { id: 'keep-notice', type: 'notice', level: 'error', content: 'keep this notice' }],
+    other: [{ id: 'other-error', type: 'notice', turnError: true, content: 'other session error' }],
+  }))
+  chatStreaming.set({ live: streaming }); flushSync()
+  expect(target.querySelector('.turn-error-banner')?.textContent).toContain('PROVIDER_CONTEXT_UNAVAILABLE')
+  const input = target.querySelector('textarea')!
+  input.value = 'new question'; input.dispatchEvent(new Event('input', { bubbles: true })); flushSync()
+  target.querySelector<HTMLButtonElement>('button.send-btn')!.click()
+  await settle(); await settle()
+  expect(ws.sendMessage).toHaveBeenCalledWith('live', 'new question', undefined, false, false)
+  expect(target.querySelector('.turn-error-banner')).toBeNull()
+  expect(target.textContent).not.toContain('PROVIDER_CONTEXT_UNAVAILABLE')
+  expect(target.textContent).toContain('previous answer')
+  expect(target.textContent).toContain('keep this notice')
+  expect(get(chatMessages).other).toHaveLength(1)
+  emit('turn_error', { session_id: 'live', error: 'new failure' }); flushSync()
+  expect(target.querySelector('.turn-error-banner')?.textContent).toContain('new failure')
+  expect(get(chatMessages).live.filter(m => m.turnError)).toHaveLength(1)
+  target.querySelector<HTMLButtonElement>('.turn-error-dismiss')!.click(); flushSync()
+  expect(target.querySelector('.turn-error-banner')).toBeNull()
+  expect(get(chatMessages).live.filter(m => m.turnError)).toHaveLength(0)
+})
+
+it('clears a previous failure on a live user confirmation only for the current session', async () => {
+  activeSessionId.set('live')
+  app = mount(ChatView, { target }); flushSync(); await settle(); await settle()
+  emit('turn_error', { session_id: 'live', error: 'previous failure' }); flushSync()
+  emit('history_user_message', { session_id: 'other', content: 'unrelated' }); flushSync()
+  expect(target.querySelector('.turn-error-banner')).not.toBeNull()
+  emit('history_user_message', { session_id: 'live', content: 'new message from another entry' }); flushSync()
+  expect(target.querySelector('.turn-error-banner')).toBeNull()
+  expect(get(chatMessages).live.filter(m => m.turnError)).toHaveLength(0)
 })
 
 // A sparse final delta must render even when no later stream event arrives.

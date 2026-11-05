@@ -2,11 +2,74 @@ package agent
 
 import (
 	"context"
+	"encoding/json"
 	"reflect"
+	"strings"
 	"testing"
 
 	"github.com/open-octo/octo-agent/internal/hooks"
 )
+
+func TestCanonicalToolAliases(t *testing.T) {
+	terminal := ToolDefinition{Name: "terminal", Aliases: []string{"Bash"}}
+	for _, tc := range []struct {
+		label string
+		name  string
+		tools []ToolDefinition
+		want  string
+	}{
+		{"alias", "Bash", []ToolDefinition{terminal}, "terminal"},
+		{"alias casing", "bAsH", []ToolDefinition{terminal}, "terminal"},
+		{"unavailable", "Bash", nil, "Bash"},
+		{"not declared", "Bash", []ToolDefinition{{Name: "terminal"}}, "Bash"},
+		{"exact name first", "Bash", []ToolDefinition{terminal, {Name: "Bash"}}, "Bash"},
+		{"canonical casing first", "BASH", []ToolDefinition{terminal, {Name: "bash"}}, "bash"},
+		{"ambiguous alias", "Bash", []ToolDefinition{terminal, {Name: "other", Aliases: []string{"bash"}}}, "Bash"},
+		{"new tool", "FutureAlias", []ToolDefinition{{Name: "future_tool", Aliases: []string{"FutureAlias"}}}, "future_tool"},
+	} {
+		t.Run(tc.label, func(t *testing.T) {
+			if got := canonicalToolName(tc.name, tc.tools); got != tc.want {
+				t.Fatalf("canonicalToolName(%q) = %q, want %q", tc.name, got, tc.want)
+			}
+		})
+	}
+	wire, err := json.Marshal(terminal)
+	if err != nil || strings.Contains(string(wire), "Bash") || strings.Contains(string(wire), "Aliases") {
+		t.Fatalf("local aliases leaked onto the wire: %s, %v", wire, err)
+	}
+}
+
+func TestAgent_ToolAliasUsesCanonicalPermission(t *testing.T) {
+	for _, stream := range []bool{false, true} {
+		for _, deny := range []string{"", "terminal"} {
+			t.Run(map[bool]string{false: "buffered", true: "streamed"}[stream]+"/deny="+deny, func(t *testing.T) {
+				sender := &fakeToolSender{replies: []Reply{
+					{StopReason: "tool_use", Blocks: []ContentBlock{NewToolUseBlock("shell", "Bash", map[string]any{"command": "echo alias"})}},
+					{StopReason: "end_turn", Content: "done"},
+				}}
+				a := New(sender, "test")
+				a.Gate = denyOneGate{deny: deny}
+				executor := &fakeExecutor{}
+				defs := []ToolDefinition{{Name: "terminal", Aliases: []string{"Bash"}}}
+				var err error
+				if stream {
+					_, err = a.RunStream(context.Background(), "run", defs, executor, nil)
+				} else {
+					_, err = a.Run(context.Background(), "run", defs, executor)
+				}
+				if err != nil {
+					t.Fatal(err)
+				}
+				if deny != "" && len(executor.called) != 0 {
+					t.Fatalf("alias bypassed terminal denial: %v", executor.called)
+				}
+				if deny == "" && !reflect.DeepEqual(executor.called, []string{"terminal"}) {
+					t.Fatalf("executor saw %v, want terminal", executor.called)
+				}
+			})
+		}
+	}
+}
 
 func TestCanonicalToolName(t *testing.T) {
 	tools := []ToolDefinition{{Name: "skill"}, {Name: "glob"}, {Name: "write_file"}, {Name: "mcp__Server__Fetch"}}

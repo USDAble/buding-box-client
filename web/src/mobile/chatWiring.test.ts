@@ -23,7 +23,8 @@ vi.mock('../lib/ws', () => ({
       handlers.set(type, fn)
       return () => handlers.delete(type)
     }),
-    send: vi.fn(),
+    // OCTO-FORK: exercise the actual mobile send path after a turn failure.
+    send: vi.fn(), sendMessage: vi.fn(),
   },
 }))
 
@@ -32,9 +33,9 @@ vi.mock('../lib/api', () => ({
   getSessionMessages: vi.fn(async () => ({ events: [] })),
 }))
 
-import { chatMessages } from '../lib/stores'
+import { chatMessages, chatStreaming } from '../lib/stores'
 import { locale, tr } from '../lib/i18n'
-import { wireMobileSession } from './chatWiring'
+import { sendMobile, wireMobileSession } from './chatWiring'
 
 function notices(sid: string): string[] {
   return (get(chatMessages)[sid] ?? []).filter(m => m.type === 'notice').map(m => m.content)
@@ -44,6 +45,8 @@ beforeEach(() => {
   locale.set('zh')
   handlers.clear()
   chatMessages.set({})
+  chatStreaming.set({})
+  vi.clearAllMocks()
 })
 
 describe('the mobile turn_error handler reads the code', () => {
@@ -79,5 +82,31 @@ describe('the mobile turn_error handler reads the code', () => {
     handlers.get('turn_error')!({ type: 'turn_error', session_id: 'other', code: 'insufficient_credits', error: 'x' })
 
     expect(notices('s3')).toEqual([])
+  })
+
+  // OCTO-FORK: only transient turn failures retire when mobile sends another message.
+  it.each(['new message', '/compact'])('clears an old error on send: %s', message => {
+    wireMobileSession('s1')
+    handlers.get('turn_error')!({ session_id: 's1', error: 'previous failure' })
+    chatMessages.update(m => ({ ...m,
+      s1: [...m.s1, { type: 'notice', level: 'error', content: 'keep this notice' }],
+      other: [{ type: 'notice', turnError: true, content: 'other error' }],
+    }))
+    sendMobile('s1', ' ')
+    expect(notices('s1').join()).toContain('previous failure')
+    sendMobile('s1', message)
+    expect(notices('s1')).toEqual(['keep this notice'])
+    expect(notices('other')).toEqual(['other error'])
+    handlers.get('turn_error')!({ session_id: 's1', error: 'new failure' })
+    expect(notices('s1').join()).toContain('new failure')
+  })
+
+  it('clears an old failure when another entry sends a confirmed message', () => {
+    wireMobileSession('s1')
+    handlers.get('turn_error')!({ session_id: 's1', error: 'previous failure' })
+    handlers.get('history_user_message')!({ session_id: 'other', content: 'unrelated' })
+    expect(notices('s1')).toHaveLength(1)
+    handlers.get('history_user_message')!({ session_id: 's1', content: 'new message' })
+    expect(notices('s1')).toEqual([])
   })
 })

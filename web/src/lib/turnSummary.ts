@@ -53,6 +53,13 @@ export function fmtTokens(n: number): string {
   return n >= 1000 ? `${(n / 1000).toFixed(1)}k` : `${n}`
 }
 
+// OCTO-FORK: keep measurements separate from copy so completed summaries follow language changes.
+export interface TurnSummary {
+  durationMs: number
+  tokens: number
+  cachePct?: number
+}
+
 /**
  * The facts a turn summary may show, in order. Never empty: the elapsed time is
  * measured locally and is therefore always available.
@@ -63,10 +70,10 @@ export function fmtTokens(n: number): string {
  * @param cachePct   cache utilisation, when the backend reported any. Omitted
  *                   rather than defaulted, matching the backend's own rule.
  */
-export function turnSummarySegments(durationMs: number, tokens: number, cachePct?: number): string[] {
-  const segments = [fmtDur(Math.round(durationMs / 1000))]
+export function turnSummarySegments({ durationMs, tokens, cachePct }: TurnSummary, translate: (key: string) => string): string[] {
+  const segments = [fmtTurnElapsed(Math.round(durationMs / 1000) * 1000, translate)]
   if (tokens > 0) segments.push(`${fmtTokens(tokens)} tokens`)
-  if (typeof cachePct === 'number') segments.push(`cache ${cachePct}%`)
+  if (typeof cachePct === 'number') segments.push(translate('chat.summary_cache').replace('{percent}', String(cachePct)))
   return segments
 }
 

@@ -149,7 +149,9 @@ type WebSearchTool struct{}
 
 func (WebSearchTool) Definition() agent.ToolDefinition {
 	return agent.ToolDefinition{
-		Name: "web_search",
+		// OCTO-FORK: accept the common model spelling without a second search implementation.
+		Aliases: []string{"WebSearch"},
+		Name:    "web_search",
 		Description: "Search the web. Returns title/url/snippet for each hit. Works " +
 			"with no API key (uses DuckDuckGo + Bing HTML scraping); set " +
 			"BRAVE_SEARCH_API_KEY / TAVILY_API_KEY / SERPER_API_KEY to opt into a " +

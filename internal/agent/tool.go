@@ -9,6 +9,8 @@ type ToolDefinition struct {
 	Name        string         `json:"name"`
 	Description string         `json:"description"`
 	Parameters  map[string]any `json:"parameters"` // JSON Schema object
+	// OCTO-FORK: local aliases resolve before policy without advertising duplicate tools.
+	Aliases []string `json:"-"`
 }
 
 // ToolResult is the return value from a tool execution. Text is the required

@@ -68,6 +68,10 @@ func (SkillTool) Definition() agent.ToolDefinition {
 
 func (SkillTool) Execute(ctx context.Context, _ string, input map[string]any) (agent.ToolResult, error) {
 	name, _ := input["name"].(string)
+	// OCTO-FORK: accept the observed skill alias without rewriting provider history.
+	if _, provided := input["name"]; !provided {
+		name, _ = input["skill"].(string)
+	}
 	if name == "" {
 		return agent.ToolResult{Text: ""}, fmt.Errorf("skill: name is required")
 	}

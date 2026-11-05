@@ -574,6 +574,14 @@ export function addChatMsg(sessionId: string, msg: any) {
   chatMessages.update(m => ({ ...m, [sessionId]: [...(m[sessionId] || []), msg] }))
 }
 
+// OCTO-FORK: a new send retires transient turn failures without deleting tool results or other notices.
+export function clearTurnErrorNotices(sessionId: string) {
+  chatMessages.update(m => ({
+    ...m,
+    [sessionId]: (m[sessionId] || []).filter(msg => !(msg.type === 'notice' && msg.turnError === true)),
+  }))
+}
+
 export function updateLastMsg(sessionId: string, updater: (msg: any) => any) {
   chatMessages.update(m => {
     const msgs = [...(m[sessionId] || [])]

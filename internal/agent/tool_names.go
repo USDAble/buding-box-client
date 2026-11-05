@@ -32,5 +32,19 @@ func canonicalToolName(name string, tools []ToolDefinition) string {
 	if match != "" {
 		return match
 	}
+	// OCTO-FORK: aliases belong to the advertised tool, so unavailable tools gain no identity.
+	for _, tool := range tools {
+		for _, alias := range tool.Aliases {
+			if strings.EqualFold(alias, name) {
+				if match != "" && match != tool.Name {
+					return name
+				}
+				match = tool.Name
+			}
+		}
+	}
+	if match != "" {
+		return match
+	}
 	return name
 }

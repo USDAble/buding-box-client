@@ -43,6 +43,9 @@ Proactively ask about edge cases, input/output formats, example files, success c
 
 Check available skills and tools — if useful for research, use subagents to search docs or find similar skills in parallel.
 
+<!-- OCTO-FORK: generated skills must follow this runtime's tool contracts instead of copying another agent's API. -->
+When drafting tool steps, use the exact tool names and parameter schemas advertised in this session. Translate imported examples to those contracts; a familiar tool name does not guarantee matching arguments, timeout units, or background behavior. If a required capability is unavailable, explain the gap instead of inventing a tool. Include the affected tool calls in the skill's test cases.
+
 ### Where the skill lives
 
 <!-- OCTO-FORK: 技能文档改为数据根语义：用户级数据根改用 <data root>  — see the portable data-root boundary -->

@@ -50,7 +50,9 @@ type WebFetchTool struct{}
 
 func (WebFetchTool) Definition() agent.ToolDefinition {
 	return agent.ToolDefinition{
-		Name: "web_fetch",
+		// OCTO-FORK: accept the common model spelling without a second fetch implementation.
+		Aliases: []string{"WebFetch"},
+		Name:    "web_fetch",
 		Description: "Fetch a URL and return its content via a direct HTTP GET with a " +
 			"browser-like header set (JS-rendered pages return their static HTML skeleton; " +
 			"for interactive or login-walled content use the browser tool). " +

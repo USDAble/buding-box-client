@@ -1,6 +1,9 @@
 import { describe, expect, it } from 'vitest'
 import { fmtDur, fmtTokens, fmtTurnElapsed, turnDurations, thinkingTokenSegment, turnSummarySegments } from './turnSummary'
-import { en, zh } from './i18n'
+// OCTO-FORK: summary copy covers English and both Chinese scripts without translating tokens.
+import { en, zh, zhHant } from './i18n'
+
+const english = (key: string) => en[key]
 
 // PR-5d2 / G4: the per-turn summary must not print a number nobody measured.
 //
@@ -16,36 +19,46 @@ import { en, zh } from './i18n'
 describe('turnSummarySegments', () => {
   // 1. The measured facts appear, in order, when everything was reported.
   it('shows duration, tokens and cache when all were reported', () => {
-    expect(turnSummarySegments(1234, 340, 40)).toEqual(['1s', '340 tokens', 'cache 40%'])
+    expect(turnSummarySegments({ durationMs: 1234, tokens: 340, cachePct: 40 }, english)).toEqual(['Took 1s', '340 tokens', 'cache 40%'])
   })
 
   // 2. THE NAIL: no usage reported (tokens === 0) means no token segment. This is
   // the state every developer turn was in until the fixture started sending a
   // usage frame, and the line must not claim a measurement it does not have.
   it('omits the token segment when the gateway reported no usage', () => {
-    const segs = turnSummarySegments(2000, 0)
-    expect(segs).toEqual(['2s'])
+    const segs = turnSummarySegments({ durationMs: 2000, tokens: 0 }, english)
+    expect(segs).toEqual(['Took 2s'])
     expect(segs.join(', ')).not.toContain('tokens')
   })
 
   // 3. The counter-nail. A rule implemented as "always drop the token segment"
   // satisfies #2 and destroys the feature, so a reported count has to survive.
   it('keeps the token segment when a usage count was reported', () => {
-    expect(turnSummarySegments(2000, 4096).join(', ')).toContain('4.1k tokens')
+    expect(turnSummarySegments({ durationMs: 2000, tokens: 4096 }, english).join(', ')).toContain('4.1k tokens')
   })
 
   // 4. Time is measured locally, so the line is never empty — a summary notice
   // that rendered nothing would anchor an empty bubble to the reply.
   it('always has at least the elapsed time', () => {
-    expect(turnSummarySegments(0, 0).length).toBeGreaterThan(0)
+    expect(turnSummarySegments({ durationMs: 0, tokens: 0 }, english).length).toBeGreaterThan(0)
   })
 
   // 5. cache_pct follows the backend's own contract: the field is OMITTED (not
   // 0) when there was no cache activity, so `undefined` must not become
   // "cache 0%". A build that defaulted it would claim a measurement.
   it('omits the cache segment when the field is absent, and keeps a real 0%', () => {
-    expect(turnSummarySegments(1000, 5).join(', ')).not.toContain('cache')
-    expect(turnSummarySegments(1000, 5, 0).join(', ')).toContain('cache 0%')
+    expect(turnSummarySegments({ durationMs: 1000, tokens: 5 }, english).join(', ')).not.toContain('cache')
+    expect(turnSummarySegments({ durationMs: 1000, tokens: 5, cachePct: 0 }, english).join(', ')).toContain('cache 0%')
+  })
+
+  it.each([
+    ['en', en, ['Took 23s', '1.0k tokens', 'cache 99%'], 'Took 1m 30s'],
+    ['zh', zh, ['耗时 23秒', '1.0k tokens', '缓存 99%'], '耗时 1分30秒'],
+    ['zh-Hant', zhHant, ['耗時 23秒', '1.0k tokens', '緩存 99%'], '耗時 1分30秒'],
+  ] as const)('localizes %s summaries and omits unreported usage', (_locale, dict, expected, duration) => {
+    const translate = (key: string) => dict[key]
+    expect(turnSummarySegments({ durationMs: 23_000, tokens: 1000, cachePct: 99 }, translate)).toEqual(expected)
+    expect(turnSummarySegments({ durationMs: 90_000, tokens: 0 }, translate)).toEqual([duration])
   })
 })
 

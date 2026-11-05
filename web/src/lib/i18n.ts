@@ -963,6 +963,8 @@ export const en: Record<string, string> = {
   "chat.elapsed_seconds": "Took {seconds}s",
   "chat.elapsed_minutes": "Took {minutes}m {seconds}s",
   "chat.elapsed_hours": "Took {hours}h {minutes}m",
+  // OCTO-FORK: completed-turn cache labels follow the UI language while tokens stays unchanged.
+  "chat.summary_cache": "cache {percent}%",
   "composer.session_agent": "Expert bound to this session (locked after the first turn)",
   "composer.assign_agent": "Assign agent — changeable until this session's first turn",
   "composer.manage_models": "Manage models in Settings…",
@@ -2617,6 +2619,8 @@ export const zh: Record<string, string> = {
   "chat.elapsed_seconds": "耗时 {seconds}秒",
   "chat.elapsed_minutes": "耗时 {minutes}分{seconds}秒",
   "chat.elapsed_hours": "耗时 {hours}时{minutes}分",
+  // OCTO-FORK: completed-turn cache labels follow the UI language while tokens stays unchanged.
+  "chat.summary_cache": "缓存 {percent}%",
   "composer.session_agent": "本会话绑定的专家（第一轮对话后不可更改）",
   "composer.assign_agent": "指派专家 · 本会话开始对话前均可修改",
   "composer.manage_models": "在设置中管理模型…",

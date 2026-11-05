@@ -45,6 +45,8 @@
     pendingPrompt,
     artifacts,
     addChatMsg,
+    // OCTO-FORK: turn-error notices retire with the local error banner.
+    clearTurnErrorNotices,
     clearMsgs,
     appendToLastAssistant,
     addToolCallToGroup,
@@ -95,7 +97,8 @@
   // OCTO-FORK: browser exports choose a destination before fetching or rendering the transcript.
   import { pickBrowserExport, writeBrowserExport, type ExportSaveHandle } from '../lib/exportSave'
   import { confirmDialog } from '../lib/confirm'
-  import { fmtDur, fmtTurnElapsed, turnDurations, thinkingTokenSegment, turnSummarySegments } from '../lib/turnSummary'
+  // OCTO-FORK: retain summary measurements so notices and panel chips translate at render time.
+  import { fmtDur, fmtTurnElapsed, turnDurations, thinkingTokenSegment, turnSummarySegments, type TurnSummary } from '../lib/turnSummary'
   import { anchorBgTasks } from '../lib/bgTaskAnchor'
   import DOMPurify from 'dompurify'
   import PermissionCard from '../components/chat/PermissionCard.svelte'
@@ -968,6 +971,8 @@ import QuestionModal from '../components/overlays/QuestionModal.svelte'
 
     cleanups.push(ws.on('history_user_message', (ev) => {
       if ((ev as any).session_id && (ev as any).session_id !== sid) return
+      // OCTO-FORK: a message confirmed from another entry also retires the previous turn's failure.
+      clearTurnFailure(sid)
       const content = (ev as any).content ?? ''
       const createdAt = (ev as any).created_at ?? Date.now()
       const images = (ev as any).images ?? []
@@ -1098,8 +1103,9 @@ import QuestionModal from '../components/overlays/QuestionModal.svelte'
       addChatMsg(sid, {
         id: uid('err'),
         type: 'notice',
-        // OCTO-FORK: keep diagnostic details but localize the frontend's error heading.
+        // OCTO-FORK: localize the heading and tag transient failures for cleanup on the next send.
         content: `**${tr('status.error')}:** ${msg}`,
+        turnError: true,
         level: 'error',
         createdAt: Date.now(),
         streaming: false,
@@ -1223,7 +1229,7 @@ import QuestionModal from '../components/overlays/QuestionModal.svelte'
       const tokens = (ev as any).tokens
       const cachePct = (ev as any).cache_pct
       if (typeof durationMs === 'number' && typeof tokens === 'number') {
-        const segs = turnSummarySegments(durationMs, tokens, cachePct)
+        const summary: TurnSummary = { durationMs, tokens, cachePct }
         // A silent panel-update turn draws nothing in the transcript, so a
         // summary notice would float anchored to nothing. Hand the stats to
         // the panel's own status chip instead (GenuiBlock, via panelTurnStats)
@@ -1236,7 +1242,7 @@ import QuestionModal from '../components/overlays/QuestionModal.svelte'
           const actionPanel = silentActionPanel(precedingSaid(list, k))
           if (actionPanel) {
             if (isSilentPairAt(list, k)) {
-              panelTurnStats[`${sid}\x00${actionPanel}`] = segs.join(' · ')
+              panelTurnStats[`${sid}\x00${actionPanel}`] = summary
               handed = true
             } else {
               // Degraded silent turn: the model chose to answer with a visible
@@ -1252,7 +1258,8 @@ import QuestionModal from '../components/overlays/QuestionModal.svelte'
           addChatMsg(sid, {
             id: uid('sum'),
             type: 'notice',
-            content: `⏱ ${segs.join(', ')}`,
+            content: '',
+            turnSummary: summary,
             level: 'info',
             createdAt: Date.now(),
             streaming: false,
@@ -1881,7 +1888,7 @@ import QuestionModal from '../components/overlays/QuestionModal.svelte'
   // Written by the turn-done handler, shown briefly by the panel's status
   // chip. Client-session state only — it dies with the tab, like the per-turn
   // summary notices.
-  const panelTurnStats = $state<Record<string, string>>({})
+  const panelTurnStats = $state<Record<string, TurnSummary>>({})
 
   /** True when this assistant message is the hidden half of a silent pair. */
   function isHiddenReply(index: number): boolean {
@@ -2469,14 +2476,19 @@ import QuestionModal from '../components/overlays/QuestionModal.svelte'
 
   // ── send message ───────────────────────────────────────────────────────────
   // The previous turn's leftovers, cleared before anything that can start the
-  // next one: finished sub-agents, the thinking buffer, the error banner, and
+  // next one: finished sub-agents, the thinking buffer, and
   // the follow-up suggestion (it belongs to a conversation that has now moved
   // on and must not re-render when this turn ends).
   function clearLastTurnUi(sid: string) {
-    turnError = null
     clearDoneSubAgents(sid)
     chatThinking.update(tt => ({ ...tt, [sid]: '' }))
     chatSuggestion.update(s => ({ ...s, [sid]: '' }))
+  }
+
+  // OCTO-FORK: the banner and scrollback notice are two views of the same transient failure.
+  function clearTurnFailure(sid: string | null) {
+    turnError = null
+    if (sid) clearTurnErrorNotices(sid)
   }
 
   // `pin` — whether sending re-pins the view to the bottom. True for anything
@@ -2514,6 +2526,8 @@ import QuestionModal from '../components/overlays/QuestionModal.svelte'
       return
     }
     const sid = active.id
+    // OCTO-FORK: clear errors on accepted sends, including steers, after all send refusals above.
+    clearTurnFailure(sid)
     if (active.created) {
       // Nothing is subscribed to a session that existed a millisecond ago: the
       // effect above only issues the subscribe once this call returns. Sending
@@ -2609,6 +2623,7 @@ import QuestionModal from '../components/overlays/QuestionModal.svelte'
       return
     }
     bindRequiredFor = null
+    clearTurnFailure(sid)
     ws.sendMessage(sid, meta.text, meta.files, true, meta.queued)
     pinToBottom()
   }
@@ -3076,11 +3091,13 @@ import QuestionModal from '../components/overlays/QuestionModal.svelte'
                                version of itself, which a silent turn may have
                                replaced since this message was written. -->
                           {@const live = seg.spec.id ? (panels.get(seg.spec.id)?.spec ?? seg.spec) : seg.spec}
+                          <!-- OCTO-FORK: silent-panel summaries share the current-language formatter. -->
+                          {@const summary = seg.spec.id ? panelTurnStats[`${id ?? ''}\x00${seg.spec.id}`] : undefined}
                           <GenuiBlock
                             spec={live}
                             interactive={seg.complete}
                             pending={!!seg.spec.id && pendingPanel === seg.spec.id}
-                            stats={seg.spec.id ? panelTurnStats[`${id ?? ''}\x00${seg.spec.id}`] : undefined}
+                            stats={summary ? turnSummarySegments(summary, $t).join(' · ') : undefined}
                             sessionId={id ?? ''}
                             onaction={(a) => sendGenuiAction(a, seg.spec?.id)}
                           />
@@ -3162,7 +3179,8 @@ import QuestionModal from '../components/overlays/QuestionModal.svelte'
                   <span class="notice-avatar" data-level={msg.level}>
                     <iconify-icon icon="lucide:info" width="14"></iconify-icon>
                   </span>
-                  <div class="notice-line" data-level={msg.level}>{@html renderMarkdown(msg.content, showReasoning)}</div>
+                  <!-- OCTO-FORK: localize summary copy without replacing stored measurements or other notices. -->
+                  <div class="notice-line" data-level={msg.level}>{@html renderMarkdown(msg.turnSummary ? `⏱ ${turnSummarySegments(msg.turnSummary, $t).join(', ')}` : msg.content, showReasoning)}</div>
                 </div>
               </div>
             {/if}
@@ -3327,11 +3345,11 @@ import QuestionModal from '../components/overlays/QuestionModal.svelte'
         </div>
       {/if}
 
-      <!-- Turn-error banner: persists until dismissed or new message -->
+      <!-- OCTO-FORK: dismissing the banner also retires its transient scrollback notice. -->
       {#if turnError}
         <div class="turn-error-banner transition:fade|100">
           <span class="turn-error-text">{turnError}</span>
-          <button class="turn-error-dismiss" onclick={() => turnError = null}
+          <button class="turn-error-dismiss" onclick={() => clearTurnFailure(id)}
             aria-label="{$t('common.close')}">
             <iconify-icon icon="ant-design:close-outlined" width="14"></iconify-icon>
           </button>

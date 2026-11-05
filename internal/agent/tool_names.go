@@ -3,7 +3,7 @@ package agent
 import "strings"
 
 // OCTO-FORK: resolve model casing against this turn's advertised tools before
-// history, hooks, permissions and execution consume the call's identity.
+// hooks, permissions and execution consume the call's local identity.
 func canonicalizeToolCallNames(blocks []ContentBlock, tools []ToolDefinition) []ContentBlock {
 	out := append([]ContentBlock(nil), blocks...)
 	for i := range out {

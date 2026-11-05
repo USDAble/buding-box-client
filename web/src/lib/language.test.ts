@@ -35,7 +35,6 @@ it('persists Traditional Chinese without coercing it to English and restores it 
   expect(get(productState)?.prefs.locale).toBe('zh-Hant')
   expect(vi.mocked(fetch).mock.calls.map(([url, init]) => [url, JSON.parse(String(init?.body))])).toEqual([
     ['/api/product/locale', { locale: 'zh-Hant' }],
-    ['/api/config/language', { language: 'zh-Hant' }],
   ])
   productState.set(null)
   setLocale('en')
@@ -49,15 +48,6 @@ it('restores the previous choice on a refused product save and does not write it
   expect(get(locale)).toBe('en')
   expect(get(productState)?.prefs.locale).toBe('en')
   expect(fetch).toHaveBeenCalledTimes(1)
-  expect(get(languageSaving)).toBe(false)
-})
-
-it('keeps the persisted product choice if only the native mirror fails', async () => {
-  vi.mocked(fetch).mockResolvedValueOnce(new Response('{"ok":true}'))
-    .mockResolvedValueOnce(new Response('{}', { status: 500 }))
-  await expect(saveLanguagePreference('zh-Hant')).rejects.toThrow()
-  expect(get(locale)).toBe('zh-Hant')
-  expect(get(productState)?.prefs.locale).toBe('zh-Hant')
   expect(get(languageSaving)).toBe(false)
 })
 

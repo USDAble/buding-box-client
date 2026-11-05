@@ -71,6 +71,7 @@
     agenticSessions,
     chatGoal,
     nativeShell,
+    shellMacosMajor,
     chatHeaderSnippet,
   } from '../lib/stores'
   import { ws, wsState, wsReconnect } from '../lib/ws'
@@ -2852,7 +2853,8 @@ import QuestionModal from '../components/overlays/QuestionModal.svelte'
     <div class="conversation">
       <!-- Messages scroll area -->
       <div class="messages-wrap">
-      <div class="messages" bind:this={messagesEl}>
+      <!-- OCTO-FORK: only the macOS webview needs the scrolling-layer paint workaround. -->
+      <div class="messages" class:mac-webview={shellMacosMajor > 0} bind:this={messagesEl}>
         <div class="messages-inner" class:no-session={!id} bind:this={innerEl}>
 
           <!-- OCTO-FORK: the first assistant block shows the whole turn's elapsed time once. -->
@@ -3555,6 +3557,8 @@ import QuestionModal from '../components/overlays/QuestionModal.svelte'
   overscroll-behavior-y: contain;
   -webkit-overflow-scrolling: touch;
 }
+/* OCTO-FORK: keep WKWebView's scrolling tiles painted when chat content changes. */
+.messages.mac-webview { transform: translateZ(0); }
 
 /* ── User-message timeline rail ──────────────────────────────────────────── */
 /* A floating vertical timeline in the right-hand gutter: one node per user

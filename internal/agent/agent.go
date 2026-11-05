@@ -1290,6 +1290,8 @@ func (a *Agent) runLoop(
 		}
 
 		if toolUseRound {
+			// OCTO-FORK: providers must receive their original call identity on continuation.
+			providerBlocks := reply.Blocks
 			// OCTO-FORK: canonical names must reach hooks and policy before dispatch.
 			reply.Blocks = canonicalizeToolCallNames(reply.Blocks, tools)
 			// Pre-dispatch checkpoint. accrueUsage above just learned what the
@@ -1301,7 +1303,7 @@ func (a *Agent) runLoop(
 			if a.shouldCompactMidTurn() {
 				_ = a.maybeCompact(ctx, handler)
 			}
-			a.History.Append(NewToolUseMessage(reply.Blocks))
+			a.History.Append(NewToolUseMessage(providerBlocks))
 			// A tool call ends the current stretch of assistant speech (every
 			// UI starts a new block after it), so a carried pre-reminder answer
 			// stops being part of what the final reply settles.

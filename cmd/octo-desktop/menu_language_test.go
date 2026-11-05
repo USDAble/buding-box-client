@@ -6,6 +6,7 @@ import (
 
 	"github.com/open-octo/octo-agent/internal/brand"
 	"github.com/open-octo/octo-agent/internal/config"
+	"github.com/open-octo/octo-agent/internal/productstate"
 	"github.com/wailsapp/wails/v3/pkg/application"
 )
 
@@ -69,5 +70,27 @@ func TestNativeMenusFollowSavedLanguage(t *testing.T) {
 				t.Fatal("role-less Help entry was left in English")
 			}
 		})
+	}
+}
+
+func TestNativeLanguageUsesProductPreferenceInsteadOfBrowserConfig(t *testing.T) {
+	t.Setenv("OCTO_DATA_ROOT", t.TempDir())
+	prior := languagePreferences.Load()
+	t.Cleanup(func() { languagePreferences.Store(prior) })
+	state, err := productstate.Open(productstate.Options{Locale: "zh"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	languagePreferences.Store(state)
+	for _, language := range []string{"en", "zh-Hant", "zh"} {
+		if err := state.SetLocale(language); err != nil {
+			t.Fatal(err)
+		}
+		if err := (&config.Config{Language: "en"}).Save(); err != nil {
+			t.Fatal(err)
+		}
+		if got := resolveLang(); got != language {
+			t.Fatalf("native language = %q, product preference = %q", got, language)
+		}
 	}
 }

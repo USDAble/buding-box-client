@@ -1032,7 +1032,7 @@ func trayStatusLines(bridge *nativeBridge) []string {
 // its Cmd-Q) has to reach requestQuit like the tray's does, so both warn before
 // stopping a hub other clients are connected to. The framework's Quit carries
 // AppKit's terminate: selector, which never runs a Go callback, so the item has
-// to be an ordinary one. Everything else is the default menu, role for role.
+// to be an ordinary one. Other actions retain their framework roles and shortcuts.
 //
 // Doing it in ShouldQuit instead would also cover the Dock's Quit and a system
 // logout, and it can't: AppKit calls that hook on the main thread
@@ -1057,6 +1057,8 @@ func buildAppMenu(app *application.App, bridge *nativeBridge) *application.Menu 
 	menu.AddRole(application.ViewMenu)
 	menu.AddRole(application.WindowMenu)
 	menu.AddRole(application.HelpMenu)
+	// OCTO-FORK: role-provided English labels must follow the persisted interface language.
+	localizeAppMenu(menu)
 	return menu
 }
 
@@ -1105,9 +1107,6 @@ func buildTrayMenu(app *application.App, bridge *nativeBridge) *application.Menu
 // so the counts stay live without rebuilding on every tick.
 func refreshTrayLoop(app *application.App, tray *application.SystemTray, bridge *nativeBridge) {
 	sigOf := func() string {
-		applyLang() // follow a language switch made in onboarding / Settings
-		// The status lines are language-dependent, so a language switch changes
-		// this signature and triggers a rebuild (which re-reads L() for labels).
 		// The update state is folded in too, so a flip rebuilds even if the
 		// immediate refreshTray call raced with a concurrent rebuild.
 		upd := ""
@@ -1120,11 +1119,20 @@ func refreshTrayLoop(app *application.App, tray *application.SystemTray, bridge 
 	t := time.NewTicker(3 * time.Second)
 	defer t.Stop()
 	for range t.C {
+		// OCTO-FORK: all platforms refresh on a locale change even if status text is unchanged.
+		languageChanged := applyLang()
 		sig := sigOf()
-		if sig == last {
+		if sig == last && !languageChanged {
 			continue
 		}
 		last = sig
 		tray.SetMenu(buildTrayMenu(app, bridge))
+		if languageChanged {
+			tray.SetTooltip(L().takeoverTitle)
+			// OCTO-FORK: macOS application menus need their own update on the UI thread.
+			if runtime.GOOS == "darwin" {
+				application.InvokeSync(func() { app.Menu.Set(buildAppMenu(app, bridge)) })
+			}
+		}
 	}
 }

@@ -11,10 +11,20 @@ import (
 )
 
 // uiStrings holds every user-facing native string the desktop shell shows
-// outside the web UI — dialogs, the tray menu, error messages. Selected once at
-// startup by the system language. Format strings keep their verbs so call sites
+// outside the web UI — dialogs, native menus, error messages. The persisted app
+// language selects them at startup and on refresh. Format strings keep their verbs so call sites
 // can fmt.Sprintf them.
 type uiStrings struct {
+	// OCTO-FORK: framework role labels must follow the same preference as native dialogs and tray items.
+	menuAbout, menuServices, menuHide, menuHideOthers, menuShowAll string
+	menuFile, menuEdit, menuView, menuWindow, menuHelp             string
+	menuClose, menuUndo, menuRedo, menuCut, menuCopy, menuPaste    string
+	menuPasteStyle, menuDelete, menuSelectAll                      string
+	menuSpeech, menuStartSpeaking, menuStopSpeaking                string
+	menuReload, menuForceReload, menuActualSize                    string
+	menuZoomIn, menuZoomOut, menuFullscreen, menuDevTools          string
+	menuMinimise, menuZoom, menuFront, menuLearnMore               string
+
 	trayShow, trayQuit   string
 	traySettings         string
 	trayNewSession       string
@@ -73,6 +83,40 @@ type uiStrings struct {
 // takes no space around an inline name.
 func enStringsFor(name, short string) uiStrings {
 	return uiStrings{
+		// OCTO-FORK: native role menus use the app locale instead of framework English defaults.
+		menuAbout:          "About " + short,
+		menuServices:       "Services",
+		menuHide:           "Hide " + short,
+		menuHideOthers:     "Hide Others",
+		menuShowAll:        "Show All",
+		menuFile:           "File",
+		menuEdit:           "Edit",
+		menuView:           "View",
+		menuWindow:         "Window",
+		menuHelp:           "Help",
+		menuClose:          "Close",
+		menuUndo:           "Undo",
+		menuRedo:           "Redo",
+		menuCut:            "Cut",
+		menuCopy:           "Copy",
+		menuPaste:          "Paste",
+		menuPasteStyle:     "Paste and Match Style",
+		menuDelete:         "Delete",
+		menuSelectAll:      "Select All",
+		menuSpeech:         "Speech",
+		menuStartSpeaking:  "Start Speaking",
+		menuStopSpeaking:   "Stop Speaking",
+		menuReload:         "Reload",
+		menuForceReload:    "Force Reload",
+		menuActualSize:     "Actual Size",
+		menuZoomIn:         "Zoom In",
+		menuZoomOut:        "Zoom Out",
+		menuFullscreen:     "Toggle Full Screen",
+		menuDevTools:       "Open Developer Tools",
+		menuMinimise:       "Minimise",
+		menuZoom:           "Zoom",
+		menuFront:          "Bring All to Front",
+		menuLearnMore:      "Learn More",
 		trayShow:           "Show " + short,
 		trayQuit:           "Quit " + short,
 		trayNewSession:     "New Session",
@@ -131,6 +175,40 @@ func enStringsFor(name, short string) uiStrings {
 
 func zhStringsFor(name, short string) uiStrings {
 	return uiStrings{
+		// OCTO-FORK: native role menus use the app locale instead of framework English defaults.
+		menuAbout:          "关于" + short,
+		menuServices:       "服务",
+		menuHide:           "隐藏" + short,
+		menuHideOthers:     "隐藏其他应用",
+		menuShowAll:        "全部显示",
+		menuFile:           "文件",
+		menuEdit:           "编辑",
+		menuView:           "视图",
+		menuWindow:         "窗口",
+		menuHelp:           "帮助",
+		menuClose:          "关闭",
+		menuUndo:           "撤销",
+		menuRedo:           "重做",
+		menuCut:            "剪切",
+		menuCopy:           "复制",
+		menuPaste:          "粘贴",
+		menuPasteStyle:     "粘贴并匹配样式",
+		menuDelete:         "删除",
+		menuSelectAll:      "全选",
+		menuSpeech:         "语音",
+		menuStartSpeaking:  "开始朗读",
+		menuStopSpeaking:   "停止朗读",
+		menuReload:         "重新加载",
+		menuForceReload:    "强制重新加载",
+		menuActualSize:     "实际大小",
+		menuZoomIn:         "放大",
+		menuZoomOut:        "缩小",
+		menuFullscreen:     "切换全屏",
+		menuDevTools:       "打开开发者工具",
+		menuMinimise:       "最小化",
+		menuZoom:           "缩放",
+		menuFront:          "前置全部窗口",
+		menuLearnMore:      "了解更多",
 		trayShow:           "显示" + short,
 		trayQuit:           "退出" + short,
 		trayNewSession:     "新建会话",
@@ -213,17 +291,20 @@ func L() *uiStrings {
 // at startup and on each tray tick, so switching language in onboarding or
 // Settings (which writes data/config.yml) is reflected in the tray/dialogs
 // within a few seconds — the desktop shell follows the in-app language choice,
-// not the OS.
-func applyLang() {
+// not the OS. A changed string set requires republishing the native menus.
+func applyLang() bool {
 	// OCTO-FORK: keep the selected Chinese script in native window chrome.
+	var next *uiStrings
 	switch resolveLang() {
 	case "zh-Hant":
-		active.Store(&zhHantStrings)
+		next = &zhHantStrings
 	case "zh":
-		active.Store(&zhStrings)
+		next = &zhStrings
 	default:
-		active.Store(&enStrings)
+		next = &enStrings
 	}
+	// OCTO-FORK: detect language changes independently of translated status text.
+	return active.Swap(next) != next
 }
 
 // OCTO-FORK: use English on first launch, preserving an explicit in-app choice.

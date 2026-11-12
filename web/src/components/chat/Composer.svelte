@@ -1050,6 +1050,25 @@
   const PERM_LABEL_KEY: Record<string, string> = {
     interactive: 'chat.ask_mode', auto: 'chat.auto_mode', strict: 'chat.strict_mode',
   }
+  // OCTO-FORK: a wrapped permission chip must not place its menu behind the sidebar.
+  function fitPermissionMenu(node: HTMLElement) {
+    const card = node.closest<HTMLElement>('.input-card')!
+    const fit = () => {
+      node.style.maxWidth = `${Math.max(0, card.clientWidth - 16)}px`
+      node.style.transform = ''
+      const bounds = card.getBoundingClientRect()
+      const menu = node.getBoundingClientRect()
+      const scale = menu.width / node.offsetWidth || 1
+      const shift = Math.max(bounds.left + 8 * scale - menu.left,
+        Math.min(0, bounds.right - 8 * scale - menu.right))
+      node.style.transform = `translateX(${shift / scale}px)`
+    }
+    const observer = new ResizeObserver(fit)
+    observer.observe(card)
+    observer.observe(node)
+    fit()
+    return { destroy: () => observer.disconnect() }
+  }
   // OCTO-FORK: serialize explicit choices and apply completion to the captured session.
   let permissionSaving = $state(false)
   async function pickPermMode(next: string) {
@@ -1870,7 +1889,7 @@
             <iconify-icon icon="lucide:chevron-down" width="12"></iconify-icon>
           </button>
           {#if permMenu}
-            <div class="menu perm-menu" onclick={(e) => e.stopPropagation()}>
+            <div class="menu perm-menu" use:fitPermissionMenu onclick={(e) => e.stopPropagation()}>
               {#each PERM_MODES as mode}
                 <button class="menu-item" disabled={permissionSaving} class:active={mode === permMode} onclick={() => pickPermMode(mode)}>
                   <span class="perm-dot" data-mode={mode}></span>
@@ -2052,7 +2071,8 @@ textarea {
 }
 .menu-item.manage { flex-direction: row; align-items: center; gap: 6px; }
 .menu-item.manage .mi-name { color: var(--blue-6); }
-.perm-menu { left: auto; right: 0; width: 300px; max-width: 85vw; }
+/* OCTO-FORK: allow the menu to shrink inside a narrow conversation column. */
+.perm-menu { left: auto; right: 0; width: 300px; min-width: 0; max-width: 85vw; }
 .perm-description { display: block; margin-top: 3px; color: var(--text-tertiary); font-size: 11px; line-height: 1.5; white-space: normal; }
 .perm-menu .menu-item { flex-direction: row; align-items: center; gap: 8px; }
 .perm-dot { width: 7px; height: 7px; border-radius: 50%; flex: 0 0 auto; background: var(--text-quaternary); }

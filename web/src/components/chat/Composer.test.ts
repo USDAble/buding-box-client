@@ -408,6 +408,56 @@ afterEach(() => {
   vi.unstubAllGlobals()
 })
 
+// OCTO-FORK: wrapped permission menus remain inside the compressed chat column.
+describe('permission menu bounds', () => {
+  it.each([
+    { width: 600, anchorRight: 900, scale: 1 },
+    { width: 600, anchorRight: 460, scale: 1 },
+    { width: 240, anchorRight: 500, scale: 1 },
+    { width: 240, anchorRight: 500, scale: 1.2 },
+  ])('keeps every option visible at width $width and scale $scale', ({ width, anchorRight, scale }) => {
+    let resize!: () => void
+    const disconnect = vi.fn()
+    vi.stubGlobal('ResizeObserver', class {
+      constructor(callback: () => void) { resize = callback }
+      observe() {}
+      disconnect = disconnect
+    })
+    render()
+    const card = target.querySelector<HTMLElement>('.input-card')!
+    Object.defineProperty(card, 'clientWidth', { get: () => width, configurable: true })
+    card.getBoundingClientRect = () => new DOMRect(320 * scale, 400, width * scale, 100)
+    const rect = vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockImplementation(function (this: HTMLElement) {
+      const menuWidth = Math.min(300, parseFloat(this.style.maxWidth) || 300)
+      return new DOMRect((anchorRight - menuWidth) * scale, 200, menuWidth * scale, 200)
+    })
+    const offset = vi.spyOn(HTMLElement.prototype, 'offsetWidth', 'get').mockImplementation(function (this: HTMLElement) {
+      return Math.min(300, parseFloat(this.style.maxWidth) || 300)
+    })
+    try {
+      const chip = target.querySelector('.perm-dot')!.closest('button')!
+      chip.click(); flushSync()
+      const menu = target.querySelector<HTMLElement>('.perm-menu')!
+      const assertVisible = () => {
+        const menuWidth = Math.min(300, parseFloat(menu.style.maxWidth))
+        const shift = Number(menu.style.transform.match(/translateX\((.*)px\)/)![1])
+        const left = anchorRight - menuWidth + shift
+        expect(left).toBeGreaterThanOrEqual(328 - 0.01)
+        expect(left + menuWidth).toBeLessThanOrEqual(320 + width - 8 + 0.01)
+        expect(menu.querySelectorAll('button')).toHaveLength(3)
+      }
+      assertVisible()
+      width = 220; anchorRight = 460; resize()
+      assertVisible()
+      window.dispatchEvent(new MouseEvent('click')); flushSync()
+      expect(target.querySelector('.perm-menu')).toBeNull()
+      expect(disconnect).toHaveBeenCalledOnce()
+    } finally {
+      rect.mockRestore(); offset.mockRestore()
+    }
+  })
+})
+
 describe('the composer does not decide quota', () => {
   it('derives no notice at all from a zero balance', () => {
     setBalance(0)
